@@ -13,6 +13,7 @@ import RunHistory from "./pages/RunHistory";
 import RunDetail from "./pages/RunDetail";
 import AuditLog from "./pages/AuditLog";
 import ScheduleSettings from "./pages/ScheduleSettings";
+import Diagnostics from "./pages/Diagnostics";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/history/:runId" component={RunDetail} />
       <Route path="/audit" component={AuditLog} />
       <Route path="/schedule" component={ScheduleSettings} />
+      <Route path="/diagnostics" component={Diagnostics} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

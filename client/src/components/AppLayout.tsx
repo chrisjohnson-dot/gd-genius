@@ -12,6 +12,7 @@ import {
   MapPin,
   Moon,
   PackageSearch,
+  Stethoscope,
   Sun,
   Warehouse,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const configItems = [
   { href: "/settings", label: "API Settings", icon: Cog },
   { href: "/locations", label: "Location Config", icon: MapPin },
   { href: "/schedule", label: "Auto-Run Schedule", icon: CalendarClock },
+  { href: "/diagnostics", label: "API Diagnostics", icon: Stethoscope },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

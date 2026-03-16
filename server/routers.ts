@@ -199,7 +199,43 @@ export const appRouter = router({
         return facilities;
       }),
 
-    // Debug endpoint: returns raw /properties/facilities response for troubleshooting
+    // Debug endpoint: returns raw API responses for troubleshooting
+    debugRaw: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const { createExtensivClient } = await import("./extensiv/client");
+        const client = createExtensivClient(config);
+        const results: Record<string, unknown> = {};
+
+        // Test 1: /properties/facilities
+        try {
+          results.facilities = await client.get("/properties/facilities", { pgsiz: 500 });
+        } catch (err: unknown) {
+          results.facilitiesError = err instanceof Error ? err.message : String(err);
+        }
+
+        // Test 2: /customers (no filter)
+        try {
+          results.customers = await client.get("/customers", { pgsiz: 50, pgnum: 1 });
+        } catch (err: unknown) {
+          results.customersError = err instanceof Error ? err.message : String(err);
+        }
+
+        // Test 3: /customers with facilityid=1 (first facility id if available)
+        try {
+          const facilityId = (results.facilities as { _embedded?: { "http://api.3plCentral.com/rels/properties/facility"?: Array<{id:number}> } })?._embedded?.["http://api.3plCentral.com/rels/properties/facility"]?.[0]?.id ?? 1;
+          results.customersForFacility = await client.get("/customers", { pgsiz: 50, pgnum: 1, facilityid: facilityId });
+          results.testedFacilityId = facilityId;
+        } catch (err: unknown) {
+          results.customersForFacilityError = err instanceof Error ? err.message : String(err);
+        }
+
+        return results;
+      }),
+
+    // Legacy debug endpoint kept for compatibility
     facilitiesRaw: protectedProcedure
       .input(z.object({ configId: z.number() }))
       .query(async ({ input }) => {
@@ -209,11 +245,9 @@ export const appRouter = router({
         const client = createExtensivClient(config);
         try {
           const data = await client.get("/properties/facilities", { pgsiz: 500 });
-          console.log("[Extensiv] /properties/facilities raw:", JSON.stringify(data));
           return { ok: true, data };
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error("[Extensiv] /properties/facilities error:", msg);
           return { ok: false, error: msg, data: null };
         }
       }),

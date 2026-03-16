@@ -49,3 +49,4 @@
 - [x] Bug fix: Customer fields mapped incorrectly - fixed to use readOnly.customerId and companyInfo.companyName with paginated fallback
 - [x] Bug: facilityId mismatch fixed - Extensiv ignores facilityid param; now filters client-side using embedded facilities array on each customer record
 - [x] Bug: Still no customers showing - added debugSummary endpoint + improved fetchAllFacilities with customer-embedded facilities fallback
+- [x] Bug: "No open, unallocated orders" — relaxed status filter to include status 0/1/2, added debugOrders endpoint + order diagnostics table in API Diagnostics page

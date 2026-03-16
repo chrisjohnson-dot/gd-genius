@@ -257,14 +257,26 @@ export async function fetchOpenOrders(
     pgnum++;
   }
 
-  // Filter: not closed, not fully allocated, status 0 (entered) or 1 (started)
-  return allOrders.filter(
+  // Filter: not closed, not fully allocated, status 0 (Open), 1 (Complete/Ready), or 2 (some accounts use this)
+  // Note: Extensiv order statuses: 0=Open, 1=Complete(ready for pick), 2=some accounts use for partial, 3=Closed, 4=Cancelled
+  const filtered = allOrders.filter(
     (o) =>
       !o.readOnly.isClosed &&
       !o.readOnly.fullyAllocated &&
       o.readOnly.status !== undefined &&
-      o.readOnly.status <= 1
+      o.readOnly.status <= 2
   );
+
+  // Log what was excluded so we can diagnose issues
+  const excluded = allOrders.filter((o) => !filtered.includes(o));
+  if (excluded.length > 0) {
+    console.log(`[Extensiv] fetchOpenOrders: excluded ${excluded.length} orders for customer ${customerId}:`,
+      excluded.map(o => ({ id: o.readOnly.orderId, status: o.readOnly.status, isClosed: o.readOnly.isClosed, fullyAllocated: o.readOnly.fullyAllocated }))
+    );
+  }
+  console.log(`[Extensiv] fetchOpenOrders: ${filtered.length} open orders for customer ${customerId} (${allOrders.length} total fetched)`);
+
+  return filtered;
 }
 
 // Fetch a single order with full detail (includes orderItems and ETag)

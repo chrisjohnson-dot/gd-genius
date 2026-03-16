@@ -3,13 +3,26 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { useState } from "react";
+
+const STATUS_LABELS: Record<number, string> = {
+  0: "Open",
+  1: "Complete",
+  2: "Partial",
+  3: "Closed",
+  4: "Cancelled",
+};
 
 export default function Diagnostics() {
   const [configId, setConfigId] = useState<number | null>(null);
   const [runDiag, setRunDiag] = useState(false);
   const [runSummary, setRunSummary] = useState(false);
+
+  // Order debug state
+  const [orderCustomerId, setOrderCustomerId] = useState<number | null>(null);
+  const [orderFacilityId, setOrderFacilityId] = useState<number | null>(null);
+  const [runOrderDiag, setRunOrderDiag] = useState(false);
 
   const { data: configs } = trpc.config.list.useQuery();
 
@@ -23,11 +36,26 @@ export default function Diagnostics() {
     { enabled: !!configId && runSummary }
   );
 
+  const { data: orderDiagData, isLoading: orderDiagLoading, error: orderDiagError, refetch: refetchOrderDiag } = trpc.extensiv.debugOrders.useQuery(
+    { configId: configId!, customerId: orderCustomerId!, facilityId: orderFacilityId! },
+    { enabled: !!configId && !!orderCustomerId && !!orderFacilityId && runOrderDiag }
+  );
+
   const handleRun = (id: number) => {
     setConfigId(id);
     setRunDiag(true);
     setRunSummary(true);
+    setRunOrderDiag(false);
+    setOrderCustomerId(null);
+    setOrderFacilityId(null);
     if (configId === id) { refetch(); refetchSummary(); }
+  };
+
+  const handleRunOrderDiag = (custId: number, facId: number) => {
+    setOrderCustomerId(custId);
+    setOrderFacilityId(facId);
+    setRunOrderDiag(true);
+    if (orderCustomerId === custId && orderFacilityId === facId) refetchOrderDiag();
   };
 
   const countItems = (obj: unknown, relKey: string): number => {
@@ -92,12 +120,11 @@ export default function Diagnostics() {
           </Card>
         )}
 
-        {/* ── Step-by-Step Debug Summary (compact, easy to read) ── */}
+        {/* ── Step-by-Step Debug Summary ── */}
         {summaryData && (
           <div className="space-y-4">
             <h2 className="text-base font-semibold">Step-by-Step Debug Summary</h2>
 
-            {/* Step 1: Raw facilities structure */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -118,7 +145,6 @@ export default function Diagnostics() {
               </CardContent>
             </Card>
 
-            {/* Step 2: Processed facilities */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -134,7 +160,7 @@ export default function Diagnostics() {
                 {summaryData.step2_processedFacilitiesError ? (
                   <p className="text-xs text-destructive">{summaryData.step2_processedFacilitiesError}</p>
                 ) : summaryData.step2_processedFacilities.length === 0 ? (
-                  <p className="text-sm text-amber-600 font-medium">No facilities returned by fetchAllFacilities(). The warehouse list will be empty.</p>
+                  <p className="text-sm text-amber-600 font-medium">No facilities returned. The warehouse list will be empty.</p>
                 ) : (
                   <div className="space-y-1">
                     {summaryData.step2_processedFacilities.map((f) => (
@@ -149,7 +175,6 @@ export default function Diagnostics() {
               </CardContent>
             </Card>
 
-            {/* Step 3: Customers per facility */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">
@@ -158,34 +183,47 @@ export default function Diagnostics() {
               </CardHeader>
               <CardContent>
                 {Object.keys(summaryData.step3_customersByFacility).length === 0 ? (
-                  <p className="text-sm text-amber-600">No facilities to check (Step 2 returned 0 facilities).</p>
+                  <p className="text-sm text-amber-600">No facilities to check.</p>
                 ) : (
                   <div className="space-y-4">
-                    {Object.entries(summaryData.step3_customersByFacility).map(([facKey, custs]) => (
-                      <div key={facKey}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-semibold text-muted-foreground uppercase">Facility: {facKey}</span>
-                          {custs.length > 0
-                            ? <Badge className="text-xs bg-green-600">{custs.length} customers</Badge>
-                            : <Badge variant="destructive" className="text-xs">0 customers — this is the bug!</Badge>}
-                        </div>
-                        {custs.length > 0 ? (
-                          <div className="space-y-1 ml-2">
-                            {custs.slice(0, 10).map((c) => (
-                              <div key={c.id} className="flex items-center gap-2 text-sm">
-                                <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">id={c.id}</span>
-                                <span>{c.name}</span>
-                              </div>
-                            ))}
-                            {custs.length > 10 && (
-                              <p className="text-xs text-muted-foreground ml-1">...and {custs.length - 10} more</p>
-                            )}
+                    {Object.entries(summaryData.step3_customersByFacility).map(([facKey, custs]) => {
+                      const [facIdStr] = facKey.split(":");
+                      const facId = parseInt(facIdStr);
+                      return (
+                        <div key={facKey}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase">Facility: {facKey}</span>
+                            {custs.length > 0
+                              ? <Badge className="text-xs bg-green-600">{custs.length} customers</Badge>
+                              : <Badge variant="destructive" className="text-xs">0 customers</Badge>}
                           </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground ml-2">No customers match this facility ID in their embedded facilities array.</p>
-                        )}
-                      </div>
-                    ))}
+                          {custs.length > 0 && (
+                            <div className="space-y-2 ml-2">
+                              {custs.slice(0, 20).map((c) => (
+                                <div key={c.id} className="flex items-center gap-2">
+                                  <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">id={c.id}</span>
+                                  <span className="text-sm">{c.name}</span>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 text-xs px-2 ml-auto"
+                                    onClick={() => handleRunOrderDiag(c.id, facId)}
+                                    disabled={orderDiagLoading && orderCustomerId === c.id && orderFacilityId === facId}
+                                  >
+                                    {orderDiagLoading && orderCustomerId === c.id ? (
+                                      <RefreshCw className="h-3 w-3 animate-spin" />
+                                    ) : "Debug Orders"}
+                                  </Button>
+                                </div>
+                              ))}
+                              {custs.length > 20 && (
+                                <p className="text-xs text-muted-foreground ml-1">...and {custs.length - 20} more</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -193,11 +231,96 @@ export default function Diagnostics() {
           </div>
         )}
 
+        {/* ── Order Diagnostics ── */}
+        {(orderDiagData || orderDiagError) && (
+          <div className="space-y-4">
+            <h2 className="text-base font-semibold">
+              Order Diagnostics
+              {orderCustomerId && <span className="text-muted-foreground font-normal text-sm ml-2">— customer {orderCustomerId}, facility {orderFacilityId}</span>}
+            </h2>
+
+            {orderDiagError && (
+              <Card className="border-destructive">
+                <CardContent className="pt-4 text-destructive text-sm">{orderDiagError.message}</CardContent>
+              </Card>
+            )}
+
+            {orderDiagData && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-3">
+                    Orders from /orders/summaries
+                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResults} total in Extensiv</Badge>
+                    <Badge className="text-xs bg-green-600">{orderDiagData.passCount} pass filter</Badge>
+                    {orderDiagData.failCount > 0 && (
+                      <Badge variant="destructive" className="text-xs">{orderDiagData.failCount} excluded</Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {orderDiagData.fetchError && (
+                    <p className="text-xs text-destructive mb-2">{orderDiagData.fetchError}</p>
+                  )}
+                  {orderDiagData.orderSummaries.length === 0 ? (
+                    <p className="text-sm text-amber-600">No orders returned from Extensiv for this customer/facility combination.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="text-left py-1.5 pr-3">Order ID</th>
+                            <th className="text-left py-1.5 pr-3">Ref #</th>
+                            <th className="text-left py-1.5 pr-3">Status</th>
+                            <th className="text-left py-1.5 pr-3">Closed?</th>
+                            <th className="text-left py-1.5 pr-3">Allocated?</th>
+                            <th className="text-left py-1.5 pr-3">Created</th>
+                            <th className="text-left py-1.5">Passes Filter?</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderDiagData.orderSummaries.map((o, i) => (
+                            <tr key={i} className={`border-b ${o.passesFilter ? "" : "bg-red-50 dark:bg-red-950/20"}`}>
+                              <td className="py-1.5 pr-3 font-mono">{o.orderId}</td>
+                              <td className="py-1.5 pr-3">{o.referenceNum || "—"}</td>
+                              <td className="py-1.5 pr-3">
+                                <span className="font-mono">{o.status}</span>
+                                <span className="text-muted-foreground ml-1">({STATUS_LABELS[o.status ?? -1] ?? "Unknown"})</span>
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                {o.isClosed
+                                  ? <span className="text-red-600 font-medium">Yes</span>
+                                  : <span className="text-green-600">No</span>}
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                {o.fullyAllocated
+                                  ? <span className="text-red-600 font-medium">Yes</span>
+                                  : <span className="text-green-600">No</span>}
+                              </td>
+                              <td className="py-1.5 pr-3 text-muted-foreground">
+                                {o.creationDate ? new Date(o.creationDate).toLocaleDateString() : "—"}
+                              </td>
+                              <td className="py-1.5">
+                                {o.passesFilter
+                                  ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                  : <XCircle className="h-3.5 w-3.5 text-red-500" />}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* ── Raw API Responses ── */}
         {diagData && (
           <div className="space-y-4">
             <h2 className="text-base font-semibold">Raw API Responses</h2>
 
-            {/* Summary row */}
             <div className="grid grid-cols-2 gap-4">
               <Card>
                 <CardContent className="pt-4">
@@ -229,7 +352,6 @@ export default function Diagnostics() {
               </Card>
             </div>
 
-            {/* Facilities raw response */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -244,7 +366,6 @@ export default function Diagnostics() {
               </CardContent>
             </Card>
 
-            {/* Customers raw response */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">

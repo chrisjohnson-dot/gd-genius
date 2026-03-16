@@ -349,6 +349,61 @@ export const appRouter = router({
         return fetchOpenOrders(config, input.customerId, input.facilityId);
       }),
 
+    // Debug: returns raw order data for a customer/facility so we can see what status/flags each order has
+    debugOrders: protectedProcedure
+      .input(z.object({ configId: z.number(), customerId: z.number(), facilityId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const { createExtensivClient } = await import("./extensiv/client");
+        const client = createExtensivClient(config);
+
+        // Fetch first page of orders (no filter)
+        let rawOrders: unknown[] = [];
+        let totalResults = 0;
+        let fetchError: string | null = null;
+        try {
+          const data = (await client.get("/orders/summaries", {
+            pgsiz: 100,
+            pgnum: 1,
+            customerid: input.customerId,
+            facilityid: input.facilityId,
+          })) as {
+            totalResults?: number;
+            _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: unknown[] };
+          };
+          totalResults = data?.totalResults ?? 0;
+          rawOrders = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];
+        } catch (err: unknown) {
+          fetchError = err instanceof Error ? err.message : String(err);
+        }
+
+        // Summarize each order's key fields
+        const orderSummaries = (rawOrders as Array<{
+          readOnly?: { orderId?: number; status?: number; isClosed?: boolean; fullyAllocated?: boolean; creationDate?: string };
+          referenceNum?: string;
+          poNum?: string;
+        }>).map(o => ({
+          orderId: o.readOnly?.orderId,
+          referenceNum: o.referenceNum,
+          poNum: o.poNum,
+          status: o.readOnly?.status,
+          isClosed: o.readOnly?.isClosed,
+          fullyAllocated: o.readOnly?.fullyAllocated,
+          creationDate: o.readOnly?.creationDate,
+          passesFilter: !o.readOnly?.isClosed && !o.readOnly?.fullyAllocated && (o.readOnly?.status ?? 99) <= 2,
+        }));
+
+        return {
+          totalResults,
+          fetchedCount: rawOrders.length,
+          fetchError,
+          orderSummaries,
+          passCount: orderSummaries.filter(o => o.passesFilter).length,
+          failCount: orderSummaries.filter(o => !o.passesFilter).length,
+        };
+      }),
+
     inventory: protectedProcedure
       .input(
         z.object({

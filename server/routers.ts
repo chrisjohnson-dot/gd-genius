@@ -194,7 +194,28 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const config = await getExtensivConfigById(input.configId);
         if (!config) throw new TRPCError({ code: "NOT_FOUND" });
-        return fetchAllFacilities(config);
+        const facilities = await fetchAllFacilities(config);
+        console.log(`[Extensiv] fetchAllFacilities returned ${facilities.length} facilities:`, JSON.stringify(facilities));
+        return facilities;
+      }),
+
+    // Debug endpoint: returns raw /properties/facilities response for troubleshooting
+    facilitiesRaw: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const { createExtensivClient } = await import("./extensiv/client");
+        const client = createExtensivClient(config);
+        try {
+          const data = await client.get("/properties/facilities", { pgsiz: 500 });
+          console.log("[Extensiv] /properties/facilities raw:", JSON.stringify(data));
+          return { ok: true, data };
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error("[Extensiv] /properties/facilities error:", msg);
+          return { ok: false, error: msg, data: null };
+        }
       }),
 
     customersForFacility: protectedProcedure

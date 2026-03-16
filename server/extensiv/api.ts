@@ -75,22 +75,53 @@ export async function fetchCustomers(config: ExtensivClientConfig): Promise<Exte
   return data?._embedded?.["http://api.3plCentral.com/rels/customers/customer"] ?? [];
 }
 
-// Fetch all facilities for a customer
+// Fetch all facilities for a customer (used for customer-facility membership checks)
 export async function fetchFacilities(
   config: ExtensivClientConfig,
   customerId: number
 ): Promise<ExtensivFacility[]> {
   const client = createExtensivClient(config);
-  const data = (await client.get(`/customers/${customerId}/facilities`, { pgsiz: 100 })) as {
-    _embedded?: { "http://api.3plCentral.com/rels/customers/facility"?: ExtensivFacility[] };
-  };
-  return data?._embedded?.["http://api.3plCentral.com/rels/customers/facility"] ?? [];
+  try {
+    const data = (await client.get(`/customers/${customerId}/facilities`, { pgsiz: 100 })) as {
+      _embedded?: { "http://api.3plCentral.com/rels/customers/facility"?: ExtensivFacility[] };
+    };
+    return data?._embedded?.["http://api.3plCentral.com/rels/customers/facility"] ?? [];
+  } catch {
+    return [];
+  }
 }
 
-// Fetch all facilities across all customers (deduplicated by facilityId)
+// Fetch all facilities using the direct /properties/facilities endpoint
 export async function fetchAllFacilities(
   config: ExtensivClientConfig
 ): Promise<ExtensivFacility[]> {
+  const client = createExtensivClient(config);
+
+  // Primary: use the dedicated properties/facilities endpoint
+  try {
+    const data = (await client.get("/properties/facilities", { pgsiz: 500 })) as {
+      _embedded?: {
+        "http://api.3plCentral.com/rels/properties/facility"?: Array<{ id: number; name: string; [key: string]: unknown }>;
+      };
+      // Some Extensiv accounts return a flat array
+      [key: string]: unknown;
+    };
+
+    // Try HAL embedded format first
+    const embedded = data?._embedded?.["http://api.3plCentral.com/rels/properties/facility"];
+    if (embedded && embedded.length > 0) {
+      return embedded.map((f) => ({ id: f.id, name: f.name }));
+    }
+
+    // Fallback: some accounts return a direct array at root
+    if (Array.isArray(data)) {
+      return (data as Array<{ id: number; name: string }>).map((f) => ({ id: f.id, name: f.name }));
+    }
+  } catch (err) {
+    console.warn("[Extensiv] /properties/facilities failed, falling back to customer loop:", err);
+  }
+
+  // Fallback: loop through customers and collect their facilities
   const customers = await fetchCustomers(config);
   const facilityMap = new Map<number, ExtensivFacility>();
   for (const customer of customers) {

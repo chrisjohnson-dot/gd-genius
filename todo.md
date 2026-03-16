@@ -42,3 +42,4 @@
 - [x] Lot Mixing rule: per-customer toggle to prevent multiple lot codes on the same order line
 - [x] PDF export: Pull List and Pack List download from Allocation Review screen
 - [x] Scheduled auto-run: configurable cron schedule that runs all unallocated orders and sends a completion notification
+- [x] Bug: "No warehouses found" on Order Selection screen - switched to /properties/facilities endpoint with fallback

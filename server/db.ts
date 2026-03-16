@@ -19,6 +19,9 @@ import {
   customerRules,
   InsertCustomerRule,
   CustomerRule,
+  scheduleConfigs,
+  InsertScheduleConfig,
+  ScheduleConfig,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -248,8 +251,64 @@ export async function upsertCustomerRule(
     .onDuplicateKeyUpdate({
       set: {
         customerName: rule.customerName,
+        facilityId: rule.facilityId,
+        facilityName: rule.facilityName,
         noLotMixing: rule.noLotMixing,
+        autoRun: rule.autoRun,
         updatedAt: new Date(),
       },
     });
+}
+
+// ─── Schedule Config ─────────────────────────────────────────────────────────
+
+export async function getScheduleConfig(configId: number): Promise<ScheduleConfig | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(scheduleConfigs)
+    .where(eq(scheduleConfigs.configId, configId))
+    .limit(1);
+  return rows[0];
+}
+
+export async function upsertScheduleConfig(
+  cfg: InsertScheduleConfig
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(scheduleConfigs)
+    .values(cfg)
+    .onDuplicateKeyUpdate({
+      set: {
+        isEnabled: cfg.isEnabled,
+        cronExpression: cfg.cronExpression,
+        timezone: cfg.timezone,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+export async function updateScheduleConfigLastRun(
+  configId: number,
+  status: string,
+  summary: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(scheduleConfigs)
+    .set({ lastRunAt: new Date(), lastRunStatus: status, lastRunSummary: summary, updatedAt: new Date() })
+    .where(eq(scheduleConfigs.configId, configId));
+}
+
+export async function getAutoRunCustomers(configId: number): Promise<CustomerRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(customerRules)
+    .where(and(eq(customerRules.configId, configId), eq(customerRules.autoRun, true)));
 }

@@ -66,7 +66,10 @@ export const customerRules = mysqlTable("customer_rules", {
   configId: int("configId").notNull(),
   customerId: int("customerId").notNull(),
   customerName: varchar("customerName", { length: 256 }),
+  facilityId: int("facilityId"),          // facility this customer belongs to
+  facilityName: varchar("facilityName", { length: 256 }),
   noLotMixing: boolean("noLotMixing").default(false).notNull(), // Prevent multiple lot codes on the same order line
+  autoRun: boolean("autoRun").default(false).notNull(),         // Include in scheduled auto-run
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -125,3 +128,20 @@ export const auditLogs = mysqlTable("audit_logs", {
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
+// Schedule configuration for auto-run
+export const scheduleConfigs = mysqlTable("schedule_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  configId: int("configId").notNull(),     // FK to extensiv_configs
+  isEnabled: boolean("isEnabled").default(false).notNull(),
+  cronExpression: varchar("cronExpression", { length: 128 }).notNull().default("0 0 8,12,16 * * *"), // default: 8am, noon, 4pm
+  timezone: varchar("timezone", { length: 64 }).notNull().default("America/New_York"),
+  lastRunAt: timestamp("lastRunAt"),
+  lastRunStatus: varchar("lastRunStatus", { length: 32 }),
+  lastRunSummary: text("lastRunSummary"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ScheduleConfig = typeof scheduleConfigs.$inferSelect;
+export type InsertScheduleConfig = typeof scheduleConfigs.$inferInsert;

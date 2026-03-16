@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `schedule_configs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`configId` int NOT NULL,\n\t`isEnabled` boolean NOT NULL DEFAULT false,\n\t`cronExpression` varchar(128) NOT NULL DEFAULT '0 0 8,12,16 * * *',\n\t`timezone` varchar(64) NOT NULL DEFAULT 'America/New_York',\n\t`lastRunAt` timestamp,\n\t`lastRunStatus` varchar(32),\n\t`lastRunSummary` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `schedule_configs_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `customer_rules` ADD `facilityId` int;\nALTER TABLE `customer_rules` ADD `facilityName` varchar(256);\nALTER TABLE `customer_rules` ADD `autoRun` boolean DEFAULT false NOT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `schedule_configs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`configId` int NOT NULL,\n\t`isEnabled` boolean NOT NULL DEFAULT false,\n\t`cronExpression` varchar(128) NOT NULL DEFAULT '0 0 8,12,16 * * *',\n\t`timezone` varchar(64) NOT NULL DEFAULT 'America/New_York',\n\t`lastRunAt` timestamp,\n\t`lastRunStatus` varchar(32),\n\t`lastRunSummary` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `schedule_configs_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `customer_rules` ADD `facilityId` int;\nALTER TABLE `customer_rules` ADD `facilityName` varchar(256);\nALTER TABLE `customer_rules` ADD `autoRun` boolean DEFAULT false NOT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1084
+}

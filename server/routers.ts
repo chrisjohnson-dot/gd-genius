@@ -25,7 +25,11 @@ import {
   getCustomerRules,
   getCustomerRule,
   upsertCustomerRule,
+  getScheduleConfig,
+  upsertScheduleConfig,
+  getAutoRunCustomers,
 } from "./db";
+import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -563,7 +567,10 @@ export const appRouter = router({
           configId: z.number(),
           customerId: z.number(),
           customerName: z.string().optional(),
+          facilityId: z.number().optional(),
+          facilityName: z.string().optional(),
           noLotMixing: z.boolean(),
+          autoRun: z.boolean(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -573,9 +580,68 @@ export const appRouter = router({
           action: "customerRules.save",
           entityType: "customer_rules",
           entityId: String(input.customerId),
-          details: { noLotMixing: input.noLotMixing },
+          details: { noLotMixing: input.noLotMixing, autoRun: input.autoRun },
         });
         return { success: true };
+      }),
+  }),
+
+  // ─── Schedule Config ────────────────────────────────────────────────────
+  schedule: router({
+    get: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .query(async ({ input }) => {
+        return (await getScheduleConfig(input.configId)) ?? null;
+      }),
+
+    save: protectedProcedure
+      .input(
+        z.object({
+          configId: z.number(),
+          isEnabled: z.boolean(),
+          cronExpression: z.string().min(1),
+          timezone: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        await upsertScheduleConfig(input);
+        // Restart or stop the cron job
+        if (input.isEnabled) {
+          startSchedule(input.configId, input.cronExpression);
+        } else {
+          stopSchedule(input.configId);
+        }
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "schedule.save",
+          entityType: "schedule_config",
+          entityId: String(input.configId),
+          details: { isEnabled: input.isEnabled, cronExpression: input.cronExpression },
+        });
+        return { success: true };
+      }),
+
+    triggerNow: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "schedule.triggerNow",
+          entityType: "schedule_config",
+          entityId: String(input.configId),
+          details: {},
+        });
+        // Run async, don't await so the UI gets an immediate response
+        triggerManualRun(input.configId).catch((err) =>
+          console.error("[Schedule] Manual trigger failed:", err)
+        );
+        return { success: true, message: "Auto-run triggered. Check Run History for results." };
+      }),
+
+    autoRunCustomers: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .query(async ({ input }) => {
+        return getAutoRunCustomers(input.configId);
       }),
   }),
 });

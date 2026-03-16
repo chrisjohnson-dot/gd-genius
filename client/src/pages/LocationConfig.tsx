@@ -214,11 +214,13 @@ export default function LocationConfig() {
                           checked={noLotMixing}
                           onCheckedChange={(checked) => {
                             if (!selectedConfigId) return;
+                            const existingRule = (customerRulesList ?? []).find((r) => r.customerId === customerId);
                             saveRuleMutation.mutate({
                               configId: selectedConfigId,
                               customerId,
                               customerName: customerName ?? undefined,
                               noLotMixing: checked,
+                              autoRun: existingRule?.autoRun ?? false,
                             });
                           }}
                         />

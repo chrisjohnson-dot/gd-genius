@@ -4,6 +4,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
 import {
   BarChart3,
+  CalendarClock,
   ClipboardList,
   Cog,
   History,
@@ -29,6 +30,7 @@ const navItems = [
 const configItems = [
   { href: "/settings", label: "API Settings", icon: Cog },
   { href: "/locations", label: "Location Config", icon: MapPin },
+  { href: "/schedule", label: "Auto-Run Schedule", icon: CalendarClock },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `customer_rules` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `configId` int NOT NULL,\n  `customerId` int NOT NULL,\n  `customerName` varchar(256),\n  `noLotMixing` boolean NOT NULL DEFAULT false,\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `customer_rules_id` PRIMARY KEY(`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `customer_rules` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `configId` int NOT NULL,\n  `customerId` int NOT NULL,\n  `customerName` varchar(256),\n  `noLotMixing` boolean NOT NULL DEFAULT false,\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `customer_rules_id` PRIMARY KEY(`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 320
+}

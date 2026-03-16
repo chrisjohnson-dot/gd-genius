@@ -189,3 +189,55 @@ describe("Allocation Engine", () => {
     expect(result.packList[0]!.qty).toBe(5);
   });
 });
+
+describe("Allocation Engine — No Lot Mixing Rule", () => {
+  it("allocates from a single lot when noLotMixing=true and one lot has enough qty", () => {
+    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 5 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 10, locationId: STAGING_LOC_ID, lotNumber: "LOT-A" }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 10, locationId: STAGING_LOC_ID, lotNumber: "LOT-B" }),
+    ];
+    const result = runAllocationEngine(orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map(), true);
+    expect(result.allocatedOrders).toHaveLength(1);
+    // All allocations must use the same lot code
+    const lots = new Set(result.allocatedOrders[0]!.lineItems[0]!.allocations.map((a) => a.lotNumber));
+    expect(lots.size).toBe(1);
+  });
+
+  it("skips order when noLotMixing=true and no single lot has enough qty", () => {
+    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 15 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 8, locationId: STAGING_LOC_ID, lotNumber: "LOT-A" }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 8, locationId: STAGING_LOC_ID, lotNumber: "LOT-B" }),
+    ];
+    // Combined qty is 16 (enough) but no single lot has 15
+    const result = runAllocationEngine(orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map(), true);
+    expect(result.allocatedOrders).toHaveLength(0);
+    expect(result.skippedOrders).toHaveLength(1);
+    expect(result.skippedOrders[0]!.skipReason).toContain("Lot Mixing rule");
+  });
+
+  it("allows lot mixing when noLotMixing=false (default)", () => {
+    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 15 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 8, locationId: STAGING_LOC_ID, lotNumber: "LOT-A" }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 8, locationId: STAGING_LOC_ID, lotNumber: "LOT-B" }),
+    ];
+    const result = runAllocationEngine(orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map(), false);
+    expect(result.allocatedOrders).toHaveLength(1);
+    const lots = new Set(result.allocatedOrders[0]!.lineItems[0]!.allocations.map((a) => a.lotNumber));
+    expect(lots.size).toBe(2); // mixed lots allowed
+  });
+
+  it("picks the earliest-expiry lot when multiple lots qualify under noLotMixing", () => {
+    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 5 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 10, locationId: STAGING_LOC_ID, lotNumber: "LOT-LATE", expirationDate: "2027-12-01" }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 10, locationId: STAGING_LOC_ID, lotNumber: "LOT-EARLY", expirationDate: "2026-06-01" }),
+    ];
+    const result = runAllocationEngine(orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map(), true);
+    expect(result.allocatedOrders).toHaveLength(1);
+    const usedLot = result.allocatedOrders[0]!.lineItems[0]!.allocations[0]!.lotNumber;
+    expect(usedLot).toBe("LOT-EARLY");
+  });
+});

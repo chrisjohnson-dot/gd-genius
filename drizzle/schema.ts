@@ -60,6 +60,20 @@ export const locationConfigs = mysqlTable("location_configs", {
 export type LocationConfig = typeof locationConfigs.$inferSelect;
 export type InsertLocationConfig = typeof locationConfigs.$inferInsert;
 
+// Per-customer allocation rules (one row per customer per config)
+export const customerRules = mysqlTable("customer_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  configId: int("configId").notNull(),
+  customerId: int("customerId").notNull(),
+  customerName: varchar("customerName", { length: 256 }),
+  noLotMixing: boolean("noLotMixing").default(false).notNull(), // Prevent multiple lot codes on the same order line
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CustomerRule = typeof customerRules.$inferSelect;
+export type InsertCustomerRule = typeof customerRules.$inferInsert;
+
 // Allocation run header
 export const allocationRuns = mysqlTable("allocation_runs", {
   id: int("id").autoincrement().primaryKey(),

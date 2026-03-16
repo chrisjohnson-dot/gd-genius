@@ -22,6 +22,9 @@ import {
   getAllocationRunOrders,
   createAuditLog,
   getAuditLogs,
+  getCustomerRules,
+  getCustomerRule,
+  upsertCustomerRule,
 } from "./db";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
@@ -291,6 +294,10 @@ export const appRouter = router({
             locationTypeMap[lc.locationId] = lc.locationType;
           }
 
+          // Look up per-customer rules (e.g. noLotMixing)
+          const customerRule = await getCustomerRule(input.configId, customer.customerId);
+          const noLotMixing = customerRule?.noLotMixing ?? false;
+
           // Run allocation engine for this customer
           const result = runAllocationEngine(
             orders,
@@ -298,7 +305,8 @@ export const appRouter = router({
             locationTypeMap,
             customer.stagingLocationId,
             customer.stagingLocationName,
-            descMap
+            descMap,
+            noLotMixing
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -532,6 +540,42 @@ export const appRouter = router({
       .input(z.object({ limit: z.number().default(100) }))
       .query(async ({ input }) => {
         return getAuditLogs(input.limit);
+      }),
+  }),
+
+  // ─── Customer Rules ────────────────────────────────────────────────────────
+  customerRules: router({
+    list: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .query(async ({ input }) => {
+        return getCustomerRules(input.configId);
+      }),
+
+    get: protectedProcedure
+      .input(z.object({ configId: z.number(), customerId: z.number() }))
+      .query(async ({ input }) => {
+        return getCustomerRule(input.configId, input.customerId) ?? null;
+      }),
+
+    save: protectedProcedure
+      .input(
+        z.object({
+          configId: z.number(),
+          customerId: z.number(),
+          customerName: z.string().optional(),
+          noLotMixing: z.boolean(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        await upsertCustomerRule(input);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "customerRules.save",
+          entityType: "customer_rules",
+          entityId: String(input.customerId),
+          details: { noLotMixing: input.noLotMixing },
+        });
+        return { success: true };
       }),
   }),
 });

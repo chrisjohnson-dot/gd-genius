@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import { MapPin, Pencil, Plus, Trash2, FlaskConical } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 
 type LocationType = "staging" | "pick_face" | "warehouse";
 
@@ -45,6 +46,10 @@ export default function LocationConfig() {
     { configId: selectedConfigId! },
     { enabled: !!selectedConfigId }
   );
+  const { data: customerRulesList } = trpc.customerRules.list.useQuery(
+    { configId: selectedConfigId! },
+    { enabled: !!selectedConfigId }
+  );
 
   const saveMutation = trpc.locations.save.useMutation({
     onSuccess: () => { utils.locations.list.invalidate(); toast.success("Location saved"); setOpen(false); },
@@ -52,6 +57,10 @@ export default function LocationConfig() {
   });
   const deleteMutation = trpc.locations.delete.useMutation({
     onSuccess: () => { utils.locations.list.invalidate(); toast.success("Location deleted"); },
+    onError: (e) => toast.error(e.message),
+  });
+  const saveRuleMutation = trpc.customerRules.save.useMutation({
+    onSuccess: () => { utils.customerRules.list.invalidate(); toast.success("Rule saved"); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -185,14 +194,43 @@ export default function LocationConfig() {
         ) : (
           <div className="space-y-4">
             {Object.entries(grouped).map(([key, locs]) => {
-              const [customerId, customerName] = key.split(":");
+              const [customerIdStr, customerName] = key.split(":");
+              const customerId = Number(customerIdStr);
+              const rule = (customerRulesList ?? []).find((r) => r.customerId === customerId);
+              const noLotMixing = rule?.noLotMixing ?? false;
               return (
                 <Card key={key}>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Customer: <span className="text-foreground">{customerName}</span>
-                      <span className="ml-2 text-xs">(ID: {customerId})</span>
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        Customer: <span className="text-foreground">{customerName}</span>
+                        <span className="ml-2 text-xs">(ID: {customerIdStr})</span>
+                      </CardTitle>
+                      {/* Lot Mixing Rule Toggle */}
+                      <div className="flex items-center gap-2 text-sm">
+                        <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground text-xs">No Lot Mixing</span>
+                        <Switch
+                          checked={noLotMixing}
+                          onCheckedChange={(checked) => {
+                            if (!selectedConfigId) return;
+                            saveRuleMutation.mutate({
+                              configId: selectedConfigId,
+                              customerId,
+                              customerName: customerName ?? undefined,
+                              noLotMixing: checked,
+                            });
+                          }}
+                        />
+                        <Badge
+                          className={noLotMixing
+                            ? "text-xs bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-0"
+                            : "text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-0"}
+                        >
+                          {noLotMixing ? "Enforced" : "Allowed"}
+                        </Badge>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="divide-y divide-border">

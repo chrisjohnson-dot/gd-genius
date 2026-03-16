@@ -16,6 +16,9 @@ import {
   InsertAllocationRunOrder,
   auditLogs,
   InsertAuditLog,
+  customerRules,
+  InsertCustomerRule,
+  CustomerRule,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -213,4 +216,40 @@ export async function getAuditLogs(limit = 100) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
+}
+
+// ─── Customer Rules ───────────────────────────────────────────────────────────
+
+export async function getCustomerRules(configId: number): Promise<CustomerRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(customerRules).where(eq(customerRules.configId, configId));
+}
+
+export async function getCustomerRule(configId: number, customerId: number): Promise<CustomerRule | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(customerRules)
+    .where(and(eq(customerRules.configId, configId), eq(customerRules.customerId, customerId)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function upsertCustomerRule(
+  rule: InsertCustomerRule
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(customerRules)
+    .values(rule)
+    .onDuplicateKeyUpdate({
+      set: {
+        customerName: rule.customerName,
+        noLotMixing: rule.noLotMixing,
+        updatedAt: new Date(),
+      },
+    });
 }

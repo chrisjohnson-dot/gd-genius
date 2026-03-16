@@ -111,6 +111,9 @@ function sortInventoryFEFO(records: InventoryPoolRecord[]): InventoryPoolRecord[
 /**
  * Main allocation function.
  * Takes a list of orders and available inventory, returns allocation results.
+ *
+ * @param noLotMixing - When true, each order line must be fulfilled from a single lot code.
+ *                      If no single lot has enough qty, the order is skipped.
  */
 export function runAllocationEngine(
   orders: ExtensivOrder[],
@@ -118,7 +121,8 @@ export function runAllocationEngine(
   locationTypeMap: LocationTypeMap,
   stagingLocationId: number,
   stagingLocationName: string,
-  descriptionMap: Map<string, string>
+  descriptionMap: Map<string, string>,
+  noLotMixing = false
 ): AllocationRunResult {
   // Build a mutable inventory pool keyed by receiveItemId
   // Only include available (not on hold, not quarantined) inventory
@@ -171,7 +175,7 @@ export function runAllocationEngine(
       const description = descriptionMap.get(sku);
 
       // Get all available inventory for this SKU
-      const skuInventory = Array.from(inventoryPool.values()).filter(
+      let skuInventory = Array.from(inventoryPool.values()).filter(
         (r) => r.itemIdentifier.sku === sku && r.remainingQty > 0
       );
 
@@ -180,6 +184,42 @@ export function runAllocationEngine(
         skipReason = `No available inventory for SKU ${sku}`;
         break;
       }
+
+      // ── Lot Mixing Rule ──────────────────────────────────────────────────────
+      // When noLotMixing is true, restrict inventory to a single lot code.
+      // Pick the lot that (a) has enough qty on its own, preferring the earliest
+      // expiry (FEFO). If no single lot can satisfy the full qty, skip the order.
+      if (noLotMixing) {
+        // Group available qty by lot code
+        const lotQtyMap = new Map<string, number>();
+        for (const r of skuInventory) {
+          const lot = r.lotNumber ?? "";
+          lotQtyMap.set(lot, (lotQtyMap.get(lot) ?? 0) + r.remainingQty);
+        }
+
+        // Find lots that can fully satisfy qtyRequired, sorted FEFO
+        const eligibleLots = Array.from(lotQtyMap.entries())
+          .filter(([, qty]) => qty >= qtyRequired)
+          .map(([lot]) => lot);
+
+        if (eligibleLots.length === 0) {
+          orderCanBeFullyAllocated = false;
+          skipReason = `No single lot code has sufficient qty for SKU ${sku} (Lot Mixing rule active)`;
+          break;
+        }
+
+        // Pick the best lot: earliest expiry among eligible lots
+        const bestLot = eligibleLots.sort((a, b) => {
+          const aRec = skuInventory.find((r) => (r.lotNumber ?? "") === a);
+          const bRec = skuInventory.find((r) => (r.lotNumber ?? "") === b);
+          return getInventoryPriority(aRec ?? ({} as InventoryPoolRecord)) -
+                 getInventoryPriority(bRec ?? ({} as InventoryPoolRecord));
+        })[0]!;
+
+        // Restrict inventory pool to this lot only
+        skuInventory = skuInventory.filter((r) => (r.lotNumber ?? "") === bestLot);
+      }
+      // ─────────────────────────────────────────────────────────────────────────
 
       // Separate by location type
       const stagingAndPickFace = sortInventoryFEFO(

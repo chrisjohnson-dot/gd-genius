@@ -47,3 +47,4 @@
 - [x] Bug: "No customers found for this warehouse" - switched to /customers?facilityid= direct endpoint with fallback loop
 - [x] Bug: Persistent "No customers found" - added API Diagnostics page to surface raw Extensiv responses
 - [x] Bug fix: Customer fields mapped incorrectly - fixed to use readOnly.customerId and companyInfo.companyName with paginated fallback
+- [x] Bug: facilityId mismatch fixed - Extensiv ignores facilityid param; now filters client-side using embedded facilities array on each customer record

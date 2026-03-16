@@ -157,13 +157,17 @@ export async function fetchCustomersForFacility(
 ): Promise<ExtensivCustomer[]> {
   const client = createExtensivClient(config);
 
-  // Primary: use facilityid query param to get customers directly (paginated)
+  // Fetch all customers (paginated) and filter client-side by the embedded facilities array.
+  // NOTE: The Extensiv API's facilityid query param is not reliably supported — it returns all
+  // customers regardless of the filter. We rely on the embedded `facilities` array on each
+  // customer record to determine facility membership.
+  const allRaw: RawExtensivCustomer[] = [];
+  let pgnum = 1;
+  const pgsiz = 500;
+
   try {
-    const allRaw: RawExtensivCustomer[] = [];
-    let pgnum = 1;
-    const pgsiz = 500;
     while (true) {
-      const data = (await client.get("/customers", { pgsiz, pgnum, facilityid: facilityId })) as {
+      const data = (await client.get("/customers", { pgsiz, pgnum })) as {
         totalResults?: number;
         _embedded?: { "http://api.3plCentral.com/rels/customers/customer"?: RawExtensivCustomer[] };
       };
@@ -172,38 +176,24 @@ export async function fetchCustomersForFacility(
       if (page.length < pgsiz) break;
       pgnum++;
     }
-    console.log(`[Extensiv] fetchCustomersForFacility facilityId=${facilityId} raw count=${allRaw.length}`);
-    if (allRaw.length > 0) {
-      const mapped = allRaw.map(mapRawCustomer).filter((c) => c.id > 0);
-      console.log(`[Extensiv] fetchCustomersForFacility mapped ${mapped.length} customers with valid IDs`);
-      if (mapped.length > 0) return mapped;
-    }
   } catch (err) {
-    console.warn("[Extensiv] /customers?facilityid failed, falling back to loop:", err);
+    console.warn("[Extensiv] fetchCustomersForFacility: failed to fetch customers:", err);
   }
 
-  // Fallback: fetch all customers and filter by embedded facilities array
-  console.log("[Extensiv] fetchCustomersForFacility falling back to all-customers filter");
-  const allRaw2: RawExtensivCustomer[] = [];
-  const clientFb = createExtensivClient(config);
-  let pgnum2 = 1;
-  const pgsiz2 = 500;
-  while (true) {
-    const data2 = (await clientFb.get("/customers", { pgsiz: pgsiz2, pgnum: pgnum2 })) as {
-      _embedded?: { "http://api.3plCentral.com/rels/customers/customer"?: RawExtensivCustomer[] };
-    };
-    const page2 = (data2?._embedded?.["http://api.3plCentral.com/rels/customers/customer"] ?? []) as RawExtensivCustomer[];
-    allRaw2.push(...page2);
-    if (page2.length < pgsiz2) break;
-    pgnum2++;
-  }
-  console.log(`[Extensiv] fetchCustomersForFacility fallback total=${allRaw2.length}`);
-  const results = allRaw2
-    .filter((c) => c.facilities?.some((f) => f.id === facilityId))
-    .map(mapRawCustomer)
-    .filter((c) => c.id > 0);
-  console.log(`[Extensiv] fetchCustomersForFacility fallback found ${results.length} customers for facility ${facilityId}`);
-  return results;
+  console.log(`[Extensiv] fetchCustomersForFacility: fetched ${allRaw.length} total customers, filtering for facilityId=${facilityId}`);
+
+  // Filter by embedded facilities array (each customer has a `facilities` array with {id, name})
+  const filtered = allRaw.filter((c) => {
+    if (!c.facilities || c.facilities.length === 0) return false;
+    return c.facilities.some((f) => f.id === facilityId);
+  });
+
+  // Also include deactivated=false customers only
+  const active = filtered.filter((c) => !c.readOnly?.deactivated);
+
+  const mapped = active.map(mapRawCustomer).filter((c) => c.id > 0);
+  console.log(`[Extensiv] fetchCustomersForFacility: found ${mapped.length} active customers for facilityId=${facilityId}`);
+  return mapped;
 }
 
 // Fetch open, unallocated orders for a customer (client-side filtered)

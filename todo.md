@@ -40,3 +40,4 @@
 - [x] Fix nested anchor tag warnings in AppLayout, Home, RunHistory, RunDetail
 - [x] Multi-customer allocation: select orders from multiple customers in one warehouse per run
 - [x] Lot Mixing rule: per-customer toggle to prevent multiple lot codes on the same order line
+- [x] PDF export: Pull List and Pack List download from Allocation Review screen

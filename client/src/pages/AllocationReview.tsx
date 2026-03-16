@@ -8,6 +8,7 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  FileDown,
   Loader2,
   Package,
   PackageX,
@@ -283,7 +284,19 @@ export default function AllocationReview() {
           <TabsContent value="pull" className="mt-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">Inventory movements required before allocation</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm text-muted-foreground">Inventory movements required before allocation</CardTitle>
+                  {pullList.length > 0 && (
+                    <a
+                      href={`/api/pdf/pull-list/${runId}`}
+                      download
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Export PDF
+                    </a>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 {pullList.length === 0 ? (
@@ -343,7 +356,19 @@ export default function AllocationReview() {
           <TabsContent value="pack" className="mt-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">Items to pack per order from staging</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm text-muted-foreground">Items to pack per order from staging</CardTitle>
+                  {packList.length > 0 && (
+                    <a
+                      href={`/api/pdf/pack-list/${runId}`}
+                      download
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Export PDF
+                    </a>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">

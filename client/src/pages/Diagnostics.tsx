@@ -248,9 +248,10 @@ export default function Diagnostics() {
             {orderDiagData && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm flex items-center gap-3">
+                  <CardTitle className="text-sm flex items-center gap-3 flex-wrap">
                     Orders from /orders/summaries
-                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResults} total in Extensiv</Badge>
+                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResultsAll} total (no facility filter)</Badge>
+                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResultsFiltered} with facilityId={orderDiagData.sentFacilityId}</Badge>
                     <Badge className="text-xs bg-green-600">{orderDiagData.passCount} pass filter</Badge>
                     {orderDiagData.failCount > 0 && (
                       <Badge variant="destructive" className="text-xs">{orderDiagData.failCount} excluded</Badge>
@@ -258,11 +259,26 @@ export default function Diagnostics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {orderDiagData.fetchError && (
-                    <p className="text-xs text-destructive mb-2">{orderDiagData.fetchError}</p>
+                  {(orderDiagData.fetchErrorAll || orderDiagData.fetchErrorFiltered) && (
+                    <p className="text-xs text-destructive mb-2">{orderDiagData.fetchErrorAll ?? orderDiagData.fetchErrorFiltered}</p>
+                  )}
+                  {orderDiagData.uniqueFacilityIds.length > 0 && (
+                    <div className="mb-3 p-2 bg-amber-50 dark:bg-amber-950/20 rounded text-xs">
+                      <span className="font-medium">Facility IDs on these orders: </span>
+                      {orderDiagData.uniqueFacilityIds.map(id => (
+                        <span key={String(id)} className={`font-mono mr-2 px-1.5 py-0.5 rounded ${id === orderDiagData.sentFacilityId ? 'bg-green-200 dark:bg-green-800' : 'bg-muted'}`}>
+                          {String(id)}{id === orderDiagData.sentFacilityId ? ' ✓ match' : ''}
+                        </span>
+                      ))}
+                      {orderDiagData.facilityMatchCount === 0 && (
+                        <span className="text-amber-700 dark:text-amber-400 font-medium ml-1">
+                          — None match facilityId={orderDiagData.sentFacilityId}. The app now queries without facilityid and shows all orders.
+                        </span>
+                      )}
+                    </div>
                   )}
                   {orderDiagData.orderSummaries.length === 0 ? (
-                    <p className="text-sm text-amber-600">No orders returned from Extensiv for this customer/facility combination.</p>
+                    <p className="text-sm text-amber-600">No orders returned from Extensiv for this customer (even without facility filter).</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
@@ -273,6 +289,7 @@ export default function Diagnostics() {
                             <th className="text-left py-1.5 pr-3">Status</th>
                             <th className="text-left py-1.5 pr-3">Closed?</th>
                             <th className="text-left py-1.5 pr-3">Allocated?</th>
+                            <th className="text-left py-1.5 pr-3">Order Facility</th>
                             <th className="text-left py-1.5 pr-3">Created</th>
                             <th className="text-left py-1.5">Passes Filter?</th>
                           </tr>
@@ -295,6 +312,9 @@ export default function Diagnostics() {
                                 {o.fullyAllocated
                                   ? <span className="text-red-600 font-medium">Yes</span>
                                   : <span className="text-green-600">No</span>}
+                              </td>
+                              <td className="py-1.5 pr-3 font-mono text-muted-foreground">
+                                {o.orderFacilityId ? `${o.orderFacilityId} (${o.orderFacilityName ?? '?'})` : '—'}
                               </td>
                               <td className="py-1.5 pr-3 text-muted-foreground">
                                 {o.creationDate ? new Date(o.creationDate).toLocaleDateString() : "—"}

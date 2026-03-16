@@ -358,32 +358,47 @@ export const appRouter = router({
         const { createExtensivClient } = await import("./extensiv/client");
         const client = createExtensivClient(config);
 
-        // Fetch first page of orders (no filter)
-        let rawOrders: unknown[] = [];
-        let totalResults = 0;
-        let fetchError: string | null = null;
+        type RawOrder = {
+          readOnly?: { orderId?: number; status?: number; isClosed?: boolean; fullyAllocated?: boolean; creationDate?: string; facilityIdentifier?: { id?: number; name?: string } };
+          referenceNum?: string;
+          poNum?: string;
+        };
+
+        // Query 1: WITHOUT facilityid — gets all orders for the customer regardless of facility
+        let rawOrdersAll: RawOrder[] = [];
+        let totalResultsAll = 0;
+        let fetchErrorAll: string | null = null;
+        try {
+          const data = (await client.get("/orders/summaries", {
+            pgsiz: 100,
+            pgnum: 1,
+            customerid: input.customerId,
+          })) as { totalResults?: number; _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: RawOrder[] } };
+          totalResultsAll = data?.totalResults ?? 0;
+          rawOrdersAll = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];
+        } catch (err: unknown) {
+          fetchErrorAll = err instanceof Error ? err.message : String(err);
+        }
+
+        // Query 2: WITH facilityid — to show how many orders the old approach returned
+        let rawOrdersFiltered: RawOrder[] = [];
+        let totalResultsFiltered = 0;
+        let fetchErrorFiltered: string | null = null;
         try {
           const data = (await client.get("/orders/summaries", {
             pgsiz: 100,
             pgnum: 1,
             customerid: input.customerId,
             facilityid: input.facilityId,
-          })) as {
-            totalResults?: number;
-            _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: unknown[] };
-          };
-          totalResults = data?.totalResults ?? 0;
-          rawOrders = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];
+          })) as { totalResults?: number; _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: RawOrder[] } };
+          totalResultsFiltered = data?.totalResults ?? 0;
+          rawOrdersFiltered = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];
         } catch (err: unknown) {
-          fetchError = err instanceof Error ? err.message : String(err);
+          fetchErrorFiltered = err instanceof Error ? err.message : String(err);
         }
 
-        // Summarize each order's key fields
-        const orderSummaries = (rawOrders as Array<{
-          readOnly?: { orderId?: number; status?: number; isClosed?: boolean; fullyAllocated?: boolean; creationDate?: string };
-          referenceNum?: string;
-          poNum?: string;
-        }>).map(o => ({
+        // Summarize each order's key fields (from the unfiltered query)
+        const orderSummaries = rawOrdersAll.map(o => ({
           orderId: o.readOnly?.orderId,
           referenceNum: o.referenceNum,
           poNum: o.poNum,
@@ -391,16 +406,31 @@ export const appRouter = router({
           isClosed: o.readOnly?.isClosed,
           fullyAllocated: o.readOnly?.fullyAllocated,
           creationDate: o.readOnly?.creationDate,
+          orderFacilityId: o.readOnly?.facilityIdentifier?.id,
+          orderFacilityName: o.readOnly?.facilityIdentifier?.name,
+          matchesFacility: o.readOnly?.facilityIdentifier?.id === input.facilityId,
           passesFilter: !o.readOnly?.isClosed && !o.readOnly?.fullyAllocated && (o.readOnly?.status ?? 99) <= 2,
         }));
 
+        // Unique facility IDs seen on these orders
+        const uniqueFacilityIds = Array.from(new Set(rawOrdersAll.map(o => o.readOnly?.facilityIdentifier?.id).filter(Boolean)));
+
         return {
-          totalResults,
-          fetchedCount: rawOrders.length,
-          fetchError,
+          sentFacilityId: input.facilityId,
+          // Without facilityid param
+          totalResultsAll,
+          fetchedCountAll: rawOrdersAll.length,
+          fetchErrorAll,
+          // With facilityid param (old approach)
+          totalResultsFiltered,
+          fetchedCountFiltered: rawOrdersFiltered.length,
+          fetchErrorFiltered,
+          // Order details
           orderSummaries,
+          uniqueFacilityIds,
           passCount: orderSummaries.filter(o => o.passesFilter).length,
           failCount: orderSummaries.filter(o => !o.passesFilter).length,
+          facilityMatchCount: orderSummaries.filter(o => o.matchesFacility).length,
         };
       }),
 

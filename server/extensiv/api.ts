@@ -239,12 +239,15 @@ export async function fetchOpenOrders(
   let pgnum = 1;
   const pgsiz = 1000;
 
+  // NOTE: We intentionally do NOT pass facilityid to /orders/summaries.
+  // The facilityId in the customer's embedded `facilities` array (used for the warehouse list)
+  // is often different from the facilityIdentifier.id on order records.
+  // Instead, we fetch all orders for the customer and filter client-side by facilityIdentifier.id.
   while (true) {
     const data = (await client.get("/orders/summaries", {
       pgsiz,
       pgnum,
       customerid: customerId,
-      facilityid: facilityId,
     })) as {
       totalResults?: number;
       _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: ExtensivOrder[] };
@@ -257,9 +260,25 @@ export async function fetchOpenOrders(
     pgnum++;
   }
 
+  console.log(`[Extensiv] fetchOpenOrders: fetched ${allOrders.length} total orders for customer ${customerId}`);
+
+  // Filter by facility: match on facilityIdentifier.id OR facilityIdentifier.name containing the facility name
+  // We also accept orders with no facilityIdentifier (some accounts omit it)
+  const facilityOrders = allOrders.filter((o) => {
+    const fid = o.readOnly?.facilityIdentifier?.id;
+    // Accept if no facility set, or if facility ID matches
+    return !fid || fid === facilityId;
+  });
+
+  // If the facility filter removed everything, fall back to all orders (ID mismatch — show all and let user see them)
+  const ordersToFilter = facilityOrders.length > 0 ? facilityOrders : allOrders;
+  if (facilityOrders.length === 0 && allOrders.length > 0) {
+    console.warn(`[Extensiv] fetchOpenOrders: facilityId=${facilityId} matched 0 orders out of ${allOrders.length}. Falling back to all orders for customer ${customerId}. Order facility IDs: ${Array.from(new Set(allOrders.map(o => o.readOnly?.facilityIdentifier?.id))).join(', ')}`);
+  }
+
   // Filter: not closed, not fully allocated, status 0 (Open), 1 (Complete/Ready), or 2 (some accounts use this)
   // Note: Extensiv order statuses: 0=Open, 1=Complete(ready for pick), 2=some accounts use for partial, 3=Closed, 4=Cancelled
-  const filtered = allOrders.filter(
+  const filtered = ordersToFilter.filter(
     (o) =>
       !o.readOnly.isClosed &&
       !o.readOnly.fullyAllocated &&
@@ -268,13 +287,13 @@ export async function fetchOpenOrders(
   );
 
   // Log what was excluded so we can diagnose issues
-  const excluded = allOrders.filter((o) => !filtered.includes(o));
+  const excluded = ordersToFilter.filter((o) => !filtered.includes(o));
   if (excluded.length > 0) {
     console.log(`[Extensiv] fetchOpenOrders: excluded ${excluded.length} orders for customer ${customerId}:`,
       excluded.map(o => ({ id: o.readOnly.orderId, status: o.readOnly.status, isClosed: o.readOnly.isClosed, fullyAllocated: o.readOnly.fullyAllocated }))
     );
   }
-  console.log(`[Extensiv] fetchOpenOrders: ${filtered.length} open orders for customer ${customerId} (${allOrders.length} total fetched)`);
+  console.log(`[Extensiv] fetchOpenOrders: ${filtered.length} open orders for customer ${customerId} (facilityId=${facilityId}, ${allOrders.length} total fetched, ${facilityOrders.length} matched facility)`);
 
   return filtered;
 }

@@ -235,6 +235,73 @@ export const appRouter = router({
         return results;
       }),
 
+    // Compact debug summary: shows processed results (not raw JSON) to diagnose filtering issues
+    debugSummary: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const { createExtensivClient } = await import("./extensiv/client");
+        const client = createExtensivClient(config);
+
+        // Step 1: Raw /properties/facilities response
+        let facilitiesRaw: unknown = null;
+        let facilitiesError: string | null = null;
+        try {
+          facilitiesRaw = await client.get("/properties/facilities", { pgsiz: 500 });
+        } catch (err: unknown) {
+          facilitiesError = err instanceof Error ? err.message : String(err);
+        }
+
+        // Step 2: What fetchAllFacilities() returns (processed)
+        let processedFacilities: Array<{id: number; name: string}> = [];
+        let processedFacilitiesError: string | null = null;
+        try {
+          processedFacilities = await fetchAllFacilities(config);
+        } catch (err: unknown) {
+          processedFacilitiesError = err instanceof Error ? err.message : String(err);
+        }
+
+        // Step 3: For each processed facility, what does fetchCustomersForFacility() return?
+        const customersByFacility: Record<string, Array<{id: number; name: string}>> = {};
+        for (const fac of processedFacilities) {
+          try {
+            const custs = await fetchCustomersForFacility(config, fac.id);
+            customersByFacility[`${fac.id}:${fac.name}`] = custs;
+          } catch (err: unknown) {
+            customersByFacility[`${fac.id}:${fac.name}`] = [];
+          }
+        }
+
+        // Step 4: Raw facilities response structure summary
+        const rawFacilitiesStructure = (() => {
+          if (!facilitiesRaw || typeof facilitiesRaw !== 'object') return 'null or non-object';
+          const r = facilitiesRaw as Record<string, unknown>;
+          const keys = Object.keys(r);
+          const embeddedKeys = r._embedded ? Object.keys(r._embedded as object) : [];
+          const isArray = Array.isArray(r);
+          // Try to extract first item
+          let firstItem: unknown = null;
+          const embedded = r._embedded as Record<string, unknown> | undefined;
+          if (embedded) {
+            for (const k of embeddedKeys) {
+              const arr = embedded[k];
+              if (Array.isArray(arr) && arr.length > 0) { firstItem = arr[0]; break; }
+            }
+          }
+          if (isArray && (r as unknown as unknown[]).length > 0) firstItem = (r as unknown as unknown[])[0];
+          return { topLevelKeys: keys, embeddedKeys, isArray, firstItem };
+        })();
+
+        return {
+          step1_rawFacilitiesStructure: rawFacilitiesStructure,
+          step1_facilitiesError: facilitiesError,
+          step2_processedFacilities: processedFacilities,
+          step2_processedFacilitiesError: processedFacilitiesError,
+          step3_customersByFacility: customersByFacility,
+        };
+      }),
+
     // Legacy debug endpoint kept for compatibility
     facilitiesRaw: protectedProcedure
       .input(z.object({ configId: z.number() }))

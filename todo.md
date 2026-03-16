@@ -48,3 +48,4 @@
 - [x] Bug: Persistent "No customers found" - added API Diagnostics page to surface raw Extensiv responses
 - [x] Bug fix: Customer fields mapped incorrectly - fixed to use readOnly.customerId and companyInfo.companyName with paginated fallback
 - [x] Bug: facilityId mismatch fixed - Extensiv ignores facilityid param; now filters client-side using embedded facilities array on each customer record
+- [x] Bug: Still no customers showing - added debugSummary endpoint + improved fetchAllFacilities with customer-embedded facilities fallback

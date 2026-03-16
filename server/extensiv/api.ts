@@ -118,7 +118,7 @@ export async function fetchAllFacilities(
   try {
     const data = (await client.get("/properties/facilities", { pgsiz: 500 })) as {
       _embedded?: {
-        "http://api.3plCentral.com/rels/properties/facility"?: Array<{ id: number; name: string; [key: string]: unknown }>;
+        "http://api.3plCentral.com/rels/properties/facility"?: Array<{ id: number; name: string; facilityId?: number; [key: string]: unknown }>;
       };
       // Some Extensiv accounts return a flat array
       [key: string]: unknown;
@@ -127,27 +127,59 @@ export async function fetchAllFacilities(
     // Try HAL embedded format first
     const embedded = data?._embedded?.["http://api.3plCentral.com/rels/properties/facility"];
     if (embedded && embedded.length > 0) {
-      return embedded.map((f) => ({ id: f.id, name: f.name }));
+      // Some accounts use facilityId instead of id at the top level
+      return embedded.map((f) => ({ id: f.id ?? f.facilityId ?? 0, name: f.name })).filter(f => f.id > 0);
     }
 
     // Fallback: some accounts return a direct array at root
     if (Array.isArray(data)) {
-      return (data as Array<{ id: number; name: string }>).map((f) => ({ id: f.id, name: f.name }));
+      return (data as Array<{ id?: number; facilityId?: number; name: string }>).map((f) => ({ id: f.id ?? f.facilityId ?? 0, name: f.name })).filter(f => f.id > 0);
     }
+
+    console.warn("[Extensiv] /properties/facilities returned no usable data, falling back to customer-embedded facilities");
   } catch (err) {
-    console.warn("[Extensiv] /properties/facilities failed, falling back to customer loop:", err);
+    console.warn("[Extensiv] /properties/facilities failed, falling back:", err);
   }
 
-  // Fallback: loop through customers and collect their facilities
+  // Fallback 1: Extract unique facilities from the embedded facilities array on customer records
+  // This is reliable because each customer record includes a `facilities` array with {id, name}
+  try {
+    const allRaw: RawExtensivCustomer[] = [];
+    let pgnum = 1;
+    const pgsiz = 500;
+    while (true) {
+      const data = (await client.get("/customers", { pgsiz, pgnum })) as {
+        _embedded?: { "http://api.3plCentral.com/rels/customers/customer"?: RawExtensivCustomer[] };
+      };
+      const page = data?._embedded?.["http://api.3plCentral.com/rels/customers/customer"] ?? [];
+      allRaw.push(...page);
+      if (page.length < pgsiz) break;
+      pgnum++;
+    }
+    const facilityMap = new Map<number, ExtensivFacility>();
+    for (const c of allRaw) {
+      for (const f of (c.facilities ?? [])) {
+        if (f.id && !facilityMap.has(f.id)) facilityMap.set(f.id, { id: f.id, name: f.name });
+      }
+    }
+    if (facilityMap.size > 0) {
+      console.log(`[Extensiv] fetchAllFacilities: extracted ${facilityMap.size} unique facilities from customer records`);
+      return Array.from(facilityMap.values());
+    }
+  } catch (err) {
+    console.warn("[Extensiv] customer-embedded facilities fallback failed:", err);
+  }
+
+  // Fallback 2: loop through customers and call /customers/{id}/facilities per customer
   const customers = await fetchCustomers(config);
-  const facilityMap = new Map<number, ExtensivFacility>();
+  const facilityMap2 = new Map<number, ExtensivFacility>();
   for (const customer of customers) {
     const facilities = await fetchFacilities(config, customer.id);
     for (const f of facilities) {
-      if (!facilityMap.has(f.id)) facilityMap.set(f.id, f);
+      if (!facilityMap2.has(f.id)) facilityMap2.set(f.id, f);
     }
   }
-  return Array.from(facilityMap.values());
+  return Array.from(facilityMap2.values());
 }
 
 // Fetch customers that belong to a specific facility

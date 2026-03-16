@@ -133,13 +133,31 @@ export async function fetchAllFacilities(
   return Array.from(facilityMap.values());
 }
 
-// Fetch customers that have orders in a specific facility
+// Fetch customers that belong to a specific facility
 export async function fetchCustomersForFacility(
   config: ExtensivClientConfig,
   facilityId: number
 ): Promise<ExtensivCustomer[]> {
-  // Fetch all customers then filter to those with the given facility
+  const client = createExtensivClient(config);
+
+  // Primary: use facilityid query param to get customers directly
+  try {
+    const data = (await client.get("/customers", { pgsiz: 500, facilityid: facilityId })) as {
+      _embedded?: { "http://api.3plCentral.com/rels/customers/customer"?: ExtensivCustomer[] };
+    };
+    const embedded = data?._embedded?.["http://api.3plCentral.com/rels/customers/customer"];
+    console.log(`[Extensiv] fetchCustomersForFacility facilityId=${facilityId} raw count=${embedded?.length ?? 0}`);
+    if (embedded && embedded.length > 0) {
+      return embedded.map((c) => ({ id: c.id, name: c.name }));
+    }
+  } catch (err) {
+    console.warn("[Extensiv] /customers?facilityid failed, falling back to loop:", err);
+  }
+
+  // Fallback: loop through all customers and check facility membership
+  console.log("[Extensiv] fetchCustomersForFacility falling back to customer loop");
   const customers = await fetchCustomers(config);
+  console.log(`[Extensiv] fetchCustomersForFacility total customers=${customers.length}`);
   const results: ExtensivCustomer[] = [];
   for (const customer of customers) {
     const facilities = await fetchFacilities(config, customer.id);
@@ -147,6 +165,7 @@ export async function fetchCustomersForFacility(
       results.push(customer);
     }
   }
+  console.log(`[Extensiv] fetchCustomersForFacility fallback found ${results.length} customers`);
   return results;
 }
 

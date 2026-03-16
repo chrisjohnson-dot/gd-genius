@@ -46,3 +46,4 @@
 - [x] Rename "Run Allocation" button to "Run Allocation Tool" throughout the app
 - [x] Bug: "No customers found for this warehouse" - switched to /customers?facilityid= direct endpoint with fallback loop
 - [x] Bug: Persistent "No customers found" - added API Diagnostics page to surface raw Extensiv responses
+- [x] Bug fix: Customer fields mapped incorrectly - fixed to use readOnly.customerId and companyInfo.companyName with paginated fallback

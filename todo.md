@@ -33,3 +33,8 @@
 ## Testing
 - [x] Unit tests for allocation engine (FEFO, location priority, no partial allocation, rollback)
 - [x] Unit tests for auth logout
+
+## Improvements
+- [x] Redesign Order Selection with warehouse → customer → orders 3-step flow
+- [x] Add facilities and customersForFacility tRPC endpoints
+- [x] Fix nested anchor tag warnings in AppLayout, Home, RunHistory, RunDetail

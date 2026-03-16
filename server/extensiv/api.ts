@@ -75,6 +75,50 @@ export async function fetchCustomers(config: ExtensivClientConfig): Promise<Exte
   return data?._embedded?.["http://api.3plCentral.com/rels/customers/customer"] ?? [];
 }
 
+// Fetch all facilities for a customer
+export async function fetchFacilities(
+  config: ExtensivClientConfig,
+  customerId: number
+): Promise<ExtensivFacility[]> {
+  const client = createExtensivClient(config);
+  const data = (await client.get(`/customers/${customerId}/facilities`, { pgsiz: 100 })) as {
+    _embedded?: { "http://api.3plCentral.com/rels/customers/facility"?: ExtensivFacility[] };
+  };
+  return data?._embedded?.["http://api.3plCentral.com/rels/customers/facility"] ?? [];
+}
+
+// Fetch all facilities across all customers (deduplicated by facilityId)
+export async function fetchAllFacilities(
+  config: ExtensivClientConfig
+): Promise<ExtensivFacility[]> {
+  const customers = await fetchCustomers(config);
+  const facilityMap = new Map<number, ExtensivFacility>();
+  for (const customer of customers) {
+    const facilities = await fetchFacilities(config, customer.id);
+    for (const f of facilities) {
+      if (!facilityMap.has(f.id)) facilityMap.set(f.id, f);
+    }
+  }
+  return Array.from(facilityMap.values());
+}
+
+// Fetch customers that have orders in a specific facility
+export async function fetchCustomersForFacility(
+  config: ExtensivClientConfig,
+  facilityId: number
+): Promise<ExtensivCustomer[]> {
+  // Fetch all customers then filter to those with the given facility
+  const customers = await fetchCustomers(config);
+  const results: ExtensivCustomer[] = [];
+  for (const customer of customers) {
+    const facilities = await fetchFacilities(config, customer.id);
+    if (facilities.some((f) => f.id === facilityId)) {
+      results.push(customer);
+    }
+  }
+  return results;
+}
+
 // Fetch open, unallocated orders for a customer (client-side filtered)
 export async function fetchOpenOrders(
   config: ExtensivClientConfig,

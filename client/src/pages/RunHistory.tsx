@@ -67,11 +67,11 @@ export default function RunHistory() {
                         </td>
                         <td className="px-4 py-3">
                           <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/history/${run.id}`}><a>View</a></Link>
+                            <Link href={`/history/${run.id}`}>View</Link>
                           </Button>
                           {run.status === "proposed" && (
                             <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/review/${run.id}`}><a>Review</a></Link>
+                              <Link href={`/review/${run.id}`}>Review</Link>
                             </Button>
                           )}
                         </td>

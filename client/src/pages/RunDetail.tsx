@@ -46,7 +46,7 @@ export default function RunDetail() {
       <div className="p-6 space-y-6 max-w-4xl">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/history"><a><ArrowLeft className="h-4 w-4 mr-1" />Back</a></Link>
+            <Link href="/history" className="flex items-center"><ArrowLeft className="h-4 w-4 mr-1" />Back</Link>
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Run #{run.id}</h1>

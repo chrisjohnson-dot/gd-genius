@@ -90,18 +90,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             Operations
           </p>
           {navItems.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href}>
-              <a
-                className={cn(
-                  "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
-                  location === href
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {label}
-              </a>
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
+                location === href
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
+                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
             </Link>
           ))}
 
@@ -111,18 +111,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             Configuration
           </p>
           {configItems.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href}>
-              <a
-                className={cn(
-                  "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
-                  location === href
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {label}
-              </a>
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
+                location === href
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
+                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
             </Link>
           ))}
         </nav>

@@ -23,7 +23,7 @@ import {
   createAuditLog,
   getAuditLogs,
 } from "./db";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, updateOrderProposedAllocations } from "./extensiv/api";
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 
@@ -182,6 +182,22 @@ export const appRouter = router({
 
   // ─── Extensiv Data (live from API) ─────────────────────────────────────────
   extensiv: router({
+    facilities: protectedProcedure
+      .input(z.object({ configId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        return fetchAllFacilities(config);
+      }),
+
+    customersForFacility: protectedProcedure
+      .input(z.object({ configId: z.number(), facilityId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        return fetchCustomersForFacility(config, input.facilityId);
+      }),
+
     customers: protectedProcedure
       .input(z.object({ configId: z.number() }))
       .query(async ({ input }) => {

@@ -32,11 +32,9 @@ export default function Home() {
             <p className="text-muted-foreground text-sm mt-1">Go Direct Allocation Agent</p>
           </div>
           <Button asChild>
-            <Link href="/allocate">
-              <a className="flex items-center gap-2">
-                <PackageSearch className="h-4 w-4" />
-                Run Allocation
-              </a>
+            <Link href="/allocate" className="flex items-center gap-2">
+              <PackageSearch className="h-4 w-4" />
+              Run Allocation
             </Link>
           </Button>
         </div>
@@ -83,7 +81,7 @@ export default function Home() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Recent Allocation Runs</CardTitle>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/history"><a>View All</a></Link>
+              <Link href="/history">View All</Link>
             </Button>
           </CardHeader>
           <CardContent>
@@ -98,7 +96,7 @@ export default function Home() {
                 <PackageSearch className="h-10 w-10 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">No allocation runs yet.</p>
                 <Button variant="outline" size="sm" className="mt-3" asChild>
-                  <Link href="/allocate"><a>Run your first allocation</a></Link>
+                  <Link href="/allocate">Run your first allocation</Link>
                 </Button>
               </div>
             ) : (
@@ -114,7 +112,7 @@ export default function Home() {
                     <div className="flex items-center gap-2">
                       <Badge className={statusColor(run.status)}>{run.status}</Badge>
                       <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/history/${run.id}`}><a>View</a></Link>
+                        <Link href={`/history/${run.id}`}>View</Link>
                       </Button>
                     </div>
                   </div>

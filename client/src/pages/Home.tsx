@@ -34,7 +34,7 @@ export default function Home() {
           <Button asChild>
             <Link href="/allocate" className="flex items-center gap-2">
               <PackageSearch className="h-4 w-4" />
-              Run Allocation
+              Run Allocation Tool
             </Link>
           </Button>
         </div>

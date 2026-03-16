@@ -22,7 +22,7 @@ import { Skeleton } from "./ui/skeleton";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
-  { href: "/allocate", label: "Run Allocation", icon: PackageSearch },
+  { href: "/allocate", label: "Run Allocation Tool", icon: PackageSearch },
   { href: "/history", label: "Run History", icon: History },
   { href: "/audit", label: "Audit Log", icon: ClipboardList },
 ];

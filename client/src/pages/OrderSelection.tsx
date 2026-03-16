@@ -343,7 +343,7 @@ export default function OrderSelection() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Run Allocation</h1>
+            <h1 className="text-2xl font-bold">Run Allocation Tool</h1>
             <p className="text-muted-foreground text-sm mt-1">
               Select a warehouse, then pick orders from any customers to allocate in one run
             </p>
@@ -357,7 +357,7 @@ export default function OrderSelection() {
               {proposeMutation.isPending ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
               ) : (
-                <><Play className="h-4 w-4" /> Run Allocation ({selectedOrders.size})</>
+                <><Play className="h-4 w-4" /> Run Allocation Tool ({selectedOrders.size})</>
               )}
             </Button>
           )}

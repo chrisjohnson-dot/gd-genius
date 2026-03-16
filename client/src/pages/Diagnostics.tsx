@@ -250,8 +250,8 @@ export default function Diagnostics() {
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-3 flex-wrap">
                     Orders from /orders/summaries
-                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResultsAll} total (no facility filter)</Badge>
-                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResultsFiltered} with facilityId={orderDiagData.sentFacilityId}</Badge>
+                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResultsAll} via RQL (correct)</Badge>
+                    <Badge variant="outline" className="text-xs">{orderDiagData.totalResultsFiltered} via old customerid param</Badge>
                     <Badge className="text-xs bg-green-600">{orderDiagData.passCount} pass filter</Badge>
                     {orderDiagData.failCount > 0 && (
                       <Badge variant="destructive" className="text-xs">{orderDiagData.failCount} excluded</Badge>

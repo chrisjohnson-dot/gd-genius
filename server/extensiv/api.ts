@@ -239,15 +239,18 @@ export async function fetchOpenOrders(
   let pgnum = 1;
   const pgsiz = 1000;
 
-  // NOTE: We intentionally do NOT pass facilityid to /orders/summaries.
-  // The facilityId in the customer's embedded `facilities` array (used for the warehouse list)
-  // is often different from the facilityIdentifier.id on order records.
-  // Instead, we fetch all orders for the customer and filter client-side by facilityIdentifier.id.
+  // NOTE: Extensiv /orders uses RQL syntax for filtering, NOT simple query params.
+  // customerid=X is silently ignored. The correct approach is:
+  //   rql=readonly.customerIdentifier.id==X
+  // We also do NOT filter by facilityid here — the facilityId in the customer's embedded
+  // `facilities` array is often different from the facilityIdentifier.id on order records.
+  // Instead we filter client-side after fetching.
+  const rql = `readonly.customerIdentifier.id==${customerId}`;
   while (true) {
-    const data = (await client.get("/orders/summaries", {
+    const data = (await client.get("/orders", {
       pgsiz,
       pgnum,
-      customerid: customerId,
+      rql,
     })) as {
       totalResults?: number;
       _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: ExtensivOrder[] };

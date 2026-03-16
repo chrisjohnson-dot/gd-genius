@@ -364,15 +364,17 @@ export const appRouter = router({
           poNum?: string;
         };
 
-        // Query 1: WITHOUT facilityid — gets all orders for the customer regardless of facility
+        // Query 1: Using RQL to filter by customer — this is the correct Extensiv approach
+        // rql=readonly.customerIdentifier.id==X
         let rawOrdersAll: RawOrder[] = [];
         let totalResultsAll = 0;
         let fetchErrorAll: string | null = null;
+        const rql = `readonly.customerIdentifier.id==${input.customerId}`;
         try {
-          const data = (await client.get("/orders/summaries", {
+          const data = (await client.get("/orders", {
             pgsiz: 100,
             pgnum: 1,
-            customerid: input.customerId,
+            rql,
           })) as { totalResults?: number; _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: RawOrder[] } };
           totalResultsAll = data?.totalResults ?? 0;
           rawOrdersAll = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];
@@ -380,7 +382,7 @@ export const appRouter = router({
           fetchErrorAll = err instanceof Error ? err.message : String(err);
         }
 
-        // Query 2: WITH facilityid — to show how many orders the old approach returned
+        // Query 2: Old approach (customerid param, /orders/summaries) — to show the difference
         let rawOrdersFiltered: RawOrder[] = [];
         let totalResultsFiltered = 0;
         let fetchErrorFiltered: string | null = null;
@@ -389,7 +391,6 @@ export const appRouter = router({
             pgsiz: 100,
             pgnum: 1,
             customerid: input.customerId,
-            facilityid: input.facilityId,
           })) as { totalResults?: number; _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: RawOrder[] } };
           totalResultsFiltered = data?.totalResults ?? 0;
           rawOrdersFiltered = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];

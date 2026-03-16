@@ -51,3 +51,4 @@
 - [x] Bug: Still no customers showing - added debugSummary endpoint + improved fetchAllFacilities with customer-embedded facilities fallback
 - [x] Bug: "No open, unallocated orders" — relaxed status filter to include status 0/1/2, added debugOrders endpoint + order diagnostics table in API Diagnostics page
 - [x] Bug: No orders showing for any customer in Reno — fixed by removing facilityid from /orders/summaries query and filtering client-side; added facility ID comparison in debugOrders table
+- [x] Bug: Orders still not showing — root cause: /orders uses RQL syntax not query params; fixed to use rql=readonly.customerIdentifier.id==X on /orders endpoint instead of customerid= on /orders/summaries

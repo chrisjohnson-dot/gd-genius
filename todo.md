@@ -38,3 +38,4 @@
 - [x] Redesign Order Selection with warehouse → customer → orders 3-step flow
 - [x] Add facilities and customersForFacility tRPC endpoints
 - [x] Fix nested anchor tag warnings in AppLayout, Home, RunHistory, RunDetail
+- [x] Multi-customer allocation: select orders from multiple customers in one warehouse per run

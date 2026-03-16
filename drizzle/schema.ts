@@ -64,8 +64,9 @@ export type InsertLocationConfig = typeof locationConfigs.$inferInsert;
 export const allocationRuns = mysqlTable("allocation_runs", {
   id: int("id").autoincrement().primaryKey(),
   configId: int("configId").notNull(),
-  customerId: int("customerId").notNull(),
+  customerId: int("customerId"),  // nullable for multi-customer runs; use customerNames instead
   customerName: varchar("customerName", { length: 256 }),
+  customerNames: text("customerNames"),  // JSON array of customer names for multi-customer runs
   facilityId: int("facilityId").notNull(),
   facilityName: varchar("facilityName", { length: 256 }),
   status: mysqlEnum("status", ["proposed", "confirmed", "cancelled", "failed"]).notNull().default("proposed"),

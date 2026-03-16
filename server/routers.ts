@@ -241,75 +241,109 @@ export const appRouter = router({
       .input(
         z.object({
           configId: z.number(),
-          customerId: z.number(),
-          customerName: z.string(),
           facilityId: z.number(),
           facilityName: z.string(),
-          orderIds: z.array(z.number()),
-          stagingLocationId: z.number(),
-          stagingLocationName: z.string(),
+          // Multi-customer: one entry per customer
+          customers: z.array(
+            z.object({
+              customerId: z.number(),
+              customerName: z.string(),
+              orderIds: z.array(z.number()),
+              stagingLocationId: z.number(),
+              stagingLocationName: z.string(),
+            })
+          ),
         })
       )
       .mutation(async ({ input, ctx }) => {
         const config = await getExtensivConfigById(input.configId);
         if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
 
-        // Fetch orders with full detail
-        const ordersWithDetail = await Promise.all(
-          input.orderIds.map((id) => fetchOrderWithDetail(config, id))
-        );
-        const orders = ordersWithDetail.map((o) => o.order);
+        // Run allocation engine per customer, merge all results
+        const allAllocated: ReturnType<typeof runAllocationEngine>["allocatedOrders"] = [];
+        const allSkipped: ReturnType<typeof runAllocationEngine>["skippedOrders"] = [];
+        const allPullListItems: ReturnType<typeof runAllocationEngine>["pullList"] = [];
+        const allPackListItems: ReturnType<typeof runAllocationEngine>["packList"] = [];
+        const allSummaryItems: ReturnType<typeof runAllocationEngine>["allocationSummary"] = [];
 
-        // Fetch inventory
-        const inventory = await fetchInventory(config, input.customerId, input.facilityId);
+        for (const customer of input.customers) {
+          if (customer.orderIds.length === 0) continue;
 
-        // Fetch item descriptions
-        const descMap = await fetchItemDescriptions(config, input.customerId);
+          // Fetch orders with full detail for this customer
+          const ordersWithDetail = await Promise.all(
+            customer.orderIds.map((id) => fetchOrderWithDetail(config, id))
+          );
+          const orders = ordersWithDetail.map((o) => o.order);
 
-        // Build location type map from DB
-        const locationConfigsData = await getLocationConfigsByCustomer(
-          input.configId,
-          input.customerId
-        );
-        const locationTypeMap: LocationTypeMap = {};
-        for (const lc of locationConfigsData) {
-          locationTypeMap[lc.locationId] = lc.locationType;
+          // Fetch inventory for this customer
+          const inventory = await fetchInventory(config, customer.customerId, input.facilityId);
+
+          // Fetch item descriptions for this customer
+          const descMap = await fetchItemDescriptions(config, customer.customerId);
+
+          // Build location type map from DB for this customer
+          const locationConfigsData = await getLocationConfigsByCustomer(
+            input.configId,
+            customer.customerId
+          );
+          const locationTypeMap: LocationTypeMap = {};
+          for (const lc of locationConfigsData) {
+            locationTypeMap[lc.locationId] = lc.locationType;
+          }
+
+          // Run allocation engine for this customer
+          const result = runAllocationEngine(
+            orders,
+            inventory,
+            locationTypeMap,
+            customer.stagingLocationId,
+            customer.stagingLocationName,
+            descMap
+          );
+
+          allAllocated.push(...result.allocatedOrders);
+          allSkipped.push(...result.skippedOrders);
+          allPullListItems.push(...result.pullList);
+          allPackListItems.push(...result.packList);
+          allSummaryItems.push(...result.allocationSummary);
         }
 
-        // Run allocation engine
-        const result = runAllocationEngine(
-          orders,
-          inventory,
-          locationTypeMap,
-          input.stagingLocationId,
-          input.stagingLocationName,
-          descMap
-        );
+        const mergedResult = {
+          allocatedOrders: allAllocated,
+          skippedOrders: allSkipped,
+          pullList: allPullListItems,
+          packList: allPackListItems,
+          allocationSummary: allSummaryItems,
+        };
+
+        const customerNames = input.customers.map((c) => c.customerName);
+        const totalOrderIds = input.customers.flatMap((c) => c.orderIds);
 
         // Save run to DB
         const runId = await createAllocationRun({
           configId: input.configId,
-          customerId: input.customerId,
-          customerName: input.customerName,
+          customerId: input.customers.length === 1 ? input.customers[0]!.customerId : null,
+          customerName: input.customers.length === 1 ? input.customers[0]!.customerName : null,
+          customerNames: JSON.stringify(customerNames),
           facilityId: input.facilityId,
           facilityName: input.facilityName,
           status: "proposed",
-          orderCount: input.orderIds.length,
-          allocatedCount: result.allocatedOrders.length,
-          skippedCount: result.skippedOrders.length,
+          orderCount: totalOrderIds.length,
+          allocatedCount: allAllocated.length,
+          skippedCount: allSkipped.length,
           createdBy: ctx.user.id,
         });
 
         // Save per-order results
         const runOrderItems = [
-          ...result.allocatedOrders.map((o) => ({
+          ...allAllocated.map((o) => ({
             runId,
             orderId: o.orderId,
             referenceNum: o.referenceNum,
             status: "allocated" as const,
             allocationDetail: o as unknown as Record<string, unknown>,
           })),
-          ...result.skippedOrders.map((o) => ({
+          ...allSkipped.map((o) => ({
             runId,
             orderId: o.orderId,
             referenceNum: o.referenceNum,
@@ -326,13 +360,14 @@ export const appRouter = router({
           entityType: "allocation_run",
           entityId: String(runId),
           details: {
-            orderCount: input.orderIds.length,
-            allocated: result.allocatedOrders.length,
-            skipped: result.skippedOrders.length,
+            customers: customerNames,
+            orderCount: totalOrderIds.length,
+            allocated: allAllocated.length,
+            skipped: allSkipped.length,
           },
         });
 
-        return { runId, result };
+        return { runId, result: mergedResult };
       }),
 
     confirm: protectedProcedure

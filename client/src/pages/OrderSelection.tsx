@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
@@ -16,9 +17,11 @@ import {
   Loader2,
   PackageSearch,
   Play,
+  Search,
   User,
   Users,
   Warehouse,
+  X,
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -35,6 +38,22 @@ type OrderMeta = {
 type Step = "warehouse" | "clients" | "orders";
 
 // ─── Per-customer orders panel ────────────────────────────────────────────────
+/** Highlight all occurrences of `query` inside `text` with a yellow background span. */
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  if (!query || !text) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 dark:bg-yellow-700/60 text-inherit rounded-sm px-0">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
 function CustomerOrdersPanel({
   configId,
   facilityId,
@@ -42,6 +61,7 @@ function CustomerOrdersPanel({
   selectedOrders,
   onToggleOrder,
   locationConfigs,
+  searchQuery,
 }: {
   configId: number;
   facilityId: number;
@@ -49,6 +69,7 @@ function CustomerOrdersPanel({
   selectedOrders: Map<number, OrderMeta>;
   onToggleOrder: (orderId: number, referenceNum: string, customerId: number, customerName: string, select: boolean) => void;
   locationConfigs: Array<{ customerId: number; facilityId: number; locationType: string; locationId: number; locationName: string }> | undefined;
+  searchQuery: string;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -71,6 +92,22 @@ function CustomerOrdersPanel({
   const selectedCount = orderIds.filter((id) => selectedOrders.has(id)).length;
   const allSelected = orderIds.length > 0 && selectedCount === orderIds.length;
   const someSelected = selectedCount > 0 && !allSelected;
+
+  // Filter orders by search query (transaction ID, PO reference, ship-to name)
+  const filteredOrders = useMemo(() => {
+    if (!searchQuery || !orders) return orders ?? [];
+    const q = searchQuery.toLowerCase();
+    return orders.filter((o) => {
+      const shipTo = (o as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo;
+      const shipToName = (shipTo?.companyName ?? shipTo?.name ?? "").toLowerCase();
+      return (
+        String(o.readOnly.orderId).includes(q) ||
+        (o.poNum ?? "").toLowerCase().includes(q) ||
+        (o.referenceNum ?? "").toLowerCase().includes(q) ||
+        shipToName.includes(q)
+      );
+    });
+  }, [orders, searchQuery]);
 
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -151,13 +188,19 @@ function CustomerOrdersPanel({
                     onCheckedChange={toggleSelectAll}
                   />
                   <Label htmlFor={`selectAll-${customer.id}`} className="text-sm font-medium cursor-pointer">
-                    Select All ({orders.length} orders)
+                    Select All ({orders.length} orders{searchQuery && filteredOrders.length !== orders.length ? ` · ${filteredOrders.length} matching` : ""})
                   </Label>
                 </div>
 
                 {/* Order list */}
-                <div className="space-y-1 max-h-[360px] overflow-y-auto pr-1">
-                  {orders.map((order) => {
+                {searchQuery && filteredOrders.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Search className="h-6 w-6 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">No orders match "{searchQuery}"</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 max-h-[360px] overflow-y-auto pr-1">
+                    {filteredOrders.map((order) => {
                     // extensivOrderId = Extensiv Transaction ID (readOnly.orderId) — used for API calls and shown as primary bold label (Go Direct order #)
                     // customerRefNum = client's internal order number (referenceNum) — shown as secondary label
                     const extensivOrderId = order.readOnly.orderId;
@@ -165,6 +208,8 @@ function CustomerOrdersPanel({
                     const isSelected = selectedOrders.has(extensivOrderId);
                     const lineCount = order.orderItems?.length ?? 0;
                     const totalPieces = order.orderItems?.reduce((sum: number, item: { qty?: number }) => sum + (item.qty ?? 0), 0) ?? 0;
+                    const shipTo = (order as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo;
+                    const shipToName = shipTo?.companyName ?? shipTo?.name ?? "";
                     return (
                       <div
                         key={extensivOrderId}
@@ -186,20 +231,16 @@ function CustomerOrdersPanel({
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            #{extensivOrderId}
-                            {(() => {
-                              const shipToName = (order as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo?.companyName
-                                || (order as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo?.name;
-                              return shipToName ? (
-                                <span className="ml-2 font-normal text-muted-foreground">
-                                  — {shipToName}
-                                </span>
-                              ) : null;
-                            })()}
+                            #<HighlightMatch text={String(extensivOrderId)} query={searchQuery} />
+                            {shipToName ? (
+                              <span className="ml-2 font-normal text-muted-foreground">
+                                — <HighlightMatch text={shipToName} query={searchQuery} />
+                              </span>
+                            ) : null}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Customer Ref: {customerRefNum}
-                            {order.poNum ? ` · PO: ${order.poNum}` : ""}
+                            Customer Ref: <HighlightMatch text={customerRefNum} query={searchQuery} />
+                            {order.poNum ? <> · PO: <HighlightMatch text={order.poNum} query={searchQuery} /></> : ""}
                             {" · "}Created:{" "}
                             {new Date(order.readOnly.creationDate).toLocaleDateString()}
                           </p>
@@ -218,8 +259,9 @@ function CustomerOrdersPanel({
                         </div>
                       </div>
                     );
-                  })}
-                </div>
+                    })}
+                  </div>
+                )}
               </>
             )}
           </CardContent>
@@ -407,6 +449,8 @@ export default function OrderSelection() {
   // Map of orderId → OrderMeta
   const [selectedOrders, setSelectedOrders] = useState<Map<number, OrderMeta>>(new Map());
   const [quickAllocFacilityId, setQuickAllocFacilityId] = useState<number | null>(null);
+  // Search query for the orders step
+  const [orderSearch, setOrderSearch] = useState("");
 
   // Fetch facilities
   const { data: facilities, isLoading: facilitiesLoading } = trpc.extensiv.facilities.useQuery(
@@ -843,6 +887,25 @@ export default function OrderSelection() {
         {/* ── Step 3: Orders ── */}
         {step === "orders" && (
           <div className="space-y-4">
+            {/* Search bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by transaction ID, PO reference, or ship-to name…"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                className="pl-9 pr-9"
+              />
+              {orderSearch && (
+                <button
+                  onClick={() => setOrderSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             <div className="space-y-3">
               {selectedCustomers.map((customer) => (
                 <CustomerOrdersPanel
@@ -853,6 +916,7 @@ export default function OrderSelection() {
                   selectedOrders={selectedOrders}
                   onToggleOrder={handleToggleOrder}
                   locationConfigs={locationConfigs}
+                  searchQuery={orderSearch.trim()}
                 />
               ))}
             </div>

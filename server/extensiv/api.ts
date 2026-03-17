@@ -251,6 +251,8 @@ export async function fetchOpenOrders(
       pgsiz,
       pgnum,
       rql,
+      detail: "all",
+      itemdetail: "all",
     })) as {
       totalResults?: number;
       _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: ExtensivOrder[] };

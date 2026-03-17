@@ -85,3 +85,8 @@
 - [x] Feature: Unallocate moves inventory back to source locations — after deallocating in Extensiv, call inventory/mover to move products from staging back to their original pick face / warehouse locations using the stored pull list
 - [x] UX: Flip order number display — Go Direct Transaction ID (readOnly.orderId, e.g. 3214839) should be the bold primary label; customer reference (referenceNum, e.g. "19069850") should be the smaller secondary label
 - [x] Feature: Show total line items and total pieces on each order row in the allocation sheet / order selection screen
+- [x] Bug: Unallocate button missing from RunDetail — restored; default tab changed to Order Summary so button is immediately visible
+- [x] Bug: Order detail badges (line items, total pieces) not showing — fixed; fetchOpenOrders now requests detail=all+itemdetail=all so orderItems are included in list response
+- [x] Bug: Export PDF blank — fixed; pull list now reads from run.pullList (global), pack list reads from per-order allocationDetail.packListItems
+- [x] Feature: "Print Work Files" button added to RunDetail header for confirmed and proposed runs
+- [x] Feature: Pack list PDF — per-order pages with order header, Code 128 barcode for orderId, and items table

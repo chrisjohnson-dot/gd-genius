@@ -182,7 +182,23 @@ export default function RunDetail() {
               </p>
             </div>
           </div>
-          <Badge className={statusClass[run.status] ?? ""}>{run.status}</Badge>
+          <div className="flex items-center gap-2">
+            <Badge className={statusClass[run.status] ?? ""}>{run.status}</Badge>
+            {(run.status === "confirmed" || run.status === "proposed") && allocatedOrders.length > 0 && (
+              <Button
+                size="sm"
+                variant="default"
+                className="gap-1.5"
+                onClick={() => {
+                  window.open(`/api/pdf/pull-list/${runId}`, "_blank");
+                  setTimeout(() => window.open(`/api/pdf/pack-list/${runId}`, "_blank"), 400);
+                }}
+              >
+                <FileDown className="h-4 w-4" />
+                Print Work Files
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Stats */}
@@ -256,7 +272,7 @@ export default function RunDetail() {
         )}
 
         {/* Tabs */}
-        <Tabs defaultValue="pull">
+        <Tabs defaultValue="summary">
           <TabsList>
             <TabsTrigger value="pull">
               Pull List ({pullList.length})
@@ -506,7 +522,7 @@ export default function RunDetail() {
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className="text-xs">{totalLines} {totalLines === 1 ? "line" : "lines"}</Badge>
                           <Badge variant="outline" className="text-xs">{totalPieces} {totalPieces === 1 ? "pc" : "pcs"}</Badge>
-                          {isConfirmed && order.status === "allocated" && (
+                          {order.status === "allocated" && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -577,7 +593,7 @@ export default function RunDetail() {
                         <th className="text-left px-4 py-3 font-medium">Customer Ref</th>
                         <th className="text-left px-4 py-3 font-medium">Status</th>
                         <th className="text-left px-4 py-3 font-medium">Skip Reason</th>
-                        {isConfirmed && <th className="text-right px-4 py-3 font-medium">Actions</th>}
+                        <th className="text-right px-4 py-3 font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -589,8 +605,7 @@ export default function RunDetail() {
                             <Badge className={statusClass[o.status] ?? ""}>{o.status}</Badge>
                           </td>
                           <td className="px-4 py-2 text-xs text-muted-foreground">{o.skipReason ?? "—"}</td>
-                          {isConfirmed && (
-                            <td className="px-4 py-2 text-right">
+                          <td className="px-4 py-2 text-right">
                               {o.status === "allocated" && (
                                 <Button
                                   size="sm"
@@ -611,7 +626,6 @@ export default function RunDetail() {
                                 <span className="text-xs text-orange-600 dark:text-orange-400 italic">Unallocated</span>
                               )}
                             </td>
-                          )}
                         </tr>
                       ))}
                     </tbody>

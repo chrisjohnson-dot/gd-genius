@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import bwipjs from "bwip-js";
 import type { Response } from "express";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -15,6 +16,7 @@ export interface PullListItem {
 }
 
 export interface PackListItem {
+  orderId?: number;
   referenceNum: string;
   sku: string;
   description?: string;
@@ -22,6 +24,15 @@ export interface PackListItem {
   lotNumber?: string;
   expirationDate?: string;
   locationName: string;
+}
+
+/** Per-order data passed to the pack list generator */
+export interface OrderPackData {
+  orderId: number;
+  referenceNum: string;
+  totalLines: number;
+  totalPieces: number;
+  items: PackListItem[];
 }
 
 export interface RunMeta {
@@ -160,6 +171,23 @@ function ensurePageSpace(doc: PDFKit.PDFDocument, needed = 30) {
   }
 }
 
+/** Generate a Code 128 barcode PNG buffer synchronously via bwip-js */
+async function makeBarcodeBuffer(text: string): Promise<Buffer | null> {
+  try {
+    return await bwipjs.toBuffer({
+      bcid: "code128",
+      text,
+      scale: 3,
+      height: 14,
+      includetext: true,
+      textxalign: "center",
+      textsize: 9,
+    });
+  } catch {
+    return null;
+  }
+}
+
 // ─── Pull List PDF ─────────────────────────────────────────────────────────────
 
 export function generatePullListPDF(res: Response, items: PullListItem[], meta: RunMeta) {
@@ -237,9 +265,17 @@ export function generatePullListPDF(res: Response, items: PullListItem[], meta: 
   doc.end();
 }
 
-// ─── Pack List PDF ─────────────────────────────────────────────────────────────
+// ─── Pack List PDF (per-order pages with barcode) ─────────────────────────────
 
-export function generatePackListPDF(res: Response, items: PackListItem[], meta: RunMeta) {
+export async function generatePackListPDF(res: Response, orders: OrderPackData[], meta: RunMeta) {
+  // Pre-generate all barcodes before streaming starts
+  const barcodeMap = new Map<number, Buffer | null>();
+  await Promise.all(
+    orders.map(async (o) => {
+      barcodeMap.set(o.orderId, await makeBarcodeBuffer(String(o.orderId)));
+    })
+  );
+
   const doc = new PDFDocument({ margin: 50, size: "LETTER", autoFirstPage: true });
 
   res.setHeader("Content-Type", "application/pdf");
@@ -253,9 +289,8 @@ export function generatePackListPDF(res: Response, items: PackListItem[], meta: 
   const pageWidth = doc.page.width;
   const tableWidth = pageWidth - margin * 2;
 
-  drawPageHeader(doc, "Pack List — Items to Pack per Order", meta);
-
-  if (items.length === 0) {
+  if (orders.length === 0) {
+    drawPageHeader(doc, "Pack List — Items to Pack per Order", meta);
     doc
       .fillColor(TEXT_MUTED)
       .fontSize(11)
@@ -265,73 +300,173 @@ export function generatePackListPDF(res: Response, items: PackListItem[], meta: 
   }
 
   const cols = [
-    { label: "Order #", width: 90, align: "left" as const },
-    { label: "SKU", width: 90, align: "left" as const },
-    { label: "Description", width: 150, align: "left" as const },
-    { label: "Qty", width: 40, align: "right" as const },
-    { label: "Lot #", width: 70, align: "left" as const },
+    { label: "SKU", width: 100, align: "left" as const },
+    { label: "Description", width: 180, align: "left" as const },
+    { label: "Qty", width: 45, align: "right" as const },
+    { label: "Lot #", width: 75, align: "left" as const },
     { label: "Expiry", width: 65, align: "left" as const },
-    { label: "Location", width: tableWidth - 90 - 90 - 150 - 40 - 70 - 65, align: "left" as const },
+    { label: "Location", width: tableWidth - 100 - 180 - 45 - 75 - 65, align: "left" as const },
   ];
 
-  // Group by order reference
-  const grouped = new Map<string, PackListItem[]>();
-  for (const item of items) {
-    if (!grouped.has(item.referenceNum)) grouped.set(item.referenceNum, []);
-    grouped.get(item.referenceNum)!.push(item);
-  }
+  let isFirstPage = true;
 
-  let rowIndex = 0;
-  for (const [refNum, orderItems] of Array.from(grouped)) {
-    // Order group header
-    ensurePageSpace(doc, 28);
-    const groupHeaderHeight = 16;
-    doc.rect(margin, doc.y, tableWidth, groupHeaderHeight).fill("#dbeafe");
-    doc.rect(margin, doc.y, tableWidth, groupHeaderHeight).stroke(BORDER_COLOR);
+  for (const order of orders) {
+    // Each order starts on a new page (except the first)
+    if (!isFirstPage) {
+      doc.addPage();
+      doc.y = 50;
+    }
+    isFirstPage = false;
+
+    // ── Order page header ──────────────────────────────────────────────────────
+
+    // Top brand bar
+    doc.rect(0, 0, pageWidth, 60).fill(BRAND_COLOR);
     doc
-      .fillColor(BRAND_COLOR)
-      .fontSize(8.5)
+      .fillColor("#ffffff")
+      .fontSize(16)
       .font("Helvetica-Bold")
-      .text(`Order: ${refNum}  (${orderItems.length} line${orderItems.length !== 1 ? "s" : ""})`, margin + 6, doc.y + 4, {
-        width: tableWidth - 12,
+      .text("Go Direct Allocation Agent", margin, 14);
+    doc
+      .fillColor("#bfdbfe")
+      .fontSize(10)
+      .font("Helvetica")
+      .text("Pack List", margin, 34);
+    doc
+      .fillColor("#bfdbfe")
+      .fontSize(9)
+      .text(`Run #${meta.runId}  ·  ${formatDate(meta.createdAt)}`, margin, 34, {
+        align: "right",
+        width: pageWidth - margin * 2,
       });
-    doc.y += groupHeaderHeight;
 
-    // Column headers for this group
-    drawTableHeader(doc, cols, margin);
+    doc.y = 75;
 
-    for (const item of orderItems) {
-      ensurePageSpace(doc, 22);
-      drawTableRow(
-        doc,
-        [
-          { value: item.referenceNum },
-          { value: item.sku },
-          { value: item.description ?? "—" },
-          { value: String(item.qty), align: "right" },
-          { value: item.lotNumber ?? "—" },
-          { value: formatDate(item.expirationDate) },
-          { value: item.locationName },
-        ],
-        cols.map((c) => c.width),
-        margin,
-        rowIndex++
-      );
+    // Order info box
+    const infoBoxHeight = 80;
+    doc.rect(margin, doc.y, tableWidth, infoBoxHeight).fill("#f0f9ff").stroke(BORDER_COLOR);
+
+    const infoY = doc.y + 10;
+
+    // Left side: order numbers
+    doc
+      .fillColor(TEXT_MUTED)
+      .fontSize(8)
+      .font("Helvetica")
+      .text("GO DIRECT ORDER #", margin + 10, infoY);
+    doc
+      .fillColor(TEXT_DARK)
+      .fontSize(22)
+      .font("Helvetica-Bold")
+      .text(String(order.orderId), margin + 10, infoY + 10);
+
+    doc
+      .fillColor(TEXT_MUTED)
+      .fontSize(8)
+      .font("Helvetica")
+      .text("CUSTOMER REF", margin + 10, infoY + 38);
+    doc
+      .fillColor(TEXT_DARK)
+      .fontSize(11)
+      .font("Helvetica")
+      .text(order.referenceNum || "—", margin + 10, infoY + 48);
+
+    // Middle: stats
+    const statsX = margin + 200;
+    doc
+      .fillColor(TEXT_MUTED)
+      .fontSize(8)
+      .font("Helvetica")
+      .text("LINES", statsX, infoY);
+    doc
+      .fillColor(TEXT_DARK)
+      .fontSize(18)
+      .font("Helvetica-Bold")
+      .text(String(order.totalLines), statsX, infoY + 10);
+
+    doc
+      .fillColor(TEXT_MUTED)
+      .fontSize(8)
+      .font("Helvetica")
+      .text("TOTAL PIECES", statsX, infoY + 38);
+    doc
+      .fillColor(TEXT_DARK)
+      .fontSize(18)
+      .font("Helvetica-Bold")
+      .text(String(order.totalPieces), statsX, infoY + 48);
+
+    // Right side: barcode
+    const barcodeBuffer = barcodeMap.get(order.orderId);
+    if (barcodeBuffer) {
+      const barcodeW = 180;
+      const barcodeH = 55;
+      const barcodeX = pageWidth - margin - barcodeW;
+      const barcodeY = doc.y + 10;
+      doc.image(barcodeBuffer, barcodeX, barcodeY, { width: barcodeW, height: barcodeH });
     }
 
-    doc.moveDown(0.4);
-  }
+    doc.y += infoBoxHeight + 12;
 
-  doc
-    .moveDown(1)
-    .fillColor(TEXT_MUTED)
-    .fontSize(8)
-    .text(
-      `Total orders: ${grouped.size}   |   Total lines: ${items.length}   |   Generated: ${new Date().toLocaleString()}`,
-      margin,
-      doc.y,
-      { width: tableWidth, align: "right" }
-    );
+    // Facility / run meta line
+    const customers = (() => {
+      if (meta.customerName) return meta.customerName;
+      if (meta.customerNames) {
+        try { return JSON.parse(meta.customerNames).join(", "); } catch { return meta.customerNames; }
+      }
+      return "—";
+    })();
+    doc
+      .fillColor(TEXT_MUTED)
+      .fontSize(8)
+      .font("Helvetica")
+      .text(
+        `Facility: ${meta.facilityName ?? "—"}   |   Customer: ${customers}   |   Generated: ${new Date().toLocaleString()}`,
+        margin,
+        doc.y,
+        { width: tableWidth }
+      );
+    doc.moveDown(0.6);
+
+    // ── Items table ────────────────────────────────────────────────────────────
+    if (order.items.length === 0) {
+      doc
+        .fillColor(TEXT_MUTED)
+        .fontSize(10)
+        .text("No items for this order.", margin, doc.y, { width: tableWidth, align: "center" });
+    } else {
+      drawTableHeader(doc, cols, margin);
+      order.items.forEach((item, i) => {
+        ensurePageSpace(doc, 22);
+        drawTableRow(
+          doc,
+          [
+            { value: item.sku },
+            { value: item.description ?? "—" },
+            { value: String(item.qty), align: "right" },
+            { value: item.lotNumber ?? "—" },
+            { value: formatDate(item.expirationDate) },
+            { value: item.locationName },
+          ],
+          cols.map((c) => c.width),
+          margin,
+          i
+        );
+      });
+    }
+
+    // ── Page footer ────────────────────────────────────────────────────────────
+    const footerY = doc.page.height - 40;
+    doc
+      .fillColor(TEXT_MUTED)
+      .fontSize(7)
+      .font("Helvetica")
+      .text(
+        `Pack List  ·  Run #${meta.runId}  ·  Order #${order.orderId}  ·  ${order.totalLines} lines  ·  ${order.totalPieces} pcs`,
+        margin,
+        footerY,
+        { width: tableWidth, align: "center" }
+      );
+  }
 
   doc.end();
 }

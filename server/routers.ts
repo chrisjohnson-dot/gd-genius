@@ -687,10 +687,10 @@ export const appRouter = router({
             locationTypeMap[lc.locationId] = lc.locationType;
           }
 
-          // Look up per-customer rules (e.g. noLotMixing)
+          // Look up per-customer rules (e.g. noLotMixing, locationPriorityPatterns)
           const customerRule = await getCustomerRule(input.configId, customer.customerId);
           const noLotMixing = customerRule?.noLotMixing ?? false;
-
+          const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           // Run allocation engine for this customer
           const result = runAllocationEngine(
             orders,
@@ -699,7 +699,10 @@ export const appRouter = router({
             customer.stagingLocationId,
             customer.stagingLocationName,
             descMap,
-            noLotMixing
+            noLotMixing,
+            undefined,
+            undefined,
+            locationPriorityPatterns
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -866,7 +869,7 @@ export const appRouter = router({
           // Customer rules
           const customerRule = await getCustomerRule(input.configId, customer.id);
           const noLotMixing = customerRule?.noLotMixing ?? false;
-
+          const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const result = runAllocationEngine(
             orders,
             inventory,
@@ -874,7 +877,10 @@ export const appRouter = router({
             customer.stagingLocationId,
             customer.stagingLocationName,
             descMap,
-            noLotMixing
+            noLotMixing,
+            undefined,
+            undefined,
+            locationPriorityPatterns
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -1245,6 +1251,11 @@ export const appRouter = router({
           facilityName: z.string().optional(),
           noLotMixing: z.boolean(),
           autoRun: z.boolean(),
+          locationPriorityPatterns: z
+            .array(z.object({ pattern: z.string(), label: z.string() }))
+            .optional()
+            .default([]),
+          notes: z.string().optional().nullable(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -1254,7 +1265,12 @@ export const appRouter = router({
           action: "customerRules.save",
           entityType: "customer_rules",
           entityId: String(input.customerId),
-          details: { noLotMixing: input.noLotMixing, autoRun: input.autoRun },
+          details: {
+            noLotMixing: input.noLotMixing,
+            autoRun: input.autoRun,
+            locationPriorityPatterns: input.locationPriorityPatterns,
+            notes: input.notes,
+          },
         });
         return { success: true };
       }),

@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Cog,
   History,
+  ListChecks,
   LogOut,
   MapPin,
   Moon,
@@ -30,6 +31,7 @@ const navItems = [
 const configItems = [
   { href: "/settings", label: "API Settings", icon: Cog },
   { href: "/locations", label: "Location Config", icon: MapPin },
+  { href: "/rules", label: "Allocation Rules", icon: ListChecks },
   { href: "/schedule", label: "Auto-Run Schedule", icon: CalendarClock },
   { href: "/diagnostics", label: "API Diagnostics", icon: Stethoscope },
 ];

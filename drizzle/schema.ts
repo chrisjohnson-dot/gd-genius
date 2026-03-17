@@ -70,6 +70,14 @@ export const customerRules = mysqlTable("customer_rules", {
   facilityName: varchar("facilityName", { length: 256 }),
   noLotMixing: boolean("noLotMixing").default(false).notNull(), // Prevent multiple lot codes on the same order line
   autoRun: boolean("autoRun").default(false).notNull(),         // Include in scheduled auto-run
+  /**
+   * Ordered list of location-name prefix/substring patterns.
+   * Locations whose names match an earlier pattern are sorted before those
+   * matching a later pattern. Locations not matching any pattern come last.
+   * Example: [{"pattern":"12","label":"Building 12"},{"pattern":"RCV12","label":"Receiving 12"}]
+   */
+  locationPriorityPatterns: json("locationPriorityPatterns").$type<Array<{ pattern: string; label: string }>>().default([]),
+  notes: text("notes"),                                         // Free-form allocation notes / instructions
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

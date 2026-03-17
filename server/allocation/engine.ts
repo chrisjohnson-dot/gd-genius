@@ -154,6 +154,26 @@ function sortFEFO(records: InventoryPoolRecord[]): InventoryPoolRecord[] {
  * Even when not fully satisfied, returns the partial stagingMoves so the
  * per-order assignment step can allocate as many orders as possible.
  */
+function applyLocationPriority(
+  records: InventoryPoolRecord[],
+  patterns: Array<{ pattern: string; label: string }>,
+): InventoryPoolRecord[] {
+  if (patterns.length === 0) return sortFEFO(records);
+  const getTier = (rec: InventoryPoolRecord): number => {
+    const locName = rec.locationIdentifier?.nameKey?.name ?? "";
+    for (let i = 0; i < patterns.length; i++) {
+      try {
+        if (new RegExp(patterns[i].pattern, "i").test(locName)) return i;
+      } catch {
+        if (locName.startsWith(patterns[i].pattern)) return i;
+      }
+    }
+    return patterns.length;
+  };
+  // FEFO within each tier, then sort tiers ascending (lower = higher priority)
+  return sortFEFO(records).sort((a, b) => getTier(a) - getTier(b));
+}
+
 function planSkuMovements(
   qtyNeeded: number,
   pickFaceRecords: InventoryPoolRecord[],
@@ -162,6 +182,7 @@ function planSkuMovements(
   pickFaceLocationName: string,
   stagingLocationId: number,
   stagingLocationName: string,
+  locationPriorityPatterns: Array<{ pattern: string; label: string }> = [],
 ): {
   stagingMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
   pickFaceMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
@@ -198,9 +219,9 @@ function planSkuMovements(
     remaining -= take;
   }
 
-  // Now pull full warehouse pallets (FEFO) until we have enough.
+  // Now pull warehouse pallets (priority + FEFO) until we have enough.
   // Each warehouse record is treated as a full pallet — we take the whole record.
-  for (const rec of sortFEFO(warehouseRecords)) {
+  for (const rec of applyLocationPriority(warehouseRecords, locationPriorityPatterns)) {
     if (remaining <= 0) break;
     const palletQty = rec.remainingQty; // full pallet
 
@@ -252,6 +273,8 @@ export function runAllocationEngine(
   /** Optional: the pick face location to replenish surplus pallets into */
   pickFaceLocationId?: number,
   pickFaceLocationName?: string,
+  /** Optional: ordered list of location name patterns to prioritise when pulling warehouse pallets */
+  locationPriorityPatterns: Array<{ pattern: string; label: string }> = [],
 ): AllocationRunResult {
   // ── Build mutable inventory pool ─────────────────────────────────────────
   const inventoryPool = new Map<number, InventoryPoolRecord>();
@@ -341,6 +364,7 @@ export function runAllocationEngine(
       pfName,
       stagingLocationId,
       stagingLocationName,
+      locationPriorityPatterns,
     );
 
     // Always build the staging pool with whatever we could move, even if not fully satisfied.

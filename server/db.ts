@@ -293,6 +293,8 @@ export async function upsertCustomerRule(
         facilityName: rule.facilityName,
         noLotMixing: rule.noLotMixing,
         autoRun: rule.autoRun,
+        locationPriorityPatterns: rule.locationPriorityPatterns ?? [],
+        notes: rule.notes ?? null,
         updatedAt: new Date(),
       },
     });

@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import AllocationRules from "@/pages/AllocationRules";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/settings" component={Settings} />
       <Route path="/locations" component={LocationConfig} />
+      <Route path="/rules" component={AllocationRules} />
       <Route path="/allocate" component={OrderSelection} />
       <Route path="/review/:runId" component={AllocationReview} />
       <Route path="/history" component={RunHistory} />

@@ -90,3 +90,6 @@
 - [x] Bug: Export PDF blank — fixed; pull list now reads from run.pullList (global), pack list reads from per-order allocationDetail.packListItems
 - [x] Feature: "Print Work Files" button added to RunDetail header for confirmed and proposed runs
 - [x] Feature: Pack list PDF — per-order pages with order header, Code 128 barcode for orderId, and items table
+- [ ] Feature: Allocation Rules page — per-client expandable cards with location priority patterns, lot mixing toggle, and notes
+- [ ] Feature: Location priority patterns — ordered list of prefix/regex patterns per client per facility; engine uses pattern rank to sort candidate locations before FEFO
+- [ ] Feature: Wire allocation rules into engine — pass customer rules to allocator so location priority patterns are respected at run time

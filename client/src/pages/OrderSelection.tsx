@@ -21,7 +21,7 @@ import {
   Warehouse,
   Zap,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -201,6 +201,162 @@ function CustomerOrdersPanel({
         </CollapsibleContent>
       </Card>
     </Collapsible>
+  );
+}
+
+// ─── Quick Allocate Facility Card with expandable customer checklist ─────────
+function QuickAllocateFacilityCard({
+  facility,
+  configId,
+  isQuickRunning,
+  isPending,
+  onSelectFacility,
+  onQuickAllocate,
+}: {
+  facility: { id: number; name: string };
+  configId: number;
+  isQuickRunning: boolean;
+  isPending: boolean;
+  onSelectFacility: () => void;
+  onQuickAllocate: (clientIds?: number[]) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number> | null>(null); // null = not yet initialized
+
+  const { data: customers, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
+    { configId, facilityId: facility.id },
+    { enabled: expanded }
+  );
+
+  // Initialize selection from last-used when customers load
+  const last = loadLastUsed();
+  const hasLastUsed = last.facilityId === facility.id && (last.clientIds?.length ?? 0) > 0;
+
+  // When customers load and we haven't set selection yet, initialize from last-used
+  useEffect(() => {
+    if (customers && selectedIds === null) {
+      if (hasLastUsed && last.clientIds) {
+        setSelectedIds(new Set(last.clientIds));
+      } else {
+        setSelectedIds(new Set(customers.map((c) => c.id)));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers]);
+
+  const effectiveSelected = selectedIds ?? new Set<number>();
+  const allSelected = customers ? customers.length > 0 && effectiveSelected.size === customers.length : false;
+  const someSelected = effectiveSelected.size > 0 && !allSelected;
+
+  const toggleCustomer = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev ?? []);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!customers) return;
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(customers.map((c) => c.id)));
+    }
+  };
+
+  const handleRun = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ids = effectiveSelected.size > 0 ? Array.from(effectiveSelected) : undefined;
+    onQuickAllocate(ids);
+  };
+
+  return (
+    <div className="flex flex-col rounded-lg border border-border bg-card hover:border-primary/40 transition-all">
+      {/* Facility header — click to navigate to full wizard */}
+      <button
+        onClick={onSelectFacility}
+        className="flex items-center justify-between p-4 text-left group flex-1"
+      >
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+            <Warehouse className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="font-medium text-sm">{facility.name}</p>
+            <p className="text-xs text-muted-foreground">ID: {facility.id}</p>
+          </div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+      </button>
+
+      {/* Quick Allocate toggle row */}
+      <div className="px-4 pb-3 border-t border-border/50 pt-2 space-y-2">
+        <button
+          className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 font-medium transition-colors w-full"
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+        >
+          <Zap className="h-3.5 w-3.5" />
+          Quick Allocate
+          {expanded ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
+        </button>
+
+        {expanded && (
+          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+            {customersLoading ? (
+              <div className="flex items-center gap-2 py-2 text-muted-foreground text-xs">
+                <Loader2 className="h-3 w-3 animate-spin" /> Loading clients...
+              </div>
+            ) : !customers || customers.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-1">No clients found.</p>
+            ) : (
+              <>
+                {/* Select All */}
+                <div className="flex items-center gap-2 pb-1 border-b border-border/50">
+                  <Checkbox
+                    id={`qa-all-${facility.id}`}
+                    checked={allSelected}
+                    data-state={someSelected ? "indeterminate" : allSelected ? "checked" : "unchecked"}
+                    onCheckedChange={toggleAll}
+                  />
+                  <Label htmlFor={`qa-all-${facility.id}`} className="text-xs font-medium cursor-pointer">
+                    All clients ({customers.length})
+                  </Label>
+                </div>
+                {/* Customer list */}
+                <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                  {customers.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/40 cursor-pointer" onClick={() => toggleCustomer(c.id)}>
+                      <Checkbox
+                        id={`qa-c-${facility.id}-${c.id}`}
+                        checked={effectiveSelected.has(c.id)}
+                        onCheckedChange={() => toggleCustomer(c.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <Label htmlFor={`qa-c-${facility.id}-${c.id}`} className="text-xs cursor-pointer truncate">{c.name}</Label>
+                    </div>
+                  ))}
+                </div>
+                {/* Run button */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full flex items-center gap-1.5 text-xs h-7 bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 mt-1"
+                  disabled={isPending || effectiveSelected.size === 0}
+                  onClick={handleRun}
+                >
+                  {isQuickRunning ? (
+                    <><Loader2 className="h-3 w-3 animate-spin" /> Running...</>
+                  ) : (
+                    <><Zap className="h-3 w-3" /> Quick Allocate {effectiveSelected.size > 0 ? `(${effectiveSelected.size} client${effectiveSelected.size === 1 ? "" : "s"})` : ""}</>
+                  )}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -531,61 +687,17 @@ export default function OrderSelection() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {facilities.map((facility) => {
-                  const last = loadLastUsed();
-                  const hasLastUsed = last.facilityId === facility.id && (last.clientIds?.length ?? 0) > 0;
                   const isQuickRunning = quickAllocFacilityId === facility.id && quickProposeMutation.isPending;
                   return (
-                    <div
+                    <QuickAllocateFacilityCard
                       key={facility.id}
-                      className="flex flex-col rounded-lg border border-border bg-card hover:border-primary/40 transition-all"
-                    >
-                      <button
-                        onClick={() => handleSelectFacility(facility)}
-                        className="flex items-center justify-between p-4 text-left group flex-1"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                            <Warehouse className="h-4 w-4 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">{facility.name}</p>
-                            <p className="text-xs text-muted-foreground">ID: {facility.id}</p>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                      </button>
-                      {/* Quick Allocate row */}
-                      <div className="px-4 pb-3 pt-0 flex items-center gap-2 border-t border-border/50 mt-0 pt-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex items-center gap-1.5 text-xs h-7 bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                          disabled={quickProposeMutation.isPending}
-                          onClick={(e) => { e.stopPropagation(); handleQuickAllocate(facility); }}
-                        >
-                          {isQuickRunning ? (
-                            <><Loader2 className="h-3 w-3 animate-spin" /> Running...</>
-                          ) : (
-                            <><Zap className="h-3 w-3" /> Quick Allocate All</>
-                          )}
-                        </Button>
-                        {hasLastUsed && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex items-center gap-1.5 text-xs h-7"
-                            disabled={quickProposeMutation.isPending}
-                            onClick={(e) => { e.stopPropagation(); handleQuickAllocate(facility, last.clientIds); }}
-                          >
-                            {isQuickRunning ? (
-                              <><Loader2 className="h-3 w-3 animate-spin" /> Running...</>
-                            ) : (
-                              <><Zap className="h-3 w-3" /> Quick Allocate ({last.clientIds!.length} clients)</>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+                      facility={facility}
+                      configId={configId!}
+                      isQuickRunning={isQuickRunning}
+                      isPending={quickProposeMutation.isPending}
+                      onSelectFacility={() => handleSelectFacility(facility)}
+                      onQuickAllocate={(clientIds) => handleQuickAllocate(facility, clientIds)}
+                    />
                   );
                 })}
               </div>

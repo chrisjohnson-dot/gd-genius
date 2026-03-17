@@ -3,7 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Undo2, XCircle } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Link, useParams } from "wouter";
 
 const statusClass: Record<string, string> = {
@@ -13,13 +15,31 @@ const statusClass: Record<string, string> = {
   failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
   allocated: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   skipped: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  unallocated: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
 };
 
 export default function RunDetail() {
   const params = useParams<{ runId: string }>();
   const runId = Number(params.runId);
+  const [unallocatingId, setUnallocatingId] = useState<number | null>(null);
 
+  const utils = trpc.useUtils();
   const { data, isLoading } = trpc.allocation.runDetail.useQuery({ runId });
+
+  const unallocateMutation = trpc.allocation.unallocateOrder.useMutation({
+    onSuccess: () => {
+      toast.success("Order unallocated in Extensiv.");
+      utils.allocation.runDetail.invalidate({ runId });
+    },
+    onError: (e) => toast.error(`Unallocate failed: ${e.message}`),
+    onSettled: () => setUnallocatingId(null),
+  });
+
+  const handleUnallocate = (runOrderId: number, referenceNum: string | null) => {
+    if (!confirm(`Unallocate order ${referenceNum ?? runOrderId} in Extensiv? This cannot be undone.`)) return;
+    setUnallocatingId(runOrderId);
+    unallocateMutation.mutate({ runOrderId });
+  };
 
   if (isLoading) {
     return (
@@ -40,6 +60,7 @@ export default function RunDetail() {
   }
 
   const { run, orders } = data;
+  const isConfirmed = run.status === "confirmed";
 
   return (
     <AppLayout>
@@ -105,6 +126,9 @@ export default function RunDetail() {
                     <th className="text-left px-4 py-3 font-medium">Order ID</th>
                     <th className="text-left px-4 py-3 font-medium">Status</th>
                     <th className="text-left px-4 py-3 font-medium">Skip Reason</th>
+                    {isConfirmed && (
+                      <th className="text-right px-4 py-3 font-medium">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -116,6 +140,29 @@ export default function RunDetail() {
                         <Badge className={statusClass[o.status] ?? ""}>{o.status}</Badge>
                       </td>
                       <td className="px-4 py-2 text-xs text-muted-foreground">{o.skipReason ?? "—"}</td>
+                      {isConfirmed && (
+                        <td className="px-4 py-2 text-right">
+                          {o.status === "allocated" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                              disabled={unallocatingId === o.id}
+                              onClick={() => handleUnallocate(o.id, o.referenceNum ?? null)}
+                            >
+                              {unallocatingId === o.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Undo2 className="h-3 w-3" />
+                              )}
+                              Unallocate
+                            </Button>
+                          )}
+                          {o.status === "unallocated" && (
+                            <span className="text-xs text-orange-600 dark:text-orange-400 italic">Unallocated</span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

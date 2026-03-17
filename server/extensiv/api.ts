@@ -528,12 +528,9 @@ export async function fetchExtensivLocations(
   const pgsiz = 500;
 
   while (true) {
-    // Official docs: GET /properties/facilities/locations?pgsiz=N&pgnum=N&rql=FacilityIdentifier==N
-    const data = (await client.get("/properties/facilities/locations", {
-      pgsiz,
-      pgnum,
-      rql: `FacilityIdentifier==${facilityId}`,
-    })) as {
+    // Try facility-scoped URL first: /properties/facilities/{id}/locations
+    // Fall back to global collection if that fails
+    let data: {
       totalResults?: number;
       _embedded?: {
         "http://api.3plCentral.com/rels/properties/location"?: Array<{
@@ -547,6 +544,13 @@ export async function fetchExtensivLocations(
         }>;
       };
     };
+    type LocationsResponse = typeof data;
+    try {
+      data = (await client.get(`/properties/facilities/${facilityId}/locations`, { pgsiz, pgnum })) as LocationsResponse;
+    } catch {
+      // Fall back to global collection endpoint, filter client-side
+      data = (await client.get("/properties/facilities/locations", { pgsiz, pgnum })) as LocationsResponse;
+    }
 
     const items =
       data?._embedded?.["http://api.3plCentral.com/rels/properties/location"] ?? [];
@@ -557,7 +561,8 @@ export async function fetchExtensivLocations(
       const name = item.field1 ?? item.name ?? item.nameKey?.name ?? "";
       const fId = item.facilityIdentifier?.id ?? facilityId;
       const fName = item.facilityIdentifier?.name;
-      if (id && name) {
+      // Filter client-side by facilityId (RQL filter causes 400)
+      if (id && name && fId === facilityId) {
         allLocations.push({ locationId: id, name, facilityId: fId, facilityName: fName });
       }
     }

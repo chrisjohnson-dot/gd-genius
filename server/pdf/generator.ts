@@ -171,17 +171,19 @@ function drawFullHeader(
   const capH = titleFontSize * 0.72;
   const titleY = logoCentreY - capH / 2;
 
+  const titleX = MARGIN + logoW + 36;  // 36pt gap between logo right edge and first letter
   doc
     .fillColor(GD_NAVY)
     .fontSize(titleFontSize)
     .font("Helvetica-Bold")
-    .text(title, MARGIN + logoW + 20, titleY, { lineBreak: false });
+    .text(title, titleX, titleY, { lineBreak: false });
 
   // DUPLICATE badge — shown when reprinting
   if (isDuplicate) {
-    // Measure approximate title width to position badge right after it
-    const approxTitleW = title.length * titleFontSize * 0.52;
-    const badgeX = MARGIN + logoW + 20 + approxTitleW + 10;
+    // Use a generous per-character width so the badge always clears the title
+    // Helvetica-Bold at titleFontSize: avg char width ≈ 0.62 × fontSize
+    const approxTitleW = title.length * titleFontSize * 0.62;
+    const badgeX = titleX + approxTitleW + 14;
     const badgeY = titleY - 2;
     const badgeW = 82;
     const badgeH = titleFontSize + 4;
@@ -751,13 +753,14 @@ export async function generatePackListPDF(
     const logoCentreY = contentY + 4 + logoH / 2;
     const capH = titleFontSize * 0.72;
     const titleY = logoCentreY - capH / 2;
+    const packTitleX = MARGIN + logoW + 36;  // 36pt gap between logo right edge and first letter
     doc.fillColor(GD_NAVY).fontSize(titleFontSize).font("Helvetica-Bold")
-      .text("PACK SHEET", MARGIN + logoW + 20, titleY, { lineBreak: false });
+      .text("PACK SHEET", packTitleX, titleY, { lineBreak: false });
 
     // DUPLICATE badge — shown when reprinting
     if (meta.isDuplicate) {
-      const approxTitleW = "PACK SHEET".length * titleFontSize * 0.52;
-      const badgeX = MARGIN + logoW + 20 + approxTitleW + 10;
+      const approxTitleW = "PACK SHEET".length * titleFontSize * 0.62;
+      const badgeX = packTitleX + approxTitleW + 14;
       const badgeY = titleY - 2;
       const badgeW = 82;
       const badgeH = titleFontSize + 4;

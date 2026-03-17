@@ -136,3 +136,5 @@
 - [x] Bug: "QTY TO PICK" text clips against bottom border of header row — increase row height
 - [x] Bug: Barcode must encode the actual transaction ID number shown in the box
 - [x] Feature: Show "DUPLICATE" label beside title on all three PDFs when documents have been previously printed
+- [x] Bug: DUPLICATE badge overlaps title text — move it further right past the full title width
+- [x] Bug: GD logo and title text too close — increase gap between logo right edge and first word

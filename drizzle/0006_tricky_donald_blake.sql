@@ -1,0 +1,1 @@
+ALTER TABLE `allocation_run_orders` MODIFY COLUMN `status` enum('allocated','skipped','failed','unallocated') NOT NULL;

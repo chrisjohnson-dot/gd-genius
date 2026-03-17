@@ -110,6 +110,22 @@ export default function AllocationReview() {
     onError: (e) => toast.error(e.message),
   });
 
+  const utils = trpc.useUtils();
+  const [unallocatingId, setUnallocatingId] = useState<number | null>(null);
+  const unallocateMutation = trpc.allocation.unallocateOrder.useMutation({
+    onSuccess: () => {
+      toast.success("Order unallocated in Extensiv.");
+      utils.allocation.runDetail.invalidate({ runId });
+    },
+    onError: (e) => toast.error(`Unallocate failed: ${e.message}`),
+    onSettled: () => setUnallocatingId(null),
+  });
+  const handleUnallocate = (runOrderId: number, referenceNum: string | null) => {
+    if (!confirm(`Unallocate order ${referenceNum ?? runOrderId} in Extensiv? This cannot be undone.`)) return;
+    setUnallocatingId(runOrderId);
+    unallocateMutation.mutate({ runOrderId });
+  };
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -139,6 +155,8 @@ export default function AllocationReview() {
     .filter((o) => o.status === "allocated")
     .map((o) => ({ ...o, detail: o.allocationDetail as unknown as AllocationDetail }));
   const skippedOrders = orders.filter((o) => o.status === "skipped");
+  const unallocatedOrders = orders.filter((o) => o.status === "unallocated");
+  const isConfirmed = run.status === "confirmed";
 
   // Pull list is global (SKU-level, not per-order) — stored on the run
   // Fall back to per-order items for backward compatibility with older runs
@@ -509,6 +527,29 @@ export default function AllocationReview() {
             </Card>
           </TabsContent>
 
+          {/* ── Unallocated Orders Tab ─────────────────────────────────────── */}
+          {unallocatedOrders.length > 0 && (
+            <TabsContent value="unallocated" className="mt-4">
+              <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-red-800 dark:text-red-300 flex items-center gap-2">
+                    <XCircle className="h-4 w-4" /> {unallocatedOrders.length} Orders Unallocated
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-1">
+                    {unallocatedOrders.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between text-sm py-1">
+                        <span className="font-medium text-red-900 dark:text-red-200">{o.referenceNum}</span>
+                        <span className="text-red-700 dark:text-red-400 text-xs">Unallocated</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {/* ── Order Summary Tab ─────────────────────────────────────────────── */}
           <TabsContent value="summary" className="mt-4">
             <Card>
@@ -530,7 +571,26 @@ export default function AllocationReview() {
                         (order.detail?.lineItems ?? []).flatMap((line) =>
                           line.allocations.map((alloc, i) => (
                             <tr key={`${order.orderId}-${line.sku}-${i}`} className="border-b border-border/50 hover:bg-muted/30">
-                              <td className="px-4 py-2 font-medium">{order.referenceNum}</td>
+                              <td className="px-4 py-2 font-medium">
+                                <div className="flex items-center gap-2">
+                                  {order.referenceNum}
+                                  {i === 0 && isConfirmed && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 px-2 text-xs text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                      disabled={unallocatingId === order.id}
+                                      onClick={() => handleUnallocate(order.id, order.referenceNum ?? null)}
+                                    >
+                                      {unallocatingId === order.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        "Unallocate"
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
                               <td className="px-4 py-2 font-mono text-xs">{line.sku}</td>
                               <td className="px-4 py-2 text-muted-foreground text-xs">{line.description ?? "—"}</td>
                               <td className="px-4 py-2 text-right font-semibold">{alloc.qty}</td>

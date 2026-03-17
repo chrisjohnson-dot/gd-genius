@@ -494,6 +494,20 @@ export async function allocateOrder(
   return { success: false, error: JSON.stringify(result.data) };
 }
 
+// Deallocate an order (requires a fresh ETag from GET on the order)
+export async function deallocateOrder(
+  config: ExtensivClientConfig,
+  orderId: number,
+  etag: string
+): Promise<{ success: boolean; error?: string }> {
+  const client = createExtensivClient(config);
+  const result = await client.put(`/orders/${orderId}/deallocator`, {}, etag);
+  if (result.status === 200 || result.status === 204) {
+    return { success: true };
+  }
+  return { success: false, error: JSON.stringify(result.data) };
+}
+
 // Update order items with proposed allocations before calling allocator
 export async function updateOrderProposedAllocations(
   config: ExtensivClientConfig,

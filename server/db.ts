@@ -14,6 +14,7 @@ import {
   AllocationRun,
   allocationRunOrders,
   InsertAllocationRunOrder,
+  AllocationRunOrder,
   auditLogs,
   InsertAuditLog,
   customerRules,
@@ -210,6 +211,20 @@ export async function getAllocationRunOrders(runId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(allocationRunOrders).where(eq(allocationRunOrders.runId, runId));
+}
+export async function updateAllocationRunOrder(
+  id: number,
+  updates: Partial<AllocationRunOrder>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(allocationRunOrders).set(updates).where(eq(allocationRunOrders.id, id));
+}
+export async function getAllocationRunOrderById(id: number): Promise<AllocationRunOrder | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(allocationRunOrders).where(eq(allocationRunOrders.id, id)).limit(1);
+  return result[0];
 }
 
 // ─── Audit Logs ──────────────────────────────────────────────────────────────

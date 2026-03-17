@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `allocation_run_orders` MODIFY COLUMN `status` enum('allocated','skipped','failed','unallocated') NOT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute ALTER TABLE `allocation_run_orders` MODIFY COLUMN `status` enum('allocated','skipped','failed','unallocated') NOT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 415
+}

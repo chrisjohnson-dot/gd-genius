@@ -20,6 +20,8 @@ import {
   getAllocationRunById,
   createAllocationRunOrders,
   getAllocationRunOrders,
+  updateAllocationRunOrder,
+  getAllocationRunOrderById,
   createAuditLog,
   getAuditLogs,
   getCustomerRules,
@@ -30,7 +32,7 @@ import {
   getAutoRunCustomers,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 
@@ -1043,6 +1045,53 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    unallocateOrder: protectedProcedure
+      .input(z.object({ runOrderId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        // Load the run order record
+        const runOrder = await getAllocationRunOrderById(input.runOrderId);
+        if (!runOrder) throw new TRPCError({ code: "NOT_FOUND", message: "Run order not found" });
+        if (runOrder.status !== "allocated") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Order status is '${runOrder.status}' — only allocated orders can be unallocated` });
+        }
+
+        // Load the run to get Extensiv config
+        const run = await getAllocationRunById(runOrder.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Allocation run not found" });
+        const config = await getExtensivConfigById(run.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+        // Fetch fresh ETag for the order (config is the raw DB object, compatible with ExtensivClientConfig)
+        const { etag } = await fetchOrderWithDetail(config, runOrder.orderId);
+        if (!etag) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not fetch ETag for order" });
+
+        // Call Extensiv deallocator
+        const result = await deallocateOrder(config, runOrder.orderId, etag);
+        if (!result.success) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Extensiv deallocate failed: ${result.error}`,
+          });
+        }
+
+        // Update run order status to unallocated
+        await updateAllocationRunOrder(input.runOrderId, { status: "unallocated" });
+
+        // Decrement the run's allocatedCount
+        const allOrders = await getAllocationRunOrders(runOrder.runId);
+        const allocatedCount = allOrders.filter((o) => o.status === "allocated").length;
+        await updateAllocationRun(runOrder.runId, { allocatedCount });
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "allocation.unallocate",
+          entityType: "allocation_run_order",
+          entityId: String(input.runOrderId),
+          details: { orderId: runOrder.orderId, referenceNum: runOrder.referenceNum },
+        });
+
+        return { success: true };
+      }),
     history: protectedProcedure
       .input(z.object({ limit: z.number().default(50) }))
       .query(async ({ input }) => {

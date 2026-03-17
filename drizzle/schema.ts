@@ -107,7 +107,7 @@ export const allocationRunOrders = mysqlTable("allocation_run_orders", {
   runId: int("runId").notNull(),
   orderId: int("orderId").notNull(),
   referenceNum: varchar("referenceNum", { length: 256 }),
-  status: mysqlEnum("status", ["allocated", "skipped", "failed"]).notNull(),
+  status: mysqlEnum("status", ["allocated", "skipped", "failed", "unallocated"]).notNull(),
   skipReason: text("skipReason"),
   allocationDetail: json("allocationDetail"), // full proposed allocation JSON
   createdAt: timestamp("createdAt").defaultNow().notNull(),

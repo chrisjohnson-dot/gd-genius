@@ -167,7 +167,7 @@ function AutoPopulateDialog({
               <p>
                 Staging is a temporary holding area. During allocation, inventory moves from warehouse and pick face locations
                 into staging. Once the order is packed and shipped, staging is empty again.
-                Each client has one staging location in Extensiv (e.g. <code>HR-Stage</code>).
+                Each client has one staging location in Extensiv (e.g. <code>HR-Stage</code>, <code>ONCO-Staging</code>, <code>BOBA-staging</code>).
               </p>
             </div>
 
@@ -201,8 +201,8 @@ function AutoPopulateDialog({
                 <Label className="text-sm font-semibold">2. Staging Location Prefix per Client</Label>
                 <p className="text-xs text-muted-foreground">
                   Enter the prefix that identifies each client's staging location in Extensiv.
-                  The app will find any location ending in <code>-Stage</code> that starts with this prefix.
-                  For example, prefix <code>HR</code> matches <code>HR-Stage</code> or <code>HR001-Stage</code>.
+                  The app will find any location ending in <code>-Stage</code> or <code>-Staging</code> (case-insensitive) that starts with this prefix.
+                  For example, prefix <code>ONCO</code> matches <code>ONCO-Staging</code>; prefix <code>HR</code> matches <code>HR-Stage</code>.
                   Leave blank to skip a client.
                 </p>
                 {customersLoading ? (
@@ -256,8 +256,8 @@ function AutoPopulateDialog({
               <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md text-xs text-red-800 dark:text-red-300">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>
-                  No staging locations found. Make sure your staging locations in Extensiv end with <code>-Stage</code> (e.g. <code>HR-Stage</code>)
-                  and that the prefix you entered matches the beginning of the location name.
+                  No staging locations found. Make sure your staging locations in Extensiv end with <code>-Stage</code> or <code>-Staging</code>
+                  (e.g. <code>ONCO-Staging</code>, <code>HR-Stage</code>) and that the prefix you entered matches the beginning of the location name.
                 </span>
               </div>
             ) : (

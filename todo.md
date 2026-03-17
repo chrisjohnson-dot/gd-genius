@@ -65,3 +65,4 @@
 - [x] Pull list: split into two sections — "Move to Staging" and "Pallet Replenishment → Pick Face"
 - [x] DB schema: add pullList JSON column to allocation_runs for run-level pull list storage
 - [x] Tests: updated engine tests to cover all pallet scenarios (pick face sufficient, pallet pull with surplus, multi-order aggregation, multi-pallet, rollback)
+- [x] Bug: Staging location detection fails for ONCO-Staging, BOBA-staging, KGP-staging — fixed: seedFromExtensiv now accepts both -Stage and -Staging suffixes (case-insensitive); updated UI help text to match

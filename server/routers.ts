@@ -216,8 +216,9 @@ export const appRouter = router({
           const locName = loc.name.trim();
           const locNameUpper = locName.toUpperCase();
 
-          // Only process staging locations (name ends with -Stage, case-insensitive)
-          if (!locNameUpper.endsWith("-STAGE")) {
+          // Only process staging locations (name ends with -Stage or -Staging, case-insensitive)
+          const isStagingLocation = locNameUpper.endsWith("-STAGE") || locNameUpper.endsWith("-STAGING");
+          if (!isStagingLocation) {
             skipped.push(locName);
             continue;
           }

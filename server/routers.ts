@@ -766,6 +766,177 @@ export const appRouter = router({
         return { runId, result: mergedResult };
       }),
 
+    quickPropose: protectedProcedure
+      .input(
+        z.object({
+          configId: z.number(),
+          facilityId: z.number(),
+          facilityName: z.string(),
+          // Customer IDs to include — if empty, all customers with staging configs are used
+          customerIds: z.array(z.number()).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+
+        // Get all location configs for this facility to find customers with staging locations
+        const allLocationConfigs = await getLocationConfigs(input.configId);
+        const facilityConfigs = allLocationConfigs.filter(
+          (lc) => lc.facilityId === input.facilityId
+        );
+
+        // Find all customers that have a staging location configured
+        const stagingByCustomer = new Map<number, { id: number; name: string; stagingLocationId: number; stagingLocationName: string }>();
+        for (const lc of facilityConfigs) {
+          if (lc.locationType === "staging" && !stagingByCustomer.has(lc.customerId)) {
+            stagingByCustomer.set(lc.customerId, {
+              id: lc.customerId,
+              name: lc.customerName ?? `Customer ${lc.customerId}`,
+              stagingLocationId: lc.locationId,
+              stagingLocationName: lc.locationName,
+            });
+          }
+        }
+
+        // Filter to requested customer IDs if provided
+        const targetCustomers = input.customerIds && input.customerIds.length > 0
+          ? Array.from(stagingByCustomer.values()).filter((c) => input.customerIds!.includes(c.id))
+          : Array.from(stagingByCustomer.values());
+
+        if (targetCustomers.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No customers with staging locations configured for this facility. Set up Location Config first.",
+          });
+        }
+
+        // Run allocation engine per customer
+        const allAllocated: ReturnType<typeof runAllocationEngine>["allocatedOrders"] = [];
+        const allSkipped: ReturnType<typeof runAllocationEngine>["skippedOrders"] = [];
+        const allPullListItems: ReturnType<typeof runAllocationEngine>["pullList"] = [];
+        const allPackListItems: ReturnType<typeof runAllocationEngine>["packList"] = [];
+        const allSummaryItems: ReturnType<typeof runAllocationEngine>["allocationSummary"] = [];
+        const customerNames: string[] = [];
+        const totalOrderIds: number[] = [];
+        const customersPayload: Array<{ customerId: number; customerName: string; orderIds: number[]; stagingLocationId: number; stagingLocationName: string }> = [];
+
+        for (const customer of targetCustomers) {
+          // Fetch all open orders for this customer
+          const openOrders = await fetchOpenOrders(config, customer.id, input.facilityId);
+          if (openOrders.length === 0) continue;
+
+          const orderIds = openOrders.map((o) => o.readOnly.orderId);
+          customersPayload.push({ customerId: customer.id, customerName: customer.name, orderIds, stagingLocationId: customer.stagingLocationId, stagingLocationName: customer.stagingLocationName });
+          customerNames.push(customer.name);
+          totalOrderIds.push(...orderIds);
+
+          // Fetch orders with full detail
+          const ordersWithDetail = await Promise.all(
+            orderIds.map((id) => fetchOrderWithDetail(config, id))
+          );
+          const orders = ordersWithDetail.map((o) => o.order);
+
+          // Fetch inventory
+          const inventory = await fetchInventory(config, customer.id, input.facilityId);
+
+          // Fetch item descriptions
+          const descMap = await fetchItemDescriptions(config, customer.id);
+
+          // Build location type map
+          const locationConfigsData = await getLocationConfigsByCustomer(input.configId, customer.id);
+          const locationTypeMap: LocationTypeMap = {};
+          for (const lc of locationConfigsData) {
+            locationTypeMap[lc.locationId] = lc.locationType;
+          }
+
+          // Customer rules
+          const customerRule = await getCustomerRule(input.configId, customer.id);
+          const noLotMixing = customerRule?.noLotMixing ?? false;
+
+          const result = runAllocationEngine(
+            orders,
+            inventory,
+            locationTypeMap,
+            customer.stagingLocationId,
+            customer.stagingLocationName,
+            descMap,
+            noLotMixing
+          );
+
+          allAllocated.push(...result.allocatedOrders);
+          allSkipped.push(...result.skippedOrders);
+          allPullListItems.push(...result.pullList);
+          allPackListItems.push(...result.packList);
+          allSummaryItems.push(...result.allocationSummary);
+        }
+
+        if (totalOrderIds.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No open orders found for any of the selected customers at this facility.",
+          });
+        }
+
+        const mergedResult = {
+          allocatedOrders: allAllocated,
+          skippedOrders: allSkipped,
+          pullList: allPullListItems,
+          packList: allPackListItems,
+          allocationSummary: allSummaryItems,
+        };
+
+        // Save run to DB
+        const runId = await createAllocationRun({
+          configId: input.configId,
+          customerId: customersPayload.length === 1 ? customersPayload[0]!.customerId : null,
+          customerName: customersPayload.length === 1 ? customersPayload[0]!.customerName : null,
+          customerNames: JSON.stringify(customerNames),
+          facilityId: input.facilityId,
+          facilityName: input.facilityName,
+          status: "proposed",
+          orderCount: totalOrderIds.length,
+          allocatedCount: allAllocated.length,
+          skippedCount: allSkipped.length,
+          createdBy: ctx.user.id,
+        });
+
+        const runOrderItems = [
+          ...allAllocated.map((o) => ({
+            runId,
+            orderId: o.orderId,
+            referenceNum: o.referenceNum,
+            status: "allocated" as const,
+            allocationDetail: o as unknown as Record<string, unknown>,
+          })),
+          ...allSkipped.map((o) => ({
+            runId,
+            orderId: o.orderId,
+            referenceNum: o.referenceNum,
+            status: "skipped" as const,
+            skipReason: o.skipReason,
+            allocationDetail: null,
+          })),
+        ];
+        await createAllocationRunOrders(runOrderItems);
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "allocation.quickPropose",
+          entityType: "allocation_run",
+          entityId: String(runId),
+          details: {
+            customers: customerNames,
+            orderCount: totalOrderIds.length,
+            allocated: allAllocated.length,
+            skipped: allSkipped.length,
+            mode: "quick",
+          },
+        });
+
+        return { runId, result: mergedResult };
+      }),
+
     confirm: protectedProcedure
       .input(z.object({ runId: z.number() }))
       .mutation(async ({ input, ctx }) => {

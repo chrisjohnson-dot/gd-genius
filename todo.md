@@ -58,3 +58,4 @@
 - [x] Branding: Rename app to "GD Allocation Wizard" (remove "Agent"), upload and display Go Direct logo in sidebar
 - [x] Bug: 503 on /inventory/stockdetails — fixed: added validateStatus to client.get, fetchInventory now tries 4 endpoints in order with fallback; added debugInventory endpoint + UI
 - [x] Bug: Staging locations not recognized — fixed: seedFromExtensiv now detects -Stage suffix and classifies as staging type, matched to customer by prefix
+- [x] Feature: Quick Allocate button on order selection screen — added quickPropose endpoint, ⚡ Quick Allocate All + Quick Allocate (N clients) buttons on warehouse cards, Quick Allocate button on clients step, last-used facility+clients persisted in localStorage

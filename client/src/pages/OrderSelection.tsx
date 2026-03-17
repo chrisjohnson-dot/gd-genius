@@ -19,6 +19,7 @@ import {
   User,
   Users,
   Warehouse,
+  Zap,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -198,6 +199,15 @@ function CustomerOrdersPanel({
   );
 }
 
+// ─── Persist last-used facility + clients in localStorage ────────────────────
+const STORAGE_KEY = "gd-alloc-last-used";
+function loadLastUsed(): { facilityId?: number; facilityName?: string; clientIds?: number[] } {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"); } catch { return {}; }
+}
+function saveLastUsed(facilityId: number, facilityName: string, clientIds: number[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ facilityId, facilityName, clientIds }));
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function OrderSelection() {
   const [, navigate] = useLocation();
@@ -210,6 +220,7 @@ export default function OrderSelection() {
   const [selectedClientIds, setSelectedClientIds] = useState<Set<number>>(new Set());
   // Map of orderId → OrderMeta
   const [selectedOrders, setSelectedOrders] = useState<Map<number, OrderMeta>>(new Map());
+  const [quickAllocFacilityId, setQuickAllocFacilityId] = useState<number | null>(null);
 
   // Fetch facilities
   const { data: facilities, isLoading: facilitiesLoading } = trpc.extensiv.facilities.useQuery(
@@ -284,6 +295,32 @@ export default function OrderSelection() {
     }
   };
 
+  // Quick Propose mutation
+  const quickProposeMutation = trpc.allocation.quickPropose.useMutation({
+    onSuccess: (data) => {
+      setQuickAllocFacilityId(null);
+      toast.success(
+        `Quick Allocation: ${data.result.allocatedOrders.length} orders allocated, ${data.result.skippedOrders.length} skipped`
+      );
+      navigate(`/review/${data.runId}`);
+    },
+    onError: (e) => {
+      setQuickAllocFacilityId(null);
+      toast.error(`Quick Allocation failed: ${e.message}`);
+    },
+  });
+
+  const handleQuickAllocate = (facility: { id: number; name: string }, clientIds?: number[]) => {
+    if (!configId) { toast.error("No API configuration found"); return; }
+    setQuickAllocFacilityId(facility.id);
+    quickProposeMutation.mutate({
+      configId,
+      facilityId: facility.id,
+      facilityName: facility.name,
+      customerIds: clientIds,
+    });
+  };
+
   // Propose mutation
   const proposeMutation = trpc.allocation.propose.useMutation({
     onSuccess: (data) => {
@@ -333,14 +370,23 @@ export default function OrderSelection() {
   };
 
   const handleSelectFacility = (facility: { id: number; name: string }) => {
+    // Restore last-used clients for this facility
+    const last = loadLastUsed();
+    const restoredClients = last.facilityId === facility.id && last.clientIds?.length
+      ? new Set<number>(last.clientIds)
+      : new Set<number>();
     setSelectedFacility(facility);
-    setSelectedClientIds(new Set());
+    setSelectedClientIds(restoredClients);
     setSelectedOrders(new Map());
     setStep("clients");
   };
 
   const handleProceedToOrders = () => {
     if (selectedClientIds.size === 0) { toast.error("Select at least one client"); return; }
+    // Persist last-used selection
+    if (selectedFacility) {
+      saveLastUsed(selectedFacility.id, selectedFacility.name, Array.from(selectedClientIds));
+    }
     setStep("orders");
   };
 
@@ -479,24 +525,64 @@ export default function OrderSelection() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {facilities.map((facility) => (
-                  <button
-                    key={facility.id}
-                    onClick={() => handleSelectFacility(facility)}
-                    className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-primary/5 transition-all text-left group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                        <Warehouse className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{facility.name}</p>
-                        <p className="text-xs text-muted-foreground">ID: {facility.id}</p>
+                {facilities.map((facility) => {
+                  const last = loadLastUsed();
+                  const hasLastUsed = last.facilityId === facility.id && (last.clientIds?.length ?? 0) > 0;
+                  const isQuickRunning = quickAllocFacilityId === facility.id && quickProposeMutation.isPending;
+                  return (
+                    <div
+                      key={facility.id}
+                      className="flex flex-col rounded-lg border border-border bg-card hover:border-primary/40 transition-all"
+                    >
+                      <button
+                        onClick={() => handleSelectFacility(facility)}
+                        className="flex items-center justify-between p-4 text-left group flex-1"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                            <Warehouse className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{facility.name}</p>
+                            <p className="text-xs text-muted-foreground">ID: {facility.id}</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </button>
+                      {/* Quick Allocate row */}
+                      <div className="px-4 pb-3 pt-0 flex items-center gap-2 border-t border-border/50 mt-0 pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex items-center gap-1.5 text-xs h-7 bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                          disabled={quickProposeMutation.isPending}
+                          onClick={(e) => { e.stopPropagation(); handleQuickAllocate(facility); }}
+                        >
+                          {isQuickRunning ? (
+                            <><Loader2 className="h-3 w-3 animate-spin" /> Running...</>
+                          ) : (
+                            <><Zap className="h-3 w-3" /> Quick Allocate All</>
+                          )}
+                        </Button>
+                        {hasLastUsed && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex items-center gap-1.5 text-xs h-7"
+                            disabled={quickProposeMutation.isPending}
+                            onClick={(e) => { e.stopPropagation(); handleQuickAllocate(facility, last.clientIds); }}
+                          >
+                            {isQuickRunning ? (
+                              <><Loader2 className="h-3 w-3 animate-spin" /> Running...</>
+                            ) : (
+                              <><Zap className="h-3 w-3" /> Quick Allocate ({last.clientIds!.length} clients)</>
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -584,7 +670,19 @@ export default function OrderSelection() {
             )}
 
             {selectedClientIds.size > 0 && (
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                  disabled={quickProposeMutation.isPending}
+                  onClick={() => selectedFacility && handleQuickAllocate(selectedFacility, Array.from(selectedClientIds))}
+                >
+                  {quickProposeMutation.isPending ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
+                  ) : (
+                    <><Zap className="h-4 w-4" /> Quick Allocate {selectedClientIds.size} {selectedClientIds.size === 1 ? "Client" : "Clients"}</>
+                  )}
+                </Button>
                 <Button onClick={handleProceedToOrders} className="flex items-center gap-2">
                   View Orders for {selectedClientIds.size} {selectedClientIds.size === 1 ? "Client" : "Clients"}
                   <ChevronRight className="h-4 w-4" />

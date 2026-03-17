@@ -95,3 +95,4 @@
 - [ ] Feature: Wire allocation rules into engine — pass customer rules to allocator so location priority patterns are respected at run time
 - [x] UX: Remove Active Rules banner from Order Selection orders step
 - [x] Bug: AllocationRules page crash (localeCompare on undefined customerName) causing order loading to fail — fixed with null-guard in sort comparator
+- [x] UX: Filter out VACANT/TEST customers from Allocation Rules page with a toggle to show/hide them

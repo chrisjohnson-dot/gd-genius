@@ -118,6 +118,7 @@ export default function AllocationRules() {
   // Local state for all client rule cards
   const [clients, setClients] = useState<ClientRuleState[]>([]);
   const [initialized, setInitialized] = useState(false);
+  const [hideInactive, setHideInactive] = useState(true);
 
   useEffect(() => {
     if (!customersData || !rulesData || initialized) return;
@@ -234,16 +235,38 @@ export default function AllocationRules() {
   // ── Render ────────────────────────────────────────────────────────────────
   const isLoading = loadingConfigs || loadingCustomers || loadingRules;
 
+  // Filter out VACANT / TEST customers unless the user opts in
+  const INACTIVE_PATTERN = /^VACANT|\bTEST\b|\(DEACTIVAT/i;
+  const visibleClients = hideInactive
+    ? clients.filter((c) => !INACTIVE_PATTERN.test(c.customerName ?? ""))
+    : clients;
+  const hiddenCount = clients.length - visibleClients.length;
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Allocation Rules</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Configure per-client allocation behaviour. Location priority patterns
-          tell the engine which locations to prefer when picking inventory — the
-          first matching pattern wins. Rules are applied at run time.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Allocation Rules</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Configure per-client allocation behaviour. Location priority patterns
+            tell the engine which locations to prefer when picking inventory — the
+            first matching pattern wins. Rules are applied at run time.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 pt-1">
+          <Switch
+            id="hide-inactive"
+            checked={hideInactive}
+            onCheckedChange={setHideInactive}
+          />
+          <Label htmlFor="hide-inactive" className="text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
+            Hide inactive
+            {hideInactive && hiddenCount > 0 && (
+              <span className="ml-1 text-xs">({hiddenCount} hidden)</span>
+            )}
+          </Label>
+        </div>
       </div>
 
       {isLoading && (
@@ -264,7 +287,7 @@ export default function AllocationRules() {
       )}
 
       {!isLoading &&
-        clients.map((c) => (
+        visibleClients.map((c) => (
           <Collapsible
             key={c.customerId}
             open={c.open}

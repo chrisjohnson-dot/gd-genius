@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle,
-  ArrowRight,
   CheckCircle2,
   FileDown,
   Loader2,
@@ -17,7 +16,7 @@ import {
   Truck,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 
@@ -26,6 +25,7 @@ interface PullListItem {
   description?: string;
   receiveItemId: number;
   qty: number;
+  sourceQty?: number;
   fromLocationId: number;
   fromLocationName: string;
   fromLocationType: string;
@@ -50,6 +50,7 @@ interface PackListItem {
 interface AllocationDetail {
   orderId: number;
   referenceNum: string;
+  poNum?: string;
   status: "allocated" | "skipped";
   skipReason?: string;
   lineItems: Array<{
@@ -74,16 +75,6 @@ const locTypeBadge: Record<string, string> = {
   staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
   pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   warehouse: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-};
-
-const movementBadge: Record<string, string> = {
-  to_staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  to_pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-};
-
-const movementLabel: Record<string, string> = {
-  to_staging: "→ Staging",
-  to_pick_face: "→ Pick Face",
 };
 
 export default function AllocationReview() {
@@ -167,20 +158,71 @@ export default function AllocationReview() {
 
   const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
 
-  // Separate pull list by movement type
-  const toStagingMoves = pullList.filter((p) => p.movement === "to_staging" || !p.movement);
-  const toPickFaceMoves = pullList.filter((p) => p.movement === "to_pick_face");
-
-  // Summary: aggregate by SKU
-  const skuSummary = new Map<string, { sku: string; description?: string; totalQty: number; orders: string[] }>();
-  for (const order of allocatedOrders) {
-    for (const line of order.detail?.lineItems ?? []) {
-      const existing = skuSummary.get(line.sku) ?? { sku: line.sku, description: line.description, totalQty: 0, orders: [] };
-      existing.totalQty += line.qtyRequired;
-      existing.orders.push(order.referenceNum ?? "");
-      skuSummary.set(line.sku, existing);
-    }
+  // ── Consolidated pull list rows ──────────────────────────────────────────
+  // Group by source location + SKU + lot, merging staging and pick face moves
+  // into a single row with separate qty columns.
+  interface ConsolidatedRow {
+    key: string;
+    sku: string;
+    description?: string;
+    fromLocationName: string;
+    fromLocationType: string;
+    sourceQty?: number;
+    lotNumber?: string;
+    expirationDate?: string;
+    toStaging: number;
+    toPickFace: number;
+    stagingLocationName: string;
+    pickFaceLocationName: string;
   }
+
+  const consolidatedRows = useMemo((): ConsolidatedRow[] => {
+    const map = new Map<string, ConsolidatedRow>();
+    for (const item of pullList) {
+      const key = `${item.sku}|${item.fromLocationName}|${item.lotNumber ?? ""}|${item.expirationDate ?? ""}`;
+      const existing = map.get(key);
+      if (existing) {
+        if (item.movement === "to_staging") {
+          existing.toStaging += item.qty;
+        } else {
+          existing.toPickFace += item.qty;
+          existing.pickFaceLocationName = item.toLocationName;
+        }
+        // Use the largest sourceQty seen (same location, same pallet)
+        if (item.sourceQty && (!existing.sourceQty || item.sourceQty > existing.sourceQty)) {
+          existing.sourceQty = item.sourceQty;
+        }
+      } else {
+        map.set(key, {
+          key,
+          sku: item.sku,
+          description: item.description,
+          fromLocationName: item.fromLocationName,
+          fromLocationType: item.fromLocationType,
+          sourceQty: item.sourceQty,
+          lotNumber: item.lotNumber,
+          expirationDate: item.expirationDate,
+          toStaging: item.movement === "to_staging" ? item.qty : 0,
+          toPickFace: item.movement === "to_pick_face" ? item.qty : 0,
+          stagingLocationName: item.movement === "to_staging" ? item.toLocationName : "",
+          pickFaceLocationName: item.movement === "to_pick_face" ? item.toLocationName : "",
+        });
+      }
+    }
+    // Second pass: fill in missing location names from other rows with same source
+    const rows = Array.from(map.values());
+    const stagingName = rows.find((r) => r.stagingLocationName)?.stagingLocationName ?? "Staging";
+    const pfName = rows.find((r) => r.pickFaceLocationName)?.pickFaceLocationName ?? "Pick Face";
+    for (const row of rows) {
+      if (!row.stagingLocationName) row.stagingLocationName = stagingName;
+      if (!row.pickFaceLocationName) row.pickFaceLocationName = pfName;
+    }
+    return rows;
+  }, [pullList]);
+
+  const hasPickFaceMoves = consolidatedRows.some((r) => r.toPickFace > 0);
+  const toStagingCount = pullList.filter((p) => p.movement === "to_staging" || !p.movement).length;
+  const toPickFaceCount = pullList.filter((p) => p.movement === "to_pick_face").length;
 
   return (
     <AppLayout>
@@ -250,7 +292,7 @@ export default function AllocationReview() {
             <CardContent className="py-4 flex items-center gap-3">
               <Truck className="h-6 w-6 text-purple-600 shrink-0" />
               <div>
-                <p className="text-2xl font-bold">{toStagingMoves.length}</p>
+                <p className="text-2xl font-bold">{toStagingCount}</p>
                 <p className="text-xs text-muted-foreground">Moves to Staging</p>
               </div>
             </CardContent>
@@ -259,7 +301,7 @@ export default function AllocationReview() {
             <CardContent className="py-4 flex items-center gap-3">
               <RefreshCw className="h-6 w-6 text-blue-600 shrink-0" />
               <div>
-                <p className="text-2xl font-bold">{toPickFaceMoves.length}</p>
+                <p className="text-2xl font-bold">{toPickFaceCount}</p>
                 <p className="text-xs text-muted-foreground">Pallet Replenishments</p>
               </div>
             </CardContent>
@@ -281,6 +323,7 @@ export default function AllocationReview() {
                     <div>
                       <span className="font-medium text-yellow-900 dark:text-yellow-200">#{o.orderId}</span>
                       {o.referenceNum && <span className="text-yellow-700 dark:text-yellow-400 text-xs ml-2">Ref: {o.referenceNum}</span>}
+                      {(o as any).poNum && <span className="text-yellow-700 dark:text-yellow-400 text-xs ml-2">PO: {(o as any).poNum}</span>}
                     </div>
                     <span className="text-yellow-700 dark:text-yellow-400 text-xs">{o.skipReason}</span>
                   </div>
@@ -294,7 +337,7 @@ export default function AllocationReview() {
         <Tabs defaultValue="pull">
           <TabsList>
             <TabsTrigger value="pull">
-              Pull List ({pullList.length})
+              Pull List ({consolidatedRows.length})
             </TabsTrigger>
             <TabsTrigger value="pack">
               Pack List ({packList.length})
@@ -304,9 +347,9 @@ export default function AllocationReview() {
             </TabsTrigger>
           </TabsList>
 
-          {/* ── Pull List Tab ─────────────────────────────────────────────────── */}
-          <TabsContent value="pull" className="mt-4 space-y-4">
-            {pullList.length === 0 ? (
+          {/* ── Pull List Tab — single consolidated table ──────────────────────── */}
+          <TabsContent value="pull" className="mt-4">
+            {consolidatedRows.length === 0 ? (
               <Card>
                 <CardContent className="py-10 text-center text-muted-foreground">
                   <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -314,137 +357,77 @@ export default function AllocationReview() {
                 </CardContent>
               </Card>
             ) : (
-              <>
-                {/* Section 1: Moves to Staging */}
-                {toStagingMoves.length > 0 && (
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">→ Staging</Badge>
-                            Move to Staging Area
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Pick these items from their current locations and bring them to the staging area
-                          </p>
-                        </div>
-                        <a
-                          href={`/api/pdf/pull-list/${runId}`}
-                          download
-                          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                        >
-                          <FileDown className="h-3.5 w-3.5" />
-                          Export PDF
-                        </a>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border bg-muted/50">
-                              <th className="text-left px-4 py-3 font-medium">SKU</th>
-                              <th className="text-left px-4 py-3 font-medium">Description</th>
-                              <th className="text-right px-4 py-3 font-medium">Qty</th>
-                              <th className="text-left px-4 py-3 font-medium">Lot</th>
-                              <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                              <th className="text-left px-4 py-3 font-medium">From</th>
-                              <th className="text-center px-4 py-3 font-medium"></th>
-                              <th className="text-left px-4 py-3 font-medium">To</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {toStagingMoves.map((item, i) => (
-                              <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                                <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
-                                <td className="px-4 py-2 text-xs text-muted-foreground">{item.description ?? "—"}</td>
-                                <td className="px-4 py-2 text-right font-semibold">{item.qty}</td>
-                                <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
-                                <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <Badge className={`text-xs ${locTypeBadge[item.fromLocationType] ?? ""}`}>{item.fromLocationType?.replace("_", " ")}</Badge>
-                                    <span className="text-xs font-mono">{item.fromLocationName}</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2 text-center">
-                                  <ArrowRight className="h-4 w-4 text-muted-foreground mx-auto" />
-                                </td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <Badge className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">staging</Badge>
-                                    <span className="text-xs font-mono">{item.toLocationName}</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Section 2: Pallet Replenishments to Pick Face */}
-                {toPickFaceMoves.length > 0 && (
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">→ Pick Face</Badge>
-                        Pallet Replenishment — Put Balance Back to Pick Face
-                      </CardTitle>
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-sm">Pull List</CardTitle>
                       <p className="text-xs text-muted-foreground mt-1">
-                        These are the remaining units from pallets that were partially used. Place them in the pick face for future orders.
+                        Pick from source locations. Move the required qty to staging; place any surplus back to the pick face.
                       </p>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border bg-muted/50">
-                              <th className="text-left px-4 py-3 font-medium">SKU</th>
-                              <th className="text-left px-4 py-3 font-medium">Description</th>
-                              <th className="text-right px-4 py-3 font-medium">Qty (Balance)</th>
-                              <th className="text-left px-4 py-3 font-medium">Lot</th>
-                              <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                              <th className="text-left px-4 py-3 font-medium">From (Pallet)</th>
-                              <th className="text-center px-4 py-3 font-medium"></th>
-                              <th className="text-left px-4 py-3 font-medium">To</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {toPickFaceMoves.map((item, i) => (
-                              <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                                <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
-                                <td className="px-4 py-2 text-xs text-muted-foreground">{item.description ?? "—"}</td>
-                                <td className="px-4 py-2 text-right font-semibold">{item.qty}</td>
-                                <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
-                                <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <Badge className={`text-xs ${locTypeBadge[item.fromLocationType] ?? ""}`}>{item.fromLocationType?.replace("_", " ")}</Badge>
-                                    <span className="text-xs font-mono">{item.fromLocationName}</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2 text-center">
-                                  <ArrowRight className="h-4 w-4 text-muted-foreground mx-auto" />
-                                </td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">pick face</Badge>
-                                    <span className="text-xs font-mono">{item.toLocationName}</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
+                    </div>
+                    <a
+                      href={`/api/pdf/pull-list/${runId}`}
+                      download
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Export PDF
+                    </a>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/50">
+                          <th className="text-left px-4 py-3 font-medium">SKU</th>
+                          <th className="text-left px-4 py-3 font-medium">Description</th>
+                          <th className="text-left px-4 py-3 font-medium">Lot</th>
+                          <th className="text-left px-4 py-3 font-medium">Expiry</th>
+                          <th className="text-left px-4 py-3 font-medium">Source Location</th>
+                          <th className="text-right px-4 py-3 font-medium">On Hand</th>
+                          <th className="text-right px-4 py-3 font-medium text-purple-700 dark:text-purple-400">→ Staging</th>
+                          {hasPickFaceMoves && (
+                            <th className="text-right px-4 py-3 font-medium text-blue-700 dark:text-blue-400">→ Pick Face</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consolidatedRows.map((row) => (
+                          <tr key={row.key} className="border-b border-border/50 hover:bg-muted/30">
+                            <td className="px-4 py-2 font-mono text-xs">{row.sku}</td>
+                            <td className="px-4 py-2 text-xs text-muted-foreground">{row.description ?? "—"}</td>
+                            <td className="px-4 py-2 text-xs">{row.lotNumber ?? "—"}</td>
+                            <td className="px-4 py-2 text-xs">
+                              {row.expirationDate ? new Date(row.expirationDate).toLocaleDateString() : "—"}
+                            </td>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center gap-1.5">
+                                <Badge className={`text-xs ${locTypeBadge[row.fromLocationType] ?? ""}`}>
+                                  {row.fromLocationType?.replace("_", " ")}
+                                </Badge>
+                                <span className="text-xs font-mono">{row.fromLocationName}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right text-xs text-muted-foreground">
+                              {row.sourceQty != null ? row.sourceQty : "—"}
+                            </td>
+                            <td className="px-4 py-2 text-right font-semibold text-purple-700 dark:text-purple-400">
+                              {row.toStaging > 0 ? row.toStaging : "—"}
+                            </td>
+                            {hasPickFaceMoves && (
+                              <td className="px-4 py-2 text-right font-semibold text-blue-700 dark:text-blue-400">
+                                {row.toPickFace > 0 ? row.toPickFace : "—"}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
 
@@ -477,6 +460,7 @@ export default function AllocationReview() {
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
                         <th className="text-left px-4 py-3 font-medium">Order #</th>
+                        <th className="text-left px-4 py-3 font-medium">PO</th>
                         <th className="text-left px-4 py-3 font-medium">SKU</th>
                         <th className="text-left px-4 py-3 font-medium">Description</th>
                         <th className="text-right px-4 py-3 font-medium">Qty</th>
@@ -487,9 +471,8 @@ export default function AllocationReview() {
                     </thead>
                     <tbody>
                       {packList.length === 0 && (
-                        <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No items to pack.</td></tr>
+                        <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No items to pack.</td></tr>
                       )}
-                      {/* Group by order */}
                       {allocatedOrders.map((order) => {
                         const items = order.detail?.packListItems ?? [];
                         if (items.length === 0) return null;
@@ -507,6 +490,14 @@ export default function AllocationReview() {
                                   <PackageCheck className="h-3.5 w-3.5 text-green-600" />
                                   {order.referenceNum}
                                 </div>
+                              </td>
+                            )}
+                            {i === 0 && (
+                              <td
+                                className="px-4 py-2 text-xs text-muted-foreground align-top"
+                                rowSpan={items.length}
+                              >
+                                {(order as any).poNum ?? "—"}
                               </td>
                             )}
                             <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
@@ -553,7 +544,6 @@ export default function AllocationReview() {
             </TabsContent>
           )}
 
-          
           {/* ── Order Summary Tab ─────────────────────────────────────────────── */}
           <TabsContent value="summary" className="mt-4">
             <div className="space-y-3">
@@ -575,7 +565,12 @@ export default function AllocationReview() {
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-semibold text-sm">#{order.orderId}</div>
-                          {order.referenceNum && <div className="text-xs text-muted-foreground">Customer Ref: {order.referenceNum}</div>}
+                          {order.referenceNum && (
+                            <div className="text-xs text-muted-foreground">Customer Ref: {order.referenceNum}</div>
+                          )}
+                          {(order as any).poNum && (
+                            <div className="text-xs text-muted-foreground">PO: {(order as any).poNum}</div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className="text-xs">{totalLines} {totalLines === 1 ? "line" : "lines"}</Badge>

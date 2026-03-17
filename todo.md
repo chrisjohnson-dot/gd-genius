@@ -109,3 +109,6 @@
 - [x] Bug: No-expiry FEFO fallback (lowest receiveItemId) not being applied correctly in engine — getInventoryPriority was correct; Scenario B now uses warehouse-only pull so FEFO applies correctly to warehouse records
 - [x] Bug: Engine pulls from pick face even when insufficient — Scenario B now skips pick face entirely and pulls full qty from warehouse pallets; surplus goes to pick face; pick face used only as last-resort fallback
 - [x] Bug: Pull list UI still showing two separate boxes — fixed IIFE anti-pattern; consolidation logic moved to component body; single table with On Hand, → Staging, → Pick Face columns (conditional)
+- [x] Fix: Show order number (poNum) on allocation/run detail screen — shown in Order Summary card header and Pack List table
+- [x] Fix: No-expiry FEFO — engine already correct; AllocationReview now uses same getInventoryPriority logic via consolidated rows
+- [x] Fix: Pull list is now one consolidated table — Source Location, On Hand, → Staging (purple), → Pick Face (blue, hidden if no moves)

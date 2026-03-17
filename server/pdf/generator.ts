@@ -59,6 +59,8 @@ export interface RunMeta {
   skippedCount: number;
   /** True when documents have been previously printed — renders a DUPLICATE badge beside the title */
   isDuplicate?: boolean;
+  /** Order transaction IDs included in this run — shown in the TX ID box on pull sheets */
+  orderIds?: number[];
 }
 
 // ─── Brand colours (official GD palette) ─────────────────────────────────────
@@ -358,7 +360,9 @@ export async function generatePickFacePullSheetPDF(
   meta: RunMeta
 ) {
   const logoPath = getLogoPath();
-  const barcodeBuffer = await makeBarcodeBuffer(String(meta.runId));
+  // Barcode encodes the first order TX ID (or run ID if no orders)
+  const firstOrderId = meta.orderIds?.[0] ?? meta.runId;
+  const barcodeBuffer = await makeBarcodeBuffer(String(firstOrderId));
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
     margin: 0,
@@ -402,23 +406,28 @@ export async function generatePickFacePullSheetPDF(
     { label: "DATE",      value: formatDate(meta.createdAt), x: MARGIN + 340 },
   ], meta.isDuplicate);
 
-  // TX ID box top-right (matching Pack Sheet style)
+  // TX ID box top-right — smaller box, shows order transaction IDs
   {
-    const TXN_BOX_W = 180;
-    const TXN_BOX_H = 80;
+    const TXN_BOX_W = 160;
+    const TXN_BOX_H = 60;
     const contentY = TOP_BAR + GRN_BAR;
     const headerAreaH = contentY + 4 + 44 + 8 + 11 + 12 + 6 - contentY;
     const bx = tableR - TXN_BOX_W;
     const by = contentY + (headerAreaH - TXN_BOX_H) / 2;
-    doc.roundedRect(bx, by, TXN_BOX_W, TXN_BOX_H, 5).fillAndStroke(TXN_BG, GD_BLUE);
-    doc.fillColor(GD_GRAY).fontSize(6.5).font("Helvetica")
-      .text("RUN / ORDER REF", bx, by + 8, { width: TXN_BOX_W, align: "center", lineBreak: false });
-    doc.fillColor(GD_NAVY).fontSize(20).font("Helvetica-Bold")
-      .text(String(meta.runId), bx, by + 22, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    doc.roundedRect(bx, by, TXN_BOX_W, TXN_BOX_H, 4).fillAndStroke(TXN_BG, GD_BLUE);
+    doc.fillColor(GD_GRAY).fontSize(6).font("Helvetica")
+      .text("TRANSACTION ID", bx, by + 6, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    // Show order IDs (up to 3, then +N more)
+    const ids = meta.orderIds ?? [meta.runId];
+    const displayIds = ids.length <= 3
+      ? ids.join("  |  ")
+      : ids.slice(0, 3).join("  |  ") + `  +${ids.length - 3}`;
+    doc.fillColor(GD_NAVY).fontSize(ids.length === 1 ? 16 : 9).font("Helvetica-Bold")
+      .text(displayIds, bx + 4, by + 17, { width: TXN_BOX_W - 8, align: "center", lineBreak: false });
     if (barcodeBuffer) {
-      const bcW = TXN_BOX_W - 20;
-      const bcH = 24;
-      doc.image(barcodeBuffer, bx + 10, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
+      const bcW = TXN_BOX_W - 16;
+      const bcH = 20;
+      doc.image(barcodeBuffer, bx + 8, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
     }
   }
 
@@ -539,7 +548,9 @@ export async function generateWarehousePullSheetPDF(
   meta: RunMeta
 ) {
   const logoPath = getLogoPath();
-  const barcodeBuffer = await makeBarcodeBuffer(String(meta.runId));
+  // Barcode encodes the first order TX ID (or run ID if no orders)
+  const firstOrderIdWh = meta.orderIds?.[0] ?? meta.runId;
+  const barcodeBuffer = await makeBarcodeBuffer(String(firstOrderIdWh));
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
     margin: 0,
@@ -578,23 +589,27 @@ export async function generateWarehousePullSheetPDF(
     { label: "DATE",      value: formatDate(meta.createdAt), x: MARGIN + 340 },
   ], meta.isDuplicate);
 
-  // TX ID box top-right (matching Pack Sheet style)
+  // TX ID box top-right — smaller box, shows order transaction IDs
   {
-    const TXN_BOX_W = 180;
-    const TXN_BOX_H = 80;
+    const TXN_BOX_W = 160;
+    const TXN_BOX_H = 60;
     const contentY = TOP_BAR + GRN_BAR;
     const headerAreaH = contentY + 4 + 44 + 8 + 11 + 12 + 6 - contentY;
     const bx = tableR - TXN_BOX_W;
     const by = contentY + (headerAreaH - TXN_BOX_H) / 2;
-    doc.roundedRect(bx, by, TXN_BOX_W, TXN_BOX_H, 5).fillAndStroke(TXN_BG, GD_BLUE);
-    doc.fillColor(GD_GRAY).fontSize(6.5).font("Helvetica")
-      .text("RUN / ORDER REF", bx, by + 8, { width: TXN_BOX_W, align: "center", lineBreak: false });
-    doc.fillColor(GD_NAVY).fontSize(20).font("Helvetica-Bold")
-      .text(String(meta.runId), bx, by + 22, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    doc.roundedRect(bx, by, TXN_BOX_W, TXN_BOX_H, 4).fillAndStroke(TXN_BG, GD_BLUE);
+    doc.fillColor(GD_GRAY).fontSize(6).font("Helvetica")
+      .text("TRANSACTION ID", bx, by + 6, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    const idsWh = meta.orderIds ?? [meta.runId];
+    const displayIdsWh = idsWh.length <= 3
+      ? idsWh.join("  |  ")
+      : idsWh.slice(0, 3).join("  |  ") + `  +${idsWh.length - 3}`;
+    doc.fillColor(GD_NAVY).fontSize(idsWh.length === 1 ? 16 : 9).font("Helvetica-Bold")
+      .text(displayIdsWh, bx + 4, by + 17, { width: TXN_BOX_W - 8, align: "center", lineBreak: false });
     if (barcodeBuffer) {
-      const bcW = TXN_BOX_W - 20;
-      const bcH = 24;
-      doc.image(barcodeBuffer, bx + 10, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
+      const bcW = TXN_BOX_W - 16;
+      const bcH = 20;
+      doc.image(barcodeBuffer, bx + 8, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
     }
   }
 

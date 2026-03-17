@@ -182,6 +182,8 @@ export function registerPdfRoutes(app: Express) {
       allocatedCount: run.allocatedCount ?? 0,
       skippedCount: run.skippedCount ?? 0,
       isDuplicate,
+      // Pass the actual order TX IDs so pull sheets show them instead of the run ID
+      orderIds: allocated.map((o) => o.orderId),
     };
 
     // Generate all three PDFs in parallel as buffers

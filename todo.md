@@ -138,3 +138,5 @@
 - [x] Feature: Show "DUPLICATE" label beside title on all three PDFs when documents have been previously printed
 - [x] Bug: DUPLICATE badge overlaps title text — move it further right past the full title width
 - [x] Bug: GD logo and title text too close — increase gap between logo right edge and first word
+- [x] Bug: Pull sheet TX ID box shows run ID — must show order transaction ID(s) matching pack sheet
+- [x] Bug: Pull sheet TX ID box too large — reduce size so it doesn't overrun meta/table area

@@ -168,7 +168,17 @@ export async function createAllocationRun(run: InsertAllocationRun): Promise<num
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(allocationRuns).values(run);
-  return (result as unknown as { insertId: number }).insertId;
+  // Drizzle MySQL2 returns [ResultSetHeader, ...] — insertId is on the first element
+  const raw = result as unknown;
+  let insertId: number | undefined;
+  if (Array.isArray(raw) && raw[0] && typeof (raw[0] as Record<string,unknown>).insertId === "number") {
+    insertId = (raw[0] as Record<string,unknown>).insertId as number;
+  } else if (raw && typeof (raw as Record<string,unknown>).insertId === "number") {
+    insertId = (raw as Record<string,unknown>).insertId as number;
+  }
+  console.log(`[createAllocationRun] insertId=${insertId} raw type=${Array.isArray(raw)?"array":typeof raw}`);
+  if (!insertId) throw new Error(`createAllocationRun: could not get insertId from result: ${JSON.stringify(raw)}`);
+  return insertId;
 }
 
 export async function updateAllocationRun(

@@ -351,9 +351,11 @@ export async function fetchOrderWithDetail(
     resolvedItems = raw.orderItems as ExtensivOrderItem[];
   } else {
     const embedded = (raw._embedded ?? {}) as Record<string, unknown>;
-    const REL = "http://api.3plCentral.com/rels/orders/orderitem";
-    // Try canonical rel key first, then shorthand keys
-    for (const key of [REL, "orderItem", "orderItems", "item"]) {
+    // Extensiv HAL rel key for order items is /orders/item (NOT /orders/orderitem)
+    const REL_ITEM = "http://api.3plCentral.com/rels/orders/item";
+    const REL_ORDERITEM = "http://api.3plCentral.com/rels/orders/orderitem";
+    // Try the confirmed HAL key first, then fallbacks
+    for (const key of [REL_ITEM, REL_ORDERITEM, "orderItem", "orderItems", "item"]) {
       const candidate = embedded[key];
       if (candidate) {
         resolvedItems = extractItemArray(candidate);

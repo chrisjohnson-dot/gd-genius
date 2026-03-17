@@ -110,6 +110,7 @@ export const allocationRuns = mysqlTable("allocation_runs", {
   createdBy: int("createdBy"), // FK to users
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   confirmedAt: timestamp("confirmedAt"),
+  documentsPrintedAt: timestamp("documentsPrintedAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 

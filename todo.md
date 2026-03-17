@@ -125,3 +125,5 @@
 - [x] PDF: Rebuild Pick Face Pull Sheet to match sample layout (GD logo, navy/green header, correct columns, sign-off)
 - [x] PDF: Rebuild Warehouse Pull Sheet to match sample layout (FROM/TO LOCATION, TOTAL REQ., AFFECTED ORDERS)
 - [x] PDF: Rebuild Pack Sheet to match sample layout (barcode, SHIP TO, DESCRIPTION column, multi-page, 3-field sign-off)
+- [x] Run History: Show TX IDs beside customer name in the run history table
+- [x] Run History: Add Print Documents button (green = not yet printed, red = previously printed) that opens all 3 PDFs and marks as printed

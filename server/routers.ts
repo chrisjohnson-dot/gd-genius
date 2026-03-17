@@ -1206,7 +1206,18 @@ export const appRouter = router({
     history: protectedProcedure
       .input(z.object({ limit: z.number().default(50) }))
       .query(async ({ input }) => {
-        return getAllocationRuns(input.limit);
+        const runs = await getAllocationRuns(input.limit);
+        // Attach allocated orderIds to each run for display in the history table
+        const runsWithOrders = await Promise.all(
+          runs.map(async (run) => {
+            const orders = await getAllocationRunOrders(run.id);
+            const orderIds = orders
+              .filter((o) => o.status === "allocated" || o.status === "unallocated")
+              .map((o) => o.orderId);
+            return { ...run, orderIds };
+          })
+        );
+        return runsWithOrders;
       }),
 
     runDetail: protectedProcedure
@@ -1216,6 +1227,13 @@ export const appRouter = router({
         if (!run) throw new TRPCError({ code: "NOT_FOUND" });
         const orders = await getAllocationRunOrders(input.runId);
         return { run, orders };
+      }),
+
+    markDocumentsPrinted: protectedProcedure
+      .input(z.object({ runId: z.number() }))
+      .mutation(async ({ input }) => {
+        await updateAllocationRun(input.runId, { documentsPrintedAt: new Date() });
+        return { success: true };
       }),
 
     deleteRun: protectedProcedure

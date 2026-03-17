@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { History, Loader2, Trash2 } from "lucide-react";
+import { History, Loader2, Printer, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 
@@ -44,9 +44,25 @@ export default function RunHistory() {
     },
   });
 
+  const markPrinted = trpc.allocation.markDocumentsPrinted.useMutation({
+    onSuccess: () => {
+      utils.allocation.history.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Could not mark as printed: ${err.message}`);
+    },
+  });
+
+  function handlePrintDocuments(runId: number) {
+    window.open(`/api/pdf/pick-face-pull-sheet/${runId}`, "_blank");
+    setTimeout(() => window.open(`/api/pdf/warehouse-pull-sheet/${runId}`, "_blank"), 400);
+    setTimeout(() => window.open(`/api/pdf/pack-list/${runId}`, "_blank"), 800);
+    markPrinted.mutate({ runId });
+  }
+
   return (
     <AppLayout>
-      <div className="p-6 space-y-6 max-w-5xl">
+      <div className="p-6 space-y-6 max-w-6xl">
         <div>
           <h1 className="text-2xl font-bold">Run History</h1>
           <p className="text-muted-foreground text-sm mt-1">All allocation runs with results and status</p>
@@ -72,6 +88,7 @@ export default function RunHistory() {
                     <tr className="border-b border-border bg-muted/50">
                       <th className="text-left px-4 py-3 font-medium">Run #</th>
                       <th className="text-left px-4 py-3 font-medium">Customer</th>
+                      <th className="text-left px-4 py-3 font-medium">TX IDs</th>
                       <th className="text-left px-4 py-3 font-medium">Date</th>
                       <th className="text-right px-4 py-3 font-medium">Orders</th>
                       <th className="text-right px-4 py-3 font-medium">Allocated</th>
@@ -81,44 +98,92 @@ export default function RunHistory() {
                     </tr>
                   </thead>
                   <tbody>
-                    {runs.map((run) => (
-                      <tr key={run.id} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">#{run.id}</td>
-                        <td className="px-4 py-3 font-medium">{run.customerName ?? `Customer ${run.customerId}`}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right">{run.orderCount}</td>
-                        <td className="px-4 py-3 text-right text-green-700 dark:text-green-400 font-medium">{run.allocatedCount}</td>
-                        <td className="px-4 py-3 text-right text-yellow-700 dark:text-yellow-400">{run.skippedCount}</td>
-                        <td className="px-4 py-3">
-                          <Badge className={statusClass[run.status] ?? ""}>{run.status}</Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1 justify-end">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/history/${run.id}`}>View</Link>
-                            </Button>
-                            {run.status === "proposed" && (
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link href={`/review/${run.id}`}>Review</Link>
-                              </Button>
+                    {runs.map((run) => {
+                      const hasPrinted = !!run.documentsPrintedAt;
+                      const orderIds: number[] = (run as typeof run & { orderIds?: number[] }).orderIds ?? [];
+
+                      return (
+                        <tr key={run.id} className="border-b border-border/50 hover:bg-muted/30">
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">#{run.id}</td>
+                          <td className="px-4 py-3 font-medium whitespace-nowrap">
+                            {run.customerName ?? `Customer ${run.customerId}`}
+                          </td>
+                          <td className="px-4 py-3 max-w-[200px]">
+                            {orderIds.length === 0 ? (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {orderIds.slice(0, 6).map((id) => (
+                                  <span
+                                    key={id}
+                                    className="inline-block font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-foreground"
+                                  >
+                                    {id}
+                                  </span>
+                                ))}
+                                {orderIds.length > 6 && (
+                                  <span className="text-xs text-muted-foreground">+{orderIds.length - 6} more</span>
+                                )}
+                              </div>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => setPendingDeleteId(run.id)}
-                              disabled={deleteRun.isPending && pendingDeleteId === run.id}
-                            >
-                              {deleteRun.isPending && pendingDeleteId === run.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                            {new Date(run.createdAt).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right">{run.orderCount}</td>
+                          <td className="px-4 py-3 text-right text-green-700 dark:text-green-400 font-medium">{run.allocatedCount}</td>
+                          <td className="px-4 py-3 text-right text-yellow-700 dark:text-yellow-400">{run.skippedCount}</td>
+                          <td className="px-4 py-3">
+                            <Badge className={statusClass[run.status] ?? ""}>{run.status}</Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 justify-end">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/history/${run.id}`}>View</Link>
+                              </Button>
+                              {run.status === "proposed" && (
+                                <Button variant="ghost" size="sm" asChild>
+                                  <Link href={`/review/${run.id}`}>Review</Link>
+                                </Button>
                               )}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {/* Print Documents button — green if not yet printed, red if previously printed */}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={
+                                  hasPrinted
+                                    ? "gap-1.5 border-red-400 text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-950/30"
+                                    : "gap-1.5 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-600 dark:text-green-400 dark:hover:bg-green-950/30"
+                                }
+                                onClick={() => handlePrintDocuments(run.id)}
+                                disabled={markPrinted.isPending}
+                                title={
+                                  hasPrinted
+                                    ? `Documents previously printed on ${new Date(run.documentsPrintedAt!).toLocaleString()}`
+                                    : "Print all three documents"
+                                }
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                                Print Documents
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => setPendingDeleteId(run.id)}
+                                disabled={deleteRun.isPending && pendingDeleteId === run.id}
+                              >
+                                {deleteRun.isPending && pendingDeleteId === run.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

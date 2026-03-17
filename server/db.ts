@@ -198,7 +198,12 @@ export async function createAllocationRunOrders(
   const db = await getDb();
   if (!db) return;
   if (items.length === 0) return;
-  await db.insert(allocationRunOrders).values(items);
+  // Insert in chunks of 50 to avoid MySQL packet size limits on large batches
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const chunk = items.slice(i, i + CHUNK_SIZE);
+    await db.insert(allocationRunOrders).values(chunk);
+  }
 }
 
 export async function getAllocationRunOrders(runId: number) {

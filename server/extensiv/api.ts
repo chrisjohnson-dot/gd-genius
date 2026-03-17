@@ -323,7 +323,24 @@ export async function fetchOrderWithDetail(
   });
 
   const etag = (response.headers["etag"] || "").replace(/"/g, "");
-  return { order: response.data as ExtensivOrder, etag };
+  const raw = response.data as ExtensivOrder & { _embedded?: Record<string, unknown> };
+
+  // Extensiv HAL responses embed order items under _embedded rather than directly on the order.
+  // Extract them if not already present as a top-level array.
+  if (!raw.orderItems || raw.orderItems.length === 0) {
+    const embedded = raw._embedded ?? {};
+    const embeddedItems = (
+      (embedded["http://api.3plCentral.com/rels/orders/orderitem"] as ExtensivOrderItem[] | undefined) ??
+      (embedded["orderItem"] as ExtensivOrderItem[] | undefined) ??
+      (embedded["item"] as ExtensivOrderItem[] | undefined) ??
+      []
+    );
+    if (embeddedItems.length > 0) {
+      raw.orderItems = embeddedItems;
+    }
+  }
+
+  return { order: raw, etag };
 }
 
 // Fetch inventory stock details for a customer/facility (all pages)

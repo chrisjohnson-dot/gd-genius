@@ -710,7 +710,7 @@ export const appRouter = router({
             referenceNum: o.referenceNum,
             status: "skipped" as const,
             skipReason: o.skipReason,
-            allocationDetail: null,
+            allocationDetail: {} as Record<string, unknown>,
           })),
         ];
         await createAllocationRunOrders(runOrderItems);
@@ -881,7 +881,7 @@ export const appRouter = router({
             referenceNum: o.referenceNum,
             status: "skipped" as const,
             skipReason: o.skipReason,
-            allocationDetail: null,
+            allocationDetail: {} as Record<string, unknown>,
           })),
         ];
         await createAllocationRunOrders(runOrderItems);

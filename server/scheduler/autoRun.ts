@@ -174,7 +174,7 @@ async function runAutoAllocation(configId: number): Promise<void> {
         referenceNum: o.referenceNum,
         status: "skipped" as const,
         skipReason: o.skipReason,
-        allocationDetail: null,
+        allocationDetail: {} as Record<string, unknown>,
       })),
     ]);
 

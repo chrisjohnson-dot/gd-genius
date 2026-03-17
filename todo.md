@@ -114,3 +114,4 @@
 - [x] Fix: Pull list is now one consolidated table — Source Location, On Hand, → Staging (purple), → Pick Face (blue, hidden if no moves)
 - [x] Bug: React error #310 in AllocationReview — moved useMemo and all derived state before early returns; TypeScript clean
 - [x] Bug: Location priority overrides FEFO within same tier — fixed applyLocationPriority to use single stable composite comparator (tier primary, FEFO secondary); all 33 tests pass
+- [x] Bug: Engine still picks newer pallet — root cause was fetchInventory using itemsummaries (aggregated per location, one receiveItemId per location) instead of stockdetails (one record per pallet). Fixed by reordering endpoints to try stockdetails first.

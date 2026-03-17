@@ -456,27 +456,32 @@ export async function fetchInventory(
 ): Promise<ExtensivInventoryRecord[]> {
   const client = createExtensivClient(config);
 
-  // Try endpoints in order of preference (most specific first)
+  // Try endpoints in order of preference.
+  // IMPORTANT: stockdetails must come first — it returns one record PER PALLET (per receiveItemId),
+  // which is required for correct FEFO ordering. The itemsummaries endpoint returns one aggregated
+  // record per SKU per location, so individual pallets within the same location are merged into a
+  // single record with the most recent receiveItemId, making it impossible to pick the oldest pallet.
   const endpointAttempts: Array<{ path: string; params: Record<string, unknown> }> = [
-    // 1. Documented: customer-scoped itemsummaries with facility RQL filter
-    {
-      path: `/customers/${customerId}/itemsummaries`,
-      params: { rql: `facilityIdentifier.id==${facilityId}` },
-    },
-    // 2. Customer itemsummaries without facility filter (fallback)
-    {
-      path: `/customers/${customerId}/itemsummaries`,
-      params: {},
-    },
-    // 3. Undocumented but widely used stockdetails with RQL
+    // 1. stockdetails with RQL — one record per pallet, correct FEFO granularity
     {
       path: "/inventory/stockdetails",
       params: { rql: `customerIdentifier.id==${customerId};facilityIdentifier.id==${facilityId}` },
     },
-    // 4. Original approach (query params) as last resort
+    // 2. stockdetails with query params (fallback if RQL not supported)
     {
       path: "/inventory/stockdetails",
       params: { customerid: customerId, facilityid: facilityId },
+    },
+    // 3. Customer-scoped itemsummaries with facility RQL filter (last resort —
+    //    aggregated per location, loses per-pallet FEFO granularity)
+    {
+      path: `/customers/${customerId}/itemsummaries`,
+      params: { rql: `facilityIdentifier.id==${facilityId}` },
+    },
+    // 4. Customer itemsummaries without facility filter
+    {
+      path: `/customers/${customerId}/itemsummaries`,
+      params: {},
     },
   ];
 

@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT r.id, r.customer_name, r.created_at,\n       ro.order_id, ro.reference_num, ro.po_num,\n       r.allocation_detail\nFROM allocation_runs r\nJOIN allocation_run_orders ro ON ro.run_id = r.id\nWHERE r.customer_name LIKE '%Amercare%'\nORDER BY r.created_at DESC\nLIMIT 3;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT r.id, r.customer_name, r.created_at,\n       ro.order_id, ro.reference_num, ro.po_num,\n       r.allocation_detail\nFROM allocation_runs r\nJOIN allocation_run_orders ro ON ro.run_id = r.id\nWHERE r.customer_name LIKE '%Amercare%'\nORDER BY r.created_at DESC\nLIMIT 3;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'ro.run_id' in 'on clause'"
+  ]
+}

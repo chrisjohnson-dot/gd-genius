@@ -370,14 +370,24 @@ export default function AllocationReview() {
                         Pick from source locations. Move the required qty to staging; place any surplus back to the pick face.
                       </p>
                     </div>
-                    <a
-                      href={`/api/pdf/pull-list/${runId}`}
-                      download
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                    >
-                      <FileDown className="h-3.5 w-3.5" />
-                      Export PDF
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={`/api/pdf/pick-face-pull-sheet/${runId}`}
+                        download
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                      >
+                        <FileDown className="h-3.5 w-3.5" />
+                        Pick Face PDF
+                      </a>
+                      <a
+                        href={`/api/pdf/warehouse-pull-sheet/${runId}`}
+                        download
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                      >
+                        <FileDown className="h-3.5 w-3.5" />
+                        Warehouse PDF
+                      </a>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">

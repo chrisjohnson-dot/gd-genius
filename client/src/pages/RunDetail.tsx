@@ -237,8 +237,9 @@ export default function RunDetail() {
                 variant="default"
                 className="gap-1.5"
                 onClick={() => {
-                  window.open(`/api/pdf/pull-list/${runId}`, "_blank");
-                  setTimeout(() => window.open(`/api/pdf/pack-list/${runId}`, "_blank"), 400);
+                  window.open(`/api/pdf/pick-face-pull-sheet/${runId}`, "_blank");
+                  setTimeout(() => window.open(`/api/pdf/warehouse-pull-sheet/${runId}`, "_blank"), 400);
+                  setTimeout(() => window.open(`/api/pdf/pack-list/${runId}`, "_blank"), 800);
                 }}
               >
                 <FileDown className="h-4 w-4" />
@@ -352,15 +353,26 @@ export default function RunDetail() {
                     {" · "}{toStagingMoves.length} to staging
                     {toPickFaceMoves.length > 0 && ` · ${toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length} pallet replenishments`}
                   </p>
-                  <a
-                    href={`/api/pdf/pull-list/${runId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                  >
-                    <FileDown className="h-4 w-4" />
-                    Export PDF
-                  </a>
+                  <div className="flex items-center gap-4">
+                    <a
+                      href={`/api/pdf/pick-face-pull-sheet/${runId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Pick Face PDF
+                    </a>
+                    <a
+                      href={`/api/pdf/warehouse-pull-sheet/${runId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Warehouse PDF
+                    </a>
+                  </div>
                 </div>
 
                 <Card>

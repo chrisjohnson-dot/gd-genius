@@ -122,3 +122,6 @@
 - [x] UX: Show ship-to company name beside order transaction ID on Order Selection page
 - [x] UX: Sort client list A–Z on the client selection step of the Order Selection wizard
 - [x] UX: Add search bar on View Orders step — filter/highlight orders by PO reference, transaction ID, or ship-to company name
+- [x] PDF: Rebuild Pick Face Pull Sheet to match sample layout (GD logo, navy/green header, correct columns, sign-off)
+- [x] PDF: Rebuild Warehouse Pull Sheet to match sample layout (FROM/TO LOCATION, TOTAL REQ., AFFECTED ORDERS)
+- [x] PDF: Rebuild Pack Sheet to match sample layout (barcode, SHIP TO, DESCRIPTION column, multi-page, 3-field sign-off)

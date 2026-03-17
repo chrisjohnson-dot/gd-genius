@@ -661,6 +661,8 @@ export const appRouter = router({
         const allPullListItems: ReturnType<typeof runAllocationEngine>["pullList"] = [];
         const allPackListItems: ReturnType<typeof runAllocationEngine>["packList"] = [];
         const allSummaryItems: ReturnType<typeof runAllocationEngine>["allocationSummary"] = [];
+        // Map of Extensiv orderId → ship-to company name (for PDF pack sheet)
+        const shipToNameMap = new Map<number, string>();
 
         for (const customer of input.customers) {
           if (customer.orderIds.length === 0) continue;
@@ -670,6 +672,11 @@ export const appRouter = router({
             customer.orderIds.map((id) => fetchOrderWithDetail(config, id))
           );
           const orders = ordersWithDetail.map((o) => o.order);
+          // Build a map of orderId → shipToName for PDF generation
+          for (const { order } of ordersWithDetail) {
+            const name = order.shipTo?.companyName ?? order.shipTo?.name ?? null;
+            if (name) shipToNameMap.set(order.readOnly.orderId, name);
+          }
 
           // Fetch inventory for this customer
           const inventory = await fetchInventory(config, customer.customerId, input.facilityId);
@@ -748,6 +755,7 @@ export const appRouter = router({
             orderId: o.orderId,
             referenceNum: o.referenceNum,
             poNum: o.poNum,
+            shipToName: shipToNameMap.get(o.orderId) ?? null,
             status: "allocated" as const,
             allocationDetail: o as unknown as Record<string, unknown>,
           })),
@@ -756,6 +764,7 @@ export const appRouter = router({
             orderId: o.orderId,
             referenceNum: o.referenceNum,
             poNum: o.poNum,
+            shipToName: shipToNameMap.get(o.orderId) ?? null,
             status: "skipped" as const,
             skipReason: o.skipReason,
             allocationDetail: {} as Record<string, unknown>,
@@ -839,6 +848,7 @@ export const appRouter = router({
         const customerNames: string[] = [];
         const totalOrderIds: number[] = [];
         const customersPayload: Array<{ customerId: number; customerName: string; orderIds: number[]; stagingLocationId: number; stagingLocationName: string }> = [];
+        const shipToNameMapQ = new Map<number, string>();
 
         for (const customer of targetCustomers) {
           // Fetch all open orders for this customer
@@ -856,6 +866,11 @@ export const appRouter = router({
             orderIds.map((id) => fetchOrderWithDetail(config, id))
           );
           const orders = ordersWithDetail.map((o) => o.order);
+          // Capture ship-to names for PDF
+          for (const { order } of ordersWithDetail) {
+            const name = order.shipTo?.companyName ?? order.shipTo?.name ?? null;
+            if (name) shipToNameMapQ.set(order.readOnly.orderId, name);
+          }
 
           // Fetch inventory
           const inventory = await fetchInventory(config, customer.id, input.facilityId);
@@ -933,6 +948,7 @@ export const appRouter = router({
             orderId: o.orderId,
             referenceNum: o.referenceNum,
             poNum: o.poNum,
+            shipToName: shipToNameMapQ.get(o.orderId) ?? null,
             status: "allocated" as const,
             allocationDetail: o as unknown as Record<string, unknown>,
           })),
@@ -941,6 +957,7 @@ export const appRouter = router({
             orderId: o.orderId,
             referenceNum: o.referenceNum,
             poNum: o.poNum,
+            shipToName: shipToNameMapQ.get(o.orderId) ?? null,
             status: "skipped" as const,
             skipReason: o.skipReason,
             allocationDetail: {} as Record<string, unknown>,

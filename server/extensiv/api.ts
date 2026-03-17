@@ -455,3 +455,59 @@ export async function updateOrderProposedAllocations(
   }
   return { success: false, newEtag: "", error: JSON.stringify(response.data) };
 }
+
+export interface ExtensivLocation {
+  locationId: number;
+  name: string;
+  facilityId: number;
+  facilityName?: string;
+}
+
+// Fetch all locations for a facility from Extensiv
+export async function fetchExtensivLocations(
+  config: ExtensivClientConfig,
+  facilityId: number
+): Promise<ExtensivLocation[]> {
+  const client = createExtensivClient(config);
+  const allLocations: ExtensivLocation[] = [];
+  let pgnum = 1;
+  const pgsiz = 500;
+
+  while (true) {
+    const data = (await client.get("/locations", {
+      facilityid: facilityId,
+      pgsiz,
+      pgnum,
+    })) as {
+      totalResults?: number;
+      _embedded?: {
+        "http://api.3plCentral.com/rels/locations/location"?: Array<{
+          locationId?: number;
+          id?: number;
+          name?: string;
+          nameKey?: { name?: string };
+          facilityIdentifier?: { id: number; name?: string };
+        }>;
+      };
+    };
+
+    const items =
+      data?._embedded?.["http://api.3plCentral.com/rels/locations/location"] ?? [];
+
+    for (const item of items) {
+      const id = item.locationId ?? item.id;
+      const name = item.name ?? item.nameKey?.name ?? "";
+      const fId = item.facilityIdentifier?.id ?? facilityId;
+      const fName = item.facilityIdentifier?.name;
+      if (id && name) {
+        allLocations.push({ locationId: id, name, facilityId: fId, facilityName: fName });
+      }
+    }
+
+    if (items.length < pgsiz) break;
+    pgnum++;
+  }
+
+  console.log(`[Extensiv] fetchExtensivLocations: ${allLocations.length} locations for facilityId=${facilityId}`);
+  return allLocations;
+}

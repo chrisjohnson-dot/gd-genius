@@ -14,7 +14,6 @@ import {
   PackageSearch,
   Stethoscope,
   Sun,
-  Warehouse,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
@@ -60,9 +59,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <Warehouse className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">Go Direct Allocation Agent</h1>
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdlogo-transparent_3a5013eb.png" alt="Go Direct" className="h-12 w-auto" />
+            <h1 className="text-2xl font-bold text-foreground">GD Allocation Wizard</h1>
           </div>
           <p className="text-muted-foreground">Sign in to access the allocation dashboard.</p>
           <Button asChild>
@@ -78,13 +77,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className="w-60 bg-sidebar text-sidebar-foreground flex flex-col shrink-0">
         {/* Logo */}
-        <div className="p-4 flex items-center gap-2 border-b border-sidebar-border">
-          <Warehouse className="h-6 w-6 text-sidebar-primary shrink-0" />
+        <div className="p-4 flex items-center gap-2.5 border-b border-sidebar-border">
+          <img
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdlogo-transparent_3a5013eb.png"
+            alt="Go Direct"
+            className="h-8 w-auto shrink-0"
+          />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-sidebar-foreground leading-tight truncate">
-              GD Allocation
+              GD Allocation Wizard
             </p>
-            <p className="text-xs text-sidebar-foreground/50 truncate">Agent</p>
           </div>
         </div>
 

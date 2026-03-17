@@ -29,7 +29,7 @@ export default function Home() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground text-sm mt-1">Go Direct Allocation Agent</p>
+            <p className="text-muted-foreground text-sm mt-1">GD Allocation Wizard</p>
           </div>
           <Button asChild>
             <Link href="/allocate" className="flex items-center gap-2">

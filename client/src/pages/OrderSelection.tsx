@@ -17,6 +17,7 @@ import {
   PackageSearch,
   Play,
   User,
+  Users,
   Warehouse,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -30,7 +31,7 @@ type OrderMeta = {
   customerName: string;
 };
 
-type Step = "warehouse" | "orders";
+type Step = "warehouse" | "clients" | "orders";
 
 // ─── Per-customer orders panel ────────────────────────────────────────────────
 function CustomerOrdersPanel({
@@ -206,7 +207,8 @@ export default function OrderSelection() {
 
   const [step, setStep] = useState<Step>("warehouse");
   const [selectedFacility, setSelectedFacility] = useState<{ id: number; name: string } | null>(null);
-  // Map of orderId → OrderMeta (includes customerId so we can group for propose)
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<number>>(new Set());
+  // Map of orderId → OrderMeta
   const [selectedOrders, setSelectedOrders] = useState<Map<number, OrderMeta>>(new Map());
 
   // Fetch facilities
@@ -215,13 +217,19 @@ export default function OrderSelection() {
     { enabled: !!configId }
   );
 
-  // Fetch ALL customers for selected facility
+  // Fetch ALL customers for selected facility (only when on clients step or beyond)
   const { data: customers, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
     { configId: configId!, facilityId: selectedFacility?.id ?? 0 },
     { enabled: !!configId && !!selectedFacility }
   );
 
-  // Fetch all location configs (used by each customer panel to find staging)
+  // Only the selected customers (for orders step)
+  const selectedCustomers = useMemo(
+    () => (customers ?? []).filter((c) => selectedClientIds.has(c.id)),
+    [customers, selectedClientIds]
+  );
+
+  // Fetch all location configs
   const { data: locationConfigs } = trpc.locations.list.useQuery(
     { configId: configId! },
     { enabled: !!configId && !!selectedFacility }
@@ -246,6 +254,36 @@ export default function OrderSelection() {
     });
   };
 
+  // Toggle a client checkbox
+  const handleToggleClient = (clientId: number) => {
+    setSelectedClientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+        // Also deselect any orders from this client
+        setSelectedOrders((orders) => {
+          const nextOrders = new Map(orders);
+          for (const [orderId, meta] of Array.from(nextOrders.entries())) {
+            if (meta.customerId === clientId) nextOrders.delete(orderId);
+          }
+          return nextOrders;
+        });
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllClients = () => {
+    if (!customers) return;
+    if (selectedClientIds.size === customers.length) {
+      setSelectedClientIds(new Set());
+    } else {
+      setSelectedClientIds(new Set(customers.map((c) => c.id)));
+    }
+  };
+
   // Propose mutation
   const proposeMutation = trpc.allocation.propose.useMutation({
     onSuccess: (data) => {
@@ -261,20 +299,14 @@ export default function OrderSelection() {
     if (selectedOrders.size === 0) { toast.error("Select at least one order"); return; }
     if (!configId || !selectedFacility) { toast.error("No warehouse selected"); return; }
 
-    // Group selected orders by customer
     const byCustomer = new Map<number, { customerId: number; customerName: string; orderIds: number[] }>();
     for (const meta of Array.from(selectedOrders.values())) {
       if (!byCustomer.has(meta.customerId)) {
-        byCustomer.set(meta.customerId, {
-          customerId: meta.customerId,
-          customerName: meta.customerName,
-          orderIds: [],
-        });
+        byCustomer.set(meta.customerId, { customerId: meta.customerId, customerName: meta.customerName, orderIds: [] });
       }
       byCustomer.get(meta.customerId)!.orderIds.push(meta.orderId);
     }
 
-    // Build customers array with staging location per customer
     const customersPayload = Array.from(byCustomer.values()).map((c) => {
       const staging = locationConfigs?.find(
         (lc) => lc.customerId === c.customerId && lc.facilityId === selectedFacility.id && lc.locationType === "staging"
@@ -302,14 +334,26 @@ export default function OrderSelection() {
 
   const handleSelectFacility = (facility: { id: number; name: string }) => {
     setSelectedFacility(facility);
+    setSelectedClientIds(new Set());
     setSelectedOrders(new Map());
+    setStep("clients");
+  };
+
+  const handleProceedToOrders = () => {
+    if (selectedClientIds.size === 0) { toast.error("Select at least one client"); return; }
     setStep("orders");
   };
 
   const handleBackToWarehouse = () => {
     setSelectedFacility(null);
+    setSelectedClientIds(new Set());
     setSelectedOrders(new Map());
     setStep("warehouse");
+  };
+
+  const handleBackToClients = () => {
+    setSelectedOrders(new Map());
+    setStep("clients");
   };
 
   if (configsLoading) {
@@ -337,6 +381,9 @@ export default function OrderSelection() {
     );
   }
 
+  const allClientsSelected = customers && customers.length > 0 && selectedClientIds.size === customers.length;
+  const someClientsSelected = selectedClientIds.size > 0 && !allClientsSelected;
+
   return (
     <AppLayout>
       <div className="p-6 space-y-6 max-w-4xl">
@@ -345,7 +392,7 @@ export default function OrderSelection() {
           <div>
             <h1 className="text-2xl font-bold">Run Allocation Tool</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Select a warehouse, then pick orders from any customers to allocate in one run
+              Select a warehouse and clients, then pick orders to allocate
             </p>
           </div>
           {step === "orders" && (
@@ -357,7 +404,7 @@ export default function OrderSelection() {
               {proposeMutation.isPending ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
               ) : (
-                <><Play className="h-4 w-4" /> Run Allocation Tool ({selectedOrders.size})</>
+                <><Play className="h-4 w-4" /> Run Allocation ({selectedOrders.size})</>
               )}
             </Button>
           )}
@@ -375,6 +422,26 @@ export default function OrderSelection() {
           >
             <Warehouse className="h-3.5 w-3.5" />
             {selectedFacility ? selectedFacility.name : "Warehouse"}
+          </button>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          <button
+            onClick={step === "orders" ? handleBackToClients : undefined}
+            disabled={step === "warehouse"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors ${
+              step === "clients"
+                ? "bg-primary text-primary-foreground font-medium"
+                : step === "orders"
+                ? "text-muted-foreground hover:text-foreground hover:bg-muted"
+                : "text-muted-foreground/40 cursor-default"
+            }`}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Clients
+            {selectedClientIds.size > 0 && step !== "clients" && (
+              <Badge className="ml-1 h-5 px-1.5 text-xs bg-white/20 text-inherit border-0">
+                {selectedClientIds.size}
+              </Badge>
+            )}
           </button>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           <span
@@ -435,10 +502,101 @@ export default function OrderSelection() {
           </div>
         )}
 
-        {/* ── Step 2: All Customers + Orders ── */}
+        {/* ── Step 2: Select Clients ── */}
+        {step === "clients" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" />
+                Select Clients
+                {customers && customers.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    — {customers.length} clients in {selectedFacility?.name}
+                  </span>
+                )}
+              </h2>
+              <Button
+                onClick={handleProceedToOrders}
+                disabled={selectedClientIds.size === 0}
+                className="flex items-center gap-2"
+              >
+                Next: View Orders
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {customersLoading ? (
+              <div className="flex items-center gap-2 py-10 text-muted-foreground text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading clients...
+              </div>
+            ) : !customers || customers.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <User className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No clients found for this warehouse.</p>
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="pt-4 pb-2">
+                  {/* Select All */}
+                  <div className="flex items-center gap-3 pb-3 mb-2 border-b border-border">
+                    <Checkbox
+                      id="selectAllClients"
+                      checked={!!allClientsSelected}
+                      data-state={someClientsSelected ? "indeterminate" : allClientsSelected ? "checked" : "unchecked"}
+                      onCheckedChange={handleSelectAllClients}
+                    />
+                    <Label htmlFor="selectAllClients" className="text-sm font-medium cursor-pointer">
+                      Select All Clients ({customers.length})
+                    </Label>
+                  </div>
+
+                  {/* Client list */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {customers.map((customer) => {
+                      const isSelected = selectedClientIds.has(customer.id);
+                      return (
+                        <div
+                          key={customer.id}
+                          className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
+                            isSelected
+                              ? "bg-primary/8 border border-primary/20"
+                              : "hover:bg-muted/50 border border-transparent"
+                          }`}
+                          onClick={() => handleToggleClient(customer.id)}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => handleToggleClient(customer.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-7 w-7 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
+                              <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <span className="text-sm font-medium truncate">{customer.name}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {selectedClientIds.size > 0 && (
+              <div className="flex justify-end">
+                <Button onClick={handleProceedToOrders} className="flex items-center gap-2">
+                  View Orders for {selectedClientIds.size} {selectedClientIds.size === 1 ? "Client" : "Clients"}
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Step 3: Orders ── */}
         {step === "orders" && (
           <div className="space-y-4">
-            {/* Rules reminder */}
             <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md text-sm">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div className="text-amber-800 dark:text-amber-300">
@@ -446,30 +604,19 @@ export default function OrderSelection() {
               </div>
             </div>
 
-            {customersLoading ? (
-              <div className="flex items-center gap-2 py-10 text-muted-foreground text-sm">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading customers...
-              </div>
-            ) : !customers || customers.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                <User className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No customers found for this warehouse.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {customers.map((customer) => (
-                  <CustomerOrdersPanel
-                    key={customer.id}
-                    configId={configId!}
-                    facilityId={selectedFacility!.id}
-                    customer={customer}
-                    selectedOrders={selectedOrders}
-                    onToggleOrder={handleToggleOrder}
-                    locationConfigs={locationConfigs}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="space-y-3">
+              {selectedCustomers.map((customer) => (
+                <CustomerOrdersPanel
+                  key={customer.id}
+                  configId={configId!}
+                  facilityId={selectedFacility!.id}
+                  customer={customer}
+                  selectedOrders={selectedOrders}
+                  onToggleOrder={handleToggleOrder}
+                  locationConfigs={locationConfigs}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

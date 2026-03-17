@@ -52,3 +52,7 @@
 - [x] Bug: "No open, unallocated orders" — relaxed status filter to include status 0/1/2, added debugOrders endpoint + order diagnostics table in API Diagnostics page
 - [x] Bug: No orders showing for any customer in Reno — fixed by removing facilityid from /orders/summaries query and filtering client-side; added facility ID comparison in debugOrders table
 - [x] Bug: Orders still not showing — root cause: /orders uses RQL syntax not query params; fixed to use rql=readonly.customerIdentifier.id==X on /orders endpoint instead of customerid= on /orders/summaries
+- [x] Feature: Auto-populate Reno location config from inventory export — parse pick face prefixes (HR###, BIG###, BP###) and warehouse locations (D-017-C) per customer, seed DB without manual entry
+- [x] Feature: Add customer multi-select step between warehouse and orders in allocation wizard — only fetch orders for selected customers to improve load time
+- [x] Feature: Auto-populate Reno location config from inventory export — seed pick face (HR###/BIG###/BP###) and warehouse (D-###-#) locations per customer
+- [x] Branding: Rename app to "GD Allocation Wizard" (remove "Agent"), upload and display Go Direct logo in sidebar

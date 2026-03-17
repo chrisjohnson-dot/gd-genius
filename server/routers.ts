@@ -30,7 +30,7 @@ import {
   getAutoRunCustomers,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility } from "./extensiv/api";
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 
@@ -184,6 +184,100 @@ export const appRouter = router({
           });
         }
         return { success: true };
+      }),
+
+    // Auto-seed location config from Extensiv locations API using pick-face prefix rules
+    seedFromExtensiv: protectedProcedure
+      .input(z.object({
+        configId: z.number(),
+        facilityId: z.number(),
+        facilityName: z.string().optional(),
+        // Array of customer-to-pickface-prefix mappings
+        customerMappings: z.array(z.object({
+          customerId: z.number(),
+          customerName: z.string(),
+          pickFacePrefixes: z.array(z.string()), // e.g. ["HR"] or ["BIG"] or ["BP"]
+        })),
+        warehouseLocationPattern: z.string().optional(), // regex pattern for warehouse locs, default "^[A-Z]-\\d{3}-[A-Z]$"
+        dryRun: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+
+        // Fetch all locations from Extensiv for this facility
+        const allLocations = await fetchExtensivLocations(config, input.facilityId);
+        console.log(`[seedFromExtensiv] Fetched ${allLocations.length} locations from Extensiv for facility ${input.facilityId}`);
+
+        const warehousePattern = new RegExp(input.warehouseLocationPattern ?? "^[A-Z]-\\d{3}-[A-Z]$");
+        const seeded: Array<{ customerId: number; customerName: string; locationId: number; locationName: string; locationType: string }> = [];
+        const skipped: string[] = [];
+
+        for (const loc of allLocations) {
+          const locName = loc.name.trim();
+
+          // Check if it's a pick face for any customer
+          let matchedCustomer: typeof input.customerMappings[0] | null = null;
+          for (const mapping of input.customerMappings) {
+            const isPickFace = mapping.pickFacePrefixes.some((prefix) =>
+              locName.toUpperCase().startsWith(prefix.toUpperCase()) &&
+              /\d/.test(locName.slice(prefix.length, prefix.length + 1))
+            );
+            if (isPickFace) {
+              matchedCustomer = mapping;
+              break;
+            }
+          }
+
+          if (matchedCustomer) {
+            seeded.push({
+              customerId: matchedCustomer.customerId,
+              customerName: matchedCustomer.customerName,
+              locationId: loc.locationId,
+              locationName: locName,
+              locationType: "pick_face",
+            });
+          } else if (warehousePattern.test(locName)) {
+            // Warehouse location — add for all customers
+            for (const mapping of input.customerMappings) {
+              seeded.push({
+                customerId: mapping.customerId,
+                customerName: mapping.customerName,
+                locationId: loc.locationId,
+                locationName: locName,
+                locationType: "warehouse",
+              });
+            }
+          } else {
+            skipped.push(locName);
+          }
+        }
+
+        console.log(`[seedFromExtensiv] ${seeded.length} locations to seed, ${skipped.length} skipped`);
+
+        if (!input.dryRun) {
+          for (const entry of seeded) {
+            await upsertLocationConfig({
+              configId: input.configId,
+              customerId: entry.customerId,
+              customerName: entry.customerName,
+              facilityId: input.facilityId,
+              facilityName: input.facilityName,
+              locationId: entry.locationId,
+              locationName: entry.locationName,
+              locationType: entry.locationType as "pick_face" | "warehouse" | "staging",
+            });
+          }
+        }
+
+        return {
+          success: true,
+          totalLocations: allLocations.length,
+          seeded: seeded.length,
+          skipped: skipped.length,
+          preview: seeded.slice(0, 20),
+          dryRun: input.dryRun ?? false,
+        };
       }),
   }),
 

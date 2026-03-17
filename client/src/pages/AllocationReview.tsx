@@ -117,50 +117,10 @@ export default function AllocationReview() {
     unallocateMutation.mutate({ runOrderId });
   };
 
-  if (isLoading) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </AppLayout>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <AppLayout>
-        <div className="p-6 text-center text-muted-foreground">
-          <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-          <p>Run not found or error loading data.</p>
-          <Button variant="outline" className="mt-3" onClick={() => navigate("/allocate")}>Back</Button>
-        </div>
-      </AppLayout>
-    );
-  }
-
-  const { run, orders } = data;
-  const isProposed = run.status === "proposed";
-
-  const allocatedOrders = orders
-    .filter((o) => o.status === "allocated")
-    .map((o) => ({ ...o, detail: o.allocationDetail as unknown as AllocationDetail }));
-  const skippedOrders = orders.filter((o) => o.status === "skipped");
-  const unallocatedOrders = orders.filter((o) => o.status === "unallocated");
-  const isConfirmed = run.status === "confirmed";
-
-  // Pull list is global (SKU-level, not per-order) — stored on the run
-  // Fall back to per-order items for backward compatibility with older runs
-  const runPullList = (run as any).pullList as PullListItem[] | null | undefined;
-  const pullList: PullListItem[] = Array.isArray(runPullList) && runPullList.length > 0
-    ? runPullList
-    : allocatedOrders.flatMap((o) => o.detail?.pullListItems ?? []);
-
-  const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
-
   // ── Consolidated pull list rows ──────────────────────────────────────────
   // Group by source location + SKU + lot, merging staging and pick face moves
   // into a single row with separate qty columns.
+  // IMPORTANT: useMemo must be called before any early returns (Rules of Hooks).
   interface ConsolidatedRow {
     key: string;
     sku: string;
@@ -176,7 +136,19 @@ export default function AllocationReview() {
     pickFaceLocationName: string;
   }
 
+  // Derive pull list from data (may be empty if data not loaded yet)
+  const runPullListEarly = data ? (data.run as any).pullList as PullListItem[] | null | undefined : undefined;
+  const allocatedOrdersEarly = data
+    ? data.orders
+        .filter((o) => o.status === "allocated")
+        .map((o) => ({ ...o, detail: o.allocationDetail as unknown as AllocationDetail }))
+    : [];
+  const pullListEarly: PullListItem[] = Array.isArray(runPullListEarly) && runPullListEarly.length > 0
+    ? runPullListEarly
+    : allocatedOrdersEarly.flatMap((o) => o.detail?.pullListItems ?? []);
+
   const consolidatedRows = useMemo((): ConsolidatedRow[] => {
+    const pullList = pullListEarly;
     const map = new Map<string, ConsolidatedRow>();
     for (const item of pullList) {
       const key = `${item.sku}|${item.fromLocationName}|${item.lotNumber ?? ""}|${item.expirationDate ?? ""}`;
@@ -218,11 +190,43 @@ export default function AllocationReview() {
       if (!row.pickFaceLocationName) row.pickFaceLocationName = pfName;
     }
     return rows;
-  }, [pullList]);
+  }, [pullListEarly]);
 
   const hasPickFaceMoves = consolidatedRows.some((r) => r.toPickFace > 0);
-  const toStagingCount = pullList.filter((p) => p.movement === "to_staging" || !p.movement).length;
-  const toPickFaceCount = pullList.filter((p) => p.movement === "to_pick_face").length;
+  const toStagingCount = pullListEarly.filter((p) => p.movement === "to_staging" || !p.movement).length;
+  const toPickFaceCount = pullListEarly.filter((p) => p.movement === "to_pick_face").length;
+
+  // ── Early returns (after all hooks) ─────────────────────────────────────
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <AppLayout>
+        <div className="p-6 text-center text-muted-foreground">
+          <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+          <p>Run not found or error loading data.</p>
+          <Button variant="outline" className="mt-3" onClick={() => navigate("/allocate")}>Back</Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const { run, orders } = data;
+  const isProposed = run.status === "proposed";
+  const isConfirmed = run.status === "confirmed";
+  const allocatedOrders = allocatedOrdersEarly;
+  const skippedOrders = orders.filter((o) => o.status === "skipped");
+  const unallocatedOrders = orders.filter((o) => o.status === "unallocated");
+  const pullList = pullListEarly;
+  const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
 
   return (
     <AppLayout>

@@ -112,3 +112,4 @@
 - [x] Fix: Show order number (poNum) on allocation/run detail screen — shown in Order Summary card header and Pack List table
 - [x] Fix: No-expiry FEFO — engine already correct; AllocationReview now uses same getInventoryPriority logic via consolidated rows
 - [x] Fix: Pull list is now one consolidated table — Source Location, On Hand, → Staging (purple), → Pick Face (blue, hidden if no moves)
+- [x] Bug: React error #310 in AllocationReview — moved useMemo and all derived state before early returns; TypeScript clean

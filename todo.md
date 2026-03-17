@@ -100,3 +100,4 @@
 - [x] Bug: Infinite loading spinner for Hammer Care orders in Calgary warehouse — fixed: RQL now pre-filters to open/unallocated orders only, axios timeout added, error state shown instead of infinite spinner
 - [x] UX: Add line count and total pieces badges to each order row in Order Selection page — fixed HAL normalization in fetchOpenOrders so orderItems are populated from _embedded
 - [x] Feature: Wire locationPriorityPatterns from customer_rules into allocation engine (propose + autoRun) — already wired; added 5 unit tests confirming ^12/^RCV12 priority ordering, fallback, and invalid-regex safety
+- [x] Feature: Copy rules from one customer to another on Allocation Rules page — copyRules tRPC procedure + dialog UI + 5 unit tests all passing

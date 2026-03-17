@@ -1274,6 +1274,74 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+
+    /**
+     * Copy the full rule set from one customer to one or more target customers.
+     * The source customer's noLotMixing, autoRun, locationPriorityPatterns, and
+     * notes are written to every target customer. facilityId/facilityName are
+     * taken from each target's own existing rule (if any) so the staging location
+     * is not accidentally overwritten.
+     */
+    copyRules: protectedProcedure
+      .input(
+        z.object({
+          configId: z.number(),
+          sourceCustomerId: z.number(),
+          targetCustomers: z.array(
+            z.object({
+              customerId: z.number(),
+              customerName: z.string(),
+              facilityId: z.number().optional(),
+              facilityName: z.string().optional(),
+            })
+          ),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const source = await getCustomerRule(input.configId, input.sourceCustomerId);
+        if (!source) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Source customer has no saved rules to copy from.",
+          });
+        }
+
+        const results: Array<{ customerId: number; customerName: string; success: boolean }> = [];
+
+        for (const target of input.targetCustomers) {
+          // Preserve the target's own facility if it already has one; otherwise inherit from source
+          const existingTarget = await getCustomerRule(input.configId, target.customerId);
+          const facilityId = existingTarget?.facilityId ?? source.facilityId ?? target.facilityId;
+          const facilityName = existingTarget?.facilityName ?? source.facilityName ?? target.facilityName;
+
+          await upsertCustomerRule({
+            configId: input.configId,
+            customerId: target.customerId,
+            customerName: target.customerName,
+            facilityId,
+            facilityName,
+            noLotMixing: source.noLotMixing,
+            autoRun: source.autoRun,
+            locationPriorityPatterns: source.locationPriorityPatterns as Array<{ pattern: string; label: string }> ?? [],
+            notes: source.notes,
+          });
+
+          await createAuditLog({
+            userId: ctx.user.id,
+            action: "customerRules.copyRules",
+            entityType: "customer_rules",
+            entityId: String(target.customerId),
+            details: {
+              sourceCustomerId: input.sourceCustomerId,
+              copiedFields: ["noLotMixing", "autoRun", "locationPriorityPatterns", "notes"],
+            },
+          });
+
+          results.push({ customerId: target.customerId, customerName: target.customerName, success: true });
+        }
+
+        return { copied: results.length, results };
+      }),
   }),
 
   // ─── Schedule Config ────────────────────────────────────────────────────

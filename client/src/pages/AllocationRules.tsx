@@ -25,15 +25,26 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   ChevronDown,
   ChevronRight,
+  Copy,
   GripVertical,
   ListOrdered,
   Plus,
   Save,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -115,10 +126,63 @@ export default function AllocationRules() {
     },
   });
 
+  const copyMutation = trpc.customerRules.copyRules.useMutation({
+    onSuccess: (data) => {
+      utils.customerRules.list.invalidate({ configId });
+      toast.success(`Rules copied to ${data.copied} customer${data.copied === 1 ? "" : "s"}.`);
+      setCopyDialog({ open: false, sourceId: null, targetIds: new Set() });
+    },
+    onError: (e) => {
+      toast.error(`Copy failed: ${e.message}`);
+    },
+  });
+
+  // ── Copy Rules dialog state ───────────────────────────────────────────────
+  const [copyDialog, setCopyDialog] = useState<{
+    open: boolean;
+    sourceId: number | null;
+    targetIds: Set<number>;
+  }>({ open: false, sourceId: null, targetIds: new Set() });
+
+  const openCopyDialog = (sourceId: number) => {
+    setCopyDialog({ open: true, sourceId, targetIds: new Set() });
+  };
+
+  const toggleCopyTarget = (customerId: number) => {
+    setCopyDialog((prev) => {
+      const next = new Set(prev.targetIds);
+      if (next.has(customerId)) next.delete(customerId);
+      else next.add(customerId);
+      return { ...prev, targetIds: next };
+    });
+  };
+
   // Local state for all client rule cards
   const [clients, setClients] = useState<ClientRuleState[]>([]);
   const [initialized, setInitialized] = useState(false);
   const [hideInactive, setHideInactive] = useState(true);
+
+  const copyDialogSource = useMemo(
+    () => clients.find((c) => c.customerId === copyDialog.sourceId),
+    [clients, copyDialog.sourceId]
+  );
+
+  const handleCopyConfirm = () => {
+    if (!copyDialog.sourceId || copyDialog.targetIds.size === 0) return;
+    const targets = clients
+      .filter((c) => copyDialog.targetIds.has(c.customerId))
+      .map((c) => ({
+        customerId: c.customerId,
+        customerName: c.customerName,
+        facilityId: c.facilityId,
+        facilityName: c.facilityName,
+      }));
+    copyMutation.mutate({
+      configId,
+      sourceCustomerId: copyDialog.sourceId,
+      targetCustomers: targets,
+    });
+  };
 
   useEffect(() => {
     if (!customersData || !rulesData || initialized) return;
@@ -285,6 +349,102 @@ export default function AllocationRules() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Copy Rules Dialog ───────────────────────────────────────── */}
+      <Dialog
+        open={copyDialog.open}
+        onOpenChange={(open) =>
+          setCopyDialog((prev) => ({ ...prev, open }))
+        }
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Copy Rules To…</DialogTitle>
+            <DialogDescription>
+              {copyDialogSource ? (
+                <>
+                  Copying rules from <strong>{copyDialogSource.customerName}</strong>.
+                  Select one or more customers to receive the same patterns,
+                  lot-mixing setting, auto-run flag, and notes. Each customer’s
+                  staging location will be preserved.
+                </>
+              ) : (
+                "Select target customers."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {copyDialogSource && (
+            <div className="space-y-2 text-sm">
+              <div className="rounded-md border bg-muted/40 p-3 space-y-1">
+                <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-2">Rules being copied</p>
+                <div className="flex flex-wrap gap-2">
+                  {copyDialogSource.locationPriorityPatterns.length > 0 ? (
+                    copyDialogSource.locationPriorityPatterns.map((p, i) => (
+                      <Badge key={i} variant="secondary" className="font-mono text-xs">
+                        {i + 1}. {p.pattern}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground text-xs">No location patterns</span>
+                  )}
+                  {copyDialogSource.noLotMixing && <Badge variant="outline" className="text-xs">No Lot Mixing</Badge>}
+                  {copyDialogSource.autoRun && <Badge className="text-xs bg-blue-600 text-white">Auto-Run</Badge>}
+                  {copyDialogSource.notes && (
+                    <span className="text-xs text-muted-foreground italic truncate max-w-full">
+                      Notes: {copyDialogSource.notes.slice(0, 60)}{copyDialogSource.notes.length > 60 ? "…" : ""}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide pt-1">Copy to</p>
+              <ScrollArea className="h-64 rounded-md border">
+                <div className="p-2 space-y-1">
+                  {visibleClients
+                    .filter((c) => c.customerId !== copyDialog.sourceId)
+                    .map((c) => (
+                      <label
+                        key={c.customerId}
+                        className="flex items-center gap-3 rounded-md px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
+                        <Checkbox
+                          checked={copyDialog.targetIds.has(c.customerId)}
+                          onCheckedChange={() => toggleCopyTarget(c.customerId)}
+                        />
+                        <span className="flex-1 text-sm">{c.customerName}</span>
+                        {c.locationPriorityPatterns.length > 0 && (
+                          <Badge variant="secondary" className="text-xs shrink-0">
+                            {c.locationPriorityPatterns.length} pattern{c.locationPriorityPatterns.length !== 1 ? "s" : ""}
+                          </Badge>
+                        )}
+                      </label>
+                    ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCopyDialog({ open: false, sourceId: null, targetIds: new Set() })}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCopyConfirm}
+              disabled={copyDialog.targetIds.size === 0 || copyMutation.isPending}
+              className="gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              {copyMutation.isPending
+                ? "Copying…"
+                : `Copy to ${copyDialog.targetIds.size} customer${copyDialog.targetIds.size !== 1 ? "s" : ""}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {!isLoading &&
         visibleClients.map((c) => (
@@ -523,7 +683,16 @@ export default function AllocationRules() {
                   </div>
 
                   {/* ── Save button ─────────────────────────────────── */}
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-muted-foreground"
+                      onClick={(e) => { e.stopPropagation(); openCopyDialog(c.customerId); }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy rules to…
+                    </Button>
                     <Button
                       onClick={() => saveClient(c)}
                       disabled={!c.dirty || c.saving}

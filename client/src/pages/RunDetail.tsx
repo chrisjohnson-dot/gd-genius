@@ -234,7 +234,7 @@ export default function RunDetail() {
             <CardContent className="py-4 flex items-center gap-3">
               <RefreshCw className="h-6 w-6 text-blue-600 shrink-0" />
               <div>
-                <p className="text-2xl font-bold">{toPickFaceMoves.length}</p>
+                <p className="text-2xl font-bold">{toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length}</p>
                 <p className="text-xs text-muted-foreground">Pallet Replenishments</p>
               </div>
             </CardContent>
@@ -297,32 +297,70 @@ export default function RunDetail() {
                   <p>No pull list items.</p>
                 </CardContent>
               </Card>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    {toStagingMoves.length} move{toStagingMoves.length !== 1 ? "s" : ""} to staging
-                    {toPickFaceMoves.length > 0 && ` · ${toPickFaceMoves.length} pallet replenishment${toPickFaceMoves.length !== 1 ? "s" : ""}`}
-                  </p>
-                  <a
-                    href={`/api/pdf/pull-list/${runId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                  >
-                    <FileDown className="h-4 w-4" />
-                    Export PDF
-                  </a>
-                </div>
+            ) : (() => {
+              // Consolidate staging + pick face moves into one row per source location + SKU + lot
+              type ConsolidatedRow = {
+                sku: string;
+                description?: string;
+                fromLocationName: string;
+                fromLocationType: string;
+                lotNumber?: string;
+                expirationDate?: string;
+                stagingLocationName: string;
+                pickFaceLocationName: string;
+                qtyToStaging: number;
+                qtyToPickFace: number;
+              };
+              const rowMap = new Map<string, ConsolidatedRow>();
+              for (const item of pullList) {
+                const key = `${item.sku}||${item.fromLocationName}||${item.lotNumber ?? ""}||${item.expirationDate ?? ""}`;
+                if (!rowMap.has(key)) {
+                  rowMap.set(key, {
+                    sku: item.sku,
+                    description: item.description,
+                    fromLocationName: item.fromLocationName,
+                    fromLocationType: item.fromLocationType,
+                    lotNumber: item.lotNumber,
+                    expirationDate: item.expirationDate,
+                    stagingLocationName: item.movement === "to_staging" ? item.toLocationName : "",
+                    pickFaceLocationName: item.movement === "to_pick_face" ? item.toLocationName : "",
+                    qtyToStaging: item.movement === "to_staging" ? item.qty : 0,
+                    qtyToPickFace: item.movement === "to_pick_face" ? item.qty : 0,
+                  });
+                } else {
+                  const row = rowMap.get(key)!;
+                  if (item.movement === "to_staging") {
+                    row.qtyToStaging += item.qty;
+                    if (!row.stagingLocationName) row.stagingLocationName = item.toLocationName;
+                  } else {
+                    row.qtyToPickFace += item.qty;
+                    if (!row.pickFaceLocationName) row.pickFaceLocationName = item.toLocationName;
+                  }
+                }
+              }
+              const consolidatedRows = Array.from(rowMap.values());
+              const hasPickFace = consolidatedRows.some((r) => r.qtyToPickFace > 0);
 
-                {toStagingMoves.length > 0 && (
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      {consolidatedRows.length} line{consolidatedRows.length !== 1 ? "s" : ""}
+                      {" · "}{toStagingMoves.length} to staging
+                      {toPickFaceMoves.length > 0 && ` · ${toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length} pallet replenishments`}
+                    </p>
+                    <a
+                      href={`/api/pdf/pull-list/${runId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Export PDF
+                    </a>
+                  </div>
+
                   <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Truck className="h-4 w-4 text-purple-600" />
-                        Move to Staging ({toStagingMoves.length} items)
-                      </CardTitle>
-                    </CardHeader>
                     <CardContent className="p-0">
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -330,37 +368,50 @@ export default function RunDetail() {
                             <tr className="border-b border-border bg-muted/50">
                               <th className="text-left px-4 py-3 font-medium">SKU</th>
                               <th className="text-left px-4 py-3 font-medium">Description</th>
-                              <th className="text-right px-4 py-3 font-medium">Qty</th>
-                              <th className="text-left px-4 py-3 font-medium">From</th>
-                              <th className="text-left px-4 py-3 font-medium">To</th>
+                              <th className="text-left px-4 py-3 font-medium">Source Location</th>
+                              <th className="text-right px-4 py-3 font-medium">→ Staging</th>
+                              {hasPickFace && <th className="text-right px-4 py-3 font-medium">→ Pick Face</th>}
                               <th className="text-left px-4 py-3 font-medium">Lot</th>
                               <th className="text-left px-4 py-3 font-medium">Expiry</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {toStagingMoves.map((item, i) => (
+                            {consolidatedRows.map((row, i) => (
                               <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                                <td className="px-4 py-2 font-mono text-xs font-semibold">{item.sku}</td>
-                                <td className="px-4 py-2 text-muted-foreground text-xs">{item.description ?? "—"}</td>
-                                <td className="px-4 py-2 text-right font-bold">{item.qty}</td>
+                                <td className="px-4 py-2 font-mono text-xs font-semibold">{row.sku}</td>
+                                <td className="px-4 py-2 text-muted-foreground text-xs">{row.description ?? "—"}</td>
                                 <td className="px-4 py-2">
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${locTypeBadge[item.fromLocationType] ?? ""}`}>
-                                      {item.fromLocationType}
+                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${locTypeBadge[row.fromLocationType] ?? ""}`}>
+                                      {row.fromLocationType}
                                     </span>
-                                    <span className="text-xs">{item.fromLocationName}</span>
+                                    <span className="text-xs font-medium">{row.fromLocationName}</span>
                                   </div>
                                 </td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${movementBadge[item.movement] ?? ""}`}>
-                                      {movementLabel[item.movement] ?? item.movement}
-                                    </span>
-                                    <span className="text-xs">{item.toLocationName}</span>
-                                  </div>
+                                <td className="px-4 py-2 text-right">
+                                  {row.qtyToStaging > 0 ? (
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span className="font-bold">{row.qtyToStaging}</span>
+                                      {row.stagingLocationName && (
+                                        <span className="text-xs text-muted-foreground">{row.stagingLocationName}</span>
+                                      )}
+                                    </div>
+                                  ) : <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
-                                <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
+                                {hasPickFace && (
+                                  <td className="px-4 py-2 text-right">
+                                    {row.qtyToPickFace > 0 ? (
+                                      <div className="flex items-center justify-end gap-1">
+                                        <span className="font-bold">{row.qtyToPickFace}</span>
+                                        {row.pickFaceLocationName && (
+                                          <span className="text-xs text-muted-foreground">{row.pickFaceLocationName}</span>
+                                        )}
+                                      </div>
+                                    ) : <span className="text-muted-foreground">—</span>}
+                                  </td>
+                                )}
+                                <td className="px-4 py-2 text-xs">{row.lotNumber ?? "—"}</td>
+                                <td className="px-4 py-2 text-xs">{row.expirationDate ? new Date(row.expirationDate).toLocaleDateString() : "—"}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -368,64 +419,9 @@ export default function RunDetail() {
                       </div>
                     </CardContent>
                   </Card>
-                )}
-
-                {toPickFaceMoves.length > 0 && (
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <RefreshCw className="h-4 w-4 text-blue-600" />
-                        Pallet Replenishment → Pick Face ({toPickFaceMoves.length} items)
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border bg-muted/50">
-                              <th className="text-left px-4 py-3 font-medium">SKU</th>
-                              <th className="text-left px-4 py-3 font-medium">Description</th>
-                              <th className="text-right px-4 py-3 font-medium">Qty</th>
-                              <th className="text-left px-4 py-3 font-medium">From</th>
-                              <th className="text-left px-4 py-3 font-medium">To</th>
-                              <th className="text-left px-4 py-3 font-medium">Lot</th>
-                              <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {toPickFaceMoves.map((item, i) => (
-                              <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                                <td className="px-4 py-2 font-mono text-xs font-semibold">{item.sku}</td>
-                                <td className="px-4 py-2 text-muted-foreground text-xs">{item.description ?? "—"}</td>
-                                <td className="px-4 py-2 text-right font-bold">{item.qty}</td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${locTypeBadge[item.fromLocationType] ?? ""}`}>
-                                      {item.fromLocationType}
-                                    </span>
-                                    <span className="text-xs">{item.fromLocationName}</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${movementBadge[item.movement] ?? ""}`}>
-                                      {movementLabel[item.movement] ?? item.movement}
-                                    </span>
-                                    <span className="text-xs">{item.toLocationName}</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
-                                <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
-            )}
+                </>
+              );
+            })()}
           </TabsContent>
 
           {/* ── Pack List Tab ─────────────────────────────────────────────────── */}
@@ -517,7 +513,10 @@ export default function RunDetail() {
                               </Badge>
                             )}
                           </div>
-                          {order.referenceNum && <div className="text-xs text-muted-foreground">Customer Ref: {order.referenceNum}</div>}
+                          <div className="text-xs text-muted-foreground space-x-2">
+                            {order.referenceNum && <span>Ref: {order.referenceNum}</span>}
+                            {order.poNum && <span>PO: {order.poNum}</span>}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className="text-xs">{totalLines} {totalLines === 1 ? "line" : "lines"}</Badge>
@@ -591,6 +590,7 @@ export default function RunDetail() {
                       <tr className="border-b border-border bg-muted/50">
                         <th className="text-left px-4 py-3 font-medium">Order #</th>
                         <th className="text-left px-4 py-3 font-medium">Customer Ref</th>
+                        <th className="text-left px-4 py-3 font-medium">PO #</th>
                         <th className="text-left px-4 py-3 font-medium">Status</th>
                         <th className="text-left px-4 py-3 font-medium">Skip Reason</th>
                         <th className="text-right px-4 py-3 font-medium">Actions</th>
@@ -601,6 +601,7 @@ export default function RunDetail() {
                         <tr key={o.id} className="border-b border-border/50 hover:bg-muted/30">
                           <td className="px-4 py-2 font-semibold">#{o.orderId}</td>
                           <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{o.referenceNum ?? "—"}</td>
+                          <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{o.poNum ?? "—"}</td>
                           <td className="px-4 py-2">
                             <Badge className={statusClass[o.status] ?? ""}>{o.status}</Badge>
                           </td>

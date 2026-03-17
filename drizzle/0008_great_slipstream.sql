@@ -1,0 +1,1 @@
+ALTER TABLE `allocation_run_orders` ADD `poNum` varchar(256);

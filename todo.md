@@ -101,3 +101,8 @@
 - [x] UX: Add line count and total pieces badges to each order row in Order Selection page — fixed HAL normalization in fetchOpenOrders so orderItems are populated from _embedded
 - [x] Feature: Wire locationPriorityPatterns from customer_rules into allocation engine (propose + autoRun) — already wired; added 5 unit tests confirming ^12/^RCV12 priority ordering, fallback, and invalid-regex safety
 - [x] Feature: Copy rules from one customer to another on Allocation Rules page — copyRules tRPC procedure + dialog UI + 5 unit tests all passing
+- [x] UX: Show order number on the allocation/run detail screen — added poNum column to schema, threaded through engine+router, displayed in Order Summary and All Orders tabs
+- [x] Engine: Flag locations starting with 'ACR' as PickFace — inferLocationTypeFromName now matches ACR prefix
+- [x] Engine: When product has no expiry date, use oldest/lowest receiveItemId as FEFO fallback — getInventoryPriority updated
+- [x] Engine: Pallet move count should sum only warehouse locations, exclude pick face locations — RunDetail pallet replenishment count now filters fromLocationType==='warehouse'
+- [x] UX: Consolidate pull list into one unified table (source qty, qty to staging, qty to pick face) — single table with Source Location, → Staging, → Pick Face columns; Pick Face column hidden when no pick face moves

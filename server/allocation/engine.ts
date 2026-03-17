@@ -89,6 +89,7 @@ export interface PackListItem {
 export interface OrderAllocationResult {
   orderId: number;
   referenceNum: string;
+  poNum?: string;
   status: "allocated" | "skipped";
   skipReason?: string;
   lineItems: AllocationLineItem[];
@@ -124,12 +125,14 @@ type InventoryPoolRecord = ExtensivInventoryRecord & { remainingQty: number };
 
 function getInventoryPriority(record: ExtensivInventoryRecord): number {
   if (record.expirationDate) {
+    // Has expiry: sort by expiry date ascending (FEFO)
     return new Date(record.expirationDate).getTime();
   }
-  if (record.receivedDate) {
-    return new Date(record.receivedDate).getTime() + 1e15;
-  }
-  return 2e15;
+  // No expiry: fall back to receiveItemId ascending (oldest receive first = FIFO).
+  // receiveItemId is a monotonically increasing integer assigned by Extensiv at
+  // receive time, so a lower ID means it was received earlier.
+  // We add 1e15 to keep no-expiry records after any expiry-dated records.
+  return 1e15 + (record.receiveItemId ?? Number.MAX_SAFE_INTEGER);
 }
 
 function sortFEFO(records: InventoryPoolRecord[]): InventoryPoolRecord[] {
@@ -250,13 +253,23 @@ function planSkuMovements(
 
 /**
  * Infer location type from name when not explicitly configured.
- * Pattern: two letters followed by digits (e.g. HR400, PF001) → pick_face.
- * Everything else → warehouse.
+ *
+ * Rules (in priority order):
+ *  1. Locations whose name starts with "ACR" (case-insensitive) → pick_face
+ *     (these are the ACR-Staging / ACR pick face locations used in Calgary)
+ *  2. Locations named exactly "Pick face" (case-insensitive) → pick_face
+ *  3. Locations matching two letters then digits (e.g. HR400, PF001) → pick_face
+ *  4. Everything else → warehouse
  */
 export function inferLocationTypeFromName(name: string | undefined): LocationType {
   if (!name) return "warehouse";
-  // Match: exactly 2 letters then 1+ digits (optionally more chars after)
-  if (/^[A-Za-z]{2}\d+/.test(name.trim())) return "pick_face";
+  const trimmed = name.trim();
+  // Rule 1: ACR prefix → pick face
+  if (/^ACR/i.test(trimmed)) return "pick_face";
+  // Rule 2: explicit "Pick face" name
+  if (/^pick\s*face$/i.test(trimmed)) return "pick_face";
+  // Rule 3: two-letter prefix + digits pattern
+  if (/^[A-Za-z]{2}\d+/.test(trimmed)) return "pick_face";
   return "warehouse";
 }
 
@@ -290,6 +303,7 @@ export function runAllocationEngine(
   interface OrderDemand {
     orderId: number;
     referenceNum: string;
+    poNum?: string;
     sku: string;
     qtyRequired: number;
     itemIndex: number; // index into order.orderItems
@@ -303,11 +317,12 @@ export function runAllocationEngine(
     //                  referenceNum = client's internal order number (e.g. "19069850") — display only
     const orderId = order.readOnly.orderId;
     const referenceNum = order.referenceNum;
+    const poNum = order.poNum;
     for (let i = 0; i < (order.orderItems ?? []).length; i++) {
       const item = order.orderItems![i]!;
       const sku = item.itemIdentifier.sku;
       const qty = item.qty;
-      orderDemands.push({ orderId, referenceNum, sku, qtyRequired: qty, itemIndex: i });
+      orderDemands.push({ orderId, referenceNum, poNum, sku, qtyRequired: qty, itemIndex: i });
       skuTotalDemand.set(sku, (skuTotalDemand.get(sku) ?? 0) + qty);
     }
   }
@@ -436,10 +451,11 @@ export function runAllocationEngine(
     //                  referenceNum = client's internal order number (e.g. "19069850") — display only
     const orderId = order.readOnly.orderId;
     const referenceNum = order.referenceNum;
+    const poNum = order.poNum;
     const orderItems = order.orderItems ?? [];
 
     if (orderItems.length === 0) {
-      skippedOrders.push({ orderId, referenceNum, status: "skipped", skipReason: "Order has no line items", lineItems: [], pullListItems: [], packListItems: [] });
+      skippedOrders.push({ orderId, referenceNum, poNum, status: "skipped", skipReason: "Order has no line items", lineItems: [], pullListItems: [], packListItems: [] });
       continue;
     }
 
@@ -529,7 +545,7 @@ export function runAllocationEngine(
           pool.records.forEach((r, i) => { r.remaining = snapshots[i] ?? r.remaining; });
         }
       }
-      skippedOrders.push({ orderId, referenceNum, status: "skipped", skipReason, lineItems: [], pullListItems: [], packListItems: [] });
+      skippedOrders.push({ orderId, referenceNum, poNum, status: "skipped", skipReason, lineItems: [], pullListItems: [], packListItems: [] });
       continue;
     }
 
@@ -553,6 +569,7 @@ export function runAllocationEngine(
     allocatedOrders.push({
       orderId,
       referenceNum,
+      poNum,
       status: "allocated",
       lineItems,
       pullListItems: [], // pull list is global (SKU-level), not per order

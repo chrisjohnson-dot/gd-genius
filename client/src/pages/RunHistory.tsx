@@ -1,10 +1,22 @@
+import { useState } from "react";
 import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { History, Loader2 } from "lucide-react";
+import { History, Loader2, Trash2 } from "lucide-react";
 import { Link } from "wouter";
+import { toast } from "sonner";
 
 const statusClass: Record<string, string> = {
   confirmed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -14,7 +26,23 @@ const statusClass: Record<string, string> = {
 };
 
 export default function RunHistory() {
+  const utils = trpc.useUtils();
   const { data: runs, isLoading } = trpc.allocation.history.useQuery({ limit: 100 });
+
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const pendingRun = runs?.find((r) => r.id === pendingDeleteId);
+
+  const deleteRun = trpc.allocation.deleteRun.useMutation({
+    onSuccess: () => {
+      toast.success("Run deleted successfully.");
+      utils.allocation.history.invalidate();
+      setPendingDeleteId(null);
+    },
+    onError: (err) => {
+      toast.error(`Delete failed: ${err.message}`);
+      setPendingDeleteId(null);
+    },
+  });
 
   return (
     <AppLayout>
@@ -23,7 +51,6 @@ export default function RunHistory() {
           <h1 className="text-2xl font-bold">Run History</h1>
           <p className="text-muted-foreground text-sm mt-1">All allocation runs with results and status</p>
         </div>
-
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">All Allocation Runs</CardTitle>
@@ -66,14 +93,29 @@ export default function RunHistory() {
                           <Badge className={statusClass[run.status] ?? ""}>{run.status}</Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/history/${run.id}`}>View</Link>
-                          </Button>
-                          {run.status === "proposed" && (
+                          <div className="flex items-center gap-1 justify-end">
                             <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/review/${run.id}`}>Review</Link>
+                              <Link href={`/history/${run.id}`}>View</Link>
                             </Button>
-                          )}
+                            {run.status === "proposed" && (
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/review/${run.id}`}>Review</Link>
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setPendingDeleteId(run.id)}
+                              disabled={deleteRun.isPending && pendingDeleteId === run.id}
+                            >
+                              {deleteRun.isPending && pendingDeleteId === run.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -84,6 +126,43 @@ export default function RunHistory() {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Allocation Run #{pendingDeleteId}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRun ? (
+                <>
+                  This will permanently delete run <strong>#{pendingRun.id}</strong> for{" "}
+                  <strong>{pendingRun.customerName ?? `Customer ${pendingRun.customerId}`}</strong>{" "}
+                  ({pendingRun.orderCount} order{pendingRun.orderCount !== 1 ? "s" : ""}, status:{" "}
+                  <strong>{pendingRun.status}</strong>).{" "}
+                </>
+              ) : null}
+              All associated order records will also be removed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingDeleteId !== null) {
+                  deleteRun.mutate({ runId: pendingDeleteId });
+                }
+              }}
+            >
+              Delete Run
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

@@ -71,3 +71,4 @@
 - [x] Bug: allocation_run_orders insert — confirmed working via direct test; root cause was published site running old code; all fixes in latest checkpoint
 - [x] Bug: All ONCO orders skipped "Order has no line items" — fixed: OrderSelection/quickPropose/autoRun now use parseInt(referenceNum) as Extensiv internal order ID; robust HAL _embedded parsing added
 - [x] Bug: fetchOrderWithDetail returns 404 — CRITICAL FIX: reverted order ID mapping; readOnly.orderId IS Extensiv's internal ID (e.g. 19069850), referenceNum IS the customer's ref (e.g. "3214839"); all three files (OrderSelection, routers quickPropose, autoRun) now correctly use o.readOnly.orderId for API calls
+- [x] Feature: Delete Run button on Run History page — delete allocation run and its child run_orders from DB, with confirmation dialog; available for all run statuses

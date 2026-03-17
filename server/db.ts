@@ -227,6 +227,14 @@ export async function getAllocationRunOrderById(id: number): Promise<AllocationR
   return result[0];
 }
 
+export async function deleteAllocationRun(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Delete child run orders first (no cascade in MySQL by default)
+  await db.delete(allocationRunOrders).where(eq(allocationRunOrders.runId, id));
+  await db.delete(allocationRuns).where(eq(allocationRuns.id, id));
+}
+
 // ─── Audit Logs ──────────────────────────────────────────────────────────────
 
 export async function createAuditLog(log: InsertAuditLog): Promise<void> {

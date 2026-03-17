@@ -22,6 +22,7 @@ import {
   getAllocationRunOrders,
   updateAllocationRunOrder,
   getAllocationRunOrderById,
+  deleteAllocationRun,
   createAuditLog,
   getAuditLogs,
   getCustomerRules,
@@ -1149,6 +1150,30 @@ export const appRouter = router({
         if (!run) throw new TRPCError({ code: "NOT_FOUND" });
         const orders = await getAllocationRunOrders(input.runId);
         return { run, orders };
+      }),
+
+    deleteRun: protectedProcedure
+      .input(z.object({ runId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const run = await getAllocationRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Allocation run not found" });
+
+        await deleteAllocationRun(input.runId);
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "allocation.deleteRun",
+          entityType: "allocation_run",
+          entityId: String(input.runId),
+          details: {
+            customerName: run.customerName,
+            status: run.status,
+            orderCount: run.orderCount,
+            createdAt: run.createdAt,
+          },
+        });
+
+        return { success: true };
       }),
   }),
 

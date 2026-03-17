@@ -57,6 +57,8 @@ export interface RunMeta {
   createdAt: Date;
   allocatedCount: number;
   skippedCount: number;
+  /** True when documents have been previously printed — renders a DUPLICATE badge beside the title */
+  isDuplicate?: boolean;
 }
 
 // ─── Brand colours (official GD palette) ─────────────────────────────────────
@@ -147,7 +149,8 @@ function drawFullHeader(
   doc: PDFKit.PDFDocument,
   title: string,
   logoPath: string | null,
-  metaFields: Array<{ label: string; value: string; x: number }>
+  metaFields: Array<{ label: string; value: string; x: number }>,
+  isDuplicate?: boolean
 ): number {
   // Content starts just below the accent bars
   const contentY = TOP_BAR + GRN_BAR;  // ~19
@@ -173,6 +176,26 @@ function drawFullHeader(
     .fontSize(titleFontSize)
     .font("Helvetica-Bold")
     .text(title, MARGIN + logoW + 20, titleY, { lineBreak: false });
+
+  // DUPLICATE badge — shown when reprinting
+  if (isDuplicate) {
+    // Measure approximate title width to position badge right after it
+    const approxTitleW = title.length * titleFontSize * 0.52;
+    const badgeX = MARGIN + logoW + 20 + approxTitleW + 10;
+    const badgeY = titleY - 2;
+    const badgeW = 82;
+    const badgeH = titleFontSize + 4;
+    doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 3).fill("#cc2200");
+    doc
+      .fillColor("#ffffff")
+      .fontSize(titleFontSize * 0.55)
+      .font("Helvetica-Bold")
+      .text("DUPLICATE", badgeX, badgeY + badgeH / 2 - titleFontSize * 0.55 * 0.36, {
+        width: badgeW,
+        align: "center",
+        lineBreak: false,
+      });
+  }
 
   // Metadata fields — below the logo
   const metaY = contentY + 4 + logoH + 8;  // just below logo
@@ -375,7 +398,7 @@ export async function generatePickFacePullSheetPDF(
     { label: "CLIENT",    value: customerName,               x: MARGIN + 2 },
     { label: "WAREHOUSE", value: meta.facilityName ?? "—",   x: MARGIN + 180 },
     { label: "DATE",      value: formatDate(meta.createdAt), x: MARGIN + 340 },
-  ]);
+  ], meta.isDuplicate);
 
   // TX ID box top-right (matching Pack Sheet style)
   {
@@ -551,7 +574,7 @@ export async function generateWarehousePullSheetPDF(
     { label: "CLIENT",    value: customerName,               x: MARGIN + 2 },
     { label: "WAREHOUSE", value: meta.facilityName ?? "—",   x: MARGIN + 180 },
     { label: "DATE",      value: formatDate(meta.createdAt), x: MARGIN + 340 },
-  ]);
+  ], meta.isDuplicate);
 
   // TX ID box top-right (matching Pack Sheet style)
   {
@@ -730,6 +753,20 @@ export async function generatePackListPDF(
     const titleY = logoCentreY - capH / 2;
     doc.fillColor(GD_NAVY).fontSize(titleFontSize).font("Helvetica-Bold")
       .text("PACK SHEET", MARGIN + logoW + 20, titleY, { lineBreak: false });
+
+    // DUPLICATE badge — shown when reprinting
+    if (meta.isDuplicate) {
+      const approxTitleW = "PACK SHEET".length * titleFontSize * 0.52;
+      const badgeX = MARGIN + logoW + 20 + approxTitleW + 10;
+      const badgeY = titleY - 2;
+      const badgeW = 82;
+      const badgeH = titleFontSize + 4;
+      doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 3).fill("#cc2200");
+      doc.fillColor("#ffffff").fontSize(titleFontSize * 0.55).font("Helvetica-Bold")
+        .text("DUPLICATE", badgeX, badgeY + badgeH / 2 - titleFontSize * 0.55 * 0.36, {
+          width: badgeW, align: "center", lineBreak: false,
+        });
+    }
 
     // Transaction ID box (top-right, vertically centred in header area)
     const headerAreaH = contentY + 4 + logoH + 8 + 11 + 12 + 6 - contentY;  // full header height

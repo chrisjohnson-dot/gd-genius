@@ -170,6 +170,9 @@ export function registerPdfRoutes(app: Express) {
       };
     });
 
+    // isDuplicate = true when documents have been previously printed (documentsPrintedAt already set)
+    const isDuplicate = run.documentsPrintedAt != null;
+
     const runMeta = {
       runId: run.id,
       facilityName: run.facilityName,
@@ -178,6 +181,7 @@ export function registerPdfRoutes(app: Express) {
       createdAt: run.createdAt,
       allocatedCount: run.allocatedCount ?? 0,
       skippedCount: run.skippedCount ?? 0,
+      isDuplicate,
     };
 
     // Generate all three PDFs in parallel as buffers

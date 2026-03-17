@@ -323,24 +323,58 @@ export async function fetchOrderWithDetail(
   });
 
   const etag = (response.headers["etag"] || "").replace(/"/g, "");
-  const raw = response.data as ExtensivOrder & { _embedded?: Record<string, unknown> };
+  const raw = response.data as ExtensivOrder & { _embedded?: Record<string, unknown>; orderItems?: unknown };
 
-  // Extensiv HAL responses embed order items under _embedded rather than directly on the order.
-  // Extract them if not already present as a top-level array.
-  if (!raw.orderItems || raw.orderItems.length === 0) {
-    const embedded = raw._embedded ?? {};
-    const embeddedItems = (
-      (embedded["http://api.3plCentral.com/rels/orders/orderitem"] as ExtensivOrderItem[] | undefined) ??
-      (embedded["orderItem"] as ExtensivOrderItem[] | undefined) ??
-      (embedded["item"] as ExtensivOrderItem[] | undefined) ??
-      []
-    );
-    if (embeddedItems.length > 0) {
-      raw.orderItems = embeddedItems;
-    }
+  // Helper: extract an array of order items from any HAL variant Extensiv may return.
+  // Handles: direct array, object with .item array, object with ._embedded.item array,
+  // and the canonical HAL rel key as well as shorthand keys.
+  function extractItemArray(candidate: unknown): ExtensivOrderItem[] {
+    if (!candidate) return [];
+    if (Array.isArray(candidate)) return candidate as ExtensivOrderItem[];
+    const obj = candidate as Record<string, unknown>;
+    // HAL: { item: [...] } or { _embedded: { item: [...] } }
+    if (Array.isArray(obj.item)) return obj.item as ExtensivOrderItem[];
+    const nested = obj._embedded as Record<string, unknown> | undefined;
+    if (nested && Array.isArray(nested.item)) return nested.item as ExtensivOrderItem[];
+    // Single-item HAL: Extensiv sometimes returns a single object instead of array
+    if (obj.itemIdentifier || obj.readOnly) return [obj as unknown as ExtensivOrderItem];
+    return [];
   }
 
-  return { order: raw, etag };
+  // Normalise orderItems — check direct field first, then all _embedded variants
+  let resolvedItems: ExtensivOrderItem[] = [];
+  if (Array.isArray(raw.orderItems) && (raw.orderItems as ExtensivOrderItem[]).length > 0) {
+    resolvedItems = raw.orderItems as ExtensivOrderItem[];
+  } else {
+    const embedded = (raw._embedded ?? {}) as Record<string, unknown>;
+    const REL = "http://api.3plCentral.com/rels/orders/orderitem";
+    // Try canonical rel key first, then shorthand keys
+    for (const key of [REL, "orderItem", "orderItems", "item"]) {
+      const candidate = embedded[key];
+      if (candidate) {
+        resolvedItems = extractItemArray(candidate);
+        if (resolvedItems.length > 0) break;
+      }
+    }
+    // Also check if orderItems on the raw object is a non-array (single object or wrapped)
+    if (resolvedItems.length === 0 && raw.orderItems && !Array.isArray(raw.orderItems)) {
+      resolvedItems = extractItemArray(raw.orderItems);
+    }
+  }
+  raw.orderItems = resolvedItems;
+
+  // DIAGNOSTIC: log what was found
+  const embeddedKeyList = Object.keys((raw._embedded ?? {}) as Record<string, unknown>);
+  console.log(`[fetchOrderWithDetail] orderId=${orderId} itemCount=${resolvedItems.length} embeddedKeys=[${embeddedKeyList.join(",")}] rawOrderItemsType=${Array.isArray(response.data?.orderItems)?"array":typeof response.data?.orderItems}`);
+  if (resolvedItems.length > 0) {
+    const firstItem = resolvedItems[0] as unknown as Record<string, unknown>;
+    console.log(`[fetchOrderWithDetail] orderId=${orderId} firstItemKeys=${Object.keys(firstItem).join(",")} sku=${(firstItem.itemIdentifier as {sku?:string})?.sku ?? "?"}`);
+  } else {
+    // Log the full raw response structure to help diagnose
+    const topKeys = Object.keys(raw as unknown as Record<string, unknown>);
+    console.log(`[fetchOrderWithDetail] orderId=${orderId} NO ITEMS FOUND. topKeys=[${topKeys.join(",")}] rawOrderItems=${JSON.stringify(response.data?.orderItems)?.slice(0,200)}`);
+  }
+  return { order: raw as ExtensivOrder, etag };
 }
 
 // Fetch inventory stock details for a customer/facility (all pages)

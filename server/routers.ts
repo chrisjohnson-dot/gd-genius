@@ -753,8 +753,14 @@ export const appRouter = router({
             allocationDetail: {} as Record<string, unknown>,
           })),
         ];
-        await createAllocationRunOrders(runOrderItems);
-
+         console.log(`[propose] Inserting ${runOrderItems.length} run order items (allocated: ${allAllocated.length}, skipped: ${allSkipped.length})`);
+        try {
+          await createAllocationRunOrders(runOrderItems);
+          console.log(`[propose] Run order items inserted successfully`);
+        } catch (insertErr) {
+          console.error(`[propose] FAILED to insert run order items:`, insertErr);
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `Failed to save order results: ${insertErr instanceof Error ? insertErr.message : String(insertErr)}` });
+        }
         await createAuditLog({
           userId: ctx.user.id,
           action: "allocation.propose",
@@ -831,12 +837,12 @@ export const appRouter = router({
           const openOrders = await fetchOpenOrders(config, customer.id, input.facilityId);
           if (openOrders.length === 0) continue;
 
-          const orderIds = openOrders.map((o) => o.readOnly.orderId);
+           // In Extensiv API: referenceNum = Extensiv's internal order ID; readOnly.orderId = customer's ref number
+          const orderIds = openOrders.map((o) => parseInt(o.referenceNum));
           customersPayload.push({ customerId: customer.id, customerName: customer.name, orderIds, stagingLocationId: customer.stagingLocationId, stagingLocationName: customer.stagingLocationName });
           customerNames.push(customer.name);
           totalOrderIds.push(...orderIds);
-
-          // Fetch orders with full detail
+          // Fetch orders with full detail using Extensiv's internal order ID
           const ordersWithDetail = await Promise.all(
             orderIds.map((id) => fetchOrderWithDetail(config, id))
           );

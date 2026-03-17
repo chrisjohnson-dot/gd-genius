@@ -1,0 +1,55 @@
+{
+  "query": "SELECT id, customerName, status, orderCount, allocatedCount, skippedCount, UNIX_TIMESTAMP(createdAt)*1000 as createdAtMs FROM allocation_runs ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT id, customerName, status, orderCount, allocatedCount, skippedCount, UNIX_TIMESTAMP(createdAt)*1000 as createdAtMs FROM allocation_runs ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "10",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAtMs": "1773720973000"
+    },
+    {
+      "id": "9",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAtMs": "1773720340000"
+    },
+    {
+      "id": "8",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAtMs": "1773719687000"
+    },
+    {
+      "id": "7",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAtMs": "1773719023000"
+    },
+    {
+      "id": "6",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAtMs": "1773718964000"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcustomerName\tstatus\torderCount\tallocatedCount\tskippedCount\tcreatedAtMs\n10\tONCO\tproposed\t3\t0\t3\t1773720973000\n9\tONCO\tproposed\t3\t0\t3\t1773720340000\n8\tONCO\tproposed\t3\t0\t3\t1773719687000\n7\tONCO\tproposed\t3\t0\t3\t1773719023000\n6\tONCO\tproposed\t3\t0\t3\t1773718964000\n",
+  "stderr": "",
+  "execution_time_ms": 53
+}

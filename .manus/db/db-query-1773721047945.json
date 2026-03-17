@@ -1,0 +1,55 @@
+{
+  "query": "SELECT id, customerName, status, orderCount, allocatedCount, skippedCount, createdAt FROM allocation_runs ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT id, customerName, status, orderCount, allocatedCount, skippedCount, createdAt FROM allocation_runs ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "10",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAt": "2026-03-17 04:16:13"
+    },
+    {
+      "id": "9",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAt": "2026-03-17 04:05:40"
+    },
+    {
+      "id": "8",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAt": "2026-03-17 03:54:47"
+    },
+    {
+      "id": "7",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAt": "2026-03-17 03:43:43"
+    },
+    {
+      "id": "6",
+      "customerName": "ONCO",
+      "status": "proposed",
+      "orderCount": "3",
+      "allocatedCount": "0",
+      "skippedCount": "3",
+      "createdAt": "2026-03-17 03:42:44"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcustomerName\tstatus\torderCount\tallocatedCount\tskippedCount\tcreatedAt\n10\tONCO\tproposed\t3\t0\t3\t2026-03-17 04:16:13\n9\tONCO\tproposed\t3\t0\t3\t2026-03-17 04:05:40\n8\tONCO\tproposed\t3\t0\t3\t2026-03-17 03:54:47\n7\tONCO\tproposed\t3\t0\t3\t2026-03-17 03:43:43\n6\tONCO\tproposed\t3\t0\t3\t2026-03-17 03:42:44\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}

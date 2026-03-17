@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT ar.id, ar.customer_name, ar.status, ar.allocated_count, ar.created_at,\n       ar.pull_list IS NOT NULL AS has_pull_list,\n       JSON_LENGTH(ar.pull_list) AS pull_list_length\nFROM allocation_runs ar\nWHERE ar.customer_name LIKE '%Amercare%'\nORDER BY ar.created_at DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT ar.id, ar.customer_name, ar.status, ar.allocated_count, ar.created_at,\n       ar.pull_list IS NOT NULL AS has_pull_list,\n       JSON_LENGTH(ar.pull_list) AS pull_list_length\nFROM allocation_runs ar\nWHERE ar.customer_name LIKE '%Amercare%'\nORDER BY ar.created_at DESC\nLIMIT 5;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'ar.created_at' in 'order clause'"
+  ]
+}

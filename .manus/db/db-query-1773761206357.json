@@ -1,0 +1,21 @@
+{
+  "query": "\nSELECT id, customerName, status, orderCount, allocatedCount, skippedCount, createdAt,\n       pullList IS NOT NULL AS has_pull_list,\n       JSON_LENGTH(pullList) AS pull_list_entries\nFROM allocation_runs\nWHERE customerName LIKE '%Amercare%'\nORDER BY createdAt DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT id, customerName, status, orderCount, allocatedCount, skippedCount, createdAt,\n       pullList IS NOT NULL AS has_pull_list,\n       JSON_LENGTH(pullList) AS pull_list_entries\nFROM allocation_runs\nWHERE customerName LIKE '%Amercare%'\nORDER BY createdAt DESC\nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "30003",
+      "customerName": "Amercare",
+      "status": "failed",
+      "orderCount": "1",
+      "allocatedCount": "1",
+      "skippedCount": "0",
+      "createdAt": "2026-03-17 14:16:56",
+      "has_pull_list": "1",
+      "pull_list_entries": "34"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcustomerName\tstatus\torderCount\tallocatedCount\tskippedCount\tcreatedAt\thas_pull_list\tpull_list_entries\n30003\tAmercare\tfailed\t1\t1\t0\t2026-03-17 14:16:56\t1\t34\n",
+  "stderr": "",
+  "execution_time_ms": 59
+}

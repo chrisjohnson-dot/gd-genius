@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, configId, customerName, status FROM allocation_runs WHERE id = 30003;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT id, configId, customerName, status FROM allocation_runs WHERE id = 30003;",
+  "rows": [
+    {
+      "id": "30003",
+      "configId": "3",
+      "customerName": "Amercare",
+      "status": "failed"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tconfigId\tcustomerName\tstatus\n30003\t3\tAmercare\tfailed\n",
+  "stderr": "",
+  "execution_time_ms": 165
+}

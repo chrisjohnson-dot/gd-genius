@@ -91,6 +91,7 @@ export const allocationRuns = mysqlTable("allocation_runs", {
   allocatedCount: int("allocatedCount").default(0),
   skippedCount: int("skippedCount").default(0),
   notes: text("notes"),
+  pullList: json("pullList"),  // global pull list (SKU-level movements) for this run
   createdBy: int("createdBy"), // FK to users
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   confirmedAt: timestamp("confirmedAt"),

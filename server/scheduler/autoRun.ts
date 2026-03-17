@@ -154,6 +154,7 @@ async function runAutoAllocation(configId: number): Promise<void> {
       orderCount: allAllocated.length + allSkipped.length,
       allocatedCount: allAllocated.length,
       skippedCount: allSkipped.length,
+      pullList: allPullList as unknown as Record<string, unknown>[],
       createdBy: null,
     });
     runIds.push(runId);

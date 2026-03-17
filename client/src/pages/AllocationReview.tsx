@@ -11,13 +11,41 @@ import {
   FileDown,
   Loader2,
   Package,
+  PackageCheck,
   PackageX,
+  RefreshCw,
   Truck,
   XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
+
+interface PullListItem {
+  sku: string;
+  description?: string;
+  receiveItemId: number;
+  qty: number;
+  fromLocationId: number;
+  fromLocationName: string;
+  fromLocationType: string;
+  toLocationId: number;
+  toLocationName: string;
+  movement: "to_staging" | "to_pick_face";
+  lotNumber?: string;
+  expirationDate?: string;
+}
+
+interface PackListItem {
+  orderId: number;
+  referenceNum: string;
+  sku: string;
+  description?: string;
+  qty: number;
+  lotNumber?: string;
+  expirationDate?: string;
+  locationName: string;
+}
 
 interface AllocationDetail {
   orderId: number;
@@ -38,30 +66,25 @@ interface AllocationDetail {
       expirationDate?: string;
     }>;
   }>;
-  pullListItems: Array<{
-    sku: string;
-    description?: string;
-    receiveItemId: number;
-    qty: number;
-    fromLocationId: number;
-    fromLocationName: string;
-    fromLocationType: string;
-    toLocationId: number;
-    toLocationName: string;
-    lotNumber?: string;
-    expirationDate?: string;
-  }>;
-  packListItems: Array<{
-    orderId: number;
-    referenceNum: string;
-    sku: string;
-    description?: string;
-    qty: number;
-    lotNumber?: string;
-    expirationDate?: string;
-    locationName: string;
-  }>;
+  pullListItems: PullListItem[];
+  packListItems: PackListItem[];
 }
+
+const locTypeBadge: Record<string, string> = {
+  staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+  pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  warehouse: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+};
+
+const movementBadge: Record<string, string> = {
+  to_staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+  to_pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+};
+
+const movementLabel: Record<string, string> = {
+  to_staging: "→ Staging",
+  to_pick_face: "→ Pick Face",
+};
 
 export default function AllocationReview() {
   const params = useParams<{ runId: string }>();
@@ -83,7 +106,7 @@ export default function AllocationReview() {
   });
 
   const cancelMutation = trpc.allocation.cancel.useMutation({
-    onSuccess: () => { toast.info("Allocation run cancelled."); navigate("/allocate"); },
+    onSuccess: () => { toast.info("Allocation run cancelled."); navigate("/allocate" as string); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -112,22 +135,34 @@ export default function AllocationReview() {
   const { run, orders } = data;
   const isProposed = run.status === "proposed";
 
-  // Parse allocation details
   const allocatedOrders = orders
     .filter((o) => o.status === "allocated")
     .map((o) => ({ ...o, detail: o.allocationDetail as unknown as AllocationDetail }));
   const skippedOrders = orders.filter((o) => o.status === "skipped");
 
-  // Build global pull list and pack list from all allocated orders
-  const pullList = allocatedOrders.flatMap((o) => o.detail?.pullListItems ?? []);
-  const packList = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
-  const summary = allocatedOrders.flatMap((o) => o.detail?.lineItems ?? []);
+  // Pull list is global (SKU-level, not per-order) — stored on the run
+  // Fall back to per-order items for backward compatibility with older runs
+  const runPullList = (run as any).pullList as PullListItem[] | null | undefined;
+  const pullList: PullListItem[] = Array.isArray(runPullList) && runPullList.length > 0
+    ? runPullList
+    : allocatedOrders.flatMap((o) => o.detail?.pullListItems ?? []);
 
-  const locTypeBadge: Record<string, string> = {
-    staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-    pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    warehouse: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-  };
+  const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
+
+  // Separate pull list by movement type
+  const toStagingMoves = pullList.filter((p) => p.movement === "to_staging" || !p.movement);
+  const toPickFaceMoves = pullList.filter((p) => p.movement === "to_pick_face");
+
+  // Summary: aggregate by SKU
+  const skuSummary = new Map<string, { sku: string; description?: string; totalQty: number; orders: string[] }>();
+  for (const order of allocatedOrders) {
+    for (const line of order.detail?.lineItems ?? []) {
+      const existing = skuSummary.get(line.sku) ?? { sku: line.sku, description: line.description, totalQty: 0, orders: [] };
+      existing.totalQty += line.qtyRequired;
+      existing.orders.push(order.referenceNum ?? "");
+      skuSummary.set(line.sku, existing);
+    }
+  }
 
   return (
     <AppLayout>
@@ -174,7 +209,7 @@ export default function AllocationReview() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <Card>
             <CardContent className="py-4 flex items-center gap-3">
               <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
@@ -195,10 +230,19 @@ export default function AllocationReview() {
           </Card>
           <Card>
             <CardContent className="py-4 flex items-center gap-3">
-              <Truck className="h-6 w-6 text-blue-600 shrink-0" />
+              <Truck className="h-6 w-6 text-purple-600 shrink-0" />
               <div>
-                <p className="text-2xl font-bold">{pullList.length}</p>
-                <p className="text-xs text-muted-foreground">Inventory Movements</p>
+                <p className="text-2xl font-bold">{toStagingMoves.length}</p>
+                <p className="text-xs text-muted-foreground">Moves to Staging</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-4 flex items-center gap-3">
+              <RefreshCw className="h-6 w-6 text-blue-600 shrink-0" />
+              <div>
+                <p className="text-2xl font-bold">{toPickFaceMoves.length}</p>
+                <p className="text-xs text-muted-foreground">Pallet Replenishments</p>
               </div>
             </CardContent>
           </Card>
@@ -209,7 +253,7 @@ export default function AllocationReview() {
           <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 dark:border-yellow-900">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" /> {skippedOrders.length} Orders Skipped (Insufficient Inventory)
+                <AlertCircle className="h-4 w-4" /> {skippedOrders.length} Orders Skipped
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
@@ -225,139 +269,175 @@ export default function AllocationReview() {
           </Card>
         )}
 
-        {/* Tabs: Summary, Pull List, Pack List */}
-        <Tabs defaultValue="summary">
+        {/* Tabs */}
+        <Tabs defaultValue="pull">
           <TabsList>
-            <TabsTrigger value="summary">Allocation Summary</TabsTrigger>
-            <TabsTrigger value="pull">Pull List ({pullList.length})</TabsTrigger>
-            <TabsTrigger value="pack">Pack List ({packList.length})</TabsTrigger>
+            <TabsTrigger value="pull">
+              Pull List ({pullList.length})
+            </TabsTrigger>
+            <TabsTrigger value="pack">
+              Pack List ({packList.length})
+            </TabsTrigger>
+            <TabsTrigger value="summary">
+              Order Summary ({allocatedOrders.length})
+            </TabsTrigger>
           </TabsList>
 
-          {/* Summary Tab */}
-          <TabsContent value="summary" className="mt-4">
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-4 py-3 font-medium">Order</th>
-                        <th className="text-left px-4 py-3 font-medium">SKU</th>
-                        <th className="text-left px-4 py-3 font-medium">Description</th>
-                        <th className="text-right px-4 py-3 font-medium">Qty</th>
-                        <th className="text-left px-4 py-3 font-medium">Lot</th>
-                        <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                        <th className="text-left px-4 py-3 font-medium">Location</th>
-                        <th className="text-left px-4 py-3 font-medium">Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allocatedOrders.flatMap((order) =>
-                        (order.detail?.lineItems ?? []).flatMap((line) =>
-                          line.allocations.map((alloc, i) => (
-                            <tr key={`${order.orderId}-${line.sku}-${i}`} className="border-b border-border/50 hover:bg-muted/30">
-                              <td className="px-4 py-2 font-medium">{order.referenceNum}</td>
-                              <td className="px-4 py-2 font-mono text-xs">{line.sku}</td>
-                              <td className="px-4 py-2 text-muted-foreground text-xs">{line.description ?? "—"}</td>
-                              <td className="px-4 py-2 text-right font-medium">{alloc.qty}</td>
-                              <td className="px-4 py-2 text-xs">{alloc.lotNumber ?? "—"}</td>
-                              <td className="px-4 py-2 text-xs">{alloc.expirationDate ? new Date(alloc.expirationDate).toLocaleDateString() : "—"}</td>
-                              <td className="px-4 py-2 text-xs">{alloc.locationName}</td>
-                              <td className="px-4 py-2">
-                                <Badge className={`text-xs ${locTypeBadge[alloc.locationType] ?? ""}`}>{alloc.locationType}</Badge>
-                              </td>
+          {/* ── Pull List Tab ─────────────────────────────────────────────────── */}
+          <TabsContent value="pull" className="mt-4 space-y-4">
+            {pullList.length === 0 ? (
+              <Card>
+                <CardContent className="py-10 text-center text-muted-foreground">
+                  <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No inventory movements needed.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Section 1: Moves to Staging */}
+                {toStagingMoves.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">→ Staging</Badge>
+                            Move to Staging Area
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Pick these items from their current locations and bring them to the staging area
+                          </p>
+                        </div>
+                        <a
+                          href={`/api/pdf/pull-list/${runId}`}
+                          download
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                        >
+                          <FileDown className="h-3.5 w-3.5" />
+                          Export PDF
+                        </a>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/50">
+                              <th className="text-left px-4 py-3 font-medium">SKU</th>
+                              <th className="text-left px-4 py-3 font-medium">Description</th>
+                              <th className="text-right px-4 py-3 font-medium">Qty</th>
+                              <th className="text-left px-4 py-3 font-medium">Lot</th>
+                              <th className="text-left px-4 py-3 font-medium">Expiry</th>
+                              <th className="text-left px-4 py-3 font-medium">From</th>
+                              <th className="text-center px-4 py-3 font-medium"></th>
+                              <th className="text-left px-4 py-3 font-medium">To</th>
                             </tr>
-                          ))
-                        )
-                      )}
-                      {allocatedOrders.length === 0 && (
-                        <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No orders allocated.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Pull List Tab */}
-          <TabsContent value="pull" className="mt-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm text-muted-foreground">Inventory movements required before allocation</CardTitle>
-                  {pullList.length > 0 && (
-                    <a
-                      href={`/api/pdf/pull-list/${runId}`}
-                      download
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                    >
-                      <FileDown className="h-3.5 w-3.5" />
-                      Export PDF
-                    </a>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {pullList.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-muted-foreground">
-                    <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No inventory movements needed — all inventory is already in staging.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/50">
-                          <th className="text-left px-4 py-3 font-medium">SKU</th>
-                          <th className="text-left px-4 py-3 font-medium">Description</th>
-                          <th className="text-right px-4 py-3 font-medium">Qty</th>
-                          <th className="text-left px-4 py-3 font-medium">Lot</th>
-                          <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                          <th className="text-left px-4 py-3 font-medium">From</th>
-                          <th className="text-center px-4 py-3 font-medium"></th>
-                          <th className="text-left px-4 py-3 font-medium">To (Staging)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pullList.map((item, i) => (
-                          <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                            <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
-                            <td className="px-4 py-2 text-xs text-muted-foreground">{item.description ?? "—"}</td>
-                            <td className="px-4 py-2 text-right font-medium">{item.qty}</td>
-                            <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
-                            <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
-                            <td className="px-4 py-2">
-                              <div className="flex items-center gap-1.5">
-                                <Badge className={`text-xs ${locTypeBadge[item.fromLocationType] ?? ""}`}>{item.fromLocationType}</Badge>
-                                <span className="text-xs">{item.fromLocationName}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              <ArrowRight className="h-4 w-4 text-muted-foreground mx-auto" />
-                            </td>
-                            <td className="px-4 py-2">
-                              <div className="flex items-center gap-1.5">
-                                <Badge className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">staging</Badge>
-                                <span className="text-xs">{item.toLocationName}</span>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody>
+                            {toStagingMoves.map((item, i) => (
+                              <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
+                                <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
+                                <td className="px-4 py-2 text-xs text-muted-foreground">{item.description ?? "—"}</td>
+                                <td className="px-4 py-2 text-right font-semibold">{item.qty}</td>
+                                <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
+                                <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge className={`text-xs ${locTypeBadge[item.fromLocationType] ?? ""}`}>{item.fromLocationType?.replace("_", " ")}</Badge>
+                                    <span className="text-xs font-mono">{item.fromLocationName}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  <ArrowRight className="h-4 w-4 text-muted-foreground mx-auto" />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">staging</Badge>
+                                    <span className="text-xs font-mono">{item.toLocationName}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
-              </CardContent>
-            </Card>
+
+                {/* Section 2: Pallet Replenishments to Pick Face */}
+                {toPickFaceMoves.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">→ Pick Face</Badge>
+                        Pallet Replenishment — Put Balance Back to Pick Face
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        These are the remaining units from pallets that were partially used. Place them in the pick face for future orders.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/50">
+                              <th className="text-left px-4 py-3 font-medium">SKU</th>
+                              <th className="text-left px-4 py-3 font-medium">Description</th>
+                              <th className="text-right px-4 py-3 font-medium">Qty (Balance)</th>
+                              <th className="text-left px-4 py-3 font-medium">Lot</th>
+                              <th className="text-left px-4 py-3 font-medium">Expiry</th>
+                              <th className="text-left px-4 py-3 font-medium">From (Pallet)</th>
+                              <th className="text-center px-4 py-3 font-medium"></th>
+                              <th className="text-left px-4 py-3 font-medium">To</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {toPickFaceMoves.map((item, i) => (
+                              <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
+                                <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
+                                <td className="px-4 py-2 text-xs text-muted-foreground">{item.description ?? "—"}</td>
+                                <td className="px-4 py-2 text-right font-semibold">{item.qty}</td>
+                                <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
+                                <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge className={`text-xs ${locTypeBadge[item.fromLocationType] ?? ""}`}>{item.fromLocationType?.replace("_", " ")}</Badge>
+                                    <span className="text-xs font-mono">{item.fromLocationName}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  <ArrowRight className="h-4 w-4 text-muted-foreground mx-auto" />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">pick face</Badge>
+                                    <span className="text-xs font-mono">{item.toLocationName}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
           </TabsContent>
 
-          {/* Pack List Tab */}
+          {/* ── Pack List Tab ─────────────────────────────────────────────────── */}
           <TabsContent value="pack" className="mt-4">
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm text-muted-foreground">Items to pack per order from staging</CardTitle>
+                  <div>
+                    <CardTitle className="text-sm">Pack List</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Items to pick from staging and pack per order. All inventory will be in staging before packing begins.
+                    </p>
+                  </div>
                   {packList.length > 0 && (
                     <a
                       href={`/api/pdf/pack-list/${runId}`}
@@ -375,29 +455,93 @@ export default function AllocationReview() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
+                        <th className="text-left px-4 py-3 font-medium">Order #</th>
+                        <th className="text-left px-4 py-3 font-medium">SKU</th>
+                        <th className="text-left px-4 py-3 font-medium">Description</th>
+                        <th className="text-right px-4 py-3 font-medium">Qty</th>
+                        <th className="text-left px-4 py-3 font-medium">Lot</th>
+                        <th className="text-left px-4 py-3 font-medium">Expiry</th>
+                        <th className="text-left px-4 py-3 font-medium">From</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {packList.length === 0 && (
+                        <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No items to pack.</td></tr>
+                      )}
+                      {/* Group by order */}
+                      {allocatedOrders.map((order) => {
+                        const items = order.detail?.packListItems ?? [];
+                        if (items.length === 0) return null;
+                        return items.map((item, i) => (
+                          <tr
+                            key={`${order.orderId}-${i}`}
+                            className="border-b border-border/50 hover:bg-muted/30"
+                          >
+                            {i === 0 && (
+                              <td
+                                className="px-4 py-2 font-semibold align-top"
+                                rowSpan={items.length}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <PackageCheck className="h-3.5 w-3.5 text-green-600" />
+                                  {order.referenceNum}
+                                </div>
+                              </td>
+                            )}
+                            <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
+                            <td className="px-4 py-2 text-xs text-muted-foreground">{item.description ?? "—"}</td>
+                            <td className="px-4 py-2 text-right font-semibold">{item.qty}</td>
+                            <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
+                            <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center gap-1.5">
+                                <Badge className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">staging</Badge>
+                                <span className="text-xs font-mono">{item.locationName}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── Order Summary Tab ─────────────────────────────────────────────── */}
+          <TabsContent value="summary" className="mt-4">
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50">
                         <th className="text-left px-4 py-3 font-medium">Order</th>
                         <th className="text-left px-4 py-3 font-medium">SKU</th>
                         <th className="text-left px-4 py-3 font-medium">Description</th>
                         <th className="text-right px-4 py-3 font-medium">Qty</th>
                         <th className="text-left px-4 py-3 font-medium">Lot</th>
                         <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                        <th className="text-left px-4 py-3 font-medium">Location</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {packList.map((item, i) => (
-                        <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-4 py-2 font-medium">{item.referenceNum}</td>
-                          <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
-                          <td className="px-4 py-2 text-xs text-muted-foreground">{item.description ?? "—"}</td>
-                          <td className="px-4 py-2 text-right font-medium">{item.qty}</td>
-                          <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
-                          <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
-                          <td className="px-4 py-2 text-xs">{item.locationName}</td>
-                        </tr>
-                      ))}
-                      {packList.length === 0 && (
-                        <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No items to pack.</td></tr>
+                      {allocatedOrders.flatMap((order) =>
+                        (order.detail?.lineItems ?? []).flatMap((line) =>
+                          line.allocations.map((alloc, i) => (
+                            <tr key={`${order.orderId}-${line.sku}-${i}`} className="border-b border-border/50 hover:bg-muted/30">
+                              <td className="px-4 py-2 font-medium">{order.referenceNum}</td>
+                              <td className="px-4 py-2 font-mono text-xs">{line.sku}</td>
+                              <td className="px-4 py-2 text-muted-foreground text-xs">{line.description ?? "—"}</td>
+                              <td className="px-4 py-2 text-right font-semibold">{alloc.qty}</td>
+                              <td className="px-4 py-2 text-xs">{alloc.lotNumber ?? "—"}</td>
+                              <td className="px-4 py-2 text-xs">{alloc.expirationDate ? new Date(alloc.expirationDate).toLocaleDateString() : "—"}</td>
+                            </tr>
+                          ))
+                        )
+                      )}
+                      {allocatedOrders.length === 0 && (
+                        <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No orders allocated.</td></tr>
                       )}
                     </tbody>
                   </table>

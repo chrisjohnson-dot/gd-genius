@@ -192,13 +192,13 @@ export const appRouter = router({
         configId: z.number(),
         facilityId: z.number(),
         facilityName: z.string().optional(),
-        // Array of customer-to-pickface-prefix mappings
+        // Array of customer-to-staging-prefix mappings
+        // Each customer has one staging location identified by its name ending in -Stage
         customerMappings: z.array(z.object({
           customerId: z.number(),
           customerName: z.string(),
-          pickFacePrefixes: z.array(z.string()), // e.g. ["HR"] or ["BIG"] or ["BP"]
+          stagingPrefixes: z.array(z.string()), // e.g. ["HR"] matches "HR-Stage", "HR001-Stage", etc.
         })),
-        warehouseLocationPattern: z.string().optional(), // regex pattern for warehouse locs, default "^[A-Z]-\\d{3}-[A-Z]$"
         dryRun: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
@@ -209,7 +209,6 @@ export const appRouter = router({
         const allLocations = await fetchExtensivLocations(config, input.facilityId);
         console.log(`[seedFromExtensiv] Fetched ${allLocations.length} locations from Extensiv for facility ${input.facilityId}`);
 
-        const warehousePattern = new RegExp(input.warehouseLocationPattern ?? "^[A-Z]-\\d{3}-[A-Z]$");
         const seeded: Array<{ customerId: number; customerName: string; locationId: number; locationName: string; locationType: string }> = [];
         const skipped: string[] = [];
 
@@ -217,71 +216,35 @@ export const appRouter = router({
           const locName = loc.name.trim();
           const locNameUpper = locName.toUpperCase();
 
-          // Check if it's a staging location (ends with -Stage, case-insensitive)
-          const isStagingLoc = locNameUpper.endsWith("-STAGE");
-          // The base name before the -Stage suffix (e.g. "HR001-Stage" → "HR001")
-          const baseNameForStaging = isStagingLoc ? locName.slice(0, locName.length - 6) : locName;
+          // Only process staging locations (name ends with -Stage, case-insensitive)
+          if (!locNameUpper.endsWith("-STAGE")) {
+            skipped.push(locName);
+            continue;
+          }
 
-          // Check if it matches a customer's pick face prefix
+          // Match staging location to a customer by prefix
+          // e.g. "HR-Stage" or "HR001-Stage" matches prefix "HR"
           let matchedCustomer: typeof input.customerMappings[0] | null = null;
           for (const mapping of input.customerMappings) {
-            const nameToCheck = isStagingLoc ? baseNameForStaging : locName;
-            const isPickFaceOrStaging = mapping.pickFacePrefixes.some((prefix) =>
-              nameToCheck.toUpperCase().startsWith(prefix.toUpperCase()) &&
-              /\d/.test(nameToCheck.slice(prefix.length, prefix.length + 1))
-            );
-            // Also match if the staging location name starts with the prefix directly (e.g. "HR-Stage")
-            const isPrefixStaging = isStagingLoc && mapping.pickFacePrefixes.some((prefix) =>
+            const matches = mapping.stagingPrefixes.some((prefix) =>
               locNameUpper.startsWith(prefix.toUpperCase())
             );
-            if (isPickFaceOrStaging || isPrefixStaging) {
+            if (matches) {
               matchedCustomer = mapping;
               break;
             }
           }
 
-          if (isStagingLoc) {
-            // Staging location — assign to matched customer or all customers if no prefix match
-            if (matchedCustomer) {
-              seeded.push({
-                customerId: matchedCustomer.customerId,
-                customerName: matchedCustomer.customerName,
-                locationId: loc.locationId,
-                locationName: locName,
-                locationType: "staging",
-              });
-            } else {
-              // Generic staging — add for all customers
-              for (const mapping of input.customerMappings) {
-                seeded.push({
-                  customerId: mapping.customerId,
-                  customerName: mapping.customerName,
-                  locationId: loc.locationId,
-                  locationName: locName,
-                  locationType: "staging",
-                });
-              }
-            }
-          } else if (matchedCustomer) {
+          if (matchedCustomer) {
             seeded.push({
               customerId: matchedCustomer.customerId,
               customerName: matchedCustomer.customerName,
               locationId: loc.locationId,
               locationName: locName,
-              locationType: "pick_face",
+              locationType: "staging",
             });
-          } else if (warehousePattern.test(locName)) {
-            // Warehouse location — add for all customers
-            for (const mapping of input.customerMappings) {
-              seeded.push({
-                customerId: mapping.customerId,
-                customerName: mapping.customerName,
-                locationId: loc.locationId,
-                locationName: locName,
-                locationType: "warehouse",
-              });
-            }
           } else {
+            // No customer match — skip
             skipped.push(locName);
           }
         }
@@ -727,6 +690,7 @@ export const appRouter = router({
           orderCount: totalOrderIds.length,
           allocatedCount: allAllocated.length,
           skippedCount: allSkipped.length,
+          pullList: allPullListItems as unknown as Record<string, unknown>[],
           createdBy: ctx.user.id,
         });
 
@@ -898,6 +862,7 @@ export const appRouter = router({
           orderCount: totalOrderIds.length,
           allocatedCount: allAllocated.length,
           skippedCount: allSkipped.length,
+          pullList: allPullListItems as unknown as Record<string, unknown>[],
           createdBy: ctx.user.id,
         });
 

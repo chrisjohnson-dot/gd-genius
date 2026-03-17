@@ -1,0 +1,1 @@
+ALTER TABLE `allocation_runs` ADD `pullList` json;

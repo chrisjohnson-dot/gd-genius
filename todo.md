@@ -60,3 +60,8 @@
 - [x] Bug: Staging locations not recognized — fixed: seedFromExtensiv now detects -Stage suffix and classifies as staging type, matched to customer by prefix
 - [x] Feature: Quick Allocate button on order selection screen — added quickPropose endpoint, ⚡ Quick Allocate All + Quick Allocate (N clients) buttons on warehouse cards, Quick Allocate button on clients step, last-used facility+clients persisted in localStorage
 - [x] Bug: 400 error on GET /properties/facilities/locations — fixed: now tries facility-scoped URL /properties/facilities/{id}/locations first, falls back to global collection with client-side filter; removed broken RQL filter
+- [ ] Redesign: Simplify Location Config — staging is one temporary location per customer (not warehouse mapping); auto-populate should just ask for staging location name per customer (e.g. HR-Stage, BIG-Stage, BP-Stage)
+- [x] Allocation engine: pallet-aware logic — aggregate SKU demand across all orders, pick face first, full pallet from warehouse when needed, surplus back to pick face
+- [x] Pull list: split into two sections — "Move to Staging" and "Pallet Replenishment → Pick Face"
+- [x] DB schema: add pullList JSON column to allocation_runs for run-level pull list storage
+- [x] Tests: updated engine tests to cover all pallet scenarios (pick face sufficient, pallet pull with surplus, multi-order aggregation, multi-pallet, rollback)

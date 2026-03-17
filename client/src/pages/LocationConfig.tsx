@@ -11,7 +11,6 @@ import { AlertCircle, CheckCircle2, FlaskConical, Loader2, MapPin, Pencil, Plus,
 import { useState } from "react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 
 type LocationType = "staging" | "pick_face" | "warehouse";
 
@@ -40,10 +39,10 @@ const locTypeBadge: Record<LocationType, string> = {
 };
 
 // ─── Auto-Populate Dialog ─────────────────────────────────────────────────────
-interface CustomerMapping {
+interface StagingMapping {
   customerId: number;
   customerName: string;
-  pickFacePrefixes: string; // comma-separated, e.g. "HR" or "BIG" or "BP"
+  stagingPrefix: string; // e.g. "HR" matches "HR-Stage", "HR001-Stage", etc.
 }
 
 function AutoPopulateDialog({
@@ -62,14 +61,13 @@ function AutoPopulateDialog({
     { enabled: open }
   );
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
-  const [warehousePattern, setWarehousePattern] = useState("^[A-Z]-\\d{3}-[A-Z]$");
 
   const { data: customers, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
     { configId, facilityId: selectedFacilityId ?? 0 },
     { enabled: !!selectedFacilityId }
   );
 
-  const [mappings, setMappings] = useState<CustomerMapping[]>([]);
+  const [mappings, setMappings] = useState<StagingMapping[]>([]);
   const [previewResult, setPreviewResult] = useState<{
     totalLocations: number;
     seeded: number;
@@ -84,7 +82,7 @@ function AutoPopulateDialog({
         setPreviewResult(data);
         setStep("preview");
       } else {
-        toast.success(`Auto-populated ${data.seeded} locations successfully!`);
+        toast.success(`Seeded ${data.seeded} staging location${data.seeded !== 1 ? "s" : ""} successfully!`);
         onSuccess();
         onClose();
       }
@@ -92,13 +90,12 @@ function AutoPopulateDialog({
     onError: (e) => toast.error(`Failed: ${e.message}`),
   });
 
-  // When customers load, initialize mappings
   const initMappings = (customerList: Array<{ id: number; name: string }>) => {
     setMappings(
       customerList.map((c) => ({
         customerId: c.id,
         customerName: c.name,
-        pickFacePrefixes: "",
+        stagingPrefix: "",
       }))
     );
   };
@@ -110,9 +107,9 @@ function AutoPopulateDialog({
     setStep("configure");
   };
 
-  const updateMapping = (customerId: number, prefixes: string) => {
+  const updateMapping = (customerId: number, prefix: string) => {
     setMappings((prev) =>
-      prev.map((m) => (m.customerId === customerId ? { ...m, pickFacePrefixes: prefixes } : m))
+      prev.map((m) => (m.customerId === customerId ? { ...m, stagingPrefix: prefix } : m))
     );
   };
 
@@ -122,13 +119,12 @@ function AutoPopulateDialog({
       configId,
       facilityId: selectedFacilityId!,
       facilityName: selectedFacility?.name,
-      warehouseLocationPattern: warehousePattern,
       customerMappings: mappings
-        .filter((m) => m.pickFacePrefixes.trim())
+        .filter((m) => m.stagingPrefix.trim())
         .map((m) => ({
           customerId: m.customerId,
           customerName: m.customerName,
-          pickFacePrefixes: m.pickFacePrefixes
+          stagingPrefixes: m.stagingPrefix
             .split(",")
             .map((p) => p.trim())
             .filter(Boolean),
@@ -140,7 +136,7 @@ function AutoPopulateDialog({
   const handlePreview = () => {
     if (!selectedFacilityId) { toast.error("Select a facility first"); return; }
     const payload = buildPayload(true);
-    if (payload.customerMappings.length === 0) { toast.error("Add at least one pick face prefix"); return; }
+    if (payload.customerMappings.length === 0) { toast.error("Enter at least one staging prefix"); return; }
     seedMutation.mutate(payload);
   };
 
@@ -155,16 +151,26 @@ function AutoPopulateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Auto-Populate Locations from Extensiv
+            Set Up Staging Locations from Extensiv
           </DialogTitle>
         </DialogHeader>
 
         {step === "configure" && (
           <div className="space-y-5 py-2">
+            {/* What is staging */}
+            <div className="p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 rounded-md text-xs text-purple-800 dark:text-purple-300 space-y-1">
+              <p className="font-semibold">What is a staging location?</p>
+              <p>
+                Staging is a temporary holding area. During allocation, inventory moves from warehouse and pick face locations
+                into staging. Once the order is packed and shipped, staging is empty again.
+                Each client has one staging location in Extensiv (e.g. <code>HR-Stage</code>).
+              </p>
+            </div>
+
             {/* Step 1: Select Facility */}
             <div className="space-y-2">
               <Label className="text-sm font-semibold">1. Select Facility</Label>
@@ -189,14 +195,15 @@ function AutoPopulateDialog({
               )}
             </div>
 
-            {/* Step 2: Pick Face Prefixes per Customer */}
+            {/* Step 2: Staging prefix per customer */}
             {selectedFacilityId && (
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">2. Pick Face Prefix per Client</Label>
+                <Label className="text-sm font-semibold">2. Staging Location Prefix per Client</Label>
                 <p className="text-xs text-muted-foreground">
-                  Enter the location name prefix(es) for each client's pick face zone (e.g. <code>HR</code>, <code>BIG</code>, <code>BP</code>).
-                  Locations matching <code>PREFIX###</code> will be tagged as Pick Face for that client.
-                  Leave blank to skip a client (they'll still get warehouse locations).
+                  Enter the prefix that identifies each client's staging location in Extensiv.
+                  The app will find any location ending in <code>-Stage</code> that starts with this prefix.
+                  For example, prefix <code>HR</code> matches <code>HR-Stage</code> or <code>HR001-Stage</code>.
+                  Leave blank to skip a client.
                 </p>
                 {customersLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
@@ -206,13 +213,13 @@ function AutoPopulateDialog({
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                     {mappings.map((m) => (
                       <div key={m.customerId} className="flex items-center gap-3">
-                        <div className="w-40 shrink-0">
+                        <div className="w-44 shrink-0">
                           <p className="text-sm font-medium truncate">{m.customerName}</p>
                           <p className="text-xs text-muted-foreground">ID: {m.customerId}</p>
                         </div>
                         <Input
-                          placeholder="e.g. HR  or  BIG,HR"
-                          value={m.pickFacePrefixes}
+                          placeholder="e.g. HR  or  BIG"
+                          value={m.stagingPrefix}
                           onChange={(e) => updateMapping(m.customerId, e.target.value)}
                           className="flex-1"
                         />
@@ -223,27 +230,10 @@ function AutoPopulateDialog({
               </div>
             )}
 
-            {/* Step 3: Warehouse pattern */}
-            {selectedFacilityId && (
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">3. Warehouse Location Pattern (regex)</Label>
-                <p className="text-xs text-muted-foreground">
-                  Locations matching this pattern are tagged as Warehouse for all clients.
-                  Default matches <code>D-017-C</code> style (Aisle-Bay-Level).
-                </p>
-                <Input
-                  value={warehousePattern}
-                  onChange={(e) => setWarehousePattern(e.target.value)}
-                  placeholder="^[A-Z]-\d{3}-[A-Z]$"
-                />
-              </div>
-            )}
-
             <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md text-xs text-blue-800 dark:text-blue-300">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                A <strong>dry run preview</strong> will run first — you'll see exactly what will be seeded before any data is saved.
-                Staging locations must be added manually after seeding.
+                A <strong>dry run preview</strong> runs first — you'll see exactly which staging locations will be saved before anything is committed.
               </span>
             </div>
           </div>
@@ -251,46 +241,57 @@ function AutoPopulateDialog({
 
         {step === "preview" && previewResult && (
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="text-center p-3 bg-muted rounded-lg">
                 <p className="text-2xl font-bold">{previewResult.totalLocations}</p>
                 <p className="text-xs text-muted-foreground">Total Extensiv Locations</p>
               </div>
               <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
                 <p className="text-2xl font-bold text-green-700 dark:text-green-400">{previewResult.seeded}</p>
-                <p className="text-xs text-muted-foreground">Will be seeded</p>
-              </div>
-              <div className="text-center p-3 bg-muted rounded-lg">
-                <p className="text-2xl font-bold text-muted-foreground">{previewResult.skipped}</p>
-                <p className="text-xs text-muted-foreground">Skipped (no match)</p>
+                <p className="text-xs text-muted-foreground">Staging locations found</p>
               </div>
             </div>
 
-            <div>
-              <p className="text-sm font-semibold mb-2">Preview (first 20):</p>
-              <div className="space-y-1 max-h-64 overflow-y-auto text-xs">
-                {previewResult.preview.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2 py-1 border-b border-border last:border-0">
-                    <Badge className={locTypeBadge[item.locationType as LocationType] ?? ""}>{locTypeLabel[item.locationType as LocationType] ?? item.locationType}</Badge>
-                    <span className="font-mono">{item.locationName}</span>
-                    <span className="text-muted-foreground">→ {item.customerName}</span>
-                    <span className="text-muted-foreground ml-auto">ID: {item.locationId}</span>
+            {previewResult.seeded === 0 ? (
+              <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md text-xs text-red-800 dark:text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  No staging locations found. Make sure your staging locations in Extensiv end with <code>-Stage</code> (e.g. <code>HR-Stage</code>)
+                  and that the prefix you entered matches the beginning of the location name.
+                </span>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm font-semibold mb-2">Staging locations to be saved:</p>
+                  <div className="space-y-1 max-h-64 overflow-y-auto text-xs">
+                    {previewResult.preview.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2 py-1.5 border-b border-border last:border-0">
+                        <Badge className={locTypeBadge["staging"]}>Staging</Badge>
+                        <span className="font-mono font-medium">{item.locationName}</span>
+                        <span className="text-muted-foreground">→ {item.customerName}</span>
+                        <span className="text-muted-foreground ml-auto text-xs">ID: {item.locationId}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-            <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md text-xs text-amber-800 dark:text-amber-300">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>Confirming will save all {previewResult.seeded} location entries. Existing entries for these customers will not be deleted — use the manual delete buttons to clean up first if needed.</span>
-            </div>
+                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md text-xs text-amber-800 dark:text-amber-300">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>
+                    Confirming will save {previewResult.seeded} staging location{previewResult.seeded !== 1 ? "s" : ""}.
+                    Existing staging entries for these customers will not be deleted — use the delete buttons on the main page to clean up duplicates if needed.
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
 
         {step === "done" && (
           <div className="text-center py-8">
             <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
-            <p className="font-semibold">Locations seeded successfully!</p>
+            <p className="font-semibold">Staging locations saved successfully!</p>
           </div>
         )}
 
@@ -301,18 +302,22 @@ function AutoPopulateDialog({
               onClick={handlePreview}
               disabled={!selectedFacilityId || seedMutation.isPending}
             >
-              {seedMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Running preview...</> : "Preview →"}
+              {seedMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Searching...</> : "Preview →"}
             </Button>
           )}
           {step === "preview" && (
             <>
               <Button variant="outline" onClick={() => setStep("configure")}>← Back</Button>
-              <Button
-                onClick={handleConfirm}
-                disabled={seedMutation.isPending}
-              >
-                {seedMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Seeding...</> : `Confirm & Seed ${previewResult?.seeded ?? ""} Locations`}
-              </Button>
+              {previewResult && previewResult.seeded > 0 && (
+                <Button
+                  onClick={handleConfirm}
+                  disabled={seedMutation.isPending}
+                >
+                  {seedMutation.isPending
+                    ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving...</>
+                    : `Save ${previewResult.seeded} Staging Location${previewResult.seeded !== 1 ? "s" : ""}`}
+                </Button>
+              )}
             </>
           )}
         </DialogFooter>
@@ -354,7 +359,7 @@ export default function LocationConfig() {
 
   const openNew = () => {
     if (!selectedConfigId) { toast.error("Select a configuration first"); return; }
-    setForm({ configId: selectedConfigId, locationType: "warehouse" });
+    setForm({ configId: selectedConfigId, locationType: "staging" });
     setOpen(true);
   };
 
@@ -404,8 +409,10 @@ export default function LocationConfig() {
       <div className="p-6 space-y-6 max-w-4xl">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Location Configuration</h1>
-            <p className="text-muted-foreground text-sm mt-1">Map Extensiv location IDs to staging, pick face, or warehouse types</p>
+            <h1 className="text-2xl font-bold">Staging Location Setup</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Configure the staging location for each client — the temporary holding area where inventory moves during order fulfillment
+            </p>
           </div>
           <div className="flex items-center gap-2">
             {selectedConfigId && (
@@ -414,11 +421,11 @@ export default function LocationConfig() {
                 onClick={() => setAutoPopulateOpen(true)}
                 className="flex items-center gap-2"
               >
-                <Sparkles className="h-4 w-4" /> Auto-Populate from Extensiv
+                <Sparkles className="h-4 w-4" /> Auto-Detect from Extensiv
               </Button>
             )}
             <Button onClick={openNew} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" /> Add Location
+              <Plus className="h-4 w-4" /> Add Manually
             </Button>
           </div>
         </div>
@@ -445,31 +452,23 @@ export default function LocationConfig() {
           </CardContent>
         </Card>
 
-        {/* Location priority legend */}
-        <Card className="border-muted">
+        {/* How staging works */}
+        <Card className="border-purple-200 dark:border-purple-900 bg-purple-50/50 dark:bg-purple-950/10">
           <CardContent className="py-4">
-            <p className="text-sm font-medium mb-2">Location Priority for Allocation:</p>
-            <div className="flex flex-wrap gap-3 text-xs">
-              <div className="flex items-center gap-1.5">
-                <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">Staging</Badge>
-                <span className="text-muted-foreground">Tier 1 — fulfilled first, no movement needed</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">Pick Face</Badge>
-                <span className="text-muted-foreground">Tier 1 — fulfilled first, no movement needed</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">Warehouse</Badge>
-                <span className="text-muted-foreground">Tier 2 — moved to staging before allocation</span>
-              </div>
-            </div>
+            <p className="text-sm font-medium mb-1 text-purple-900 dark:text-purple-300">How Staging Works</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              During allocation, inventory moves from <strong>warehouse locations</strong> and <strong>pick face locations</strong> into
+              the client's <strong>staging area</strong>. Once the order is packed and shipped, staging is empty again.
+              Each client needs exactly one staging location configured here — this is the Extensiv location ID that
+              the allocation engine will move inventory into.
+            </p>
           </CardContent>
         </Card>
 
         {!selectedConfigId ? (
           <div className="text-center py-12 text-muted-foreground">
             <MapPin className="h-10 w-10 mx-auto mb-2 opacity-30" />
-            <p>Select a configuration above to view and manage locations.</p>
+            <p>Select a configuration above to view and manage staging locations.</p>
           </div>
         ) : isLoading ? (
           <div className="space-y-3">
@@ -481,10 +480,10 @@ export default function LocationConfig() {
           <Card>
             <CardContent className="py-10 text-center">
               <MapPin className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-muted-foreground text-sm">No locations configured yet.</p>
+              <p className="text-muted-foreground text-sm">No staging locations configured yet.</p>
               <div className="flex items-center justify-center gap-2 mt-3">
                 <Button variant="outline" size="sm" onClick={() => setAutoPopulateOpen(true)}>
-                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Auto-Populate from Extensiv
+                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Auto-Detect from Extensiv
                 </Button>
                 <Button variant="outline" size="sm" onClick={openNew}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Add Manually
@@ -505,13 +504,13 @@ export default function LocationConfig() {
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Customer: <span className="text-foreground">{customerName}</span>
+                        Client: <span className="text-foreground">{customerName}</span>
                         <span className="ml-2 text-xs">(ID: {customerIdStr})</span>
                       </CardTitle>
                       {/* Lot Mixing Rule Toggle */}
                       <div className="flex items-center gap-2 text-sm">
                         <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground text-xs">No Lot Mixing</span>
+                        <span className="text-xs text-muted-foreground">No Lot Mixing</span>
                         <Switch
                           checked={noLotMixing}
                           onCheckedChange={(checked) => {
@@ -557,7 +556,7 @@ export default function LocationConfig() {
                               variant="ghost"
                               size="sm"
                               className="text-destructive hover:text-destructive"
-                              onClick={() => { if (confirm("Delete this location?")) deleteMutation.mutate({ id: loc.id }); }}
+                              onClick={() => { if (confirm("Delete this staging location?")) deleteMutation.mutate({ id: loc.id }); }}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -587,9 +586,13 @@ export default function LocationConfig() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{form.id ? "Edit Location" : "Add Location"}</DialogTitle>
+            <DialogTitle>{form.id ? "Edit Staging Location" : "Add Staging Location"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <p className="text-xs text-muted-foreground">
+              Enter the Extensiv location ID for this client's staging area. You can find the location ID in Extensiv under
+              Properties → Facilities → Locations.
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Customer ID</Label>
@@ -603,11 +606,11 @@ export default function LocationConfig() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Facility ID</Label>
-                <Input type="number" placeholder="e.g. 1" value={form.facilityId ?? ""} onChange={(e) => setForm({ ...form, facilityId: Number(e.target.value) })} />
+                <Input type="number" placeholder="e.g. 3" value={form.facilityId ?? ""} onChange={(e) => setForm({ ...form, facilityId: Number(e.target.value) })} />
               </div>
               <div className="space-y-1.5">
                 <Label>Facility Name</Label>
-                <Input placeholder="Display name" value={form.facilityName ?? ""} onChange={(e) => setForm({ ...form, facilityName: e.target.value })} />
+                <Input placeholder="e.g. RENO - Reno" value={form.facilityName ?? ""} onChange={(e) => setForm({ ...form, facilityName: e.target.value })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -617,19 +620,19 @@ export default function LocationConfig() {
               </div>
               <div className="space-y-1.5">
                 <Label>Location Name</Label>
-                <Input placeholder="e.g. STAGING-A" value={form.locationName ?? ""} onChange={(e) => setForm({ ...form, locationName: e.target.value })} />
+                <Input placeholder="e.g. HR-Stage" value={form.locationName ?? ""} onChange={(e) => setForm({ ...form, locationName: e.target.value })} />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label>Location Type</Label>
-              <Select value={form.locationType ?? "warehouse"} onValueChange={(v) => setForm({ ...form, locationType: v as LocationType })}>
+              <Select value={form.locationType ?? "staging"} onValueChange={(v) => setForm({ ...form, locationType: v as LocationType })}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="staging">Staging (Tier 1 — no move needed)</SelectItem>
-                  <SelectItem value="pick_face">Pick Face (Tier 1 — no move needed)</SelectItem>
-                  <SelectItem value="warehouse">Warehouse (Tier 2 — moved to staging)</SelectItem>
+                  <SelectItem value="staging">Staging (temporary holding area)</SelectItem>
+                  <SelectItem value="pick_face">Pick Face (dedicated pick area)</SelectItem>
+                  <SelectItem value="warehouse">Warehouse (bulk storage)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

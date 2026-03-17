@@ -118,3 +118,4 @@
 - [x] Feature: Add locationExclusionPatterns to engine — skip matching locations entirely, use pure FEFO within remaining pool
 - [x] Data: Update Amercare's rule to use exclusion patterns (^1[01] = Building 1) instead of priority patterns; pure FEFO within remaining pool
 - [ ] UX: Show exclusion patterns in Allocation Rules UI with distinct styling from priority patterns (deferred — engine + data changes are live)
+- [x] Feature: Hybrid pallet top-up — after pulling whole warehouse pallets, top up remaining gap from pick face instead of pulling another warehouse pallet; 4 new unit tests added (37 total pass)

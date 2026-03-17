@@ -531,3 +531,161 @@ describe("Allocation Engine — Location Priority Patterns", () => {
     ).not.toThrow();
   });
 });
+
+// ─── Hybrid warehouse + pick-face top-up ───────────────────────────────────────────────────────────────────
+
+describe("Allocation Engine — Hybrid Warehouse + Pick-Face Top-Up", () => {
+  /**
+   * Scenario: Order needs 60 units.
+   *   Warehouse pallet A: 48 units (full pallet)
+   *   Pick face:          20 units
+   *
+   * Expected behaviour:
+   *   1. Pull full pallet A (48) to staging.
+   *   2. Remaining gap = 60 - 48 = 12. Pick face has 20 ≥ 12, so do NOT pull
+   *      another warehouse pallet. Top up 12 from pick face.
+   *   3. Pull list: warehouse → staging (48), pick face → staging (12).
+   *   4. No pick-face replenishment move (no warehouse surplus).
+   */
+  it("tops up from pick face after whole warehouse pallets instead of pulling another pallet", () => {
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 60 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 20, locationId: PICK_FACE_LOC_ID }),
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map()
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
+    const toPickFace = result.pullList.filter((p) => p.movement === "to_pick_face");
+
+    const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
+    expect(stagingQty).toBe(60);
+
+    // Warehouse pallet (48) goes to staging
+    const warehouseMove = toStaging.find((p) => p.fromLocationId === WAREHOUSE_LOC_ID);
+    expect(warehouseMove).toBeDefined();
+    expect(warehouseMove!.qty).toBe(48);
+
+    // Pick face tops up the remaining 12
+    const pickFaceMove = toStaging.find((p) => p.fromLocationId === PICK_FACE_LOC_ID);
+    expect(pickFaceMove).toBeDefined();
+    expect(pickFaceMove!.qty).toBe(12);
+
+    // No pick-face replenishment (no warehouse surplus)
+    expect(toPickFace).toHaveLength(0);
+  });
+
+  /**
+   * Scenario: Order needs 60 units.
+   *   Warehouse pallet A: 48 units
+   *   Warehouse pallet B: 48 units
+   *   Pick face:           5 units (NOT enough to cover the gap after pallet A)
+   *
+   * Expected behaviour:
+   *   1. Pull full pallet A (48). Remaining = 12.
+   *   2. Pick face has only 5 < 12, so it cannot cover the gap.
+   *   3. Pull pallet B: need 12, pallet has 48 → send 12 to staging, 36 surplus to pick face.
+   *   4. Pull list: WH-A → staging (48), WH-B → staging (12), WH-B → pick face (36).
+   */
+  it("falls back to splitting a second warehouse pallet when pick face cannot cover the gap", () => {
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 60 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID_2 }),
+      makeInventory({ receiveItemId: 3, sku: "SKU-A", available: 5,  locationId: PICK_FACE_LOC_ID }),
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map()
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
+    const toPickFace = result.pullList.filter((p) => p.movement === "to_pick_face");
+
+    const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
+    expect(stagingQty).toBe(60);
+
+    // Surplus from second pallet back to pick face
+    const pickFaceQty = toPickFace.reduce((s, p) => s + p.qty, 0);
+    expect(pickFaceQty).toBe(36); // 48 - 12 = 36
+  });
+
+  /**
+   * Scenario: Order needs 50 units.
+   *   Warehouse pallet A: 48 units
+   *   Pick face:          10 units
+   *
+   * Expected behaviour:
+   *   1. Pull full pallet A (48). Remaining = 2.
+   *   2. Pick face has 10 ≥ 2, so top up 2 from pick face.
+   *   3. Total staged = 50. No pick-face replenishment.
+   */
+  it("handles small top-up from pick face (remainder < pick face qty)", () => {
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 50 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID }),
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map()
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
+    const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
+    expect(stagingQty).toBe(50);
+
+    const pickFaceTopUp = toStaging.find((p) => p.fromLocationId === PICK_FACE_LOC_ID);
+    expect(pickFaceTopUp).toBeDefined();
+    expect(pickFaceTopUp!.qty).toBe(2);
+
+    const toPickFace = result.pullList.filter((p) => p.movement === "to_pick_face");
+    expect(toPickFace).toHaveLength(0);
+  });
+
+  /**
+   * Scenario: Order needs 100 units.
+   *   Two warehouse pallets: 48 each = 96 total.
+   *   Pick face: 10 units.
+   *
+   * Expected behaviour:
+   *   1. Pull pallet A (48). Remaining = 52.
+   *   2. Pull pallet B (48). Remaining = 4.
+   *   3. Pick face has 10 ≥ 4 → top up 4 from pick face.
+   *   4. Total staged = 100. No pick-face replenishment.
+   */
+  it("tops up from pick face after exhausting multiple full warehouse pallets", () => {
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 100 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID_2 }),
+      makeInventory({ receiveItemId: 3, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID }),
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map()
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
+    const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
+    expect(stagingQty).toBe(100);
+
+    const pickFaceTopUp = toStaging.find((p) => p.fromLocationId === PICK_FACE_LOC_ID);
+    expect(pickFaceTopUp).toBeDefined();
+    expect(pickFaceTopUp!.qty).toBe(4);
+
+    const toPickFace = result.pullList.filter((p) => p.movement === "to_pick_face");
+    expect(toPickFace).toHaveLength(0);
+  });
+});

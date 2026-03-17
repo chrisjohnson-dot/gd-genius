@@ -219,27 +219,45 @@ function planSkuMovements(
     return { stagingMoves, pickFaceMoves, satisfied: true, totalStaged: qtyNeeded };
   }
 
-  // ── Scenario B: pick face is short — pull entirely from warehouse ────────
-  // Rule: when the pick face cannot satisfy the full demand, do NOT drain the
-  // pick face. Instead pull the full qty needed from warehouse pallets (FEFO /
-  // location-priority order) and put the pallet surplus back to the pick face.
-  // The pick face stock stays untouched so it remains available for future orders.
+  // ── Scenario B: pick face is short — pull whole warehouse pallets first,
+  //                then top up from pick face if still short ─────────────────
+  //
+  // Rule:
+  //   1. Pull warehouse pallets in FEFO / location-priority order.
+  //      Each pallet is taken in full (whole pallet move). If a pallet exactly
+  //      covers the remaining need, take it all to staging with no surplus.
+  //      If a pallet would overshoot, do NOT split it — stop pulling warehouse
+  //      pallets and top up the gap from the pick face instead.
+  //   2. After all whole pallets have been pulled, if there is still a gap,
+  //      take the remainder from the pick face (FEFO).
+  //   3. If the pick face also cannot cover the gap, we are short — the
+  //      satisfied flag will be false.
+  //
+  // This avoids pulling a second (or partial) warehouse pallet just to cover
+  // a small overage when the pick face already has available stock.
   let remaining = qtyNeeded;
 
-  // Pull warehouse pallets (priority + FEFO) until we have enough.
-  // Each warehouse record is treated as a full pallet — we take the whole record.
   for (const rec of applyLocationPriority(warehouseRecords, locationPriorityPatterns)) {
     if (remaining <= 0) break;
     const palletQty = rec.remainingQty; // full pallet
 
     if (palletQty <= remaining) {
-      // Entire pallet goes to staging
+      // Entire pallet fits within what we still need — take it all to staging.
       stagingMoves.push({ record: rec, qty: palletQty });
       rec.remainingQty = 0;
       remaining -= palletQty;
     } else {
-      // Pallet is bigger than what we still need.
-      // Send exactly `remaining` to staging, surplus to pick face.
+      // This pallet would overshoot. Check whether the pick face can cover
+      // the remaining gap instead of splitting this pallet.
+      const pickFaceAvail = pickFaceRecords.reduce((s, r) => s + r.remainingQty, 0);
+      if (pickFaceAvail >= remaining) {
+        // Pick face can cover the gap — do NOT pull this warehouse pallet.
+        // Break out of the warehouse loop and let the pick-face top-up below
+        // handle the remainder.
+        break;
+      }
+      // Pick face cannot cover the gap on its own, so we must split this pallet:
+      // send exactly `remaining` to staging and put the surplus to pick face.
       stagingMoves.push({ record: rec, qty: remaining });
       const surplus = palletQty - remaining;
       pickFaceMoves.push({ record: rec, qty: surplus });
@@ -248,8 +266,11 @@ function planSkuMovements(
     }
   }
 
-  // If warehouse alone wasn't enough, fall back to draining pick face for the
-  // residual (this handles edge cases where warehouse is also short).
+  // Top up any remaining gap from the pick face (FEFO order).
+  // This covers two cases:
+  //   a) We stopped pulling warehouse pallets because the pick face could cover
+  //      the remainder (the new hybrid rule above).
+  //   b) The warehouse was completely exhausted and we are still short.
   if (remaining > 0) {
     for (const rec of sortFEFO(pickFaceRecords)) {
       if (remaining <= 0) break;

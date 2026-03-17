@@ -1,0 +1,87 @@
+{
+  "query": "SHOW COLUMNS FROM allocation_run_orders; SHOW CREATE TABLE allocation_run_orders;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SHOW COLUMNS FROM allocation_run_orders; SHOW CREATE TABLE allocation_run_orders;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "runId",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "orderId",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "referenceNum",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "enum('allocated','skipped','failed','unallocated')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "skipReason",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "allocationDetail",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "createdAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    }
+  ],
+  "messages": [
+    "Table\tCreate Table",
+    "allocation_run_orders\tCREATE TABLE `allocation_run_orders` (",
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `runId` int NOT NULL,",
+    "  `orderId` int NOT NULL,",
+    "  `referenceNum` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `status` enum('allocated','skipped','failed','unallocated') COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `skipReason` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `allocationDetail` json DEFAULT NULL,",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001"
+  ],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nrunId\tint\tNO\t\tNULL\t\norderId\tint\tNO\t\tNULL\t\nreferenceNum\tvarchar(256)\tYES\t\tNULL\t\nstatus\tenum('allocated','skipped','failed','unallocated')\tNO\t\tNULL\t\nskipReason\ttext\tYES\t\tNULL\t\nallocationDetail\tjson\tYES\t\tNULL\t\ncreatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nTable\tCreate Table\nallocation_run_orders\tCREATE TABLE `allocation_run_orders` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `runId` int NOT NULL,\n  `orderId` int NOT NULL,\n  `referenceNum` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `status` enum('allocated','skipped','failed','unallocated') COLLATE utf8mb4_unicode_ci NOT NULL,\n  `skipReason` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `allocationDetail` json DEFAULT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001\n",
+  "stderr": "",
+  "execution_time_ms": 65
+}

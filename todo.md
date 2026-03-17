@@ -68,3 +68,5 @@
 - [x] Bug: Staging location detection fails for ONCO-Staging, BOBA-staging, KGP-staging — fixed: seedFromExtensiv now accepts both -Stage and -Staging suffixes (case-insensitive); updated UI help text to match
 - [x] Bug: Allocation insert fails — fixed: skipped orders now pass {} instead of null for allocationDetail; added chunked inserts (50/batch); fixed fetchOrderWithDetail to extract orderItems from HAL _embedded when not present directly
 - [x] Feature: Per-order unallocation — Extensiv deallocateOrder API call, unallocated status in DB (schema migrated), Unallocate button in Order Summary tab on confirmed runs, unallocated orders panel
+- [ ] Bug: allocation_run_orders insert still failing — MySQL JSON column rejects allocationDetail value for skipped orders even after null→{} fix
+- [ ] Bug: All ONCO orders skipped "Order has no line items" — fetchOrderWithDetail HAL _embedded parsing not finding order lines in actual Extensiv response

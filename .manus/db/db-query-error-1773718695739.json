@@ -1,0 +1,8 @@
+{
+  "query": "ALTER TABLE `allocation_runs` ADD `pullList` json;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute ALTER TABLE `allocation_runs` ADD `pullList` json;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1060 (42S21) at line 1: Duplicate column name 'pullList'"
+  ]
+}

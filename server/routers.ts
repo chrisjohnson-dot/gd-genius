@@ -590,9 +590,47 @@ export const appRouter = router({
 
         return results;
       }),
+    debugOrderDetail: protectedProcedure
+      .input(z.object({ configId: z.number(), orderId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const { getExtensivToken } = await import("./extensiv/client");
+        const axios = (await import("axios")).default;
+        const token = await getExtensivToken(config);
+        const baseUrl = (config as { baseUrl?: string }).baseUrl || "https://secure-wms.com";
+        // Fetch with all detail params
+        const response = await axios.get(`${baseUrl}/orders/${input.orderId}`, {
+          params: { detail: "all", itemdetail: "all" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/hal+json",
+            "Accept-Language": "en-US,en;q=0.8",
+          },
+          validateStatus: () => true,
+        });
+        const raw = response.data as Record<string, unknown>;
+        const embedded = (raw._embedded ?? {}) as Record<string, unknown>;
+        const embeddedKeys = Object.keys(embedded);
+        // Check all possible orderItems locations
+        const directItems = Array.isArray(raw.orderItems) ? (raw.orderItems as unknown[]) : [];
+        const embeddedItemKey = embeddedKeys.find(k => k.toLowerCase().includes("orderitem") || k.toLowerCase().includes("item"));
+        const embeddedItems = embeddedItemKey ? (embedded[embeddedItemKey] as unknown[]) : [];
+        return {
+          httpStatus: response.status,
+          etag: response.headers["etag"] ?? null,
+          topLevelKeys: Object.keys(raw),
+          embeddedKeys,
+          directItemsCount: directItems.length,
+          embeddedItemKey: embeddedItemKey ?? null,
+          embeddedItemsCount: embeddedItems.length,
+          sampleDirectItem: directItems.length > 0 ? JSON.stringify(directItems[0]).slice(0, 500) : null,
+          sampleEmbeddedItem: embeddedItems.length > 0 ? JSON.stringify(embeddedItems[0]).slice(0, 500) : null,
+          rawSnippet: JSON.stringify(raw).slice(0, 1000),
+        };
+      }),
   }),
-
-  // ─── Allocation ────────────────────────────────────────────────────────────
+  // ─── Allocation ───────────────────────────────────────────────────────────────────────────
   allocation: router({
     propose: protectedProcedure
       .input(

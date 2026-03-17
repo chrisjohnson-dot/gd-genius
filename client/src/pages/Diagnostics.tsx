@@ -29,6 +29,10 @@ export default function Diagnostics() {
   const [invFacilityId, setInvFacilityId] = useState<number | null>(null);
   const [runInvDiag, setRunInvDiag] = useState(false);
 
+  // Order detail debug state
+  const [detailOrderId, setDetailOrderId] = useState<string>("");
+  const [runDetailDiag, setRunDetailDiag] = useState(false);
+
   const { data: configs } = trpc.config.list.useQuery();
 
   const { data: diagData, isLoading, error, refetch } = trpc.extensiv.debugRaw.useQuery(
@@ -44,6 +48,11 @@ export default function Diagnostics() {
   const { data: orderDiagData, isLoading: orderDiagLoading, error: orderDiagError, refetch: refetchOrderDiag } = trpc.extensiv.debugOrders.useQuery(
     { configId: configId!, customerId: orderCustomerId!, facilityId: orderFacilityId! },
     { enabled: !!configId && !!orderCustomerId && !!orderFacilityId && runOrderDiag }
+  );
+
+  const { data: detailData, isLoading: detailLoading, error: detailError } = trpc.extensiv.debugOrderDetail.useQuery(
+    { configId: configId!, orderId: parseInt(detailOrderId, 10) },
+    { enabled: !!configId && runDetailDiag && !!detailOrderId && !isNaN(parseInt(detailOrderId, 10)) }
   );
 
   const { data: invDiagData, isLoading: invDiagLoading, error: invDiagError, refetch: refetchInvDiag } = trpc.extensiv.debugInventory.useQuery(
@@ -479,6 +488,65 @@ export default function Diagnostics() {
                 </pre>
               </CardContent>
             </Card>
+          </div>
+        )}
+        {/* ── Order Detail Debug ─────────────────────────────────────────── */}
+        {configId && (
+          <div className="space-y-4">
+            <h2 className="text-base font-semibold">Order Detail Diagnostic</h2>
+            <Card>
+              <CardContent className="pt-4">
+                <p className="text-xs text-muted-foreground mb-3">Enter an Extensiv Order ID (the internal numeric ID, e.g. 3214839) to inspect the raw order detail response and check if line items are being returned.</p>
+                <div className="flex gap-2 items-end">
+                  <div>
+                    <label className="text-xs font-medium block mb-1">Extensiv Order ID</label>
+                    <input
+                      type="number"
+                      className="border rounded px-2 py-1 text-sm w-40 bg-background"
+                      placeholder="e.g. 3214839"
+                      value={detailOrderId}
+                      onChange={e => { setDetailOrderId(e.target.value); setRunDetailDiag(false); }}
+                    />
+                  </div>
+                  <Button size="sm" onClick={() => setRunDetailDiag(true)} disabled={!detailOrderId || detailLoading}>
+                    {detailLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : "Fetch Order Detail"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            {detailError && <p className="text-sm text-destructive">Error: {detailError.message}</p>}
+            {detailData && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground mb-1">HTTP Status</p><p className="text-xl font-bold">{detailData.httpStatus}</p></CardContent></Card>
+                  <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground mb-1">Direct orderItems</p><p className="text-xl font-bold {detailData.directItemsCount > 0 ? 'text-green-600' : 'text-amber-600'}">{detailData.directItemsCount}</p></CardContent></Card>
+                  <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground mb-1">Embedded Items</p><p className="text-xl font-bold">{detailData.embeddedItemsCount}</p></CardContent></Card>
+                  <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground mb-1">ETag</p><p className="text-xs font-mono break-all">{detailData.etag ?? "—"}</p></CardContent></Card>
+                </div>
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">Top-level Keys</CardTitle></CardHeader>
+                  <CardContent><p className="text-xs font-mono">{detailData.topLevelKeys.join(", ")}</p></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">_embedded Keys</CardTitle></CardHeader>
+                  <CardContent><p className="text-xs font-mono">{detailData.embeddedKeys.length > 0 ? detailData.embeddedKeys.join(", ") : "(none)"}</p></CardContent>
+                </Card>
+                {detailData.embeddedItemKey && (
+                  <Card>
+                    <CardHeader><CardTitle className="text-sm">Embedded Item Key: <span className="font-mono text-green-600">{detailData.embeddedItemKey}</span></CardTitle></CardHeader>
+                    <CardContent><pre className="text-xs bg-muted rounded p-3 overflow-auto max-h-48 whitespace-pre-wrap break-all">{detailData.sampleEmbeddedItem}</pre></CardContent>
+                  </Card>
+                )}
+                {detailData.directItemsCount === 0 && detailData.embeddedItemsCount === 0 && (
+                  <Card className="border-destructive">
+                    <CardContent className="pt-4 text-destructive text-sm">
+                      <p className="font-medium mb-2">No order items found in either location. Raw response snippet:</p>
+                      <pre className="text-xs bg-muted rounded p-3 overflow-auto max-h-64 whitespace-pre-wrap break-all">{detailData.rawSnippet}</pre>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

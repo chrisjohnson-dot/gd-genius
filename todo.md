@@ -140,3 +140,4 @@
 - [x] Bug: GD logo and title text too close — increase gap between logo right edge and first word
 - [x] Bug: Pull sheet TX ID box shows run ID — must show order transaction ID(s) matching pack sheet
 - [x] Bug: Pull sheet TX ID box too large — reduce size so it doesn't overrun meta/table area
+- [x] Feature: Merge all three PDFs into one single print file instead of a ZIP archive

@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { PassThrough } from "stream";
-import archiver from "archiver";
+import { PDFDocument } from "pdf-lib";
 import { getAllocationRunById, getAllocationRunOrders } from "../db";
 import {
   generatePickFacePullSheetPDF,
@@ -193,16 +193,18 @@ export function registerPdfRoutes(app: Express) {
       pdfToBuffer((pt) => generatePackListPDF(pt, orderPackData, runMeta)),
     ]);
 
-    // Stream a ZIP back to the client
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="work-files-run-${runId}.zip"`);
+    // Merge all three PDFs into a single file using pdf-lib
+    const merged = await PDFDocument.create();
+    for (const buf of [pfBuf, whBuf, packBuf]) {
+      const src = await PDFDocument.load(buf);
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      for (const page of pages) merged.addPage(page);
+    }
+    const mergedBytes = await merged.save();
 
-    const archive = archiver("zip", { zlib: { level: 6 } });
-    archive.pipe(res);
-    archive.append(pfBuf, { name: `pick-face-pull-sheet-run-${runId}.pdf` });
-    archive.append(whBuf, { name: `warehouse-pull-sheet-run-${runId}.pdf` });
-    archive.append(packBuf, { name: `pack-sheet-run-${runId}.pdf` });
-    await archive.finalize();
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="work-files-run-${runId}.pdf"`);
+    res.end(Buffer.from(mergedBytes));
   });
 
   // ── Legacy pull-list endpoint (backward compat → redirects to pick-face) ─

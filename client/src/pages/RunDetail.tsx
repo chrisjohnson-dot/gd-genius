@@ -474,85 +474,95 @@ export default function RunDetail() {
             </Card>
           </TabsContent>
 
-          {/* ── Order Summary Tab ─────────────────────────────────────────────── */}
+                    {/* ── Order Summary Tab ─────────────────────────────────────────────── */}
           <TabsContent value="summary" className="mt-4">
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-4 py-3 font-medium">Order</th>
-                        <th className="text-left px-4 py-3 font-medium">SKU</th>
-                        <th className="text-left px-4 py-3 font-medium">Description</th>
-                        <th className="text-right px-4 py-3 font-medium">Qty</th>
-                        <th className="text-left px-4 py-3 font-medium">Lot</th>
-                        <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                        <th className="text-left px-4 py-3 font-medium">Location</th>
-                        {isConfirmed && <th className="text-right px-4 py-3 font-medium">Actions</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allocatedOrders.flatMap((order) =>
-                        (order.detail?.lineItems ?? []).flatMap((line) =>
-                          line.allocations.map((alloc, i) => (
-                            <tr key={`${order.orderId}-${line.sku}-${i}`} className="border-b border-border/50 hover:bg-muted/30">
-                              <td className="px-4 py-2 font-medium">
-                                <div className="flex items-center gap-2">
-                                  {order.referenceNum}
-                                  {order.status === "unallocated" && (
-                                    <Badge className="text-xs bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
-                                      unallocated
-                                    </Badge>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 font-mono text-xs">{line.sku}</td>
-                              <td className="px-4 py-2 text-muted-foreground text-xs">{line.description ?? "—"}</td>
-                              <td className="px-4 py-2 text-right font-semibold">{alloc.qty}</td>
-                              <td className="px-4 py-2 text-xs">{alloc.lotNumber ?? "—"}</td>
-                              <td className="px-4 py-2 text-xs">{alloc.expirationDate ? new Date(alloc.expirationDate).toLocaleDateString() : "—"}</td>
-                              <td className="px-4 py-2 text-xs">
-                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${locTypeBadge[alloc.locationType] ?? ""}`}>
-                                  {alloc.locationName}
-                                </span>
-                              </td>
-                              {isConfirmed && (
-                                <td className="px-4 py-2 text-right">
-                                  {i === 0 && order.status === "allocated" && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-6 px-2 text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
-                                      disabled={unallocatingId === order.id}
-                                      onClick={() => handleUnallocate(order.id, order.referenceNum ?? null)}
-                                    >
-                                      {unallocatingId === order.id ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        <Undo2 className="h-3 w-3" />
-                                      )}
-                                      Unallocate
-                                    </Button>
-                                  )}
-                                </td>
+            <div className="space-y-3">
+              {allocatedOrders.length === 0 && (
+                <Card>
+                  <CardContent className="py-10 text-center text-muted-foreground">
+                    <p className="text-sm">No orders allocated.</p>
+                  </CardContent>
+                </Card>
+              )}
+              {allocatedOrders.map((order) => {
+                const lineItems = order.detail?.lineItems ?? [];
+                const totalLines = lineItems.length;
+                const totalPieces = lineItems.reduce((sum, l) => sum + l.qtyRequired, 0);
+                return (
+                  <Card key={order.id}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold text-sm flex items-center gap-2">
+                            #{order.orderId}
+                            {order.status === "unallocated" && (
+                              <Badge className="text-xs bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                                unallocated
+                              </Badge>
+                            )}
+                          </div>
+                          {order.referenceNum && <div className="text-xs text-muted-foreground">Customer Ref: {order.referenceNum}</div>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">{totalLines} {totalLines === 1 ? "line" : "lines"}</Badge>
+                          <Badge variant="outline" className="text-xs">{totalPieces} {totalPieces === 1 ? "pc" : "pcs"}</Badge>
+                          {isConfirmed && order.status === "allocated" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                              disabled={unallocatingId === order.id}
+                              onClick={() => handleUnallocate(order.id, order.referenceNum ?? null)}
+                            >
+                              {unallocatingId === order.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Undo2 className="h-3 w-3" />
                               )}
+                              Unallocate
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/50">
+                              <th className="text-left px-4 py-2 font-medium">SKU</th>
+                              <th className="text-left px-4 py-2 font-medium">Description</th>
+                              <th className="text-right px-4 py-2 font-medium">Qty</th>
+                              <th className="text-left px-4 py-2 font-medium">Lot</th>
+                              <th className="text-left px-4 py-2 font-medium">Expiry</th>
+                              <th className="text-left px-4 py-2 font-medium">Location</th>
                             </tr>
-                          ))
-                        )
-                      )}
-                      {allocatedOrders.length === 0 && (
-                        <tr>
-                          <td colSpan={isConfirmed ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">
-                            No orders allocated.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                          </thead>
+                          <tbody>
+                            {lineItems.flatMap((line) =>
+                              line.allocations.map((alloc, i) => (
+                                <tr key={`${order.orderId}-${line.sku}-${i}`} className="border-b border-border/50 hover:bg-muted/30">
+                                  <td className="px-4 py-2 font-mono text-xs">{line.sku}</td>
+                                  <td className="px-4 py-2 text-muted-foreground text-xs">{line.description ?? "—"}</td>
+                                  <td className="px-4 py-2 text-right font-semibold">{alloc.qty}</td>
+                                  <td className="px-4 py-2 text-xs">{alloc.lotNumber ?? "—"}</td>
+                                  <td className="px-4 py-2 text-xs">{alloc.expirationDate ? new Date(alloc.expirationDate).toLocaleDateString() : "—"}</td>
+                                  <td className="px-4 py-2 text-xs">
+                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${locTypeBadge[alloc.locationType] ?? ""}`}>
+                                      {alloc.locationName}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </TabsContent>
 
           {/* ── All Orders Tab ─────────────────────────────────────────────────── */}
@@ -563,8 +573,8 @@ export default function RunDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-4 py-3 font-medium">Reference #</th>
-                        <th className="text-left px-4 py-3 font-medium">Order ID</th>
+                        <th className="text-left px-4 py-3 font-medium">Order #</th>
+                        <th className="text-left px-4 py-3 font-medium">Customer Ref</th>
                         <th className="text-left px-4 py-3 font-medium">Status</th>
                         <th className="text-left px-4 py-3 font-medium">Skip Reason</th>
                         {isConfirmed && <th className="text-right px-4 py-3 font-medium">Actions</th>}
@@ -573,8 +583,8 @@ export default function RunDetail() {
                     <tbody>
                       {orders.map((o) => (
                         <tr key={o.id} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-4 py-2 font-medium">{o.referenceNum ?? "—"}</td>
-                          <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{o.orderId}</td>
+                          <td className="px-4 py-2 font-semibold">#{o.orderId}</td>
+                          <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{o.referenceNum ?? "—"}</td>
                           <td className="px-4 py-2">
                             <Badge className={statusClass[o.status] ?? ""}>{o.status}</Badge>
                           </td>

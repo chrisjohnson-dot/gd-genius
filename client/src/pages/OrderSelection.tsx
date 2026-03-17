@@ -150,12 +150,13 @@ function CustomerOrdersPanel({
                 {/* Order list */}
                 <div className="space-y-1 max-h-[360px] overflow-y-auto pr-1">
                   {orders.map((order) => {
-                    // extensivOrderId = Extensiv Transaction ID (readOnly.orderId) — used for API calls
-                    // customerRefNum = client's internal order number (referenceNum) — shown to user
+                    // extensivOrderId = Extensiv Transaction ID (readOnly.orderId) — used for API calls and shown as primary bold label (Go Direct order #)
+                    // customerRefNum = client's internal order number (referenceNum) — shown as secondary label
                     const extensivOrderId = order.readOnly.orderId;
                     const customerRefNum = order.referenceNum;
                     const isSelected = selectedOrders.has(extensivOrderId);
                     const lineCount = order.orderItems?.length ?? 0;
+                    const totalPieces = order.orderItems?.reduce((sum: number, item: { qty?: number }) => sum + (item.qty ?? 0), 0) ?? 0;
                     return (
                       <div
                         key={extensivOrderId}
@@ -176,9 +177,9 @@ function CustomerOrdersPanel({
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{customerRefNum}</p>
+                          <p className="text-sm font-medium truncate">#{extensivOrderId}</p>
                           <p className="text-xs text-muted-foreground">
-                            Ext ID #{extensivOrderId}
+                            Customer Ref: {customerRefNum}
                             {order.poNum ? ` · PO: ${order.poNum}` : ""}
                             {" · "}Created:{" "}
                             {new Date(order.readOnly.creationDate).toLocaleDateString()}
@@ -188,6 +189,11 @@ function CustomerOrdersPanel({
                           {lineCount > 0 && (
                             <Badge variant="secondary" className="text-xs">
                               {lineCount} {lineCount === 1 ? "line" : "lines"}
+                            </Badge>
+                          )}
+                          {totalPieces > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {totalPieces} {totalPieces === 1 ? "pc" : "pcs"}
                             </Badge>
                           )}
                         </div>

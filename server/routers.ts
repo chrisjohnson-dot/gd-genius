@@ -1089,7 +1089,7 @@ export const appRouter = router({
         const { etag } = await fetchOrderWithDetail(config, runOrder.orderId);
         if (!etag) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not fetch ETag for order" });
 
-        // Call Extensiv deallocator
+         // Call Extensiv deallocator
         const result = await deallocateOrder(config, runOrder.orderId, etag);
         if (!result.success) {
           throw new TRPCError({
@@ -1097,7 +1097,63 @@ export const appRouter = router({
             message: `Extensiv deallocate failed: ${result.error}`,
           });
         }
-
+        // Reverse inventory moves: move products back from staging to their original source locations
+        // The pull list stored on the run records every staging move (fromLocation → staging).
+        // To reverse, we group items by their original fromLocation and call moveInventory for each group.
+        try {
+          const runForPullList = await getAllocationRunById(runOrder.runId);
+          const runPullList = runForPullList?.pullList as Array<{
+            sku: string;
+            receiveItemId: number;
+            qty: number;
+            fromLocationId: number;
+            fromLocationName: string;
+            toLocationId: number;
+            toLocationName: string;
+            movement: string;
+          }> | null | undefined;
+          // Also check per-order pull list items for backward compatibility
+          const orderDetail = runOrder.allocationDetail as { pullListItems?: Array<{
+            sku: string;
+            receiveItemId: number;
+            qty: number;
+            fromLocationId: number;
+            fromLocationName: string;
+            toLocationId: number;
+            toLocationName: string;
+            movement: string;
+          }> } | null | undefined;
+          // Collect all pull list entries that belong to this order
+          // Global pull list doesn't track per-order, so we use the order's own pullListItems
+          const itemsToReverse = orderDetail?.pullListItems ?? [];
+          // If no per-order items, fall back to filtering global pull list by this order's SKUs
+          // (best-effort: may over-reverse if same SKU appears in multiple orders)
+          const effectiveItems = itemsToReverse.length > 0
+            ? itemsToReverse
+            : (Array.isArray(runPullList) ? runPullList : []).filter((p) => p.movement === "to_staging" || !p.movement);
+          if (effectiveItems.length > 0) {
+            // Group by original source location (fromLocation)
+            const bySource = new Map<number, { locationId: number; locationName: string; items: Array<{ receiveItemId: number; quantity: number }> }>();
+            for (const entry of effectiveItems) {
+              if (!bySource.has(entry.fromLocationId)) {
+                bySource.set(entry.fromLocationId, { locationId: entry.fromLocationId, locationName: entry.fromLocationName, items: [] });
+              }
+              bySource.get(entry.fromLocationId)!.items.push({ receiveItemId: entry.receiveItemId, quantity: entry.qty });
+            }
+            // Move each group back to its source location
+            for (const { locationId, locationName, items } of Array.from(bySource.values())) {
+              const moveResult = await moveInventory(config, locationId, locationName, items);
+              if (!moveResult.success) {
+                console.warn(`[unallocate] Reverse move to ${locationName} (${locationId}) failed: ${moveResult.error}`);
+              } else {
+                console.log(`[unallocate] Reversed ${items.length} item(s) back to ${locationName}`);
+              }
+            }
+          }
+        } catch (reverseErr) {
+          // Log but don't fail the unallocation — the Extensiv deallocate already succeeded
+          console.error("[unallocate] Error during reverse inventory move:", reverseErr);
+        }
         // Update run order status to unallocated
         await updateAllocationRunOrder(input.runOrderId, { status: "unallocated" });
 

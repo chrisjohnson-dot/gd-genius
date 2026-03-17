@@ -401,3 +401,132 @@ describe("Allocation Engine — No Lot Mixing Rule", () => {
     expect(usedLot).toBe("LOT-EARLY");
   });
 });
+
+// ─── Location Priority Patterns ───────────────────────────────────────────────
+
+describe("Allocation Engine — Location Priority Patterns", () => {
+  // Helper that creates inventory with an explicit location name
+  function makeInventoryNamed(
+    receiveItemId: number,
+    sku: string,
+    available: number,
+    locationId: number,
+    locationName: string,
+    extra: Partial<ExtensivInventoryRecord> = {}
+  ): ExtensivInventoryRecord {
+    return {
+      receiveItemId,
+      itemIdentifier: { sku, id: receiveItemId },
+      available,
+      onHand: available,
+      isOnHold: false,
+      quarantined: false,
+      locationIdentifier: { id: locationId, nameKey: { name: locationName } },
+      ...extra,
+    };
+  }
+
+  const STAGING_ID = 100;
+  const WH_12_ID = 201;   // location name "12050101" — matches ^12
+  const WH_RCV12_ID = 202; // location name "RCV12001" — matches ^RCV12
+  const WH_OTHER_ID = 203; // location name "11050101" — no pattern match
+
+  const ltMap: LocationTypeMap = {
+    [STAGING_ID]: "staging",
+    [WH_12_ID]: "warehouse",
+    [WH_RCV12_ID]: "warehouse",
+    [WH_OTHER_ID]: "warehouse",
+  };
+
+  const amercarePatterns = [
+    { pattern: "^12", label: "Building 2 – 12xxxx locations" },
+    { pattern: "^RCV12", label: "Building 2 – RCV12 locations" },
+  ];
+
+  it("prefers ^12 location over unmatched warehouse when patterns are set", () => {
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 10 }])];
+    const inventory = [
+      makeInventoryNamed(1, "SKU-A", 50, WH_OTHER_ID, "11050101"),  // no match
+      makeInventoryNamed(2, "SKU-A", 50, WH_12_ID, "12050101"),      // matches ^12
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map(),
+      false, undefined, undefined, amercarePatterns
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+    // The pull list entry should come from the ^12 location, not the 11xxxxxx location
+    const stagingMoves = result.pullList.filter((p) => p.movement === "to_staging");
+    expect(stagingMoves.length).toBeGreaterThan(0);
+    expect(stagingMoves[0]!.fromLocationName).toBe("12050101");
+  });
+
+  it("prefers ^12 over ^RCV12 (first pattern wins)", () => {
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 10 }])];
+    const inventory = [
+      makeInventoryNamed(1, "SKU-A", 50, WH_RCV12_ID, "RCV12001"),  // matches ^RCV12 (rank 1)
+      makeInventoryNamed(2, "SKU-A", 50, WH_12_ID, "12050101"),      // matches ^12 (rank 0)
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map(),
+      false, undefined, undefined, amercarePatterns
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+    const stagingMoves = result.pullList.filter((p) => p.movement === "to_staging");
+    expect(stagingMoves[0]!.fromLocationName).toBe("12050101");
+  });
+
+  it("falls back to unmatched location when pattern locations have no stock", () => {
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 10 }])];
+    const inventory = [
+      makeInventoryNamed(1, "SKU-A", 50, WH_OTHER_ID, "11050101"),  // no match — only stock
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map(),
+      false, undefined, undefined, amercarePatterns
+    );
+
+    // Should still allocate using the unmatched location
+    expect(result.allocatedOrders).toHaveLength(1);
+    const stagingMoves = result.pullList.filter((p) => p.movement === "to_staging");
+    expect(stagingMoves[0]!.fromLocationName).toBe("11050101");
+  });
+
+  it("behaves identically to no-patterns when patterns array is empty", () => {
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 10 }])];
+    const inventory = [
+      makeInventoryNamed(1, "SKU-A", 50, WH_12_ID, "12050101"),
+    ];
+
+    const withPatterns = runAllocationEngine(
+      orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map(),
+      false, undefined, undefined, amercarePatterns
+    );
+    const withoutPatterns = runAllocationEngine(
+      orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map(),
+      false, undefined, undefined, []
+    );
+
+    expect(withPatterns.allocatedOrders).toHaveLength(1);
+    expect(withoutPatterns.allocatedOrders).toHaveLength(1);
+  });
+
+  it("invalid regex pattern falls back to string startsWith without throwing", () => {
+    const badPatterns = [{ pattern: "[invalid", label: "Bad regex" }];
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 5 }])];
+    const inventory = [
+      makeInventoryNamed(1, "SKU-A", 20, WH_12_ID, "[invalid-match"),
+    ];
+
+    expect(() =>
+      runAllocationEngine(
+        orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map(),
+        false, undefined, undefined, badPatterns
+      )
+    ).not.toThrow();
+  });
+});

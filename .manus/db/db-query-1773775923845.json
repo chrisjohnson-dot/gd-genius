@@ -1,0 +1,21 @@
+{
+  "query": "SELECT id, customerId, customerName, facilityId, facilityName, noLotMixing, autoRun, locationPriorityPatterns, notes FROM customer_rules WHERE customerName LIKE '%Amercare%' OR customerName LIKE '%amercare%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT id, customerId, customerName, facilityId, facilityName, noLotMixing, autoRun, locationPriorityPatterns, notes FROM customer_rules WHERE customerName LIKE '%Amercare%' OR customerName LIKE '%amercare%';",
+  "rows": [
+    {
+      "id": "1",
+      "customerId": "145",
+      "customerName": "Amercare",
+      "facilityId": "4",
+      "facilityName": "CAL-Calgary",
+      "noLotMixing": "0",
+      "autoRun": "0",
+      "locationPriorityPatterns": "[{\"label\": \"Building 2 – 12xxxx locations\", \"pattern\": \"^12\"}, {\"label\": \"Building 2 – RCV12 locations\", \"pattern\": \"^RCV12\"}]",
+      "notes": "Calgary warehouse: prioritize Building 2 locations (12#### and RCV12) over Building 1 (<12) locations."
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcustomerId\tcustomerName\tfacilityId\tfacilityName\tnoLotMixing\tautoRun\tlocationPriorityPatterns\tnotes\n1\t145\tAmercare\t4\tCAL-Calgary\t0\t0\t[{\"label\": \"Building 2 – 12xxxx locations\", \"pattern\": \"^12\"}, {\"label\": \"Building 2 – RCV12 locations\", \"pattern\": \"^RCV12\"}]\tCalgary warehouse: prioritize Building 2 locations (12#### and RCV12) over Building 1 (<12) locations.\n",
+  "stderr": "",
+  "execution_time_ms": 199
+}

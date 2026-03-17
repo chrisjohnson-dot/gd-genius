@@ -27,6 +27,7 @@ interface PullListItem {
   description?: string;
   receiveItemId: number;
   qty: number;
+  sourceQty?: number;
   fromLocationId: number;
   fromLocationName: string;
   fromLocationType: string;
@@ -163,6 +164,52 @@ export default function RunDetail() {
   const toStagingMoves = pullList.filter((p) => p.movement === "to_staging" || !p.movement);
   const toPickFaceMoves = pullList.filter((p) => p.movement === "to_pick_face");
 
+  // Consolidate staging + pick face moves into one row per source location + SKU + lot
+  type ConsolidatedRow = {
+    sku: string;
+    description?: string;
+    fromLocationName: string;
+    fromLocationType: string;
+    sourceQty?: number;
+    lotNumber?: string;
+    expirationDate?: string;
+    stagingLocationName: string;
+    pickFaceLocationName: string;
+    qtyToStaging: number;
+    qtyToPickFace: number;
+  };
+  const consolidatedRowMap = new Map<string, ConsolidatedRow>();
+  for (const item of pullList) {
+    const key = `${item.sku}||${item.fromLocationName}||${item.lotNumber ?? ""}||${item.expirationDate ?? ""}`;
+    if (!consolidatedRowMap.has(key)) {
+      consolidatedRowMap.set(key, {
+        sku: item.sku,
+        description: item.description,
+        fromLocationName: item.fromLocationName,
+        fromLocationType: item.fromLocationType,
+        sourceQty: item.sourceQty,
+        lotNumber: item.lotNumber,
+        expirationDate: item.expirationDate,
+        stagingLocationName: item.movement === "to_staging" ? item.toLocationName : "",
+        pickFaceLocationName: item.movement === "to_pick_face" ? item.toLocationName : "",
+        qtyToStaging: item.movement === "to_staging" ? item.qty : 0,
+        qtyToPickFace: item.movement === "to_pick_face" ? item.qty : 0,
+      });
+    } else {
+      const row = consolidatedRowMap.get(key)!;
+      if (item.movement === "to_staging") {
+        row.qtyToStaging += item.qty;
+        if (!row.stagingLocationName) row.stagingLocationName = item.toLocationName;
+      } else {
+        row.qtyToPickFace += item.qty;
+        if (!row.pickFaceLocationName) row.pickFaceLocationName = item.toLocationName;
+      }
+    }
+  }
+  const consolidatedRows = Array.from(consolidatedRowMap.values());
+  const hasPickFace = consolidatedRows.some((r) => r.qtyToPickFace > 0);
+  const hasSourceQty = consolidatedRows.some((r) => r.sourceQty != null);
+
   return (
     <AppLayout>
       <div className="p-6 space-y-6 max-w-6xl">
@@ -297,131 +344,92 @@ export default function RunDetail() {
                   <p>No pull list items.</p>
                 </CardContent>
               </Card>
-            ) : (() => {
-              // Consolidate staging + pick face moves into one row per source location + SKU + lot
-              type ConsolidatedRow = {
-                sku: string;
-                description?: string;
-                fromLocationName: string;
-                fromLocationType: string;
-                lotNumber?: string;
-                expirationDate?: string;
-                stagingLocationName: string;
-                pickFaceLocationName: string;
-                qtyToStaging: number;
-                qtyToPickFace: number;
-              };
-              const rowMap = new Map<string, ConsolidatedRow>();
-              for (const item of pullList) {
-                const key = `${item.sku}||${item.fromLocationName}||${item.lotNumber ?? ""}||${item.expirationDate ?? ""}`;
-                if (!rowMap.has(key)) {
-                  rowMap.set(key, {
-                    sku: item.sku,
-                    description: item.description,
-                    fromLocationName: item.fromLocationName,
-                    fromLocationType: item.fromLocationType,
-                    lotNumber: item.lotNumber,
-                    expirationDate: item.expirationDate,
-                    stagingLocationName: item.movement === "to_staging" ? item.toLocationName : "",
-                    pickFaceLocationName: item.movement === "to_pick_face" ? item.toLocationName : "",
-                    qtyToStaging: item.movement === "to_staging" ? item.qty : 0,
-                    qtyToPickFace: item.movement === "to_pick_face" ? item.qty : 0,
-                  });
-                } else {
-                  const row = rowMap.get(key)!;
-                  if (item.movement === "to_staging") {
-                    row.qtyToStaging += item.qty;
-                    if (!row.stagingLocationName) row.stagingLocationName = item.toLocationName;
-                  } else {
-                    row.qtyToPickFace += item.qty;
-                    if (!row.pickFaceLocationName) row.pickFaceLocationName = item.toLocationName;
-                  }
-                }
-              }
-              const consolidatedRows = Array.from(rowMap.values());
-              const hasPickFace = consolidatedRows.some((r) => r.qtyToPickFace > 0);
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    {consolidatedRows.length} line{consolidatedRows.length !== 1 ? "s" : ""}
+                    {" · "}{toStagingMoves.length} to staging
+                    {toPickFaceMoves.length > 0 && ` · ${toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length} pallet replenishments`}
+                  </p>
+                  <a
+                    href={`/api/pdf/pull-list/${runId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  >
+                    <FileDown className="h-4 w-4" />
+                    Export PDF
+                  </a>
+                </div>
 
-              return (
-                <>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      {consolidatedRows.length} line{consolidatedRows.length !== 1 ? "s" : ""}
-                      {" · "}{toStagingMoves.length} to staging
-                      {toPickFaceMoves.length > 0 && ` · ${toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length} pallet replenishments`}
-                    </p>
-                    <a
-                      href={`/api/pdf/pull-list/${runId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                    >
-                      <FileDown className="h-4 w-4" />
-                      Export PDF
-                    </a>
-                  </div>
-
-                  <Card>
-                    <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border bg-muted/50">
-                              <th className="text-left px-4 py-3 font-medium">SKU</th>
-                              <th className="text-left px-4 py-3 font-medium">Description</th>
-                              <th className="text-left px-4 py-3 font-medium">Source Location</th>
-                              <th className="text-right px-4 py-3 font-medium">→ Staging</th>
-                              {hasPickFace && <th className="text-right px-4 py-3 font-medium">→ Pick Face</th>}
-                              <th className="text-left px-4 py-3 font-medium">Lot</th>
-                              <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {consolidatedRows.map((row, i) => (
-                              <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                                <td className="px-4 py-2 font-mono text-xs font-semibold">{row.sku}</td>
-                                <td className="px-4 py-2 text-muted-foreground text-xs">{row.description ?? "—"}</td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${locTypeBadge[row.fromLocationType] ?? ""}`}>
-                                      {row.fromLocationType}
-                                    </span>
-                                    <span className="text-xs font-medium">{row.fromLocationName}</span>
-                                  </div>
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/50">
+                            <th className="text-left px-4 py-3 font-medium">SKU</th>
+                            <th className="text-left px-4 py-3 font-medium">Description</th>
+                            <th className="text-left px-4 py-3 font-medium">Source Location</th>
+                            {hasSourceQty && <th className="text-right px-4 py-3 font-medium">On Hand</th>}
+                            <th className="text-right px-4 py-3 font-medium">→ Staging</th>
+                            {hasPickFace && <th className="text-right px-4 py-3 font-medium">→ Pick Face</th>}
+                            <th className="text-left px-4 py-3 font-medium">Lot</th>
+                            <th className="text-left px-4 py-3 font-medium">Expiry</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {consolidatedRows.map((row, i) => (
+                            <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
+                              <td className="px-4 py-2 font-mono text-xs font-semibold">{row.sku}</td>
+                              <td className="px-4 py-2 text-muted-foreground text-xs">{row.description ?? "—"}</td>
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${locTypeBadge[row.fromLocationType] ?? ""}`}>
+                                    {row.fromLocationType}
+                                  </span>
+                                  <span className="text-xs font-medium">{row.fromLocationName}</span>
+                                </div>
+                              </td>
+                              {hasSourceQty && (
+                                <td className="px-4 py-2 text-right text-muted-foreground text-xs">
+                                  {row.sourceQty != null ? row.sourceQty : "—"}
                                 </td>
+                              )}
+                              <td className="px-4 py-2 text-right">
+                                {row.qtyToStaging > 0 ? (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="font-bold">{row.qtyToStaging}</span>
+                                    {row.stagingLocationName && (
+                                      <span className="text-xs text-muted-foreground">{row.stagingLocationName}</span>
+                                    )}
+                                  </div>
+                                ) : <span className="text-muted-foreground">—</span>}
+                              </td>
+                              {hasPickFace && (
                                 <td className="px-4 py-2 text-right">
-                                  {row.qtyToStaging > 0 ? (
+                                  {row.qtyToPickFace > 0 ? (
                                     <div className="flex items-center justify-end gap-1">
-                                      <span className="font-bold">{row.qtyToStaging}</span>
-                                      {row.stagingLocationName && (
-                                        <span className="text-xs text-muted-foreground">{row.stagingLocationName}</span>
+                                      <span className="font-bold">{row.qtyToPickFace}</span>
+                                      {row.pickFaceLocationName && (
+                                        <span className="text-xs text-muted-foreground">{row.pickFaceLocationName}</span>
                                       )}
                                     </div>
                                   ) : <span className="text-muted-foreground">—</span>}
                                 </td>
-                                {hasPickFace && (
-                                  <td className="px-4 py-2 text-right">
-                                    {row.qtyToPickFace > 0 ? (
-                                      <div className="flex items-center justify-end gap-1">
-                                        <span className="font-bold">{row.qtyToPickFace}</span>
-                                        {row.pickFaceLocationName && (
-                                          <span className="text-xs text-muted-foreground">{row.pickFaceLocationName}</span>
-                                        )}
-                                      </div>
-                                    ) : <span className="text-muted-foreground">—</span>}
-                                  </td>
-                                )}
-                                <td className="px-4 py-2 text-xs">{row.lotNumber ?? "—"}</td>
-                                <td className="px-4 py-2 text-xs">{row.expirationDate ? new Date(row.expirationDate).toLocaleDateString() : "—"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </>
-              );
-            })()}
+                              )}
+                              <td className="px-4 py-2 text-xs">{row.lotNumber ?? "—"}</td>
+                              <td className="px-4 py-2 text-xs">{row.expirationDate ? new Date(row.expirationDate).toLocaleDateString() : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </TabsContent>
 
           {/* ── Pack List Tab ─────────────────────────────────────────────────── */}

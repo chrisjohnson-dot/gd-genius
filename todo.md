@@ -106,3 +106,6 @@
 - [x] Engine: When product has no expiry date, use oldest/lowest receiveItemId as FEFO fallback — getInventoryPriority updated
 - [x] Engine: Pallet move count should sum only warehouse locations, exclude pick face locations — RunDetail pallet replenishment count now filters fromLocationType==='warehouse'
 - [x] UX: Consolidate pull list into one unified table (source qty, qty to staging, qty to pick face) — single table with Source Location, → Staging, → Pick Face columns; Pick Face column hidden when no pick face moves
+- [x] Bug: No-expiry FEFO fallback (lowest receiveItemId) not being applied correctly in engine — getInventoryPriority was correct; Scenario B now uses warehouse-only pull so FEFO applies correctly to warehouse records
+- [x] Bug: Engine pulls from pick face even when insufficient — Scenario B now skips pick face entirely and pulls full qty from warehouse pallets; surplus goes to pick face; pick face used only as last-resort fallback
+- [x] Bug: Pull list UI still showing two separate boxes — fixed IIFE anti-pattern; consolidation logic moved to component body; single table with On Hand, → Staging, → Pick Face columns (conditional)

@@ -65,6 +65,8 @@ export interface PullListItem {
   description?: string;
   receiveItemId: number;
   qty: number;
+  /** Total available qty in the source location at time of allocation */
+  sourceQty: number;
   fromLocationId: number;
   fromLocationName: string;
   fromLocationType: LocationType;
@@ -211,18 +213,14 @@ function planSkuMovements(
     return { stagingMoves, pickFaceMoves, satisfied: true, totalStaged: qtyNeeded };
   }
 
-  // ── Scenario B: pick face is short — need warehouse pallets ──────────────
-  // First, drain whatever is in the pick face toward staging.
+  // ── Scenario B: pick face is short — pull entirely from warehouse ────────
+  // Rule: when the pick face cannot satisfy the full demand, do NOT drain the
+  // pick face. Instead pull the full qty needed from warehouse pallets (FEFO /
+  // location-priority order) and put the pallet surplus back to the pick face.
+  // The pick face stock stays untouched so it remains available for future orders.
   let remaining = qtyNeeded;
-  for (const rec of sortFEFO(pickFaceRecords)) {
-    if (remaining <= 0) break;
-    const take = Math.min(remaining, rec.remainingQty);
-    stagingMoves.push({ record: rec, qty: take });
-    rec.remainingQty -= take;
-    remaining -= take;
-  }
 
-  // Now pull warehouse pallets (priority + FEFO) until we have enough.
+  // Pull warehouse pallets (priority + FEFO) until we have enough.
   // Each warehouse record is treated as a full pallet — we take the whole record.
   for (const rec of applyLocationPriority(warehouseRecords, locationPriorityPatterns)) {
     if (remaining <= 0) break;
@@ -235,12 +233,24 @@ function planSkuMovements(
       remaining -= palletQty;
     } else {
       // Pallet is bigger than what we still need.
-      // Send `remaining` to staging, surplus to pick face.
+      // Send exactly `remaining` to staging, surplus to pick face.
       stagingMoves.push({ record: rec, qty: remaining });
       const surplus = palletQty - remaining;
       pickFaceMoves.push({ record: rec, qty: surplus });
       rec.remainingQty = 0;
       remaining = 0;
+    }
+  }
+
+  // If warehouse alone wasn't enough, fall back to draining pick face for the
+  // residual (this handles edge cases where warehouse is also short).
+  if (remaining > 0) {
+    for (const rec of sortFEFO(pickFaceRecords)) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, rec.remainingQty);
+      stagingMoves.push({ record: rec, qty: take });
+      rec.remainingQty -= take;
+      remaining -= take;
     }
   }
 
@@ -396,6 +406,7 @@ export function runAllocationEngine(
         description: descriptionMap.get(sku),
         receiveItemId: record.receiveItemId,
         qty,
+        sourceQty: record.available, // total available in source location at allocation time
         fromLocationId: record.locationIdentifier?.id ?? 0,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
         fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
@@ -415,6 +426,7 @@ export function runAllocationEngine(
         description: descriptionMap.get(sku),
         receiveItemId: record.receiveItemId,
         qty,
+        sourceQty: record.available,
         fromLocationId: record.locationIdentifier?.id ?? 0,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
         fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),

@@ -313,7 +313,34 @@ export async function fetchOpenOrders(
     );
   }
 
-  return filtered;
+  // Normalise orderItems from HAL embedded so lineCount/totalPieces are available in the UI.
+  // The list endpoint returns items under _embedded HAL keys, not a direct orderItems array.
+  const REL_ITEM = "http://api.3plCentral.com/rels/orders/item";
+  const REL_ORDERITEM = "http://api.3plCentral.com/rels/orders/orderitem";
+
+  function extractItemsFromOrder(o: ExtensivOrder): ExtensivOrderItem[] {
+    const raw = o as ExtensivOrder & { _embedded?: Record<string, unknown>; orderItems?: unknown };
+    if (Array.isArray(raw.orderItems) && (raw.orderItems as ExtensivOrderItem[]).length > 0) {
+      return raw.orderItems as ExtensivOrderItem[];
+    }
+    const embedded = (raw._embedded ?? {}) as Record<string, unknown>;
+    for (const key of [REL_ITEM, REL_ORDERITEM, "orderItem", "orderItems", "item"]) {
+      const candidate = embedded[key];
+      if (!candidate) continue;
+      if (Array.isArray(candidate) && candidate.length > 0) return candidate as ExtensivOrderItem[];
+      const obj = candidate as Record<string, unknown>;
+      if (Array.isArray(obj.item) && obj.item.length > 0) return obj.item as ExtensivOrderItem[];
+      if (obj.itemIdentifier || obj.readOnly) return [obj as unknown as ExtensivOrderItem];
+    }
+    return [];
+  }
+
+  const normalized = filtered.map((o) => {
+    const items = extractItemsFromOrder(o);
+    return { ...o, orderItems: items };
+  });
+
+  return normalized;
 }
 
 // Fetch a single order with full detail (includes orderItems and ETag)

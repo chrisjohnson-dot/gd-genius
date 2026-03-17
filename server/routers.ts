@@ -691,6 +691,7 @@ export const appRouter = router({
           const customerRule = await getCustomerRule(input.configId, customer.customerId);
           const noLotMixing = customerRule?.noLotMixing ?? false;
           const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
+          const locationExclusionPatterns = (customerRule?.locationExclusionPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           // Run allocation engine for this customer
           const result = runAllocationEngine(
             orders,
@@ -702,7 +703,8 @@ export const appRouter = router({
             noLotMixing,
             undefined,
             undefined,
-            locationPriorityPatterns
+            locationPriorityPatterns,
+            locationExclusionPatterns
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -872,6 +874,7 @@ export const appRouter = router({
           const customerRule = await getCustomerRule(input.configId, customer.id);
           const noLotMixing = customerRule?.noLotMixing ?? false;
           const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
+          const locationExclusionPatterns = (customerRule?.locationExclusionPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const result = runAllocationEngine(
             orders,
             inventory,
@@ -882,7 +885,8 @@ export const appRouter = router({
             noLotMixing,
             undefined,
             undefined,
-            locationPriorityPatterns
+            locationPriorityPatterns,
+            locationExclusionPatterns
           );
 
           allAllocated.push(...result.allocatedOrders);

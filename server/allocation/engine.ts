@@ -304,6 +304,8 @@ export function runAllocationEngine(
   pickFaceLocationName?: string,
   /** Optional: ordered list of location name patterns to prioritise when pulling warehouse pallets */
   locationPriorityPatterns: Array<{ pattern: string; label: string }> = [],
+  /** Optional: list of location name patterns to EXCLUDE from allocation entirely (e.g. Building 1) */
+  locationExclusionPatterns: Array<{ pattern: string; label: string }> = [],
 ): AllocationRunResult {
   // ── Build mutable inventory pool ─────────────────────────────────────────
   const inventoryPool = new Map<number, InventoryPoolRecord>();
@@ -360,9 +362,19 @@ export function runAllocationEngine(
   const poolSnapshot = new Map<number, number>();
   inventoryPool.forEach((v, k) => poolSnapshot.set(k, v.remainingQty));
 
+  // Helper: test if a location name matches any exclusion pattern
+  const isExcludedLocation = (locName: string | undefined): boolean => {
+    if (!locName || locationExclusionPatterns.length === 0) return false;
+    return locationExclusionPatterns.some(({ pattern }) => {
+      try { return new RegExp(pattern, "i").test(locName); }
+      catch { return locName.startsWith(pattern); }
+    });
+  };
+
   for (const [sku, totalNeeded] of Array.from(skuTotalDemand.entries())) {
     const allSkuRecords = Array.from(inventoryPool.values()).filter(
       (r) => r.itemIdentifier.sku === sku && r.remainingQty > 0
+        && !isExcludedLocation(r.locationIdentifier?.nameKey?.name)
     );
 
     // Helper: resolve effective location type — use explicit config first, then name-based inference

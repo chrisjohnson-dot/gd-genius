@@ -77,6 +77,13 @@ export const customerRules = mysqlTable("customer_rules", {
    * Example: [{"pattern":"12","label":"Building 12"},{"pattern":"RCV12","label":"Receiving 12"}]
    */
   locationPriorityPatterns: json("locationPriorityPatterns").$type<Array<{ pattern: string; label: string }>>().default([]),
+  /**
+   * Patterns for locations to EXCLUDE from allocation entirely.
+   * Any inventory record whose location name matches one of these patterns
+   * is filtered out before FEFO sorting. Used to exclude a building or zone.
+   * Example: [{"pattern":"^1[01]","label":"Building 1 (exclude)"}]
+   */
+  locationExclusionPatterns: json("locationExclusionPatterns").$type<Array<{ pattern: string; label: string }>>().default([]),
   notes: text("notes"),                                         // Free-form allocation notes / instructions
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

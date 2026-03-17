@@ -1,0 +1,1 @@
+ALTER TABLE `customer_rules` ADD `locationExclusionPatterns` json DEFAULT ('[]');

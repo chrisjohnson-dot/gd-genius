@@ -115,3 +115,6 @@
 - [x] Bug: React error #310 in AllocationReview — moved useMemo and all derived state before early returns; TypeScript clean
 - [x] Bug: Location priority overrides FEFO within same tier — fixed applyLocationPriority to use single stable composite comparator (tier primary, FEFO secondary); all 33 tests pass
 - [x] Bug: Engine still picks newer pallet — root cause was fetchInventory using itemsummaries (aggregated per location, one receiveItemId per location) instead of stockdetails (one record per pallet). Fixed by reordering endpoints to try stockdetails first.
+- [x] Feature: Add locationExclusionPatterns to engine — skip matching locations entirely, use pure FEFO within remaining pool
+- [x] Data: Update Amercare's rule to use exclusion patterns (^1[01] = Building 1) instead of priority patterns; pure FEFO within remaining pool
+- [ ] UX: Show exclusion patterns in Allocation Rules UI with distinct styling from priority patterns (deferred — engine + data changes are live)

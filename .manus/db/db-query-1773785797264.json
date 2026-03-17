@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE customer_rules \nSET \n  locationPriorityPatterns = '[]',\n  locationExclusionPatterns = '[{\"pattern\":\"^1[01]\",\"label\":\"Building 1 (exclude)\"}]',\n  notes = 'Calgary warehouse: exclude Building 1 locations (10#### and 11####). Use pure FEFO (oldest receiveItemId first) within all other locations.'\nWHERE customerName LIKE '%Amercare%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute UPDATE customer_rules \nSET \n  locationPriorityPatterns = '[]',\n  locationExclusionPatterns = '[{\"pattern\":\"^1[01]\",\"label\":\"Building 1 (exclude)\"}]',\n  notes = 'Calgary warehouse: exclude Building 1 locations (10#### and 11####). Use pure FEFO (oldest receiveItemId first) within all other locations.'\nWHERE customerName LIKE '%Amercare%';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 161
+}

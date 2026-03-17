@@ -1,0 +1,16 @@
+{
+  "query": "SELECT customerName, locationPriorityPatterns, locationExclusionPatterns, notes FROM customer_rules WHERE customerName LIKE '%Amercare%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT customerName, locationPriorityPatterns, locationExclusionPatterns, notes FROM customer_rules WHERE customerName LIKE '%Amercare%';",
+  "rows": [
+    {
+      "customerName": "Amercare",
+      "locationPriorityPatterns": "[]",
+      "locationExclusionPatterns": "[{\"label\": \"Building 1 (exclude)\", \"pattern\": \"^1[01]\"}]",
+      "notes": "Calgary warehouse: exclude Building 1 locations (10#### and 11####). Use pure FEFO (oldest receiveItemId first) within all other locations."
+    }
+  ],
+  "messages": [],
+  "stdout": "customerName\tlocationPriorityPatterns\tlocationExclusionPatterns\tnotes\nAmercare\t[]\t[{\"label\": \"Building 1 (exclude)\", \"pattern\": \"^1[01]\"}]\tCalgary warehouse: exclude Building 1 locations (10#### and 11####). Use pure FEFO (oldest receiveItemId first) within all other locations.\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}

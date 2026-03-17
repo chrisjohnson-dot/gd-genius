@@ -237,14 +237,10 @@ export default function RunDetail() {
                 variant="default"
                 className="gap-1.5"
                 onClick={() => {
-                  const openPdf = (url: string) => {
-                    const a = document.createElement("a");
-                    a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                  };
-                  openPdf(`/api/pdf/pick-face-pull-sheet/${runId}`);
-                  openPdf(`/api/pdf/warehouse-pull-sheet/${runId}`);
-                  openPdf(`/api/pdf/pack-list/${runId}`);
+                  const a = document.createElement("a");
+                  a.href = `/api/pdf/all-documents/${runId}`;
+                  a.rel = "noopener noreferrer";
+                  document.body.appendChild(a); a.click(); document.body.removeChild(a);
                 }}
               >
                 <FileDown className="h-4 w-4" />

@@ -2,7 +2,9 @@ import PDFDocument from "pdfkit";
 import bwipjs from "bwip-js";
 import fs from "fs";
 import path from "path";
+import { PassThrough } from "stream";
 import type { Response } from "express";
+import type { Writable } from "stream";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -241,15 +243,18 @@ function drawTableHeaderRow(
   tableR: number,
   cols: ColSpec[]
 ): number {
-  const h = 21;
+  const h = 28;
   doc.roundedRect(tableL, y, tableR - tableL, h, 3).fill(GD_DKBLUE);
 
   doc.fillColor(WHITE).fontSize(7.5).font("Helvetica-Bold");
   for (const col of cols) {
+    // Multi-word labels that wrap get vertically centered in the taller row
+    const words = col.label.split(" ");
+    const textY = words.length > 2 ? y + 5 : y + 10;
     if (col.align === "right") {
-      doc.text(col.label, col.x - 40, y + 7, { width: 40, align: "right", lineBreak: false });
+      doc.text(col.label, col.x - 40, textY, { width: 40, align: "right", lineBreak: false });
     } else {
-      doc.text(col.label, col.x, y + 7, { lineBreak: false });
+      doc.text(col.label, col.x, textY, { lineBreak: false });
     }
   }
   return y + h;  // returns Y of first row
@@ -323,7 +328,7 @@ function drawSignOff(
 // ─── 1. PICK FACE PULL SHEET ──────────────────────────────────────────────────
 
 export async function generatePickFacePullSheetPDF(
-  res: Response,
+  res: Response | Writable,
   items: PullListItem[],
   meta: RunMeta
 ) {
@@ -335,8 +340,10 @@ export async function generatePickFacePullSheetPDF(
     autoFirstPage: true,
   });
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="pick-face-pull-sheet-run-${meta.runId}.pdf"`);
+  if ('setHeader' in res) {
+    (res as Response).setHeader("Content-Type", "application/pdf");
+    (res as Response).setHeader("Content-Disposition", `attachment; filename="pick-face-pull-sheet-run-${meta.runId}.pdf"`);
+  }
   doc.pipe(res);
 
   const tableL = MARGIN - 4;
@@ -398,10 +405,10 @@ export async function generatePickFacePullSheetPDF(
   }
 
   let rowY = drawTableHeaderRow(doc, tableTop, tableL, tableR, [
-    { label: "FACE LOCATION", x: cx.face },
-    { label: "SKU",           x: cx.sku },
-    { label: "LOT #",         x: cx.lot },
-    { label: "QTY TO PICK",   x: cx.qty + 40, align: "right" },
+    { label: "LOCATION",    x: cx.face },
+    { label: "SKU",         x: cx.sku },
+    { label: "LOT #",       x: cx.lot },
+    { label: "QTY TO PICK", x: cx.qty + 40, align: "right" },
   ]);
 
   const n1 = Math.min(pfItems.length, ROWS_P1);
@@ -459,10 +466,10 @@ export async function generatePickFacePullSheetPDF(
   drawChrome(doc, 2, totalPages);
   const mini2Y = drawMiniHeader(doc, "PICK FACE PULL SHEET", `Order: ${meta.runId}`, logoPath);
   let rowY2 = drawTableHeaderRow(doc, mini2Y, tableL, tableR, [
-    { label: "FACE LOCATION", x: cx.face },
-    { label: "SKU",           x: cx.sku },
-    { label: "LOT #",         x: cx.lot },
-    { label: "QTY TO PICK",   x: cx.qty + 40, align: "right" },
+    { label: "LOCATION",    x: cx.face },
+    { label: "SKU",         x: cx.sku },
+    { label: "LOT #",       x: cx.lot },
+    { label: "QTY TO PICK", x: cx.qty + 40, align: "right" },
   ]);
 
   const rest = pfItems.slice(ROWS_P1);
@@ -502,7 +509,7 @@ export async function generatePickFacePullSheetPDF(
 // ─── 2. WAREHOUSE PULL SHEET ──────────────────────────────────────────────────
 
 export async function generateWarehousePullSheetPDF(
-  res: Response,
+  res: Response | Writable,
   items: PullListItem[],
   meta: RunMeta
 ) {
@@ -514,8 +521,10 @@ export async function generateWarehousePullSheetPDF(
     autoFirstPage: true,
   });
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="warehouse-pull-sheet-run-${meta.runId}.pdf"`);
+  if ('setHeader' in res) {
+    (res as Response).setHeader("Content-Type", "application/pdf");
+    (res as Response).setHeader("Content-Disposition", `attachment; filename="warehouse-pull-sheet-run-${meta.runId}.pdf"`);
+  }
   doc.pipe(res);
 
   const tableL = MARGIN - 4;
@@ -642,7 +651,7 @@ export async function generateWarehousePullSheetPDF(
 // ─── 3. PACK SHEET ────────────────────────────────────────────────────────────
 
 export async function generatePackListPDF(
-  res: Response,
+  res: Response | Writable,
   orders: OrderPackData[],
   meta: RunMeta
 ) {
@@ -658,8 +667,10 @@ export async function generatePackListPDF(
     autoFirstPage: true,
   });
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="pack-sheet-run-${meta.runId}.pdf"`);
+  if ('setHeader' in res) {
+    (res as Response).setHeader("Content-Type", "application/pdf");
+    (res as Response).setHeader("Content-Disposition", `attachment; filename="pack-sheet-run-${meta.runId}.pdf"`);
+  }
   doc.pipe(res);
 
   const tableL = MARGIN - 4;

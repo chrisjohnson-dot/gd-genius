@@ -64,9 +64,8 @@ export default function RunHistory() {
   }
 
   function handlePrintDocuments(runId: number) {
-    openPdf(`/api/pdf/pick-face-pull-sheet/${runId}`);
-    openPdf(`/api/pdf/warehouse-pull-sheet/${runId}`);
-    openPdf(`/api/pdf/pack-list/${runId}`);
+    // Download a single ZIP containing all three PDFs
+    openPdf(`/api/pdf/all-documents/${runId}`);
     markPrinted.mutate({ runId });
   }
 

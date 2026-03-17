@@ -131,3 +131,7 @@
 - [x] Bug: Print Documents only downloads pick face PDF — all three must open
 - [x] Bug: Title text overlaps GD logo on pull sheets — increase left offset
 - [x] Feature: Add TX ID box + barcode to top-right of both pull sheet headers (matching Pack Sheet)
+- [x] Bug: Print Documents still only opens pick face PDF — switch to ZIP download so all three open in one click
+- [x] Bug: "FACE LOCATION" column header should read "LOCATION" on pick face pull sheet
+- [x] Bug: "QTY TO PICK" text clips against bottom border of header row — increase row height
+- [x] Bug: Barcode must encode the actual transaction ID number shown in the box

@@ -262,8 +262,10 @@ export function runAllocationEngine(
   const skuTotalDemand = new Map<string, number>();
 
   for (const order of orders) {
-    const orderId = order.readOnly.orderId;
-    const referenceNum = order.referenceNum;
+    // In Extensiv API: referenceNum = internal numeric ID (use for API calls)
+    //                  readOnly.orderId = customer's reference number (display only)
+    const orderId = parseInt(order.referenceNum);
+    const referenceNum = String(order.readOnly.orderId);
     for (let i = 0; i < (order.orderItems ?? []).length; i++) {
       const item = order.orderItems![i]!;
       const sku = item.itemIdentifier.sku;
@@ -392,8 +394,10 @@ export function runAllocationEngine(
   const skippedOrders: OrderAllocationResult[] = [];
 
   for (const order of orders) {
-    const orderId = order.readOnly.orderId;
-    const referenceNum = order.referenceNum;
+    // In Extensiv API: referenceNum = internal numeric ID (use for API calls)
+    //                  readOnly.orderId = customer's reference number (display only)
+    const orderId = parseInt(order.referenceNum);
+    const referenceNum = String(order.readOnly.orderId);
     const orderItems = order.orderItems ?? [];
 
     if (orderItems.length === 0) {

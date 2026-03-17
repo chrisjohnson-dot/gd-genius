@@ -67,7 +67,7 @@ const locationTypeMap: LocationTypeMap = {
 
 describe("Allocation Engine — Core", () => {
   it("allocates from pick face when pick face has enough (no warehouse pull)", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 10 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 10 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 20, locationId: PICK_FACE_LOC_ID }),
     ];
@@ -87,7 +87,7 @@ describe("Allocation Engine — Core", () => {
   });
 
   it("skips order when total inventory is insufficient (no partial allocation)", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 50 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 50 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 30, locationId: PICK_FACE_LOC_ID }),
     ];
@@ -102,7 +102,7 @@ describe("Allocation Engine — Core", () => {
   });
 
   it("skips order when a line item has no inventory at all", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 10 }, { sku: "SKU-B", qty: 5 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 10 }, { sku: "SKU-B", qty: 5 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 20, locationId: PICK_FACE_LOC_ID }),
       // SKU-B has no inventory
@@ -118,7 +118,7 @@ describe("Allocation Engine — Core", () => {
   });
 
   it("excludes on-hold inventory", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 10 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 10 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 20, locationId: PICK_FACE_LOC_ID, isOnHold: true }),
     ];
@@ -131,7 +131,7 @@ describe("Allocation Engine — Core", () => {
   });
 
   it("excludes quarantined inventory", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 10 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 10 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 20, locationId: PICK_FACE_LOC_ID, quarantined: true }),
     ];
@@ -144,7 +144,7 @@ describe("Allocation Engine — Core", () => {
   });
 
   it("applies FEFO: picks earliest expiry first", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 10 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 10 }])];
     const inventory = [
       makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID, expirationDate: "2026-06-01" }),
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID, expirationDate: "2026-03-01" }),
@@ -162,7 +162,7 @@ describe("Allocation Engine — Core", () => {
   });
 
   it("builds pack list with correct order references", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 5 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 5 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID }),
     ];
@@ -172,7 +172,7 @@ describe("Allocation Engine — Core", () => {
     );
 
     expect(result.packList).toHaveLength(1);
-    expect(result.packList[0]!.referenceNum).toBe("ORD-001");
+    expect(result.packList[0]!.referenceNum).toBe("1");  // referenceNum = String(readOnly.orderId) = "1"
     expect(result.packList[0]!.qty).toBe(5);
     expect(result.packList[0]!.locationName).toBe("STAGING-1");
   });
@@ -183,7 +183,7 @@ describe("Allocation Engine — Core", () => {
 describe("Allocation Engine — Pallet Logic", () => {
   it("takes full pallet from warehouse when pick face is empty; sends needed qty to staging, surplus to pick face", () => {
     // Pallet has 48 units, order needs 20
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 20 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 20 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
     ];
@@ -204,7 +204,7 @@ describe("Allocation Engine — Pallet Logic", () => {
   });
 
   it("takes whole pallet when order needs exactly the full pallet qty (no surplus)", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 48 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 48 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
     ];
@@ -224,7 +224,7 @@ describe("Allocation Engine — Pallet Logic", () => {
 
   it("uses pick face first, then pulls warehouse pallet for the remainder; surplus goes to pick face", () => {
     // Pick face has 5, order needs 20, warehouse pallet has 48
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 20 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 20 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 5, locationId: PICK_FACE_LOC_ID }),
       makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
@@ -251,8 +251,8 @@ describe("Allocation Engine — Pallet Logic", () => {
   it("aggregates demand across multiple orders before deciding pallet pull", () => {
     // Two orders each needing 15 = 30 total. Pick face has 0. Pallet has 48.
     const orders = [
-      makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 15 }]),
-      makeOrder(2, "ORD-002", [{ sku: "SKU-A", qty: 15 }]),
+      makeOrder(1, "1001", [{ sku: "SKU-A", qty: 15 }]),
+      makeOrder(2, "1002", [{ sku: "SKU-A", qty: 15 }]),
     ];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
@@ -278,7 +278,7 @@ describe("Allocation Engine — Pallet Logic", () => {
 
   it("pulls multiple pallets when demand exceeds one pallet", () => {
     // Need 90 units. Two pallets of 48 each. Pick face empty.
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 90 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 90 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
       makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID_2 }),
@@ -305,8 +305,8 @@ describe("Allocation Engine — Pallet Logic", () => {
     // Staging pool = 15 (from pick face). Two orders each need 10.
     // First order gets 10, second needs 10 but only 5 remain → skipped.
     const orders = [
-      makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 10 }]),
-      makeOrder(2, "ORD-002", [{ sku: "SKU-A", qty: 10 }]),
+      makeOrder(1, "1001", [{ sku: "SKU-A", qty: 10 }]),
+      makeOrder(2, "1002", [{ sku: "SKU-A", qty: 10 }]),
     ];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 15, locationId: PICK_FACE_LOC_ID }),
@@ -318,16 +318,16 @@ describe("Allocation Engine — Pallet Logic", () => {
 
     expect(result.allocatedOrders).toHaveLength(1);
     expect(result.skippedOrders).toHaveLength(1);
-    expect(result.allocatedOrders[0]!.orderId).toBe(1);
-    expect(result.skippedOrders[0]!.orderId).toBe(2);
+    expect(result.allocatedOrders[0]!.orderId).toBe(1001);  // parseInt("1001")
+    expect(result.skippedOrders[0]!.orderId).toBe(1002);  // parseInt("1002")
   });
 
   it("rolls back staging pool on failed order so subsequent orders can use it", () => {
     // ORD-001 needs SKU-A (10) + SKU-B (5) — SKU-B doesn't exist → fails
     // ORD-002 needs SKU-A (10) — should succeed using the rolled-back staging pool
     const orders = [
-      makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 10 }, { sku: "SKU-B", qty: 5 }]),
-      makeOrder(2, "ORD-002", [{ sku: "SKU-A", qty: 10 }]),
+      makeOrder(1, "1001", [{ sku: "SKU-A", qty: 10 }, { sku: "SKU-B", qty: 5 }]),
+      makeOrder(2, "1002", [{ sku: "SKU-A", qty: 10 }]),
     ];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID }),
@@ -337,8 +337,8 @@ describe("Allocation Engine — Pallet Logic", () => {
       orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map()
     );
 
-    expect(result.skippedOrders[0]!.orderId).toBe(1);
-    expect(result.allocatedOrders[0]!.orderId).toBe(2);
+    expect(result.skippedOrders[0]!.orderId).toBe(1001);  // parseInt("1001")
+    expect(result.allocatedOrders[0]!.orderId).toBe(1002);  // parseInt("1002")
   });
 });
 
@@ -346,7 +346,7 @@ describe("Allocation Engine — Pallet Logic", () => {
 
 describe("Allocation Engine — No Lot Mixing Rule", () => {
   it("allocates from a single lot when noLotMixing=true and one lot has enough qty", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 5 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 5 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-A" }),
       makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-B" }),
@@ -360,7 +360,7 @@ describe("Allocation Engine — No Lot Mixing Rule", () => {
   });
 
   it("skips order when noLotMixing=true and no single lot has enough qty", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 15 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 15 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 8, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-A" }),
       makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 8, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-B" }),
@@ -374,7 +374,7 @@ describe("Allocation Engine — No Lot Mixing Rule", () => {
   });
 
   it("allows lot mixing when noLotMixing=false (default)", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 15 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 15 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 8, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-A" }),
       makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 8, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-B" }),
@@ -388,7 +388,7 @@ describe("Allocation Engine — No Lot Mixing Rule", () => {
   });
 
   it("picks the earliest-expiry lot when multiple lots qualify under noLotMixing", () => {
-    const orders = [makeOrder(1, "ORD-001", [{ sku: "SKU-A", qty: 5 }])];
+    const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 5 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-LATE", expirationDate: "2027-12-01" }),
       makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 10, locationId: PICK_FACE_LOC_ID, lotNumber: "LOT-EARLY", expirationDate: "2026-06-01" }),

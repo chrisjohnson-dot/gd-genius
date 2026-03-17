@@ -65,9 +65,9 @@ function CustomerOrdersPanel({
     return staging ? { id: staging.locationId, name: staging.locationName } : null;
   }, [locationConfigs, customer.id, facilityId]);
 
-  // In Extensiv's API: readOnly.orderId = Extensiv's internal numeric order ID (used for API calls)
-  //                     referenceNum = customer's order reference number (for display)
-  const orderIds = useMemo(() => (orders ?? []).map((o) => o.readOnly.orderId), [orders]);
+  // In Extensiv's API: referenceNum = Extensiv's internal numeric ID (used for API calls, parse as int)
+  //                     readOnly.orderId = customer's order reference number (for display)
+  const orderIds = useMemo(() => (orders ?? []).map((o) => parseInt(o.referenceNum)), [orders]);
   const selectedCount = orderIds.filter((id) => selectedOrders.has(id)).length;
   const allSelected = orderIds.length > 0 && selectedCount === orderIds.length;
   const someSelected = selectedCount > 0 && !allSelected;
@@ -77,7 +77,7 @@ function CustomerOrdersPanel({
       orderIds.forEach((id) => onToggleOrder(id, "", customer.id, customer.name, false));
     } else {
       (orders ?? []).forEach((o) =>
-        onToggleOrder(o.readOnly.orderId, o.referenceNum, customer.id, customer.name, true)
+        onToggleOrder(parseInt(o.referenceNum), String(o.readOnly.orderId), customer.id, customer.name, true)
       );
     }
   };
@@ -150,10 +150,10 @@ function CustomerOrdersPanel({
                 {/* Order list */}
                 <div className="space-y-1 max-h-[360px] overflow-y-auto pr-1">
                   {orders.map((order) => {
-                    // extensivOrderId = Extensiv's internal ID (readOnly.orderId) — used for API calls
-                    // customerRefNum = customer's reference number (referenceNum) — shown to user
-                    const extensivOrderId = order.readOnly.orderId;
-                    const customerRefNum = order.referenceNum;
+                    // extensivOrderId = Extensiv's internal ID (parseInt(referenceNum)) — used for API calls
+                    // customerRefNum = customer's reference number (String(readOnly.orderId)) — shown to user
+                    const extensivOrderId = parseInt(order.referenceNum);
+                    const customerRefNum = String(order.readOnly.orderId);
                     const isSelected = selectedOrders.has(extensivOrderId);
                     const lineCount = order.orderItems?.length ?? 0;
                     return (
@@ -178,7 +178,7 @@ function CustomerOrdersPanel({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{customerRefNum}</p>
                           <p className="text-xs text-muted-foreground">
-                            Extensiv #{extensivOrderId}
+                            Ext ID #{extensivOrderId}
                             {order.poNum ? ` · PO: ${order.poNum}` : ""}
                             {" · "}Created:{" "}
                             {new Date(order.readOnly.creationDate).toLocaleDateString()}

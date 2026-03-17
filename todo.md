@@ -113,3 +113,4 @@
 - [x] Fix: No-expiry FEFO — engine already correct; AllocationReview now uses same getInventoryPriority logic via consolidated rows
 - [x] Fix: Pull list is now one consolidated table — Source Location, On Hand, → Staging (purple), → Pick Face (blue, hidden if no moves)
 - [x] Bug: React error #310 in AllocationReview — moved useMemo and all derived state before early returns; TypeScript clean
+- [x] Bug: Location priority overrides FEFO within same tier — fixed applyLocationPriority to use single stable composite comparator (tier primary, FEFO secondary); all 33 tests pass

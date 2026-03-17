@@ -175,8 +175,14 @@ function applyLocationPriority(
     }
     return patterns.length;
   };
-  // FEFO within each tier, then sort tiers ascending (lower = higher priority)
-  return sortFEFO(records).sort((a, b) => getTier(a) - getTier(b));
+  // Stable composite sort: tier ascending (primary), then FEFO/receiveItemId ascending (secondary).
+  // Using a single comparator avoids the instability of chaining two .sort() calls, which can
+  // discard the FEFO order when two records share the same tier.
+  return [...records].sort((a, b) => {
+    const tierDiff = getTier(a) - getTier(b);
+    if (tierDiff !== 0) return tierDiff;
+    return getInventoryPriority(a) - getInventoryPriority(b);
+  });
 }
 
 function planSkuMovements(

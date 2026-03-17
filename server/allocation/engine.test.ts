@@ -222,8 +222,9 @@ describe("Allocation Engine — Pallet Logic", () => {
     expect(toPickFace).toHaveLength(0); // no surplus
   });
 
-  it("uses pick face first, then pulls warehouse pallet for the remainder; surplus goes to pick face", () => {
-    // Pick face has 5, order needs 20, warehouse pallet has 48
+  it("when pick face is insufficient, skips pick face and pulls full qty from warehouse; surplus goes to pick face", () => {
+    // Pick face has 5 (insufficient for order of 20), warehouse pallet has 48.
+    // Rule: skip pick face entirely, pull full 20 from warehouse, surplus 28 to pick face.
     const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 20 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 5, locationId: PICK_FACE_LOC_ID }),
@@ -239,13 +240,13 @@ describe("Allocation Engine — Pallet Logic", () => {
     const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
     const toPickFace = result.pullList.filter((p) => p.movement === "to_pick_face");
 
-    // 5 from pick face + 15 from warehouse → staging = 20 total
+    // All 20 come from warehouse (pick face skipped when insufficient)
     const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
     expect(stagingQty).toBe(20);
 
-    // Surplus: 48 - 15 = 33 back to pick face
+    // Surplus: 48 - 20 = 28 back to pick face
     const pickFaceQty = toPickFace.reduce((s, p) => s + p.qty, 0);
-    expect(pickFaceQty).toBe(33);
+    expect(pickFaceQty).toBe(28);
   });
 
   it("aggregates demand across multiple orders before deciding pallet pull", () => {

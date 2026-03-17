@@ -225,6 +225,20 @@ function planSkuMovements(
   return { stagingMoves, pickFaceMoves, satisfied: remaining === 0, totalStaged };
 }
 
+// ─── Location type helpers ───────────────────────────────────────────────────
+
+/**
+ * Infer location type from name when not explicitly configured.
+ * Pattern: two letters followed by digits (e.g. HR400, PF001) → pick_face.
+ * Everything else → warehouse.
+ */
+export function inferLocationTypeFromName(name: string | undefined): LocationType {
+  if (!name) return "warehouse";
+  // Match: exactly 2 letters then 1+ digits (optionally more chars after)
+  if (/^[A-Za-z]{2}\d+/.test(name.trim())) return "pick_face";
+  return "warehouse";
+}
+
 // ─── Main engine ──────────────────────────────────────────────────────────────
 
 export function runAllocationEngine(
@@ -297,23 +311,23 @@ export function runAllocationEngine(
       (r) => r.itemIdentifier.sku === sku && r.remainingQty > 0
     );
 
+    // Helper: resolve effective location type — use explicit config first, then name-based inference
+    const resolveLocType = (r: InventoryPoolRecord): LocationType => {
+      const configured = locationTypeMap[r.locationIdentifier?.id ?? -1];
+      if (configured) return configured;
+      return inferLocationTypeFromName(r.locationIdentifier?.nameKey?.name);
+    };
+
     const pickFaceRecords = allSkuRecords.filter((r) => {
-      const t = locationTypeMap[r.locationIdentifier?.id ?? -1];
+      const t = resolveLocType(r);
       return t === "pick_face" || t === "staging"; // staging already there counts as pick face tier
     });
 
     const warehouseRecords = allSkuRecords.filter((r) => {
-      const t = locationTypeMap[r.locationIdentifier?.id ?? -1];
-      return t === "warehouse";
+      return resolveLocType(r) === "warehouse";
     });
 
-    // Unmapped locations: treat as warehouse
-    const unmappedRecords = allSkuRecords.filter((r) => {
-      const t = locationTypeMap[r.locationIdentifier?.id ?? -1];
-      return !t;
-    });
-
-    const allWarehouse = [...warehouseRecords, ...unmappedRecords];
+    const allWarehouse = [...warehouseRecords];
 
     // Resolve pick face location for replenishment
     const pfId = pickFaceLocationId ?? (pickFaceRecords[0]?.locationIdentifier?.id ?? 0);
@@ -345,7 +359,7 @@ export function runAllocationEngine(
         qty,
         fromLocationId: record.locationIdentifier?.id ?? 0,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
-        fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? "warehouse",
+        fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
         toLocationId: stagingLocationId,
         toLocationName: stagingLocationName,
         movement: "to_staging",
@@ -364,7 +378,7 @@ export function runAllocationEngine(
         qty,
         fromLocationId: record.locationIdentifier?.id ?? 0,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
-        fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? "warehouse",
+        fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
         toLocationId: pfId,
         toLocationName: pfName,
         movement: "to_pick_face",

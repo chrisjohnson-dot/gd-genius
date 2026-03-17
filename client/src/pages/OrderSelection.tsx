@@ -818,13 +818,6 @@ export default function OrderSelection() {
         {/* ── Step 3: Orders ── */}
         {step === "orders" && (
           <div className="space-y-4">
-            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md text-sm">
-              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-amber-800 dark:text-amber-300">
-                <strong>Active Rules:</strong> On-hold orders are excluded automatically. Orders that cannot be fully satisfied will be skipped (no partial allocation). Inventory sourced FEFO with staging/pick face priority.
-              </div>
-            </div>
-
             <div className="space-y-3">
               {selectedCustomers.map((customer) => (
                 <CustomerOrdersPanel

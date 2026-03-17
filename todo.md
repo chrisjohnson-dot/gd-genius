@@ -93,3 +93,5 @@
 - [ ] Feature: Allocation Rules page — per-client expandable cards with location priority patterns, lot mixing toggle, and notes
 - [ ] Feature: Location priority patterns — ordered list of prefix/regex patterns per client per facility; engine uses pattern rank to sort candidate locations before FEFO
 - [ ] Feature: Wire allocation rules into engine — pass customer rules to allocator so location priority patterns are respected at run time
+- [x] UX: Remove Active Rules banner from Order Selection orders step
+- [x] Bug: AllocationRules page crash (localeCompare on undefined customerName) causing order loading to fail — fixed with null-guard in sort comparator

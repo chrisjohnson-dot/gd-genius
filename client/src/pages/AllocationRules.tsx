@@ -68,7 +68,7 @@ function buildInitialState(
   }>
 ): ClientRuleState[] {
   const ruleMap = new Map(rules.map((r) => [r.customerId, r]));
-  return [...customers].sort((a, b) => a.customerName.localeCompare(b.customerName)).map((c) => {
+  return [...customers].sort((a, b) => (a.customerName ?? "").localeCompare(b.customerName ?? "")).map((c) => {
     const r = ruleMap.get(c.customerId);
     return {
       customerId: c.customerId,

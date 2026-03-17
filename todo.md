@@ -128,3 +128,6 @@
 - [x] Run History: Show TX IDs beside customer name in the run history table
 - [x] Run History: Add Print Documents button (green = not yet printed, red = previously printed) that opens all 3 PDFs and marks as printed
 - [x] PDF: Pixel-accurate reproduction of all three sample PDFs — match exact fonts, spacing, colors, borders, logo placement, and layout
+- [x] Bug: Print Documents only downloads pick face PDF — all three must open
+- [x] Bug: Title text overlaps GD logo on pull sheets — increase left offset
+- [x] Feature: Add TX ID box + barcode to top-right of both pull sheet headers (matching Pack Sheet)

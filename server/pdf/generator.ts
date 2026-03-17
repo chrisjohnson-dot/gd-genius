@@ -156,7 +156,7 @@ function drawFullHeader(
   if (logoPath) {
     try {
       doc.image(logoPath, MARGIN, contentY + 4, { height: logoH });
-      logoW = logoH * 1.06;  // approximate aspect ratio of the GD icon
+      logoW = logoH * 1.4;  // approximate aspect ratio of the GD icon (wider than tall)
     } catch { logoW = 0; }
   }
 
@@ -170,7 +170,7 @@ function drawFullHeader(
     .fillColor(GD_NAVY)
     .fontSize(titleFontSize)
     .font("Helvetica-Bold")
-    .text(title, MARGIN + logoW + 14, titleY, { lineBreak: false });
+    .text(title, MARGIN + logoW + 20, titleY, { lineBreak: false });
 
   // Metadata fields — below the logo
   const metaY = contentY + 4 + logoH + 8;  // just below logo
@@ -204,7 +204,7 @@ function drawMiniHeader(
   if (logoPath) {
     try {
       doc.image(logoPath, MARGIN, contentY + 4, { height: logoH });
-      logoW = logoH * 1.06;
+      logoW = logoH * 1.4;
     } catch { logoW = 0; }
   }
 
@@ -213,7 +213,7 @@ function drawMiniHeader(
     .fillColor(GD_NAVY)
     .fontSize(14)
     .font("Helvetica-Bold")
-    .text(title, MARGIN + logoW + 10, logoCentreY - 7, { lineBreak: false });
+    .text(title, MARGIN + logoW + 16, logoCentreY - 7, { lineBreak: false });
 
   doc
     .fillColor(GD_GRAY)
@@ -322,12 +322,13 @@ function drawSignOff(
 
 // ─── 1. PICK FACE PULL SHEET ──────────────────────────────────────────────────
 
-export function generatePickFacePullSheetPDF(
+export async function generatePickFacePullSheetPDF(
   res: Response,
   items: PullListItem[],
   meta: RunMeta
 ) {
   const logoPath = getLogoPath();
+  const barcodeBuffer = await makeBarcodeBuffer(String(meta.runId));
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
     margin: 0,
@@ -367,8 +368,27 @@ export function generatePickFacePullSheetPDF(
     { label: "CLIENT",    value: customerName,               x: MARGIN + 2 },
     { label: "WAREHOUSE", value: meta.facilityName ?? "—",   x: MARGIN + 180 },
     { label: "DATE",      value: formatDate(meta.createdAt), x: MARGIN + 340 },
-    { label: "ORDER REF", value: String(meta.runId),         x: MARGIN + 500 },
   ]);
+
+  // TX ID box top-right (matching Pack Sheet style)
+  {
+    const TXN_BOX_W = 180;
+    const TXN_BOX_H = 80;
+    const contentY = TOP_BAR + GRN_BAR;
+    const headerAreaH = contentY + 4 + 44 + 8 + 11 + 12 + 6 - contentY;
+    const bx = tableR - TXN_BOX_W;
+    const by = contentY + (headerAreaH - TXN_BOX_H) / 2;
+    doc.roundedRect(bx, by, TXN_BOX_W, TXN_BOX_H, 5).fillAndStroke(TXN_BG, GD_BLUE);
+    doc.fillColor(GD_GRAY).fontSize(6.5).font("Helvetica")
+      .text("RUN / ORDER REF", bx, by + 8, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    doc.fillColor(GD_NAVY).fontSize(20).font("Helvetica-Bold")
+      .text(String(meta.runId), bx, by + 22, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    if (barcodeBuffer) {
+      const bcW = TXN_BOX_W - 20;
+      const bcH = 24;
+      doc.image(barcodeBuffer, bx + 10, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
+    }
+  }
 
   if (pfItems.length === 0) {
     doc.fillColor(GD_GRAY).fontSize(10).font("Helvetica")
@@ -481,12 +501,13 @@ export function generatePickFacePullSheetPDF(
 
 // ─── 2. WAREHOUSE PULL SHEET ──────────────────────────────────────────────────
 
-export function generateWarehousePullSheetPDF(
+export async function generateWarehousePullSheetPDF(
   res: Response,
   items: PullListItem[],
   meta: RunMeta
 ) {
   const logoPath = getLogoPath();
+  const barcodeBuffer = await makeBarcodeBuffer(String(meta.runId));
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
     margin: 0,
@@ -521,8 +542,27 @@ export function generateWarehousePullSheetPDF(
     { label: "CLIENT",    value: customerName,               x: MARGIN + 2 },
     { label: "WAREHOUSE", value: meta.facilityName ?? "—",   x: MARGIN + 180 },
     { label: "DATE",      value: formatDate(meta.createdAt), x: MARGIN + 340 },
-    { label: "ORDER REF", value: String(meta.runId),         x: MARGIN + 500 },
   ]);
+
+  // TX ID box top-right (matching Pack Sheet style)
+  {
+    const TXN_BOX_W = 180;
+    const TXN_BOX_H = 80;
+    const contentY = TOP_BAR + GRN_BAR;
+    const headerAreaH = contentY + 4 + 44 + 8 + 11 + 12 + 6 - contentY;
+    const bx = tableR - TXN_BOX_W;
+    const by = contentY + (headerAreaH - TXN_BOX_H) / 2;
+    doc.roundedRect(bx, by, TXN_BOX_W, TXN_BOX_H, 5).fillAndStroke(TXN_BG, GD_BLUE);
+    doc.fillColor(GD_GRAY).fontSize(6.5).font("Helvetica")
+      .text("RUN / ORDER REF", bx, by + 8, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    doc.fillColor(GD_NAVY).fontSize(20).font("Helvetica-Bold")
+      .text(String(meta.runId), bx, by + 22, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    if (barcodeBuffer) {
+      const bcW = TXN_BOX_W - 20;
+      const bcH = 24;
+      doc.image(barcodeBuffer, bx + 10, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
+    }
+  }
 
   if (whItems.length === 0) {
     doc.fillColor(GD_GRAY).fontSize(10).font("Helvetica")
@@ -668,7 +708,7 @@ export async function generatePackListPDF(
     if (logoPath) {
       try {
         doc.image(logoPath, MARGIN, contentY + 4, { height: logoH });
-        logoW = logoH * 1.06;
+        logoW = logoH * 1.4;
       } catch { logoW = 0; }
     }
 
@@ -678,7 +718,7 @@ export async function generatePackListPDF(
     const capH = titleFontSize * 0.72;
     const titleY = logoCentreY - capH / 2;
     doc.fillColor(GD_NAVY).fontSize(titleFontSize).font("Helvetica-Bold")
-      .text("PACK SHEET", MARGIN + logoW + 14, titleY, { lineBreak: false });
+      .text("PACK SHEET", MARGIN + logoW + 20, titleY, { lineBreak: false });
 
     // Transaction ID box (top-right, vertically centred in header area)
     const headerAreaH = contentY + 4 + logoH + 8 + 11 + 12 + 6 - contentY;  // full header height

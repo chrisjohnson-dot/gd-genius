@@ -39,7 +39,7 @@ export function registerPdfRoutes(app: Express) {
           return detail?.pullListItems ?? [];
         });
 
-    generatePickFacePullSheetPDF(res, pullList, {
+    await generatePickFacePullSheetPDF(res, pullList, {
       runId: run.id,
       facilityName: run.facilityName,
       customerName: run.customerName,
@@ -70,7 +70,7 @@ export function registerPdfRoutes(app: Express) {
           return detail?.pullListItems ?? [];
         });
 
-    generateWarehousePullSheetPDF(res, pullList, {
+    await generateWarehousePullSheetPDF(res, pullList, {
       runId: run.id,
       facilityName: run.facilityName,
       customerName: run.customerName,

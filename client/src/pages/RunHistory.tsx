@@ -53,10 +53,20 @@ export default function RunHistory() {
     },
   });
 
+  function openPdf(url: string) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   function handlePrintDocuments(runId: number) {
-    window.open(`/api/pdf/pick-face-pull-sheet/${runId}`, "_blank");
-    setTimeout(() => window.open(`/api/pdf/warehouse-pull-sheet/${runId}`, "_blank"), 400);
-    setTimeout(() => window.open(`/api/pdf/pack-list/${runId}`, "_blank"), 800);
+    openPdf(`/api/pdf/pick-face-pull-sheet/${runId}`);
+    openPdf(`/api/pdf/warehouse-pull-sheet/${runId}`);
+    openPdf(`/api/pdf/pack-list/${runId}`);
     markPrinted.mutate({ runId });
   }
 

@@ -127,3 +127,4 @@
 - [x] PDF: Rebuild Pack Sheet to match sample layout (barcode, SHIP TO, DESCRIPTION column, multi-page, 3-field sign-off)
 - [x] Run History: Show TX IDs beside customer name in the run history table
 - [x] Run History: Add Print Documents button (green = not yet printed, red = previously printed) that opens all 3 PDFs and marks as printed
+- [x] PDF: Pixel-accurate reproduction of all three sample PDFs — match exact fonts, spacing, colors, borders, logo placement, and layout

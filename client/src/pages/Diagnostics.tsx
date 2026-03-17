@@ -24,6 +24,11 @@ export default function Diagnostics() {
   const [orderFacilityId, setOrderFacilityId] = useState<number | null>(null);
   const [runOrderDiag, setRunOrderDiag] = useState(false);
 
+  // Inventory debug state
+  const [invCustomerId, setInvCustomerId] = useState<number | null>(null);
+  const [invFacilityId, setInvFacilityId] = useState<number | null>(null);
+  const [runInvDiag, setRunInvDiag] = useState(false);
+
   const { data: configs } = trpc.config.list.useQuery();
 
   const { data: diagData, isLoading, error, refetch } = trpc.extensiv.debugRaw.useQuery(
@@ -41,6 +46,11 @@ export default function Diagnostics() {
     { enabled: !!configId && !!orderCustomerId && !!orderFacilityId && runOrderDiag }
   );
 
+  const { data: invDiagData, isLoading: invDiagLoading, error: invDiagError, refetch: refetchInvDiag } = trpc.extensiv.debugInventory.useQuery(
+    { configId: configId!, customerId: invCustomerId!, facilityId: invFacilityId! },
+    { enabled: !!configId && !!invCustomerId && !!invFacilityId && runInvDiag }
+  );
+
   const handleRun = (id: number) => {
     setConfigId(id);
     setRunDiag(true);
@@ -56,6 +66,13 @@ export default function Diagnostics() {
     setOrderFacilityId(facId);
     setRunOrderDiag(true);
     if (orderCustomerId === custId && orderFacilityId === facId) refetchOrderDiag();
+  };
+
+  const handleRunInvDiag = (custId: number, facId: number) => {
+    setInvCustomerId(custId);
+    setInvFacilityId(facId);
+    setRunInvDiag(true);
+    if (invCustomerId === custId && invFacilityId === facId) refetchInvDiag();
   };
 
   const countItems = (obj: unknown, relKey: string): number => {
@@ -203,17 +220,30 @@ export default function Diagnostics() {
                                 <div key={c.id} className="flex items-center gap-2">
                                   <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">id={c.id}</span>
                                   <span className="text-sm">{c.name}</span>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-6 text-xs px-2 ml-auto"
-                                    onClick={() => handleRunOrderDiag(c.id, facId)}
-                                    disabled={orderDiagLoading && orderCustomerId === c.id && orderFacilityId === facId}
-                                  >
-                                    {orderDiagLoading && orderCustomerId === c.id ? (
-                                      <RefreshCw className="h-3 w-3 animate-spin" />
-                                    ) : "Debug Orders"}
-                                  </Button>
+                                  <div className="flex gap-1 ml-auto">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs px-2"
+                                      onClick={() => handleRunOrderDiag(c.id, facId)}
+                                      disabled={orderDiagLoading && orderCustomerId === c.id && orderFacilityId === facId}
+                                    >
+                                      {orderDiagLoading && orderCustomerId === c.id ? (
+                                        <RefreshCw className="h-3 w-3 animate-spin" />
+                                      ) : "Debug Orders"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs px-2"
+                                      onClick={() => handleRunInvDiag(c.id, facId)}
+                                      disabled={invDiagLoading && invCustomerId === c.id && invFacilityId === facId}
+                                    >
+                                      {invDiagLoading && invCustomerId === c.id ? (
+                                        <RefreshCw className="h-3 w-3 animate-spin" />
+                                      ) : "Debug Inventory"}
+                                    </Button>
+                                  </div>
                                 </div>
                               ))}
                               {custs.length > 20 && (
@@ -330,6 +360,56 @@ export default function Diagnostics() {
                       </table>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* ── Inventory Diagnostics ── */}
+        {(invDiagData || invDiagError) && (
+          <div className="space-y-4">
+            <h2 className="text-base font-semibold">
+              Inventory Diagnostics
+              {invCustomerId && <span className="text-muted-foreground font-normal text-sm ml-2">— customer {invCustomerId}, facility {invFacilityId}</span>}
+            </h2>
+
+            {invDiagError && (
+              <Card className="border-destructive">
+                <CardContent className="pt-4 text-destructive text-sm">{invDiagError.message}</CardContent>
+              </Card>
+            )}
+
+            {invDiagData && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Endpoint Results (first working endpoint is used)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {invDiagData.map((ep, i) => (
+                      <div key={i} className={`p-3 rounded border text-xs ${
+                        ep.status === "success" ? "border-green-300 bg-green-50 dark:bg-green-950/20" : "border-red-300 bg-red-50 dark:bg-red-950/20"
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {ep.status === "success"
+                            ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                            : <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                          <span className="font-medium">{ep.label}</span>
+                          {ep.status === "success" && (
+                            <Badge className="text-xs bg-green-600 ml-auto">{ep.totalResults} total, {ep.sampleCount} fetched</Badge>
+                          )}
+                        </div>
+                        {ep.error && <p className="text-red-700 dark:text-red-400 mt-1 break-all">{ep.error}</p>}
+                        {ep.embeddedKeys.length > 0 && (
+                          <p className="text-muted-foreground mt-1">Embedded keys: {ep.embeddedKeys.join(", ")}</p>
+                        )}
+                        {ep.sampleRecord && (
+                          <pre className="mt-2 bg-muted rounded p-2 overflow-auto max-h-32 whitespace-pre-wrap break-all">{ep.sampleRecord}</pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             )}

@@ -215,21 +215,54 @@ export const appRouter = router({
 
         for (const loc of allLocations) {
           const locName = loc.name.trim();
+          const locNameUpper = locName.toUpperCase();
 
-          // Check if it's a pick face for any customer
+          // Check if it's a staging location (ends with -Stage, case-insensitive)
+          const isStagingLoc = locNameUpper.endsWith("-STAGE");
+          // The base name before the -Stage suffix (e.g. "HR001-Stage" → "HR001")
+          const baseNameForStaging = isStagingLoc ? locName.slice(0, locName.length - 6) : locName;
+
+          // Check if it matches a customer's pick face prefix
           let matchedCustomer: typeof input.customerMappings[0] | null = null;
           for (const mapping of input.customerMappings) {
-            const isPickFace = mapping.pickFacePrefixes.some((prefix) =>
-              locName.toUpperCase().startsWith(prefix.toUpperCase()) &&
-              /\d/.test(locName.slice(prefix.length, prefix.length + 1))
+            const nameToCheck = isStagingLoc ? baseNameForStaging : locName;
+            const isPickFaceOrStaging = mapping.pickFacePrefixes.some((prefix) =>
+              nameToCheck.toUpperCase().startsWith(prefix.toUpperCase()) &&
+              /\d/.test(nameToCheck.slice(prefix.length, prefix.length + 1))
             );
-            if (isPickFace) {
+            // Also match if the staging location name starts with the prefix directly (e.g. "HR-Stage")
+            const isPrefixStaging = isStagingLoc && mapping.pickFacePrefixes.some((prefix) =>
+              locNameUpper.startsWith(prefix.toUpperCase())
+            );
+            if (isPickFaceOrStaging || isPrefixStaging) {
               matchedCustomer = mapping;
               break;
             }
           }
 
-          if (matchedCustomer) {
+          if (isStagingLoc) {
+            // Staging location — assign to matched customer or all customers if no prefix match
+            if (matchedCustomer) {
+              seeded.push({
+                customerId: matchedCustomer.customerId,
+                customerName: matchedCustomer.customerName,
+                locationId: loc.locationId,
+                locationName: locName,
+                locationType: "staging",
+              });
+            } else {
+              // Generic staging — add for all customers
+              for (const mapping of input.customerMappings) {
+                seeded.push({
+                  customerId: mapping.customerId,
+                  customerName: mapping.customerName,
+                  locationId: loc.locationId,
+                  locationName: locName,
+                  locationType: "staging",
+                });
+              }
+            }
+          } else if (matchedCustomer) {
             seeded.push({
               customerId: matchedCustomer.customerId,
               customerName: matchedCustomer.customerName,
@@ -541,6 +574,55 @@ export const appRouter = router({
         const config = await getExtensivConfigById(input.configId);
         if (!config) throw new TRPCError({ code: "NOT_FOUND" });
         return fetchInventory(config, input.customerId, input.facilityId);
+      }),
+
+    debugInventory: protectedProcedure
+      .input(z.object({ configId: z.number(), customerId: z.number(), facilityId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const { createExtensivClient } = await import("./extensiv/client");
+        const client = createExtensivClient(config);
+
+        const endpoints = [
+          { label: "itemsummaries (with facility RQL)", path: `/customers/${input.customerId}/itemsummaries`, params: { rql: `facilityIdentifier.id==${input.facilityId}`, pgsiz: 10, pgnum: 1 } },
+          { label: "itemsummaries (no filter)", path: `/customers/${input.customerId}/itemsummaries`, params: { pgsiz: 10, pgnum: 1 } },
+          { label: "stockdetails (RQL)", path: "/inventory/stockdetails", params: { rql: `customerIdentifier.id==${input.customerId};facilityIdentifier.id==${input.facilityId}`, pgsiz: 10, pgnum: 1 } },
+          { label: "stockdetails (query params)", path: "/inventory/stockdetails", params: { customerid: input.customerId, facilityid: input.facilityId, pgsiz: 10, pgnum: 1 } },
+        ];
+
+        const results = [];
+        for (const ep of endpoints) {
+          try {
+            const data = await client.get(ep.path, ep.params) as { totalResults?: number; _embedded?: Record<string, unknown> };
+            const embedded = data?._embedded ?? {};
+            const keys = Object.keys(embedded);
+            const firstKey = keys[0];
+            const firstArr = firstKey ? (embedded[firstKey] as unknown[]) : [];
+            results.push({
+              label: ep.label,
+              status: "success",
+              totalResults: data?.totalResults ?? 0,
+              embeddedKeys: keys,
+              sampleCount: Array.isArray(firstArr) ? firstArr.length : 0,
+              sampleRecord: Array.isArray(firstArr) && firstArr.length > 0 ? JSON.stringify(firstArr[0]).slice(0, 400) : null,
+              error: null,
+            });
+          } catch (err: unknown) {
+            const e = err as { status?: number; message?: string; responseData?: unknown };
+            results.push({
+              label: ep.label,
+              status: "error",
+              totalResults: 0,
+              embeddedKeys: [],
+              sampleCount: 0,
+              sampleRecord: null,
+              error: `${e.status ?? "?"}: ${e.message ?? String(err)} | response: ${JSON.stringify(e.responseData ?? "").slice(0, 200)}`,
+            });
+          }
+        }
+
+        return results;
       }),
   }),
 

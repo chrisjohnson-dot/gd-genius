@@ -56,3 +56,5 @@
 - [x] Feature: Add customer multi-select step between warehouse and orders in allocation wizard — only fetch orders for selected customers to improve load time
 - [x] Feature: Auto-populate Reno location config from inventory export — seed pick face (HR###/BIG###/BP###) and warehouse (D-###-#) locations per customer
 - [x] Branding: Rename app to "GD Allocation Wizard" (remove "Agent"), upload and display Go Direct logo in sidebar
+- [x] Bug: 503 on /inventory/stockdetails — fixed: added validateStatus to client.get, fetchInventory now tries 4 endpoints in order with fallback; added debugInventory endpoint + UI
+- [x] Bug: Staging locations not recognized — fixed: seedFromExtensiv now detects -Stage suffix and classifies as staging type, matched to customer by prefix

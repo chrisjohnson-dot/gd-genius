@@ -327,28 +327,30 @@ export async function fetchOrderWithDetail(
 }
 
 // Fetch inventory stock details for a customer/facility (all pages)
-export async function fetchInventory(
-  config: ExtensivClientConfig,
-  customerId: number,
-  facilityId: number
+// Helper: paginated fetch from a given inventory endpoint path
+async function fetchInventoryFromPath(
+  client: ReturnType<typeof createExtensivClient>,
+  path: string,
+  baseParams: Record<string, unknown>
 ): Promise<ExtensivInventoryRecord[]> {
-  const client = createExtensivClient(config);
   const allRecords: ExtensivInventoryRecord[] = [];
   let pgnum = 1;
   const pgsiz = 500;
 
   while (true) {
-    const data = (await client.get("/inventory/stockdetails", {
-      customerid: customerId,
-      facilityid: facilityId,
-      pgsiz,
-      pgnum,
-    })) as {
+    const data = (await client.get(path, { ...baseParams, pgsiz, pgnum })) as {
       totalResults?: number;
-      _embedded?: { item?: ExtensivInventoryRecord[] };
+      _embedded?: Record<string, unknown>;
     };
 
-    const records = data?._embedded?.item ?? [];
+    // The embedded key varies by endpoint — try common keys
+    const embedded = data?._embedded ?? {};
+    const records = (
+      (embedded["item"] as ExtensivInventoryRecord[] | undefined) ??
+      (embedded["http://api.3plCentral.com/rels/inventory/stockdetail"] as ExtensivInventoryRecord[] | undefined) ??
+      (embedded["http://api.3plCentral.com/rels/customers/itemsummary"] as ExtensivInventoryRecord[] | undefined) ??
+      []
+    );
     allRecords.push(...records);
 
     if (records.length < pgsiz) break;
@@ -356,6 +358,58 @@ export async function fetchInventory(
   }
 
   return allRecords;
+}
+
+export async function fetchInventory(
+  config: ExtensivClientConfig,
+  customerId: number,
+  facilityId: number
+): Promise<ExtensivInventoryRecord[]> {
+  const client = createExtensivClient(config);
+
+  // Try endpoints in order of preference (most specific first)
+  const endpointAttempts: Array<{ path: string; params: Record<string, unknown> }> = [
+    // 1. Documented: customer-scoped itemsummaries with facility RQL filter
+    {
+      path: `/customers/${customerId}/itemsummaries`,
+      params: { rql: `facilityIdentifier.id==${facilityId}` },
+    },
+    // 2. Customer itemsummaries without facility filter (fallback)
+    {
+      path: `/customers/${customerId}/itemsummaries`,
+      params: {},
+    },
+    // 3. Undocumented but widely used stockdetails with RQL
+    {
+      path: "/inventory/stockdetails",
+      params: { rql: `customerIdentifier.id==${customerId};facilityIdentifier.id==${facilityId}` },
+    },
+    // 4. Original approach (query params) as last resort
+    {
+      path: "/inventory/stockdetails",
+      params: { customerid: customerId, facilityid: facilityId },
+    },
+  ];
+
+  for (const attempt of endpointAttempts) {
+    try {
+      const records = await fetchInventoryFromPath(client, attempt.path, attempt.params);
+      // If we got records, return them (even 0 is valid — customer may have no stock)
+      // Only skip to next attempt if we got an error (caught below)
+      return records;
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      // 503 = service unavailable (wrong endpoint), 404 = not found — try next
+      // 401/403 = auth error — stop trying
+      if (status === 401 || status === 403) throw err;
+      // Otherwise try next endpoint
+      console.warn(`[fetchInventory] Attempt failed (${status}) for ${attempt.path}, trying next...`);
+    }
+  }
+
+  // All attempts failed — return empty array so allocation can still proceed
+  console.error(`[fetchInventory] All inventory endpoints failed for customer ${customerId}, facility ${facilityId}`);
+  return [];
 }
 
 // Fetch item descriptions for a customer (paginated, max 100 per page)
@@ -474,29 +528,33 @@ export async function fetchExtensivLocations(
   const pgsiz = 500;
 
   while (true) {
-    const data = (await client.get("/locations", {
-      facilityid: facilityId,
+    // Official docs: GET /properties/facilities/locations?pgsiz=N&pgnum=N&rql=FacilityIdentifier==N
+    const data = (await client.get("/properties/facilities/locations", {
       pgsiz,
       pgnum,
+      rql: `FacilityIdentifier==${facilityId}`,
     })) as {
       totalResults?: number;
       _embedded?: {
-        "http://api.3plCentral.com/rels/locations/location"?: Array<{
+        "http://api.3plCentral.com/rels/properties/location"?: Array<{
           locationId?: number;
           id?: number;
           name?: string;
+          field1?: string;
           nameKey?: { name?: string };
           facilityIdentifier?: { id: number; name?: string };
+          allocationPriority?: number;
         }>;
       };
     };
 
     const items =
-      data?._embedded?.["http://api.3plCentral.com/rels/locations/location"] ?? [];
+      data?._embedded?.["http://api.3plCentral.com/rels/properties/location"] ?? [];
 
     for (const item of items) {
       const id = item.locationId ?? item.id;
-      const name = item.name ?? item.nameKey?.name ?? "";
+      // Official docs: field1 is the location name (e.g. "D-017-C")
+      const name = item.field1 ?? item.name ?? item.nameKey?.name ?? "";
       const fId = item.facilityIdentifier?.id ?? facilityId;
       const fName = item.facilityIdentifier?.name;
       if (id && name) {

@@ -971,20 +971,20 @@ export const appRouter = router({
 
         // Step 1: Execute the global pull list moves (SKU-level, not per-order).
         // The pull list is stored at the run level; per-order pullListItems is always empty.
-        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; fromLocationType?: string };
+        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string };
         const globalPullList = (run.pullList ?? []) as PullListEntry[];
         // Group moves by destination (staging) location and only move non-staging items
         const stagingMoves = globalPullList.filter((p) => p.fromLocationType !== "staging");
         if (stagingMoves.length > 0) {
           // Group by toLocationId (there may be multiple staging locations in multi-customer runs)
-          const movesByDest = new Map<number, Array<{ receiveItemId: number; quantity: number }>>();
+          const movesByDest = new Map<number, { name: string; items: Array<{ receiveItemId: number; quantity: number }> }>();
           for (const p of stagingMoves) {
-            if (!movesByDest.has(p.toLocationId)) movesByDest.set(p.toLocationId, []);
-            movesByDest.get(p.toLocationId)!.push({ receiveItemId: p.receiveItemId, quantity: p.qty });
+            if (!movesByDest.has(p.toLocationId)) movesByDest.set(p.toLocationId, { name: p.toLocationName ?? "", items: [] });
+            movesByDest.get(p.toLocationId)!.items.push({ receiveItemId: p.receiveItemId, quantity: p.qty });
           }
-          for (const [destId, items] of Array.from(movesByDest.entries())) {
-            console.log(`[confirm] Moving ${items.length} items to staging location ${destId}`);
-            const moveResult = await moveInventory(config, destId, items);
+          for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
+            console.log(`[confirm] Moving ${items.length} items to staging location ${destId} (${destName})`);
+            const moveResult = await moveInventory(config, destId, destName, items);
             if (!moveResult.success) {
               // Log but don't abort — allocator may still work if inventory is already in staging
               console.error(`[confirm] Move to staging ${destId} failed: ${moveResult.error}`);

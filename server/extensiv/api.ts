@@ -503,14 +503,19 @@ export async function fetchItemDescriptions(
 }
 
 // Move inventory to staging location
+// NOTE: Extensiv requires destination.nameKey.name — sending only id causes 400 ModelValidationException.
 export async function moveInventory(
   config: ExtensivClientConfig,
   destinationLocationId: number,
+  destinationLocationName: string,
   moveItems: Array<{ receiveItemId: number; quantity: number }>
 ): Promise<{ success: boolean; error?: string }> {
   const client = createExtensivClient(config);
   const result = await client.post("/inventory/mover", {
-    destination: { id: destinationLocationId },
+    destination: {
+      id: destinationLocationId,
+      nameKey: { name: destinationLocationName },
+    },
     moveItems,
   });
 

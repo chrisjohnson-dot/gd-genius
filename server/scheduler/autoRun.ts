@@ -179,57 +179,33 @@ async function runAutoAllocation(configId: number): Promise<void> {
       })),
     ]);
 
-    // Auto-confirm: execute moves + allocations
+    // Auto-confirm: execute global pull list moves, then allocate each order
     const confirmErrors: string[] = [];
     let successCount = 0;
 
+    // Step 1: Execute global pull list moves (grouped by destination staging location)
+    // NOTE: pull list is stored at run level; per-order pullListItems is always empty.
+    type PullEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string };
+    const runPullList = (allPullList as unknown as PullEntry[]).filter((p) => p.fromLocationType !== "staging");
+    if (runPullList.length > 0) {
+      const movesByDest = new Map<number, { name: string; items: Array<{ receiveItemId: number; quantity: number }> }>();
+      for (const p of runPullList) {
+        if (!movesByDest.has(p.toLocationId)) movesByDest.set(p.toLocationId, { name: p.toLocationName ?? "", items: [] });
+        movesByDest.get(p.toLocationId)!.items.push({ receiveItemId: p.receiveItemId, quantity: p.qty });
+      }
+      for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
+        const moveResult = await moveInventory(config, destId, destName, items);
+        if (!moveResult.success) {
+          confirmErrors.push(`Move to staging ${destName || destId} failed: ${moveResult.error}`);
+        }
+      }
+    }
+
+    // Step 2: Allocate each order (fetch fresh ETag, call allocator)
     for (const runOrder of allAllocated) {
-      const detail = runOrder as {
-        lineItems: Array<{ sku: string; allocations: Array<{ receiveItemId: number; qty: number; locationType: string }> }>;
-        pullListItems: Array<{ receiveItemId: number; qty: number; toLocationId: number }>;
-      };
-
       try {
-        // Step 1: Move inventory to staging
-        const moveItems = detail.pullListItems.map((p) => ({
-          receiveItemId: p.receiveItemId,
-          quantity: p.qty,
-        }));
-        if (moveItems.length > 0) {
-          const stagingLocationId = detail.pullListItems[0]?.toLocationId;
-          if (stagingLocationId) {
-            const moveResult = await moveInventory(config, stagingLocationId, moveItems);
-            if (!moveResult.success) {
-              confirmErrors.push(`Order ${runOrder.referenceNum}: move failed - ${moveResult.error}`);
-              continue;
-            }
-          }
-        }
-
-        // Step 2: Fetch fresh ETag
-        const { order, etag } = await fetchOrderWithDetail(config, runOrder.orderId);
-
-        // Step 3: Update proposed allocations
-        const updatedOrderItems = (order.orderItems ?? []).map((item) => {
-          const lineDetail = detail.lineItems.find((l) => l.sku === item.itemIdentifier.sku);
-          if (!lineDetail) return item;
-          return {
-            ...item,
-            proposedAllocations: lineDetail.allocations.map((a) => ({
-              receivedItemId: a.receiveItemId,
-              qty: a.qty,
-            })),
-          };
-        });
-
-        const updateResult = await updateOrderProposedAllocations(config, runOrder.orderId, etag, updatedOrderItems);
-        if (!updateResult.success) {
-          confirmErrors.push(`Order ${runOrder.referenceNum}: update failed - ${updateResult.error}`);
-          continue;
-        }
-
-        // Step 4: Allocate
-        const allocResult = await allocateOrder(config, runOrder.orderId, updateResult.newEtag);
+        const { etag } = await fetchOrderWithDetail(config, runOrder.orderId);
+        const allocResult = await allocateOrder(config, runOrder.orderId, etag);
         if (allocResult.success) {
           successCount++;
         } else {

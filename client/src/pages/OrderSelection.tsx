@@ -415,9 +415,15 @@ export default function OrderSelection() {
   );
 
   // Fetch ALL customers for selected facility (only when on clients step or beyond)
-  const { data: customers, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
+  const { data: customersRaw, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
     { configId: configId!, facilityId: selectedFacility?.id ?? 0 },
     { enabled: !!configId && !!selectedFacility }
+  );
+
+  // Sort customers A–Z by name for the client selection step
+  const customers = useMemo(
+    () => (customersRaw ?? []).slice().sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+    [customersRaw]
   );
 
   // Only the selected customers (for orders step)

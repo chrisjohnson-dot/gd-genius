@@ -37,6 +37,16 @@ export interface ExtensivOrder {
   referenceNum: string;
   poNum?: string;
   notes?: string;
+  /** Ship-to address — populated when detail=all is requested */
+  shipTo?: {
+    companyName?: string;
+    name?: string;
+    address1?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+  };
   orderItems?: ExtensivOrderItem[];
   _links?: Record<string, unknown>;
 }

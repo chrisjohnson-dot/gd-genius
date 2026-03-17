@@ -185,7 +185,18 @@ function CustomerOrdersPanel({
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">#{extensivOrderId}</p>
+                          <p className="text-sm font-medium truncate">
+                            #{extensivOrderId}
+                            {(() => {
+                              const shipToName = (order as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo?.companyName
+                                || (order as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo?.name;
+                              return shipToName ? (
+                                <span className="ml-2 font-normal text-muted-foreground">
+                                  — {shipToName}
+                                </span>
+                              ) : null;
+                            })()}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             Customer Ref: {customerRefNum}
                             {order.poNum ? ` · PO: ${order.poNum}` : ""}

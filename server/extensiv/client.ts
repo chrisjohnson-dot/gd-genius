@@ -89,7 +89,7 @@ export function createExtensivClient(config: ExtensivClientConfig): {
   return {
     async get(path: string, params?: Record<string, unknown>) {
       const headers = await makeHeaders();
-      const response = await axios.get(`${baseUrl}${path}`, { headers, params, validateStatus: () => true });
+      const response = await axios.get(`${baseUrl}${path}`, { headers, params, validateStatus: () => true, timeout: 60000 });
       if (response.status >= 400) {
         const err = new Error(`Extensiv API error ${response.status} on GET ${path}`) as Error & { status: number; responseData: unknown };
         err.status = response.status;
@@ -101,7 +101,7 @@ export function createExtensivClient(config: ExtensivClientConfig): {
 
     async getWithHeaders(path: string, params?: Record<string, unknown>): Promise<{ data: unknown; headers: Record<string, string> }> {
       const headers = await makeHeaders();
-      const response = await axios.get(`${baseUrl}${path}`, { headers, params, validateStatus: () => true });
+      const response = await axios.get(`${baseUrl}${path}`, { headers, params, validateStatus: () => true, timeout: 60000 });
       if (response.status >= 400) {
         const err = new Error(`Extensiv API error ${response.status} on GET ${path}`) as Error & { status: number; responseData: unknown };
         err.status = response.status;

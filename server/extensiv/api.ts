@@ -245,7 +245,9 @@ export async function fetchOpenOrders(
   // We also do NOT filter by facilityid here — the facilityId in the customer's embedded
   // `facilities` array is often different from the facilityIdentifier.id on order records.
   // Instead we filter client-side after fetching.
-  const rql = `readonly.customerIdentifier.id==${customerId}`;
+  // Filter to open/unallocated orders only (status 0=Open, 1=Complete/Ready, 2=some accounts)
+  // This dramatically reduces the payload for customers with many historical orders
+  const rql = `readonly.customerIdentifier.id==${customerId};readonly.status=in=(0,1,2);readonly.isClosed==false;readonly.fullyAllocated==false`;
   while (true) {
     const data = (await client.get("/orders", {
       pgsiz,

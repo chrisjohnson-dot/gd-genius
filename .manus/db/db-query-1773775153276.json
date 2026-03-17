@@ -1,0 +1,9 @@
+{
+  "query": "SELECT customerId, customerName, facilityId, facilityName FROM allocation_runs WHERE customerName LIKE '%Hammer%' OR customerName LIKE '%hammer%' LIMIT 10; SELECT customerId, customerName, facilityId, facilityName FROM customer_rules WHERE customerName LIKE '%Hammer%' OR customerName LIKE '%hammer%' LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT customerId, customerName, facilityId, facilityName FROM allocation_runs WHERE customerName LIKE '%Hammer%' OR customerName LIKE '%hammer%' LIMIT 10; SELECT customerId, customerName, facilityId, facilityName FROM customer_rules WHERE customerName LIKE '%Hammer%' OR customerName LIKE '%hammer%' LIMIT 10;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 67
+}

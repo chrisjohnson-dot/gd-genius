@@ -52,9 +52,9 @@ function CustomerOrdersPanel({
 }) {
   const [open, setOpen] = useState(true);
 
-  const { data: orders, isLoading } = trpc.extensiv.openOrders.useQuery(
+  const { data: orders, isLoading, error: ordersError } = trpc.extensiv.openOrders.useQuery(
     { configId, customerId: customer.id, facilityId },
-    { enabled: true }
+    { enabled: true, retry: 1 }
   );
 
   const stagingLocation = useMemo(() => {
@@ -126,6 +126,14 @@ function CustomerOrdersPanel({
             {isLoading ? (
               <div className="flex items-center gap-2 py-6 text-muted-foreground text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading orders...
+              </div>
+            ) : ordersError ? (
+              <div className="flex items-start gap-2 py-4 text-sm text-red-600 dark:text-red-400">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Failed to load orders</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{ordersError.message}</p>
+                </div>
               </div>
             ) : !orders || orders.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">

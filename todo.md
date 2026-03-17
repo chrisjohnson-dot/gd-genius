@@ -96,3 +96,5 @@
 - [x] UX: Remove Active Rules banner from Order Selection orders step
 - [x] Bug: AllocationRules page crash (localeCompare on undefined customerName) causing order loading to fail — fixed with null-guard in sort comparator
 - [x] UX: Filter out VACANT/TEST customers from Allocation Rules page with a toggle to show/hide them
+- [x] Bug: Orders not loading on Order Selection page — fixed: added RQL status filter to reduce payload, 60s timeout on axios, error state in UI
+- [x] Bug: Infinite loading spinner for Hammer Care orders in Calgary warehouse — fixed: RQL now pre-filters to open/unallocated orders only, axios timeout added, error state shown instead of infinite spinner

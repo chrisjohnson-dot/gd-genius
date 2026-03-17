@@ -1,0 +1,14 @@
+{
+  "query": "SELECT DISTINCT customerId, customerName FROM allocation_runs WHERE customerName LIKE '%Amercare%' OR customerName LIKE '%amercare%' LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT DISTINCT customerId, customerName FROM allocation_runs WHERE customerName LIKE '%Amercare%' OR customerName LIKE '%amercare%' LIMIT 5;",
+  "rows": [
+    {
+      "customerId": "145",
+      "customerName": "Amercare"
+    }
+  ],
+  "messages": [],
+  "stdout": "customerId\tcustomerName\n145\tAmercare\n",
+  "stderr": "",
+  "execution_time_ms": 62
+}

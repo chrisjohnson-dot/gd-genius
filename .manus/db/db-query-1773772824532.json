@@ -1,0 +1,9 @@
+{
+  "query": "\nINSERT INTO customer_rules (configId, customerId, customerName, facilityId, facilityName, noLotMixing, locationPriorityPatterns, notes)\nVALUES (\n  3,\n  145,\n  'Amercare',\n  4,\n  'CAL-Calgary',\n  0,\n  JSON_ARRAY(\n    JSON_OBJECT('pattern', '^12', 'label', 'Building 2 – 12xxxx locations'),\n    JSON_OBJECT('pattern', '^RCV12', 'label', 'Building 2 – RCV12 locations')\n  ),\n  'Calgary warehouse: prioritize Building 2 locations (12#### and RCV12) over Building 1 (<12) locations.'\n);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nINSERT INTO customer_rules (configId, customerId, customerName, facilityId, facilityName, noLotMixing, locationPriorityPatterns, notes)\nVALUES (\n  3,\n  145,\n  'Amercare',\n  4,\n  'CAL-Calgary',\n  0,\n  JSON_ARRAY(\n    JSON_OBJECT('pattern', '^12', 'label', 'Building 2 – 12xxxx locations'),\n    JSON_OBJECT('pattern', '^RCV12', 'label', 'Building 2 – RCV12 locations')\n  ),\n  'Calgary warehouse: prioritize Building 2 locations (12#### and RCV12) over Building 1 (<12) locations.'\n);\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 75
+}

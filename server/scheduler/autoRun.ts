@@ -89,10 +89,10 @@ async function runAutoAllocation(configId: number): Promise<void> {
         const openOrders = await fetchOpenOrders(config, customer.customerId, facilityId);
         if (openOrders.length === 0) continue;
 
-        // Fetch full order details — use parseInt(referenceNum) as Extensiv's internal order ID
-        // (In Extensiv API: referenceNum = internal numeric ID; readOnly.orderId = customer's ref number)
+        // Fetch full order details — use readOnly.orderId as the Extensiv Transaction ID
+        // (In Extensiv API: readOnly.orderId = Transaction ID used in API URLs; referenceNum = client's order number)
         const ordersWithDetail = await Promise.all(
-          openOrders.map((o) => fetchOrderWithDetail(config, parseInt(o.referenceNum)))
+          openOrders.map((o) => fetchOrderWithDetail(config, o.readOnly.orderId))
         );
         const orders = ordersWithDetail.map((o) => o.order);
 

@@ -69,6 +69,7 @@ export async function getExtensivToken(config: ExtensivClientConfig): Promise<st
 
 export function createExtensivClient(config: ExtensivClientConfig): {
   get: (path: string, params?: Record<string, unknown>) => Promise<unknown>;
+  getWithHeaders: (path: string, params?: Record<string, unknown>) => Promise<{ data: unknown; headers: Record<string, string> }>;
   put: (path: string, body: unknown, etag?: string) => Promise<{ data: unknown; status: number }>;
   post: (path: string, body: unknown) => Promise<{ data: unknown; status: number }>;
 } {
@@ -96,6 +97,18 @@ export function createExtensivClient(config: ExtensivClientConfig): {
         throw err;
       }
       return response.data;
+    },
+
+    async getWithHeaders(path: string, params?: Record<string, unknown>): Promise<{ data: unknown; headers: Record<string, string> }> {
+      const headers = await makeHeaders();
+      const response = await axios.get(`${baseUrl}${path}`, { headers, params, validateStatus: () => true });
+      if (response.status >= 400) {
+        const err = new Error(`Extensiv API error ${response.status} on GET ${path}`) as Error & { status: number; responseData: unknown };
+        err.status = response.status;
+        err.responseData = response.data;
+        throw err;
+      }
+      return { data: response.data, headers: response.headers as Record<string, string> };
     },
 
     async put(path: string, body: unknown, etag?: string) {

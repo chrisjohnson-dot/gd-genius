@@ -262,10 +262,10 @@ export function runAllocationEngine(
   const skuTotalDemand = new Map<string, number>();
 
   for (const order of orders) {
-    // In Extensiv API: referenceNum = internal numeric ID (use for API calls)
-    //                  readOnly.orderId = customer's reference number (display only)
-    const orderId = parseInt(order.referenceNum);
-    const referenceNum = String(order.readOnly.orderId);
+    // In Extensiv API: readOnly.orderId = Extensiv Transaction ID (e.g. 3214839) — used in API URLs
+    //                  referenceNum = client's internal order number (e.g. "19069850") — display only
+    const orderId = order.readOnly.orderId;
+    const referenceNum = order.referenceNum;
     for (let i = 0; i < (order.orderItems ?? []).length; i++) {
       const item = order.orderItems![i]!;
       const sku = item.itemIdentifier.sku;
@@ -394,10 +394,10 @@ export function runAllocationEngine(
   const skippedOrders: OrderAllocationResult[] = [];
 
   for (const order of orders) {
-    // In Extensiv API: referenceNum = internal numeric ID (use for API calls)
-    //                  readOnly.orderId = customer's reference number (display only)
-    const orderId = parseInt(order.referenceNum);
-    const referenceNum = String(order.readOnly.orderId);
+    // In Extensiv API: readOnly.orderId = Extensiv Transaction ID (e.g. 3214839) — used in API URLs
+    //                  referenceNum = client's internal order number (e.g. "19069850") — display only
+    const orderId = order.readOnly.orderId;
+    const referenceNum = order.referenceNum;
     const orderItems = order.orderItems ?? [];
 
     if (orderItems.length === 0) {

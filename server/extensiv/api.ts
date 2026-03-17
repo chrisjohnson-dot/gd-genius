@@ -298,6 +298,17 @@ export async function fetchOpenOrders(
   }
   console.log(`[Extensiv] fetchOpenOrders: ${filtered.length} open orders for customer ${customerId} (facilityId=${facilityId}, ${allOrders.length} total fetched, ${facilityOrders.length} matched facility)`);
 
+  // DIAGNOSTIC: log raw field values so we can confirm which field is the Extensiv internal ID
+  if (filtered.length > 0) {
+    console.log(`[Extensiv] fetchOpenOrders FIELD DIAGNOSTIC for customer ${customerId}:`,
+      filtered.slice(0, 5).map(o => ({
+        "readOnly.orderId": o.readOnly.orderId,
+        "referenceNum": o.referenceNum,
+        "poNum": (o as unknown as Record<string, unknown>).poNum,
+      }))
+    );
+  }
+
   return filtered;
 }
 
@@ -307,23 +318,16 @@ export async function fetchOrderWithDetail(
   orderId: number
 ): Promise<{ order: ExtensivOrder; etag: string }> {
   const client = createExtensivClient(config);
-  // We need the ETag - fetch with axios directly to get headers
-  const { getExtensivToken } = await import("./client");
-  const token = await getExtensivToken(config);
+  // Use client.getWithHeaders so the correct tplGuid/userLoginId auth context is included
   const baseUrl = config.baseUrl || "https://secure-wms.com";
+  console.log(`[fetchOrderWithDetail] Calling GET ${baseUrl}/orders/${orderId} (via authenticated client)`);
+  const { data: rawData, headers: responseHeaders } = await client.getWithHeaders(
+    `/orders/${orderId}`,
+    { detail: "all", itemdetail: "all" }
+  );
 
-  const axios = (await import("axios")).default;
-  const response = await axios.get(`${baseUrl}/orders/${orderId}`, {
-    params: { detail: "all", itemdetail: "all" },
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/hal+json",
-      "Accept-Language": "en-US,en;q=0.8",
-    },
-  });
-
-  const etag = (response.headers["etag"] || "").replace(/"/g, "");
-  const raw = response.data as ExtensivOrder & { _embedded?: Record<string, unknown>; orderItems?: unknown };
+  const etag = ((responseHeaders["etag"] || responseHeaders["ETag"]) ?? "").replace(/"/g, "");
+  const raw = rawData as ExtensivOrder & { _embedded?: Record<string, unknown>; orderItems?: unknown };
 
   // Helper: extract an array of order items from any HAL variant Extensiv may return.
   // Handles: direct array, object with .item array, object with ._embedded.item array,
@@ -365,14 +369,15 @@ export async function fetchOrderWithDetail(
 
   // DIAGNOSTIC: log what was found
   const embeddedKeyList = Object.keys((raw._embedded ?? {}) as Record<string, unknown>);
-  console.log(`[fetchOrderWithDetail] orderId=${orderId} itemCount=${resolvedItems.length} embeddedKeys=[${embeddedKeyList.join(",")}] rawOrderItemsType=${Array.isArray(response.data?.orderItems)?"array":typeof response.data?.orderItems}`);
+  console.log(`[fetchOrderWithDetail] orderId=${orderId} itemCount=${resolvedItems.length} embeddedKeys=[${embeddedKeyList.join(",")}] rawOrderItemsType=${Array.isArray(rawData && (rawData as Record<string,unknown>).orderItems)?"array":typeof (rawData as Record<string,unknown>)?.orderItems}`);
   if (resolvedItems.length > 0) {
     const firstItem = resolvedItems[0] as unknown as Record<string, unknown>;
     console.log(`[fetchOrderWithDetail] orderId=${orderId} firstItemKeys=${Object.keys(firstItem).join(",")} sku=${(firstItem.itemIdentifier as {sku?:string})?.sku ?? "?"}`);
   } else {
     // Log the full raw response structure to help diagnose
     const topKeys = Object.keys(raw as unknown as Record<string, unknown>);
-    console.log(`[fetchOrderWithDetail] orderId=${orderId} NO ITEMS FOUND. topKeys=[${topKeys.join(",")}] rawOrderItems=${JSON.stringify(response.data?.orderItems)?.slice(0,200)}`);
+    const rawOrderItems = (rawData as Record<string,unknown>)?.orderItems;
+    console.log(`[fetchOrderWithDetail] orderId=${orderId} NO ITEMS FOUND. topKeys=[${topKeys.join(",")}] rawOrderItems=${JSON.stringify(rawOrderItems)?.slice(0,200)}`);
   }
   return { order: raw as ExtensivOrder, etag };
 }

@@ -838,9 +838,9 @@ export const appRouter = router({
           const openOrders = await fetchOpenOrders(config, customer.id, input.facilityId);
           if (openOrders.length === 0) continue;
 
-           // In Extensiv API: referenceNum = Extensiv's internal order ID (parse as int for API calls)
-          //                   readOnly.orderId = customer's reference number (display only)
-          const orderIds = openOrders.map((o) => parseInt(o.referenceNum));
+          // In Extensiv API: readOnly.orderId = Extensiv Transaction ID (used for API calls)
+          //                   referenceNum = client's internal order number (display only)
+          const orderIds = openOrders.map((o) => o.readOnly.orderId);
           customersPayload.push({ customerId: customer.id, customerName: customer.name, orderIds, stagingLocationId: customer.stagingLocationId, stagingLocationName: customer.stagingLocationName });
           customerNames.push(customer.name);
           totalOrderIds.push(...orderIds);

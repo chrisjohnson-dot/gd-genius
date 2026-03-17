@@ -172,7 +172,7 @@ describe("Allocation Engine — Core", () => {
     );
 
     expect(result.packList).toHaveLength(1);
-    expect(result.packList[0]!.referenceNum).toBe("1");  // referenceNum = String(readOnly.orderId) = "1"
+    expect(result.packList[0]!.referenceNum).toBe("1001");  // referenceNum = order.referenceNum = "1001"
     expect(result.packList[0]!.qty).toBe(5);
     expect(result.packList[0]!.locationName).toBe("STAGING-1");
   });
@@ -318,8 +318,8 @@ describe("Allocation Engine — Pallet Logic", () => {
 
     expect(result.allocatedOrders).toHaveLength(1);
     expect(result.skippedOrders).toHaveLength(1);
-    expect(result.allocatedOrders[0]!.orderId).toBe(1001);  // parseInt("1001")
-    expect(result.skippedOrders[0]!.orderId).toBe(1002);  // parseInt("1002")
+    expect(result.allocatedOrders[0]!.orderId).toBe(1);  // readOnly.orderId = 1
+    expect(result.skippedOrders[0]!.orderId).toBe(2);  // readOnly.orderId = 2
   });
 
   it("rolls back staging pool on failed order so subsequent orders can use it", () => {
@@ -337,8 +337,8 @@ describe("Allocation Engine — Pallet Logic", () => {
       orders, inventory, locationTypeMap, STAGING_LOC_ID, "STAGING-1", new Map()
     );
 
-    expect(result.skippedOrders[0]!.orderId).toBe(1001);  // parseInt("1001")
-    expect(result.allocatedOrders[0]!.orderId).toBe(1002);  // parseInt("1002")
+    expect(result.skippedOrders[0]!.orderId).toBe(1);  // readOnly.orderId = 1
+    expect(result.allocatedOrders[0]!.orderId).toBe(2);  // readOnly.orderId = 2
   });
 });
 

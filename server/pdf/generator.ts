@@ -406,11 +406,12 @@ export async function generatePickFacePullSheetPDF(
 
   // Column x positions (matching Python _pf_cols)
   const cx = {
-    face: tableL + 4,
-    sku:  tableL + 4 + 120,
-    lot:  tableL + 4 + 420,
-    qty:  tableL + 4 + 570,
-    chk:  tableR - 26,
+    face:    tableL + 4,
+    sku:     tableL + 4 + 120,
+    lot:     tableL + 4 + 360,
+    unhand:  tableL + 4 + 480,  // qty being pulled (unhand)
+    req:     tableL + 4 + 550,  // total qty required by order(s)
+    chk:     tableR - 26,
   };
 
   const customerName = getCustomerName(meta);
@@ -459,7 +460,8 @@ export async function generatePickFacePullSheetPDF(
     { label: "LOCATION",    x: cx.face },
     { label: "SKU",         x: cx.sku },
     { label: "LOT #",       x: cx.lot },
-    { label: "QTY TO PICK", x: cx.qty + 40, align: "right" },
+    { label: "UNHAND QTY",  x: cx.unhand + 30, align: "right" },
+    { label: "QTY REQ.",    x: cx.req + 30, align: "right" },
   ]);
 
   const n1 = Math.min(pfItems.length, ROWS_P1);
@@ -497,9 +499,14 @@ export async function generatePickFacePullSheetPDF(
     doc.fillColor(lot === "-" ? GD_GRAY : GD_DKGRAY).fontSize(8).font("Helvetica")
       .text(lot, cx.lot, textY, { lineBreak: false });
 
-    // Qty — right-aligned bold
+    // Unhand qty — qty being pulled, right-aligned bold
     doc.fillColor(GD_DKGRAY).fontSize(9).font("Helvetica-Bold")
-      .text(String(item.qty), cx.qty, textY, { width: 40, align: "right", lineBreak: false });
+      .text(String(item.qty), cx.unhand, textY, { width: 40, align: "right", lineBreak: false });
+
+    // Qty required — total needed by order(s), muted
+    const totalReq = item.totalRequired ?? item.sourceQty;
+    doc.fillColor(GD_GRAY).fontSize(8).font("Helvetica")
+      .text(totalReq != null ? String(totalReq) : "—", cx.req, textY, { width: 40, align: "right", lineBreak: false });
 
     // Checkbox
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
@@ -526,7 +533,8 @@ export async function generatePickFacePullSheetPDF(
     { label: "LOCATION",    x: cx.face },
     { label: "SKU",         x: cx.sku },
     { label: "LOT #",       x: cx.lot },
-    { label: "QTY TO PICK", x: cx.qty + 40, align: "right" },
+    { label: "UNHAND QTY",  x: cx.unhand + 30, align: "right" },
+    { label: "QTY REQ.",    x: cx.req + 30, align: "right" },
   ]);
 
   const rest = pfItems.slice(ROWS_P1);
@@ -555,7 +563,10 @@ export async function generatePickFacePullSheetPDF(
     doc.fillColor(lot === "-" ? GD_GRAY : GD_DKGRAY).fontSize(8).font("Helvetica")
       .text(lot, cx.lot, textY2, { lineBreak: false });
     doc.fillColor(GD_DKGRAY).fontSize(9).font("Helvetica-Bold")
-      .text(String(item.qty), cx.qty, textY2, { width: 40, align: "right", lineBreak: false });
+      .text(String(item.qty), cx.unhand, textY2, { width: 40, align: "right", lineBreak: false });
+    const totalReq2 = item.totalRequired ?? item.sourceQty;
+    doc.fillColor(GD_GRAY).fontSize(8).font("Helvetica")
+      .text(totalReq2 != null ? String(totalReq2) : "—", cx.req, textY2, { width: 40, align: "right", lineBreak: false });
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
   }
 
@@ -600,14 +611,13 @@ export async function generateWarehousePullSheetPDF(
     .filter((i) => i.fromLocationType === "warehouse")
     .sort((a, b) => a.fromLocationName.localeCompare(b.fromLocationName));
 
-  // Column x positions — Location first, SKU second
+  // Column x positions — Location first, SKU second, no affected orders
   const cx = {
     from:   tableL + 4,
     sku:    tableL + 4 + 130,
     to:     tableL + 4 + 270,
-    qty:    tableL + 4 + 370,
-    req:    tableL + 4 + 460,
-    orders: tableL + 4 + 550,
+    unhand: tableL + 4 + 390,  // qty being pulled (unhand)
+    req:    tableL + 4 + 470,  // total qty required
     chk:    tableR - 26,
   };
 
@@ -652,12 +662,11 @@ export async function generateWarehousePullSheetPDF(
   }
 
   let rowY = drawTableHeaderRow(doc, tableTop, tableL, tableR, [
-    { label: "FROM LOCATION",    x: cx.from },
-    { label: "SKU",              x: cx.sku },
-    { label: "TO LOCATION",      x: cx.to },
-    { label: "QTY TO PULL",      x: cx.qty },
-    { label: "TOTAL REQ.",       x: cx.req },
-    { label: "AFFECTED ORDERS",  x: cx.orders },
+    { label: "FROM LOCATION",  x: cx.from },
+    { label: "SKU",            x: cx.sku },
+    { label: "TO LOCATION",    x: cx.to },
+    { label: "UNHAND QTY",     x: cx.unhand + 30, align: "right" },
+    { label: "QTY REQ.",       x: cx.req + 30, align: "right" },
   ]);
 
   let totalQty = 0;
@@ -688,21 +697,14 @@ export async function generateWarehousePullSheetPDF(
     doc.fillColor(isPickFaceDest ? GD_GREEN : GD_GRAY).fontSize(8).font("Helvetica-Bold")
       .text(toLabel, cx.to, textY, { lineBreak: false });
 
-    // Qty to pull — bold
+    // Unhand qty — qty being pulled, right-aligned bold
     doc.fillColor(GD_DKGRAY).fontSize(9).font("Helvetica-Bold")
-      .text(String(item.qty), cx.qty, textY, { lineBreak: false });
+      .text(String(item.qty), cx.unhand, textY, { width: 40, align: "right", lineBreak: false });
 
-    // Total req — muted
+    // Qty required — total needed by order(s), muted
     const totalReq = item.totalRequired ?? item.sourceQty;
     doc.fillColor(GD_GRAY).fontSize(8).font("Helvetica")
-      .text(totalReq != null ? String(totalReq) : "—", cx.req, textY, { lineBreak: false });
-
-    // Affected orders
-    const affectedText = item.affectedOrderIds?.length
-      ? item.affectedOrderIds.map((id) => String(id)).join(", ")
-      : "—";
-    doc.fillColor(GD_DKGRAY).fontSize(8).font("Helvetica")
-      .text(affectedText, cx.orders, textY, { lineBreak: false });
+      .text(totalReq != null ? String(totalReq) : "—", cx.req, textY, { width: 40, align: "right", lineBreak: false });
 
     // Checkbox
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);

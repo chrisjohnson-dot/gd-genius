@@ -269,7 +269,9 @@ export default function RunDetail() {
                 variant="default"
                 className="gap-1.5"
                 onClick={() => {
-                  const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}`);
+                  const alreadyPrinted = !!data?.run.documentsPrintedAt;
+                  const firstPrintParam = alreadyPrinted ? "" : "?firstPrint=1";
+                  const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}${firstPrintParam}`);
                   window.open(`/print?url=${pdfUrl}`, "_blank", "noopener,noreferrer");
                 }}
               >

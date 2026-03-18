@@ -170,8 +170,10 @@ export function registerPdfRoutes(app: Express) {
       };
     });
 
-    // isDuplicate = true when documents have been previously printed (documentsPrintedAt already set)
-    const isDuplicate = run.documentsPrintedAt != null;
+    // isDuplicate = true only when documentsPrintedAt was ALREADY set before this request.
+    // The UI passes ?firstPrint=1 on the very first print to suppress the badge.
+    const firstPrint = req.query.firstPrint === "1";
+    const isDuplicate = !firstPrint && run.documentsPrintedAt != null;
 
     const runMeta = {
       runId: run.id,

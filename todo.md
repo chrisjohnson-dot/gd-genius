@@ -156,3 +156,6 @@
 - [x] Bug: GD logo missing from pack and pull sheet PDFs — logo file was only available at a local sandbox path; now bundled inside server/pdf/ and resolved via import.meta.dirname so it works in production
 - [x] Feature: Pick face pull sheet — show only pick face locations; to_pick_face items show toLocationName as the pick face location with (from: warehouseSource) in grey below
 - [x] Feature: Warehouse pull sheet — Location column first, SKU second; rows sorted ascending by fromLocationName
+- [x] Bug: DUPLICATE badge appears on pull sheets even on first print — fixed: PDF route now reads ?firstPrint=1 param; UI passes it on first print so badge is suppressed
+- [x] Feature: Both pull sheets — added UNHAND QTY and QTY REQ. columns
+- [x] Feature: Warehouse pull sheet — removed Affected Orders column

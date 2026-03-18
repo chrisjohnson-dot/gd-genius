@@ -104,8 +104,10 @@ export default function RunHistory() {
     },
   });
 
-  function handlePrintDocuments(runId: number) {
-    const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}`);
+  function handlePrintDocuments(runId: number, alreadyPrinted: boolean) {
+    // Pass firstPrint=1 when this is the first time printing — suppresses the DUPLICATE badge
+    const firstPrintParam = alreadyPrinted ? "" : "?firstPrint=1";
+    const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}${firstPrintParam}`);
     window.open(`/print?url=${pdfUrl}`, "_blank", "noopener,noreferrer");
     markPrinted.mutate({ runId });
   }
@@ -243,7 +245,7 @@ export default function RunHistory() {
                                     ? "gap-1.5 border-red-400 text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-950/30"
                                     : "gap-1.5 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-600 dark:text-green-400 dark:hover:bg-green-950/30"
                                 }
-                                onClick={() => handlePrintDocuments(run.id)}
+                                onClick={() => handlePrintDocuments(run.id, hasPrinted)}
                                 disabled={markPrinted.isPending}
                                 title={
                                   hasPrinted

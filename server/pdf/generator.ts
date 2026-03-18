@@ -460,7 +460,7 @@ export async function generatePickFacePullSheetPDF(
     { label: "LOCATION",    x: cx.face },
     { label: "SKU",         x: cx.sku },
     { label: "LOT #",       x: cx.lot },
-    { label: "UNHAND QTY",  x: cx.unhand + 30, align: "right" },
+    { label: "ONHAND QTY",  x: cx.unhand + 30, align: "right" },
     { label: "QTY REQ.",    x: cx.req + 30, align: "right" },
   ]);
 
@@ -533,7 +533,7 @@ export async function generatePickFacePullSheetPDF(
     { label: "LOCATION",    x: cx.face },
     { label: "SKU",         x: cx.sku },
     { label: "LOT #",       x: cx.lot },
-    { label: "UNHAND QTY",  x: cx.unhand + 30, align: "right" },
+    { label: "ONHAND QTY",  x: cx.unhand + 30, align: "right" },
     { label: "QTY REQ.",    x: cx.req + 30, align: "right" },
   ]);
 
@@ -665,7 +665,7 @@ export async function generateWarehousePullSheetPDF(
     { label: "FROM LOCATION",  x: cx.from },
     { label: "SKU",            x: cx.sku },
     { label: "TO LOCATION",    x: cx.to },
-    { label: "UNHAND QTY",     x: cx.unhand + 30, align: "right" },
+    { label: "ONHAND QTY",     x: cx.unhand + 30, align: "right" },
     { label: "QTY REQ.",       x: cx.req + 30, align: "right" },
   ]);
 

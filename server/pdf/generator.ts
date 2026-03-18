@@ -90,8 +90,15 @@ const FOOTER_H = 24;          // footer band height (from bottom)
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getLogoPath(): string | null {
-  const p = path.resolve("/home/ubuntu/webdev-static-assets/gd_icon_only.jpg");
-  return fs.existsSync(p) ? p : null;
+  // First try the bundled copy next to this file (works in both dev and production)
+  try {
+    const bundled = path.resolve(import.meta.dirname, "gd_icon_only.jpg");
+    if (fs.existsSync(bundled)) return bundled;
+  } catch { /* import.meta.dirname unavailable in some environments */ }
+  // Fallback: local dev static assets directory
+  const devAssets = path.resolve("/home/ubuntu/webdev-static-assets/gd_icon_only.jpg");
+  if (fs.existsSync(devAssets)) return devAssets;
+  return null;
 }
 
 function formatDate(d?: string | Date | null): string {

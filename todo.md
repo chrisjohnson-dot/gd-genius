@@ -153,3 +153,4 @@
 - [x] UX: Show loading spinner beside each client name while order counts are being fetched
 - [x] Bug: moveInventory call fails with "Move.Destination.NameKey.FacilityIdentifier Required" — added facilityIdentifier to destination nameKey in all three call sites (confirm, unallocate, autoRun)
 - [x] Feature: Add "Retry Move" button on Run Detail page for runs with staging move errors — re-attempts the inventory move without requiring unallocate/re-run; button only visible when run is confirmed and has error notes; clears notes on full success
+- [x] Bug: GD logo missing from pack and pull sheet PDFs — logo file was only available at a local sandbox path; now bundled inside server/pdf/ and resolved via import.meta.dirname so it works in production

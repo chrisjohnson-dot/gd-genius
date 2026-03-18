@@ -181,14 +181,16 @@ function drawFullHeader(
     .text(title, titleX, titleY, { lineBreak: false });
 
   // DUPLICATE badge — shown when reprinting
+  // Placed to the right of the TX ID box area, vertically centred on the logo
   if (isDuplicate) {
-    // Use a generous per-character width so the badge always clears the title
-    // Helvetica-Bold at titleFontSize: avg char width ≈ 0.62 × fontSize
-    const approxTitleW = title.length * titleFontSize * 0.62;
-    const badgeX = titleX + approxTitleW + 14;
-    const badgeY = titleY - 2;
     const badgeW = 82;
     const badgeH = titleFontSize + 4;
+    // Position: just to the left of where the TX ID box starts (tableR - 160 - 12)
+    // Use PAGE_W - MARGIN - 160 - 12 as right boundary so it never overlaps the TX box
+    const badgeX = PAGE_W - MARGIN - 160 - badgeW - 12;
+    // Vertically centre on the logo midpoint (= arrow tip)
+    const logoCentreY2 = contentY + 4 + logoH / 2;
+    const badgeY = logoCentreY2 - badgeH / 2;
     doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 3).fill("#cc2200");
     doc
       .fillColor("#ffffff")
@@ -716,8 +718,8 @@ export async function generatePackListPDF(
   const tableL = MARGIN - 4;
   const tableR = MARGIN + 714;
   const ROW_H  = 20;
-  const TXN_BOX_W = 210;
-  const TXN_BOX_H = 90;
+  const TXN_BOX_W = 160;
+  const TXN_BOX_H = 60;
 
   // Column x positions (matching Python CX)
   const cx = {
@@ -773,12 +775,13 @@ export async function generatePackListPDF(
       .text("PACK SHEET", packTitleX, titleY, { lineBreak: false });
 
     // DUPLICATE badge — shown when reprinting
+    // Placed to the left of the TX ID box, vertically centred on the logo midpoint
     if (meta.isDuplicate) {
-      const approxTitleW = "PACK SHEET".length * titleFontSize * 0.62;
-      const badgeX = packTitleX + approxTitleW + 14;
-      const badgeY = titleY - 2;
       const badgeW = 82;
       const badgeH = titleFontSize + 4;
+      const badgeX = tableR - TXN_BOX_W - badgeW - 12;
+      const logoCentreY2 = contentY + 4 + logoH / 2;
+      const badgeY = logoCentreY2 - badgeH / 2;
       doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 3).fill("#cc2200");
       doc.fillColor("#ffffff").fontSize(titleFontSize * 0.55).font("Helvetica-Bold")
         .text("DUPLICATE", badgeX, badgeY + badgeH / 2 - titleFontSize * 0.55 * 0.36, {
@@ -793,18 +796,18 @@ export async function generatePackListPDF(
 
     doc.roundedRect(bx, by, TXN_BOX_W, TXN_BOX_H, 5).fillAndStroke(TXN_BG, GD_BLUE);
 
-    doc.fillColor(GD_GRAY).fontSize(6.5).font("Helvetica")
-      .text("TRANSACTION ID", bx, by + 8, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    doc.fillColor(GD_GRAY).fontSize(6).font("Helvetica")
+      .text("TRANSACTION ID", bx, by + 6, { width: TXN_BOX_W, align: "center", lineBreak: false });
 
-    doc.fillColor(GD_NAVY).fontSize(20).font("Helvetica-Bold")
-      .text(String(order.orderId), bx, by + 22, { width: TXN_BOX_W, align: "center", lineBreak: false });
+    doc.fillColor(GD_NAVY).fontSize(16).font("Helvetica-Bold")
+      .text(String(order.orderId), bx, by + 16, { width: TXN_BOX_W, align: "center", lineBreak: false });
 
     // Barcode
     const barcodeBuffer = barcodeMap.get(order.orderId);
     if (barcodeBuffer) {
-      const bcW = TXN_BOX_W - 20;
-      const bcH = 28;
-      doc.image(barcodeBuffer, bx + 10, by + TXN_BOX_H - bcH - 6, { width: bcW, height: bcH });
+      const bcW = TXN_BOX_W - 16;
+      const bcH = 18;
+      doc.image(barcodeBuffer, bx + 8, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
     }
 
     // Metadata: CLIENT | SHIP TO

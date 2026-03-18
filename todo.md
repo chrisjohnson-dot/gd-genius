@@ -141,3 +141,6 @@
 - [x] Bug: Pull sheet TX ID box shows run ID — must show order transaction ID(s) matching pack sheet
 - [x] Bug: Pull sheet TX ID box too large — reduce size so it doesn't overrun meta/table area
 - [x] Feature: Merge all three PDFs into one single print file instead of a ZIP archive
+- [x] Bug: DUPLICATE badge overruns "SHEET" on Warehouse Pull Sheet — push badge further right
+- [x] Bug: DUPLICATE badge vertical position — center on GD logo arrow tip across all three documents
+- [x] Bug: Pack Sheet TX ID box too large — resize to match pull sheet TX ID box dimensions

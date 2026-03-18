@@ -53,19 +53,10 @@ export default function RunHistory() {
     },
   });
 
-  function openPdf(url: string) {
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-
   function handlePrintDocuments(runId: number) {
-    // Download a single ZIP containing all three PDFs
-    openPdf(`/api/pdf/all-documents/${runId}`);
+    // Open the /print page in a new tab — it embeds the PDF in an iframe and auto-triggers print dialog
+    const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}`);
+    window.open(`/print?url=${pdfUrl}`, "_blank", "noopener,noreferrer");
     markPrinted.mutate({ runId });
   }
 

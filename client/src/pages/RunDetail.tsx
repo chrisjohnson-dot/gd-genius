@@ -237,10 +237,8 @@ export default function RunDetail() {
                 variant="default"
                 className="gap-1.5"
                 onClick={() => {
-                  const a = document.createElement("a");
-                  a.href = `/api/pdf/all-documents/${runId}`;
-                  a.rel = "noopener noreferrer";
-                  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                  const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}`);
+                  window.open(`/print?url=${pdfUrl}`, "_blank", "noopener,noreferrer");
                 }}
               >
                 <FileDown className="h-4 w-4" />

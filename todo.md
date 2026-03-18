@@ -144,3 +144,4 @@
 - [x] Bug: DUPLICATE badge overruns "SHEET" on Warehouse Pull Sheet — push badge further right
 - [x] Bug: DUPLICATE badge vertical position — center on GD logo arrow tip across all three documents
 - [x] Bug: Pack Sheet TX ID box too large — resize to match pull sheet TX ID box dimensions
+- [x] Feature: Print Documents opens browser print dialog instead of downloading PDF

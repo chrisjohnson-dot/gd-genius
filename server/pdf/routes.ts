@@ -203,7 +203,7 @@ export function registerPdfRoutes(app: Express) {
     const mergedBytes = await merged.save();
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="work-files-run-${runId}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="work-files-run-${runId}.pdf"`);
     res.end(Buffer.from(mergedBytes));
   });
 

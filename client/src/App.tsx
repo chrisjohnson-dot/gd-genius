@@ -15,6 +15,7 @@ import RunDetail from "./pages/RunDetail";
 import AuditLog from "./pages/AuditLog";
 import ScheduleSettings from "./pages/ScheduleSettings";
 import Diagnostics from "./pages/Diagnostics";
+import PrintPage from "./pages/PrintPage";
 
 function Router() {
   return (
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/audit" component={AuditLog} />
       <Route path="/schedule" component={ScheduleSettings} />
       <Route path="/diagnostics" component={Diagnostics} />
+      <Route path="/print" component={PrintPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

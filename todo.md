@@ -147,3 +147,4 @@
 - [x] Feature: Print Documents opens browser print dialog instead of downloading PDF
 - [x] Bug: Engine allocates from pick face before staging — staging must be consumed first before touching pick face; 5 new unit tests added (42 total pass)
 - [x] Bug: Run History still shows "confirmed" after all orders are unallocated — run status now updates to "unallocated" when allocatedCount drops to 0; orange badge added; existing runs backfilled via SQL
+- [x] UX: Add bulk-select checkboxes to Run History — select individual runs or select all, then delete all selected with one click; confirmation dialog before bulk delete

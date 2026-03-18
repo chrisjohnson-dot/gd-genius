@@ -3,6 +3,7 @@ import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,8 +31,35 @@ export default function RunHistory() {
   const utils = trpc.useUtils();
   const { data: runs, isLoading } = trpc.allocation.history.useQuery({ limit: 100 });
 
+  // Single-delete state
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const pendingRun = runs?.find((r) => r.id === pendingDeleteId);
+
+  // Bulk-select state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const allIds = runs?.map((r) => r.id) ?? [];
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allIds));
+    }
+  }
+
+  function toggleOne(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const deleteRun = trpc.allocation.deleteRun.useMutation({
     onSuccess: () => {
@@ -45,6 +73,28 @@ export default function RunHistory() {
     },
   });
 
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await deleteRun.mutateAsync({ runId: id });
+      } catch {
+        failed++;
+      }
+    }
+    setBulkDeleting(false);
+    setPendingBulkDelete(false);
+    setSelectedIds(new Set());
+    if (failed > 0) {
+      toast.error(`${failed} run(s) could not be deleted.`);
+    } else {
+      toast.success(`${ids.length} run(s) deleted.`);
+    }
+    utils.allocation.history.invalidate();
+  }
+
   const markPrinted = trpc.allocation.markDocumentsPrinted.useMutation({
     onSuccess: () => {
       utils.allocation.history.invalidate();
@@ -55,7 +105,6 @@ export default function RunHistory() {
   });
 
   function handlePrintDocuments(runId: number) {
-    // Open the /print page in a new tab — it embeds the PDF in an iframe and auto-triggers print dialog
     const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}`);
     window.open(`/print?url=${pdfUrl}`, "_blank", "noopener,noreferrer");
     markPrinted.mutate({ runId });
@@ -64,9 +113,27 @@ export default function RunHistory() {
   return (
     <AppLayout>
       <div className="p-6 space-y-6 max-w-6xl">
-        <div>
-          <h1 className="text-2xl font-bold">Run History</h1>
-          <p className="text-muted-foreground text-sm mt-1">All allocation runs with results and status</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Run History</h1>
+            <p className="text-muted-foreground text-sm mt-1">All allocation runs with results and status</p>
+          </div>
+          {selectedIds.size > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setPendingBulkDelete(true)}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete {selectedIds.size} Selected
+            </Button>
+          )}
         </div>
         <Card>
           <CardHeader className="pb-2">
@@ -87,6 +154,16 @@ export default function RunHistory() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-3 w-10">
+                        <Checkbox
+                          checked={allSelected}
+                          ref={(el) => {
+                            if (el) (el as HTMLButtonElement & { indeterminate?: boolean }).indeterminate = someSelected;
+                          }}
+                          onCheckedChange={toggleAll}
+                          aria-label="Select all runs"
+                        />
+                      </th>
                       <th className="text-left px-4 py-3 font-medium">Run #</th>
                       <th className="text-left px-4 py-3 font-medium">Customer</th>
                       <th className="text-left px-4 py-3 font-medium">TX IDs</th>
@@ -102,9 +179,20 @@ export default function RunHistory() {
                     {runs.map((run) => {
                       const hasPrinted = !!run.documentsPrintedAt;
                       const orderIds: number[] = (run as typeof run & { orderIds?: number[] }).orderIds ?? [];
+                      const isChecked = selectedIds.has(run.id);
 
                       return (
-                        <tr key={run.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <tr
+                          key={run.id}
+                          className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${isChecked ? "bg-muted/20" : ""}`}
+                        >
+                          <td className="px-4 py-3">
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={() => toggleOne(run.id)}
+                              aria-label={`Select run #${run.id}`}
+                            />
+                          </td>
                           <td className="px-4 py-3 font-mono text-xs text-muted-foreground">#{run.id}</td>
                           <td className="px-4 py-3 font-medium whitespace-nowrap">
                             {run.customerName ?? `Customer ${run.customerId}`}
@@ -147,7 +235,6 @@ export default function RunHistory() {
                                   <Link href={`/review/${run.id}`}>Review</Link>
                                 </Button>
                               )}
-                              {/* Print Documents button — green if not yet printed, red if previously printed */}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -193,6 +280,7 @@ export default function RunHistory() {
         </Card>
       </div>
 
+      {/* Single-run delete dialog */}
       <AlertDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => {
@@ -225,6 +313,40 @@ export default function RunHistory() {
               }}
             >
               Delete Run
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete confirmation dialog */}
+      <AlertDialog
+        open={pendingBulkDelete}
+        onOpenChange={(open) => {
+          if (!open && !bulkDeleting) setPendingBulkDelete(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} Run{selectedIds.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{selectedIds.size}</strong> selected allocation run{selectedIds.size !== 1 ? "s" : ""} and all their associated order records. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? (
+                <span className="flex items-center gap-1.5">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting…
+                </span>
+              ) : (
+                `Delete ${selectedIds.size} Run${selectedIds.size !== 1 ? "s" : ""}`
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

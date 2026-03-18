@@ -387,12 +387,20 @@ export async function generatePickFacePullSheetPDF(
   const tableL = MARGIN - 4;
   const tableR = PAGE_W - MARGIN + 4;
 
-  // Filter to pick-face items only
+  // Pick face items: direct picks from pick face, OR warehouse→pick_face transfers
+  // For to_pick_face items, the pick face location is toLocationName (not fromLocationName)
   const pfItems = items.filter(
-    (i) => i.fromLocationType === "pick_face" || i.movement === "to_staging"
+    (i) => i.fromLocationType === "pick_face" || i.movement === "to_pick_face"
   );
 
-  const ROW_H = 22;
+  // Helper: get the pick face location name for display
+  const pfLocationName = (item: (typeof pfItems)[0]) =>
+    item.movement === "to_pick_face" ? item.toLocationName : item.fromLocationName;
+  // Helper: warehouse source (only for to_pick_face items)
+  const warehouseSource = (item: (typeof pfItems)[0]) =>
+    item.movement === "to_pick_face" ? item.fromLocationName : null;
+
+  const ROW_H = 26; // taller rows to accommodate optional 2nd line
   const ROWS_P1 = 22;
   const totalPages = pfItems.length <= ROWS_P1 ? 1 : 2;
 
@@ -468,11 +476,17 @@ export async function generatePickFacePullSheetPDF(
     // Row bottom border
     doc.moveTo(tableL, y + ROW_H).lineTo(tableR, y + ROW_H).stroke(GD_BORDER);
 
-    const textY = y + ROW_H / 2 - 4;
+    const textY = y + 7;
 
     // Face location — green bold
     doc.fillColor(GD_GREEN).fontSize(8.5).font("Helvetica-Bold")
-      .text(item.fromLocationName, cx.face, textY, { lineBreak: false });
+      .text(pfLocationName(item), cx.face, textY, { lineBreak: false });
+    // Warehouse source in grey below (if applicable)
+    const src = warehouseSource(item);
+    if (src) {
+      doc.fillColor(GD_GRAY).fontSize(7).font("Helvetica")
+        .text(`(from: ${src})`, cx.face, textY + 11, { lineBreak: false });
+    }
 
     // SKU — navy bold
     doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
@@ -526,17 +540,22 @@ export async function generatePickFacePullSheetPDF(
     }
     doc.moveTo(tableL, y + ROW_H).lineTo(tableR, y + ROW_H).stroke(GD_BORDER);
 
-    const textY = y + ROW_H / 2 - 4;
+    const textY2 = y + 7;
     doc.fillColor(GD_GREEN).fontSize(8.5).font("Helvetica-Bold")
-      .text(item.fromLocationName, cx.face, textY, { lineBreak: false });
+      .text(pfLocationName(item), cx.face, textY2, { lineBreak: false });
+    const src2 = warehouseSource(item);
+    if (src2) {
+      doc.fillColor(GD_GRAY).fontSize(7).font("Helvetica")
+        .text(`(from: ${src2})`, cx.face, textY2 + 11, { lineBreak: false });
+    }
     doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
-      .text(item.sku, cx.sku, textY, { lineBreak: false });
+      .text(item.sku, cx.sku, textY2, { lineBreak: false });
 
     const lot = item.lotNumber && item.lotNumber !== "0" ? item.lotNumber : "-";
     doc.fillColor(lot === "-" ? GD_GRAY : GD_DKGRAY).fontSize(8).font("Helvetica")
-      .text(lot, cx.lot, textY, { lineBreak: false });
+      .text(lot, cx.lot, textY2, { lineBreak: false });
     doc.fillColor(GD_DKGRAY).fontSize(9).font("Helvetica-Bold")
-      .text(String(item.qty), cx.qty, textY, { width: 40, align: "right", lineBreak: false });
+      .text(String(item.qty), cx.qty, textY2, { width: 40, align: "right", lineBreak: false });
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
   }
 
@@ -576,12 +595,15 @@ export async function generateWarehousePullSheetPDF(
   const tableR = PAGE_W - MARGIN + 4;
   const ROW_H  = 26;
 
-  const whItems = items.filter((i) => i.fromLocationType === "warehouse");
+  // Warehouse items only, sorted ascending by source location name
+  const whItems = items
+    .filter((i) => i.fromLocationType === "warehouse")
+    .sort((a, b) => a.fromLocationName.localeCompare(b.fromLocationName));
 
-  // Column x positions (matching Python _wh_cols)
+  // Column x positions — Location first, SKU second
   const cx = {
-    sku:    tableL + 4,
-    from:   tableL + 4 + 140,
+    from:   tableL + 4,
+    sku:    tableL + 4 + 130,
     to:     tableL + 4 + 270,
     qty:    tableL + 4 + 370,
     req:    tableL + 4 + 460,
@@ -630,8 +652,8 @@ export async function generateWarehousePullSheetPDF(
   }
 
   let rowY = drawTableHeaderRow(doc, tableTop, tableL, tableR, [
-    { label: "SKU",              x: cx.sku },
     { label: "FROM LOCATION",    x: cx.from },
+    { label: "SKU",              x: cx.sku },
     { label: "TO LOCATION",      x: cx.to },
     { label: "QTY TO PULL",      x: cx.qty },
     { label: "TOTAL REQ.",       x: cx.req },
@@ -651,13 +673,13 @@ export async function generateWarehousePullSheetPDF(
 
     const textY = y + ROW_H / 2 - 4;
 
-    // SKU — navy bold
-    doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
-      .text(item.sku, cx.sku, textY, { lineBreak: false });
-
-    // From location
+    // From location — first column
     doc.fillColor(GD_DKGRAY).fontSize(8).font("Helvetica")
       .text(item.fromLocationName, cx.from, textY, { lineBreak: false });
+
+    // SKU — navy bold, second column
+    doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
+      .text(item.sku, cx.sku, textY, { lineBreak: false });
 
     // To location — green if pick face (ACR*), gray if STAGING
     const isPickFaceDest = item.movement === "to_pick_face" ||

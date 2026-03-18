@@ -306,8 +306,10 @@ function drawTotalBar(
   tableL: number,
   tableR: number,
   y: number,
-  /** Optional: left edge of the column the total should right-align under (width=40). Defaults to tableR-60. */
-  totalColX?: number
+  /** Optional: left edge of the column the total should right-align under. Defaults to tableR-60. */
+  totalColX?: number,
+  /** Optional: width of the right-aligned total number block. Defaults to 40. */
+  totalColW?: number
 ): number {
   const th = 22;
   const y2 = y + 4;
@@ -323,11 +325,12 @@ function drawTotalBar(
 
   // Align total under the specified column, or fall back to right edge
   const numX = totalColX !== undefined ? totalColX : tableR - 60;
+  const numW = totalColW ?? 40;
   doc
     .fillColor(GD_GREEN)
     .fontSize(13)
     .font("Helvetica-Bold")
-    .text(String(total), numX, y2 + 5, { width: 40, align: "right", lineBreak: false });
+    .text(String(total), numX, y2 + 5, { width: numW, align: "right", lineBreak: false });
 
   return y2 + th;
 }
@@ -526,7 +529,7 @@ export async function generatePickFacePullSheetPDF(
   const afterRows = rowY + n1 * ROW_H;
 
   if (totalPages === 1) {
-    const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, afterRows, cx.req);
+    const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, afterRows, cx.req, QTY_W);
     drawSignOff(doc, afterTotal, tableL, [
       { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
     ]);
@@ -581,7 +584,7 @@ export async function generatePickFacePullSheetPDF(
   }
 
   const after2 = rowY2 + rest.length * ROW_H;
-  const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, after2, cx.req);
+  const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, after2, cx.req, QTY_W);
   drawSignOff(doc, afterTotal2, tableL, [
     { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
   ]);
@@ -622,12 +625,14 @@ export async function generateWarehousePullSheetPDF(
     .sort((a, b) => a.fromLocationName.localeCompare(b.fromLocationName));
 
   // Column x positions — Location first, SKU second, no affected orders
+  // QTY_W=50: header and data both use { x: cx.unhand/req, width: QTY_W, align: 'right' } so right edges match
+  const QTY_W_WH = 50;
   const cx = {
     from:   tableL + 4,
     sku:    tableL + 4 + 130,
     to:     tableL + 4 + 270,
-    unhand: tableL + 4 + 390,  // qty being pulled (unhand)
-    req:    tableL + 4 + 470,  // total qty required
+    unhand: tableL + 4 + 390,  // ONHAND QTY — right edge at +440
+    req:    tableL + 4 + 450,  // QTY REQ. — right edge at +500
     chk:    tableR - 26,
   };
 
@@ -676,8 +681,8 @@ export async function generateWarehousePullSheetPDF(
     { label: "FROM LOCATION",  x: cx.from },
     { label: "SKU",            x: cx.sku },
     { label: "TO LOCATION",    x: cx.to },
-    { label: "ONHAND QTY",     x: cx.unhand + 30, align: "right" },
-    { label: "QTY REQ.",       x: cx.req + 30, align: "right" },
+    { label: "ONHAND QTY",     x: cx.unhand, width: QTY_W_WH, align: "right" },
+    { label: "QTY REQ.",       x: cx.req,    width: QTY_W_WH, align: "right" },
   ]);
 
   let totalQty = 0;
@@ -710,12 +715,12 @@ export async function generateWarehousePullSheetPDF(
 
     // Onhand qty — grey (available qty at location)
     doc.fillColor(GD_GRAY).fontSize(9).font("Helvetica")
-      .text(String(item.qty), cx.unhand, textY, { width: 40, align: "right", lineBreak: false });
+      .text(String(item.qty), cx.unhand, textY, { width: QTY_W_WH, align: "right", lineBreak: false });
 
     // Qty required — bold navy (total needed by order(s))
     const totalReq = item.totalRequired ?? item.sourceQty;
     doc.fillColor(GD_NAVY).fontSize(9).font("Helvetica-Bold")
-      .text(totalReq != null ? String(totalReq) : "—", cx.req, textY, { width: 40, align: "right", lineBreak: false });
+      .text(totalReq != null ? String(totalReq) : "—", cx.req, textY, { width: QTY_W_WH, align: "right", lineBreak: false });
 
     // Checkbox
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
@@ -724,7 +729,7 @@ export async function generateWarehousePullSheetPDF(
   }
 
   const afterRows = rowY + whItems.length * ROW_H;
-  const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PULL", totalQty, tableL, tableR, afterRows, cx.req);
+  const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PULL", totalQty, tableL, tableR, afterRows, cx.req, QTY_W_WH);
   drawSignOff(doc, afterTotal, tableL, [
     { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
   ]);

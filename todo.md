@@ -163,3 +163,4 @@
 - [x] Fix: Pull sheets — suppress barcode when multiple transaction IDs; total qty now aligned under QTY REQ. column; ONHAND QTY and QTY REQ. right-justified
 - [x] Fix: Pull sheets — right-edge of ONHAND QTY and QTY REQ. header labels now align with data values (shared QTY_W=50 width); FROM LOC. and TO LOC. columns added to pick face sheet
 - [ ] Bug: Remove spurious placeholder text about PPTX redesign appearing in the app
+- [x] Bug: Warehouse pull sheet ONHAND QTY / QTY REQ. header labels now use same QTY_W_WH=50 width as data cells; pick face total bar now uses QTY_W=50 so total aligns with numbers above

@@ -145,3 +145,4 @@
 - [x] Bug: DUPLICATE badge vertical position — center on GD logo arrow tip across all three documents
 - [x] Bug: Pack Sheet TX ID box too large — resize to match pull sheet TX ID box dimensions
 - [x] Feature: Print Documents opens browser print dialog instead of downloading PDF
+- [x] Bug: Engine allocates from pick face before staging — staging must be consumed first before touching pick face; 5 new unit tests added (42 total pass)

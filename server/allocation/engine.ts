@@ -194,6 +194,8 @@ function planSkuMovements(
   stagingLocationId: number,
   stagingLocationName: string,
   locationPriorityPatterns: Array<{ pattern: string; label: string }> = [],
+  /** Records already in staging — must be consumed BEFORE the pick face */
+  stagingAlreadyThere: InventoryPoolRecord[] = [],
 ): {
   stagingMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
   pickFaceMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
@@ -203,12 +205,26 @@ function planSkuMovements(
   const stagingMoves: Array<{ record: InventoryPoolRecord; qty: number }> = [];
   const pickFaceMoves: Array<{ record: InventoryPoolRecord; qty: number }> = [];
 
+  // ── Step 0: Drain existing staging inventory first (highest priority) ──────
+  // Items already moved to staging must be consumed before touching the pick face
+  // or pulling any warehouse pallets.
+  let remaining = qtyNeeded;
+  for (const rec of sortFEFO(stagingAlreadyThere)) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, rec.remainingQty);
+    stagingMoves.push({ record: rec, qty: take });
+    rec.remainingQty -= take;
+    remaining -= take;
+  }
+  if (remaining === 0) {
+    return { stagingMoves, pickFaceMoves, satisfied: true, totalStaged: qtyNeeded };
+  }
+
   const pickFaceAvailable = pickFaceRecords.reduce((s, r) => s + r.remainingQty, 0);
 
-  if (pickFaceAvailable >= qtyNeeded) {
-    // ── Scenario A: pick face has enough ─────────────────────────────────────
-    // Take exactly what we need from pick face → staging. FEFO order.
-    let remaining = qtyNeeded;
+  if (pickFaceAvailable >= remaining) {
+    // ── Scenario A: pick face has enough for the remainder ───────────────────
+    // Take exactly what we still need from pick face → staging. FEFO order.
     for (const rec of sortFEFO(pickFaceRecords)) {
       if (remaining <= 0) break;
       const take = Math.min(remaining, rec.remainingQty);
@@ -235,7 +251,7 @@ function planSkuMovements(
   //
   // This avoids pulling a second (or partial) warehouse pallet just to cover
   // a small overage when the pick face already has available stock.
-  let remaining = qtyNeeded;
+  // Note: the `remaining` variable was declared in Step 0 above; we continue reducing it here.
 
   for (const rec of applyLocationPriority(warehouseRecords, locationPriorityPatterns)) {
     if (remaining <= 0) break;
@@ -405,14 +421,13 @@ export function runAllocationEngine(
       return inferLocationTypeFromName(r.locationIdentifier?.nameKey?.name);
     };
 
-    const pickFaceRecords = allSkuRecords.filter((r) => {
-      const t = resolveLocType(r);
-      return t === "pick_face" || t === "staging"; // staging already there counts as pick face tier
-    });
-
-    const warehouseRecords = allSkuRecords.filter((r) => {
-      return resolveLocType(r) === "warehouse";
-    });
+    // Separate inventory into three tiers:
+    //   1. stagingAlreadyThere — items already in a staging location (consume FIRST)
+    //   2. pickFaceRecords     — items in pick face locations (consume second)
+    //   3. warehouseRecords    — full pallets in warehouse (pull only when needed)
+    const stagingAlreadyThere = allSkuRecords.filter((r) => resolveLocType(r) === "staging");
+    const pickFaceRecords = allSkuRecords.filter((r) => resolveLocType(r) === "pick_face");
+    const warehouseRecords = allSkuRecords.filter((r) => resolveLocType(r) === "warehouse");
 
     const allWarehouse = [...warehouseRecords];
 
@@ -429,6 +444,7 @@ export function runAllocationEngine(
       stagingLocationId,
       stagingLocationName,
       locationPriorityPatterns,
+      stagingAlreadyThere,
     );
 
     // Always build the staging pool with whatever we could move, even if not fully satisfied.

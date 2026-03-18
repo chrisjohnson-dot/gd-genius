@@ -161,3 +161,5 @@
 - [x] Feature: Warehouse pull sheet — removed Affected Orders column
 - [x] Style: Pull sheets — QTY REQ. bolded navy, ONHAND QTY shaded grey on both pick face and warehouse sheets
 - [x] Fix: Pull sheets — suppress barcode when multiple transaction IDs; total qty now aligned under QTY REQ. column; ONHAND QTY and QTY REQ. right-justified
+- [x] Fix: Pull sheets — right-edge of ONHAND QTY and QTY REQ. header labels now align with data values (shared QTY_W=50 width); FROM LOC. and TO LOC. columns added to pick face sheet
+- [ ] Bug: Remove spurious placeholder text about PPTX redesign appearing in the app

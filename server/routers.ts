@@ -443,6 +443,32 @@ export const appRouter = router({
         return fetchOpenOrders(config, input.customerId, input.facilityId);
       }),
 
+    // Returns open order counts for all customers at a facility in one batched call
+    openOrderCounts: protectedProcedure
+      .input(
+        z.object({
+          configId: z.number(),
+          customerIds: z.array(z.number()),
+          facilityId: z.number(),
+        })
+      )
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        // Fetch counts in parallel, one per customer
+        const results = await Promise.all(
+          input.customerIds.map(async (customerId) => {
+            try {
+              const orders = await fetchOpenOrders(config, customerId, input.facilityId);
+              return { customerId, count: orders.length };
+            } catch {
+              return { customerId, count: 0 };
+            }
+          })
+        );
+        return results;
+      }),
+
     // Debug: returns raw order data for a customer/facility so we can see what status/flags each order has
     debugOrders: protectedProcedure
       .input(z.object({ configId: z.number(), customerId: z.number(), facilityId: z.number() }))

@@ -476,6 +476,18 @@ export default function OrderSelection() {
     [customers, selectedClientIds]
   );
 
+  // Fetch open order counts for all customers at the clients step (shown in brackets next to each name)
+  const customerIds = useMemo(() => (customers ?? []).map((c) => c.id), [customers]);
+  const { data: orderCountsRaw } = trpc.extensiv.openOrderCounts.useQuery(
+    { configId: configId!, customerIds, facilityId: selectedFacility?.id ?? 0 },
+    { enabled: !!configId && !!selectedFacility && step === "clients" && customerIds.length > 0 }
+  );
+  const orderCountMap = useMemo(() => {
+    const m = new Map<number, number>();
+    (orderCountsRaw ?? []).forEach(({ customerId, count }) => m.set(customerId, count));
+    return m;
+  }, [orderCountsRaw]);
+
   // Fetch all location configs
   const { data: locationConfigs } = trpc.locations.list.useQuery(
     { configId: configId! },
@@ -852,6 +864,9 @@ export default function OrderSelection() {
                               <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                             </div>
                             <span className="text-sm font-medium truncate">{customer.name}</span>
+                            {orderCountMap.has(customer.id) && (
+                              <span className="text-xs text-muted-foreground shrink-0">({orderCountMap.get(customer.id)})</span>
+                            )}
                           </div>
                         </div>
                       );

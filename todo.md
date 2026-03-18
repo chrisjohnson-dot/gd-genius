@@ -159,3 +159,4 @@
 - [x] Bug: DUPLICATE badge appears on pull sheets even on first print — fixed: PDF route now reads ?firstPrint=1 param; UI passes it on first print so badge is suppressed
 - [x] Feature: Both pull sheets — added UNHAND QTY and QTY REQ. columns
 - [x] Feature: Warehouse pull sheet — removed Affected Orders column
+- [x] Style: Pull sheets — QTY REQ. bolded navy, ONHAND QTY shaded grey on both pick face and warehouse sheets

@@ -499,13 +499,13 @@ export async function generatePickFacePullSheetPDF(
     doc.fillColor(lot === "-" ? GD_GRAY : GD_DKGRAY).fontSize(8).font("Helvetica")
       .text(lot, cx.lot, textY, { lineBreak: false });
 
-    // Unhand qty — qty being pulled, right-aligned bold
-    doc.fillColor(GD_DKGRAY).fontSize(9).font("Helvetica-Bold")
+    // Onhand qty — grey (available qty at location)
+    doc.fillColor(GD_GRAY).fontSize(9).font("Helvetica")
       .text(String(item.qty), cx.unhand, textY, { width: 40, align: "right", lineBreak: false });
 
-    // Qty required — total needed by order(s), muted
+    // Qty required — bold navy (total needed by order(s))
     const totalReq = item.totalRequired ?? item.sourceQty;
-    doc.fillColor(GD_GRAY).fontSize(8).font("Helvetica")
+    doc.fillColor(GD_NAVY).fontSize(9).font("Helvetica-Bold")
       .text(totalReq != null ? String(totalReq) : "—", cx.req, textY, { width: 40, align: "right", lineBreak: false });
 
     // Checkbox
@@ -562,10 +562,10 @@ export async function generatePickFacePullSheetPDF(
     const lot = item.lotNumber && item.lotNumber !== "0" ? item.lotNumber : "-";
     doc.fillColor(lot === "-" ? GD_GRAY : GD_DKGRAY).fontSize(8).font("Helvetica")
       .text(lot, cx.lot, textY2, { lineBreak: false });
-    doc.fillColor(GD_DKGRAY).fontSize(9).font("Helvetica-Bold")
+    doc.fillColor(GD_GRAY).fontSize(9).font("Helvetica")
       .text(String(item.qty), cx.unhand, textY2, { width: 40, align: "right", lineBreak: false });
     const totalReq2 = item.totalRequired ?? item.sourceQty;
-    doc.fillColor(GD_GRAY).fontSize(8).font("Helvetica")
+    doc.fillColor(GD_NAVY).fontSize(9).font("Helvetica-Bold")
       .text(totalReq2 != null ? String(totalReq2) : "—", cx.req, textY2, { width: 40, align: "right", lineBreak: false });
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
   }
@@ -697,13 +697,13 @@ export async function generateWarehousePullSheetPDF(
     doc.fillColor(isPickFaceDest ? GD_GREEN : GD_GRAY).fontSize(8).font("Helvetica-Bold")
       .text(toLabel, cx.to, textY, { lineBreak: false });
 
-    // Unhand qty — qty being pulled, right-aligned bold
-    doc.fillColor(GD_DKGRAY).fontSize(9).font("Helvetica-Bold")
+    // Onhand qty — grey (available qty at location)
+    doc.fillColor(GD_GRAY).fontSize(9).font("Helvetica")
       .text(String(item.qty), cx.unhand, textY, { width: 40, align: "right", lineBreak: false });
 
-    // Qty required — total needed by order(s), muted
+    // Qty required — bold navy (total needed by order(s))
     const totalReq = item.totalRequired ?? item.sourceQty;
-    doc.fillColor(GD_GRAY).fontSize(8).font("Helvetica")
+    doc.fillColor(GD_NAVY).fontSize(9).font("Helvetica-Bold")
       .text(totalReq != null ? String(totalReq) : "—", cx.req, textY, { width: 40, align: "right", lineBreak: false });
 
     // Checkbox

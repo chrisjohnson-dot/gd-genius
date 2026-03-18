@@ -1041,7 +1041,7 @@ export const appRouter = router({
           }
           for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
             console.log(`[confirm] Moving ${items.length} items to staging location ${destId} (${destName})`);
-            const moveResult = await moveInventory(config, destId, destName, items);
+            const moveResult = await moveInventory(config, destId, destName, items, run.facilityId);
             if (!moveResult.success) {
               // Log but don't abort — allocator may still work if inventory is already in staging
               console.error(`[confirm] Move to staging ${destId} failed: ${moveResult.error}`);
@@ -1199,7 +1199,7 @@ export const appRouter = router({
             }
             // Move each group back to its source location
             for (const { locationId, locationName, items } of Array.from(bySource.values())) {
-              const moveResult = await moveInventory(config, locationId, locationName, items);
+              const moveResult = await moveInventory(config, locationId, locationName, items, runForPullList?.facilityId ?? undefined);
               if (!moveResult.success) {
                 console.warn(`[unallocate] Reverse move to ${locationName} (${locationId}) failed: ${moveResult.error}`);
               } else {

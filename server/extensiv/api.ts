@@ -554,13 +554,16 @@ export async function moveInventory(
   config: ExtensivClientConfig,
   destinationLocationId: number,
   destinationLocationName: string,
-  moveItems: Array<{ receiveItemId: number; quantity: number }>
+  moveItems: Array<{ receiveItemId: number; quantity: number }>,
+  facilityId?: number
 ): Promise<{ success: boolean; error?: string }> {
   const client = createExtensivClient(config);
+  const nameKey: Record<string, unknown> = { name: destinationLocationName };
+  if (facilityId != null) nameKey.facilityIdentifier = { id: facilityId };
   const result = await client.post("/inventory/mover", {
     destination: {
       id: destinationLocationId,
-      nameKey: { name: destinationLocationName },
+      nameKey,
     },
     moveItems,
   });

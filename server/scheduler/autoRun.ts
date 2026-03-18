@@ -194,7 +194,7 @@ async function runAutoAllocation(configId: number): Promise<void> {
         movesByDest.get(p.toLocationId)!.items.push({ receiveItemId: p.receiveItemId, quantity: p.qty });
       }
       for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
-        const moveResult = await moveInventory(config, destId, destName, items);
+        const moveResult = await moveInventory(config, destId, destName, items, facilityId);
         if (!moveResult.success) {
           confirmErrors.push(`Move to staging ${destName || destId} failed: ${moveResult.error}`);
         }

@@ -151,3 +151,4 @@
 - [x] UX: Show open order count in brackets after each client name on the Select Clients step of the allocation wizard
 - [x] UX: Dim clients with zero open orders on the Select Clients step — opacity-40, cursor-not-allowed, checkbox disabled
 - [x] UX: Show loading spinner beside each client name while order counts are being fetched
+- [x] Bug: moveInventory call fails with "Move.Destination.NameKey.FacilityIdentifier Required" — added facilityIdentifier to destination nameKey in all three call sites (confirm, unallocate, autoRun)

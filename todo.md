@@ -149,3 +149,5 @@
 - [x] Bug: Run History still shows "confirmed" after all orders are unallocated — run status now updates to "unallocated" when allocatedCount drops to 0; orange badge added; existing runs backfilled via SQL
 - [x] UX: Add bulk-select checkboxes to Run History — select individual runs or select all, then delete all selected with one click; confirmation dialog before bulk delete
 - [x] UX: Show open order count in brackets after each client name on the Select Clients step of the allocation wizard
+- [x] UX: Dim clients with zero open orders on the Select Clients step — opacity-40, cursor-not-allowed, checkbox disabled
+- [x] UX: Show loading spinner beside each client name while order counts are being fetched

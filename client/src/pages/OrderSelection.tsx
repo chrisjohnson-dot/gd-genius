@@ -478,7 +478,7 @@ export default function OrderSelection() {
 
   // Fetch open order counts for all customers at the clients step (shown in brackets next to each name)
   const customerIds = useMemo(() => (customers ?? []).map((c) => c.id), [customers]);
-  const { data: orderCountsRaw } = trpc.extensiv.openOrderCounts.useQuery(
+  const { data: orderCountsRaw, isLoading: orderCountsLoading } = trpc.extensiv.openOrderCounts.useQuery(
     { configId: configId!, customerIds, facilityId: selectedFacility?.id ?? 0 },
     { enabled: !!configId && !!selectedFacility && step === "clients" && customerIds.length > 0 }
   );
@@ -844,19 +844,25 @@ export default function OrderSelection() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                     {customers.map((customer) => {
                       const isSelected = selectedClientIds.has(customer.id);
+                      const count = orderCountMap.get(customer.id);
+                      const hasCount = orderCountMap.has(customer.id);
+                      const isZero = hasCount && count === 0;
                       return (
                         <div
                           key={customer.id}
-                          className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
-                            isSelected
-                              ? "bg-primary/8 border border-primary/20"
-                              : "hover:bg-muted/50 border border-transparent"
+                          className={`flex items-center gap-3 p-3 rounded-md transition-colors ${
+                            isZero
+                              ? "opacity-40 cursor-not-allowed border border-transparent"
+                              : isSelected
+                              ? "bg-primary/8 border border-primary/20 cursor-pointer"
+                              : "hover:bg-muted/50 border border-transparent cursor-pointer"
                           }`}
-                          onClick={() => handleToggleClient(customer.id)}
+                          onClick={() => !isZero && handleToggleClient(customer.id)}
                         >
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={() => handleToggleClient(customer.id)}
+                            disabled={isZero}
+                            onCheckedChange={() => !isZero && handleToggleClient(customer.id)}
                             onClick={(e) => e.stopPropagation()}
                           />
                           <div className="flex items-center gap-2 min-w-0">
@@ -864,9 +870,11 @@ export default function OrderSelection() {
                               <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                             </div>
                             <span className="text-sm font-medium truncate">{customer.name}</span>
-                            {orderCountMap.has(customer.id) && (
-                              <span className="text-xs text-muted-foreground shrink-0">({orderCountMap.get(customer.id)})</span>
-                            )}
+                            {orderCountsLoading && !hasCount ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                            ) : hasCount ? (
+                              <span className="text-xs text-muted-foreground shrink-0">({count})</span>
+                            ) : null}
                           </div>
                         </div>
                       );

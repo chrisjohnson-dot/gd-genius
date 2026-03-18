@@ -23,6 +23,7 @@ const statusClass: Record<string, string> = {
   proposed: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   cancelled: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
   failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  unallocated: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
 };
 
 export default function RunHistory() {

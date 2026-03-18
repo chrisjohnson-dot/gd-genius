@@ -1188,10 +1188,15 @@ export const appRouter = router({
         // Update run order status to unallocated
         await updateAllocationRunOrder(input.runOrderId, { status: "unallocated" });
 
-        // Decrement the run's allocatedCount
+        // Decrement the run's allocatedCount; if all orders are now unallocated, update run status too
         const allOrders = await getAllocationRunOrders(runOrder.runId);
         const allocatedCount = allOrders.filter((o) => o.status === "allocated").length;
-        await updateAllocationRun(runOrder.runId, { allocatedCount });
+        const runStatusUpdate: { allocatedCount: number; status?: "proposed" | "confirmed" | "cancelled" | "failed" | "unallocated" } = { allocatedCount };
+        if (allocatedCount === 0) {
+          // Every order in this run has been unallocated — reflect that on the run itself
+          runStatusUpdate.status = "unallocated";
+        }
+        await updateAllocationRun(runOrder.runId, runStatusUpdate);
 
         await createAuditLog({
           userId: ctx.user.id,

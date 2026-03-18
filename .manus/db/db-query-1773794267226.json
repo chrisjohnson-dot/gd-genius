@@ -1,0 +1,90 @@
+{
+  "query": "SELECT ar.id, ar.status, ar.allocatedCount, ar.customerName, COUNT(CASE WHEN aro.status = 'unallocated' THEN 1 END) as unallocatedOrders, COUNT(CASE WHEN aro.status = 'allocated' THEN 1 END) as stillAllocated FROM allocation_runs ar LEFT JOIN allocation_run_orders aro ON aro.runId = ar.id GROUP BY ar.id ORDER BY ar.id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT ar.id, ar.status, ar.allocatedCount, ar.customerName, COUNT(CASE WHEN aro.status = 'unallocated' THEN 1 END) as unallocatedOrders, COUNT(CASE WHEN aro.status = 'allocated' THEN 1 END) as stillAllocated FROM allocation_runs ar LEFT JOIN allocation_run_orders aro ON aro.runId = ar.id GROUP BY ar.id ORDER BY ar.id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "90015",
+      "status": "confirmed",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90014",
+      "status": "unallocated",
+      "allocatedCount": "0",
+      "customerName": "Amercare",
+      "unallocatedOrders": "1",
+      "stillAllocated": "0"
+    },
+    {
+      "id": "90013",
+      "status": "proposed",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90012",
+      "status": "proposed",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90011",
+      "status": "cancelled",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90010",
+      "status": "cancelled",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90009",
+      "status": "proposed",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90008",
+      "status": "proposed",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90007",
+      "status": "cancelled",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    },
+    {
+      "id": "90006",
+      "status": "proposed",
+      "allocatedCount": "1",
+      "customerName": "Amercare",
+      "unallocatedOrders": "0",
+      "stillAllocated": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\tallocatedCount\tcustomerName\tunallocatedOrders\tstillAllocated\n90015\tconfirmed\t1\tAmercare\t0\t1\n90014\tunallocated\t0\tAmercare\t1\t0\n90013\tproposed\t1\tAmercare\t0\t1\n90012\tproposed\t1\tAmercare\t0\t1\n90011\tcancelled\t1\tAmercare\t0\t1\n90010\tcancelled\t1\tAmercare\t0\t1\n90009\tproposed\t1\tAmercare\t0\t1\n90008\tproposed\t1\tAmercare\t0\t1\n90007\tcancelled\t1\tAmercare\t0\t1\n90006\tproposed\t1\tAmercare\t0\t1\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}

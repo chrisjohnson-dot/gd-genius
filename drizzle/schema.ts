@@ -101,7 +101,7 @@ export const allocationRuns = mysqlTable("allocation_runs", {
   customerNames: text("customerNames"),  // JSON array of customer names for multi-customer runs
   facilityId: int("facilityId").notNull(),
   facilityName: varchar("facilityName", { length: 256 }),
-  status: mysqlEnum("status", ["proposed", "confirmed", "cancelled", "failed"]).notNull().default("proposed"),
+  status: mysqlEnum("status", ["proposed", "confirmed", "cancelled", "failed", "unallocated"]).notNull().default("proposed"),
   orderCount: int("orderCount").default(0),
   allocatedCount: int("allocatedCount").default(0),
   skippedCount: int("skippedCount").default(0),

@@ -160,3 +160,4 @@
 - [x] Feature: Both pull sheets — added UNHAND QTY and QTY REQ. columns
 - [x] Feature: Warehouse pull sheet — removed Affected Orders column
 - [x] Style: Pull sheets — QTY REQ. bolded navy, ONHAND QTY shaded grey on both pick face and warehouse sheets
+- [x] Fix: Pull sheets — suppress barcode when multiple transaction IDs; total qty now aligned under QTY REQ. column; ONHAND QTY and QTY REQ. right-justified

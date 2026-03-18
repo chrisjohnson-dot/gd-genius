@@ -304,7 +304,9 @@ function drawTotalBar(
   total: number,
   tableL: number,
   tableR: number,
-  y: number
+  y: number,
+  /** Optional: left edge of the column the total should right-align under (width=40). Defaults to tableR-60. */
+  totalColX?: number
 ): number {
   const th = 22;
   const y2 = y + 4;
@@ -318,11 +320,13 @@ function drawTotalBar(
     .font("Helvetica-Bold")
     .text(label, tableL + 8, y2 + 7, { lineBreak: false });
 
+  // Align total under the specified column, or fall back to right edge
+  const numX = totalColX !== undefined ? totalColX : tableR - 60;
   doc
     .fillColor(GD_GREEN)
     .fontSize(13)
     .font("Helvetica-Bold")
-    .text(String(total), tableR - 60, y2 + 5, { width: 56, align: "right", lineBreak: false });
+    .text(String(total), numX, y2 + 5, { width: 40, align: "right", lineBreak: false });
 
   return y2 + th;
 }
@@ -442,7 +446,8 @@ export async function generatePickFacePullSheetPDF(
       : ids.slice(0, 3).join("  |  ") + `  +${ids.length - 3}`;
     doc.fillColor(GD_NAVY).fontSize(ids.length === 1 ? 16 : 9).font("Helvetica-Bold")
       .text(displayIds, bx + 4, by + 17, { width: TXN_BOX_W - 8, align: "center", lineBreak: false });
-    if (barcodeBuffer) {
+    // Only show barcode when there is a single order ID
+    if (barcodeBuffer && ids.length === 1) {
       const bcW = TXN_BOX_W - 16;
       const bcH = 20;
       doc.image(barcodeBuffer, bx + 8, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
@@ -517,7 +522,7 @@ export async function generatePickFacePullSheetPDF(
   const afterRows = rowY + n1 * ROW_H;
 
   if (totalPages === 1) {
-    const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, afterRows);
+    const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, afterRows, cx.req);
     drawSignOff(doc, afterTotal, tableL, [
       { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
     ]);
@@ -571,7 +576,7 @@ export async function generatePickFacePullSheetPDF(
   }
 
   const after2 = rowY2 + rest.length * ROW_H;
-  const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, after2);
+  const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, after2, cx.req);
   drawSignOff(doc, afterTotal2, tableL, [
     { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
   ]);
@@ -647,7 +652,8 @@ export async function generateWarehousePullSheetPDF(
       : idsWh.slice(0, 3).join("  |  ") + `  +${idsWh.length - 3}`;
     doc.fillColor(GD_NAVY).fontSize(idsWh.length === 1 ? 16 : 9).font("Helvetica-Bold")
       .text(displayIdsWh, bx + 4, by + 17, { width: TXN_BOX_W - 8, align: "center", lineBreak: false });
-    if (barcodeBuffer) {
+    // Only show barcode when there is a single order ID
+    if (barcodeBuffer && idsWh.length === 1) {
       const bcW = TXN_BOX_W - 16;
       const bcH = 20;
       doc.image(barcodeBuffer, bx + 8, by + TXN_BOX_H - bcH - 4, { width: bcW, height: bcH });
@@ -713,7 +719,7 @@ export async function generateWarehousePullSheetPDF(
   }
 
   const afterRows = rowY + whItems.length * ROW_H;
-  const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PULL", totalQty, tableL, tableR, afterRows);
+  const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PULL", totalQty, tableL, tableR, afterRows, cx.req);
   drawSignOff(doc, afterTotal, tableL, [
     { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
   ]);

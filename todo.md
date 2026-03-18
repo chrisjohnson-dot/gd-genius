@@ -152,3 +152,4 @@
 - [x] UX: Dim clients with zero open orders on the Select Clients step — opacity-40, cursor-not-allowed, checkbox disabled
 - [x] UX: Show loading spinner beside each client name while order counts are being fetched
 - [x] Bug: moveInventory call fails with "Move.Destination.NameKey.FacilityIdentifier Required" — added facilityIdentifier to destination nameKey in all three call sites (confirm, unallocate, autoRun)
+- [x] Feature: Add "Retry Move" button on Run Detail page for runs with staging move errors — re-attempts the inventory move without requiring unallocate/re-run; button only visible when run is confirmed and has error notes; clears notes on full success

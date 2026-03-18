@@ -1234,6 +1234,59 @@ export const appRouter = router({
 
         return { success: true };
       }),
+
+    retryMove: protectedProcedure
+      .input(z.object({ runId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const run = await getAllocationRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.status !== "confirmed") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Can only retry moves on confirmed runs" });
+        }
+
+        const config = await getExtensivConfigById(run.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+
+        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string };
+        const globalPullList = (run.pullList ?? []) as PullListEntry[];
+        const stagingMoves = globalPullList.filter((p) => p.fromLocationType !== "staging");
+
+        if (stagingMoves.length === 0) {
+          return { success: true, moved: 0, errors: [] };
+        }
+
+        const movesByDest = new Map<number, { name: string; items: Array<{ receiveItemId: number; quantity: number }> }>();
+        for (const p of stagingMoves) {
+          if (!movesByDest.has(p.toLocationId)) movesByDest.set(p.toLocationId, { name: p.toLocationName ?? "", items: [] });
+          movesByDest.get(p.toLocationId)!.items.push({ receiveItemId: p.receiveItemId, quantity: p.qty });
+        }
+
+        const errors: string[] = [];
+        let moved = 0;
+        for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
+          const moveResult = await moveInventory(config, destId, destName, items, run.facilityId);
+          if (!moveResult.success) {
+            errors.push(`Move to staging ${destName || destId} failed: ${moveResult.error}`);
+          } else {
+            moved += items.length;
+          }
+        }
+
+        // Clear the notes field if all moves succeeded, otherwise update with latest error
+        const newNotes = errors.length > 0 ? errors.join("; ") : null;
+        await updateAllocationRun(input.runId, { notes: newNotes ?? undefined });
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "allocation.retryMove",
+          entityType: "allocation_run",
+          entityId: String(input.runId),
+          details: { moved, errors },
+        });
+
+        return { success: errors.length === 0, moved, errors };
+      }),
+
     history: protectedProcedure
       .input(z.object({ limit: z.number().default(50) }))
       .query(async ({ input }) => {

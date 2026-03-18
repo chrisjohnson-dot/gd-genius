@@ -102,9 +102,29 @@ export default function RunDetail() {
   const params = useParams<{ runId: string }>();
   const runId = Number(params.runId);
   const [unallocatingId, setUnallocatingId] = useState<number | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.allocation.runDetail.useQuery({ runId });
+
+  const retryMoveMutation = trpc.allocation.retryMove.useMutation({
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success(`Staging move succeeded — ${result.moved} item(s) moved.`);
+      } else {
+        toast.warning(`Move partially failed: ${result.errors.join("; ")}`);
+      }
+      utils.allocation.runDetail.invalidate({ runId });
+    },
+    onError: (e) => toast.error(`Retry failed: ${e.message}`),
+    onSettled: () => setRetrying(false),
+  });
+
+  const handleRetryMove = () => {
+    if (!confirm("Re-attempt the staging inventory move for this run? This will try to move the same items again.")) return;
+    setRetrying(true);
+    retryMoveMutation.mutate({ runId });
+  };
 
   const unallocateMutation = trpc.allocation.unallocateOrder.useMutation({
     onSuccess: () => {
@@ -231,6 +251,18 @@ export default function RunDetail() {
           </div>
           <div className="flex items-center gap-2">
             <Badge className={statusClass[run.status] ?? ""}>{run.status}</Badge>
+            {run.status === "confirmed" && run.notes && toStagingMoves.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-orange-400 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                onClick={handleRetryMove}
+                disabled={retrying}
+              >
+                {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Retry Move
+              </Button>
+            )}
             {(run.status === "confirmed" || run.status === "proposed") && allocatedOrders.length > 0 && (
               <Button
                 size="sm"

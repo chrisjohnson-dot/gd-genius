@@ -172,3 +172,5 @@
 - [x] Fix: Pick face pull sheet — remove MOVE TO PICK FACE column, keep only MOVE TO STAGING
 - [x] Fix: Warehouse pull sheet — add separate totals for ONHAND QTY, MOVE TO STAGING, and MOVE TO PICK FACE columns
 - [x] Ensure existing run history reprints use the new pull sheet layout (verify movement field is stored in DB pull list JSON and PDF routes re-render from stored data)
+- [x] Fix: Warehouse pull sheet — order-required qty goes to MOVE TO STAGING, surplus/residual qty goes to MOVE TO PICK FACE
+- [x] Fix: Warehouse pull sheet — consolidate multiple rows from the same source location into a single row

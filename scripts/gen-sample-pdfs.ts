@@ -64,14 +64,26 @@ const pfItems: PullListItem[] = [
 ];
 
 const whItems: PullListItem[] = [
+  // Pallet A: full pallet goes to staging (no surplus)
   {
     sku: "SKU-DELTA-004",
     description: "Delta Component",
-    qty: 100,
+    qty: 20,
     sourceQty: 20,
-    totalRequired: 20,
     lotNumber: "LOT-2024-D",
     fromLocationName: "WH-RACK-A01",
+    fromLocationType: "warehouse",
+    toLocationName: "ACR-Staging",
+    movement: "to_staging",
+  },
+  // Pallet B: split — 15 to staging, 35 surplus to pick face (same location, same SKU, same lot)
+  {
+    sku: "SKU-EPSILON-005",
+    description: "Epsilon Part",
+    qty: 15,
+    sourceQty: 50,
+    lotNumber: "LOT-2024-E",
+    fromLocationName: "WH-RACK-B02",
     fromLocationType: "warehouse",
     toLocationName: "ACR-Staging",
     movement: "to_staging",
@@ -79,21 +91,20 @@ const whItems: PullListItem[] = [
   {
     sku: "SKU-EPSILON-005",
     description: "Epsilon Part",
-    qty: 50,
-    sourceQty: 15,
-    totalRequired: 15,
+    qty: 35,
+    sourceQty: 50,
     lotNumber: "LOT-2024-E",
     fromLocationName: "WH-RACK-B02",
     fromLocationType: "warehouse",
     toLocationName: "ACR-PF-B03",
     movement: "to_pick_face",
   },
+  // Pallet C: all to staging
   {
     sku: "SKU-ZETA-006",
     description: "Zeta Assembly",
-    qty: 75,
-    sourceQty: 8,
-    totalRequired: 8,
+    qty: 8,
+    sourceQty: 75,
     lotNumber: "LOT-2025-F",
     fromLocationName: "WH-RACK-C05",
     fromLocationType: "warehouse",

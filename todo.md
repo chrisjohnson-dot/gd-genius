@@ -164,3 +164,6 @@
 - [x] Fix: Pull sheets — right-edge of ONHAND QTY and QTY REQ. header labels now align with data values (shared QTY_W=50 width); FROM LOC. and TO LOC. columns added to pick face sheet
 - [ ] Bug: Remove spurious placeholder text about PPTX redesign appearing in the app
 - [x] Bug: Warehouse pull sheet ONHAND QTY / QTY REQ. header labels now use same QTY_W_WH=50 width as data cells; pick face total bar now uses QTY_W=50 so total aligns with numbers above
+- [x] Bug: Pack sheet total qty now aligned with QTY column (cx.qty, width 36)
+- [x] Bug: Pick face pull sheet TO location now shows staging (item.toLocationName ?? "STAGING")
+- [x] Bug: Warehouse location rows removed from pick face sheet — filter now only includes fromLocationType==="pick_face"

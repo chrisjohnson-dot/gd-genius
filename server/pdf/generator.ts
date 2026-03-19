@@ -395,18 +395,11 @@ export async function generatePickFacePullSheetPDF(
   const tableL = MARGIN - 4;
   const tableR = PAGE_W - MARGIN + 4;
 
-  // Pick face items: direct picks from pick face, OR warehouse→pick_face transfers
-  // For to_pick_face items, the pick face location is toLocationName (not fromLocationName)
+  // Pick face items: ONLY direct picks from pick face locations
+  // to_pick_face (warehouse→pick_face) movements belong on the warehouse sheet
   const pfItems = items.filter(
-    (i) => i.fromLocationType === "pick_face" || i.movement === "to_pick_face"
+    (i) => i.fromLocationType === "pick_face"
   );
-
-  // Helper: get the pick face location name for display
-  const pfLocationName = (item: (typeof pfItems)[0]) =>
-    item.movement === "to_pick_face" ? item.toLocationName : item.fromLocationName;
-  // Helper: warehouse source (only for to_pick_face items)
-  const warehouseSource = (item: (typeof pfItems)[0]) =>
-    item.movement === "to_pick_face" ? item.fromLocationName : null;
 
   const ROW_H = 26; // taller rows to accommodate optional 2nd line
   const ROWS_P1 = 22;
@@ -493,14 +486,15 @@ export async function generatePickFacePullSheetPDF(
 
     const textY = y + 7;
 
-    // FROM location — grey (where the stock is coming from)
-    const fromLoc = item.movement === "to_pick_face" ? item.fromLocationName : item.fromLocationName;
+    // FROM location — the pick face location the stock is at
     doc.fillColor(GD_DKGRAY).fontSize(8).font("Helvetica")
-      .text(fromLoc, cx.from, textY, { width: 112, lineBreak: false });
+      .text(item.fromLocationName, cx.from, textY, { width: 112, lineBreak: false });
 
-    // TO location — green bold (pick face destination)
-    doc.fillColor(GD_GREEN).fontSize(8.5).font("Helvetica-Bold")
-      .text(pfLocationName(item), cx.to, textY, { width: 112, lineBreak: false });
+    // TO location — always STAGING (picker brings pick face stock to staging)
+    const toLocLabel = item.toLocationName ?? "STAGING";
+    doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
+      .text(toLocLabel, cx.to, textY, { width: 112, lineBreak: false });
+
 
     // SKU — navy bold
     doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
@@ -562,13 +556,13 @@ export async function generatePickFacePullSheetPDF(
     doc.moveTo(tableL, y + ROW_H).lineTo(tableR, y + ROW_H).stroke(GD_BORDER);
 
     const textY2 = y + 7;
-    // FROM location
-    const fromLoc2 = item.movement === "to_pick_face" ? item.fromLocationName : item.fromLocationName;
+    // FROM location — the pick face location the stock is at
     doc.fillColor(GD_DKGRAY).fontSize(8).font("Helvetica")
-      .text(fromLoc2, cx.from, textY2, { width: 112, lineBreak: false });
-    // TO location — green bold
-    doc.fillColor(GD_GREEN).fontSize(8.5).font("Helvetica-Bold")
-      .text(pfLocationName(item), cx.to, textY2, { width: 112, lineBreak: false });
+      .text(item.fromLocationName, cx.from, textY2, { width: 112, lineBreak: false });
+    // TO location — always STAGING
+    const toLocLabel2 = item.toLocationName ?? "STAGING";
+    doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
+      .text(toLocLabel2, cx.to, textY2, { width: 112, lineBreak: false });
     doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
       .text(item.sku, cx.sku, textY2, { lineBreak: false });
 
@@ -939,7 +933,7 @@ export async function generatePackListPDF(
 
     if (totalPages === 1) {
       const afterRows = rowY + n1 * ROW_H;
-      const afterTotal = drawTotalBar(doc, "TOTAL UNITS", totalQty, tableL, tableR, afterRows);
+      const afterTotal = drawTotalBar(doc, "TOTAL UNITS", totalQty, tableL, tableR, afterRows, cx.qty, 36);
       drawSignOff(doc, afterTotal, tableL, [
         { label: "PICKER NAME",   x: MARGIN + 4,       lineWidth: 210 },
         { label: "QC NAME",       x: MARGIN + 4 + 250, lineWidth: 210 },
@@ -971,7 +965,7 @@ export async function generatePackListPDF(
 
       if (isLastChunk) {
         const afterRows2 = rowY2 + chunk.length * ROW_H;
-        const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS", totalQty, tableL, tableR, afterRows2);
+        const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS", totalQty, tableL, tableR, afterRows2, cx.qty, 36);
         drawSignOff(doc, afterTotal2, tableL, [
           { label: "PICKER NAME",   x: MARGIN + 4,       lineWidth: 210 },
           { label: "QC NAME",       x: MARGIN + 4 + 250, lineWidth: 210 },

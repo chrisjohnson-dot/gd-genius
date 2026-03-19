@@ -5,6 +5,7 @@ import path from "path";
 import { PassThrough } from "stream";
 import type { Response } from "express";
 import type { Writable } from "stream";
+import { GD_LOGO_B64 } from "./logo";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -89,16 +90,9 @@ const FOOTER_H = 24;          // footer band height (from bottom)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getLogoPath(): string | null {
-  // First try the bundled copy next to this file (works in both dev and production)
-  try {
-    const bundled = path.resolve(import.meta.dirname, "gd_icon_only.jpg");
-    if (fs.existsSync(bundled)) return bundled;
-  } catch { /* import.meta.dirname unavailable in some environments */ }
-  // Fallback: local dev static assets directory
-  const devAssets = path.resolve("/home/ubuntu/webdev-static-assets/gd_icon_only.jpg");
-  if (fs.existsSync(devAssets)) return devAssets;
-  return null;
+function getLogoBuffer(): Buffer {
+  // Logo is embedded as base64 in logo.ts — works in all environments including production
+  return Buffer.from(GD_LOGO_B64, "base64");
 }
 
 function formatDate(d?: string | Date | null): string {
@@ -157,7 +151,7 @@ function drawChrome(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number
 function drawFullHeader(
   doc: PDFKit.PDFDocument,
   title: string,
-  logoPath: string | null,
+  logoPath: Buffer | null,
   metaFields: Array<{ label: string; value: string; x: number }>,
   isDuplicate?: boolean
 ): number {
@@ -234,7 +228,7 @@ function drawMiniHeader(
   doc: PDFKit.PDFDocument,
   title: string,
   subtitle: string,
-  logoPath: string | null
+  logoPath: Buffer | null
 ): number {
   const contentY = TOP_BAR + GRN_BAR;
   const logoH = 34;
@@ -376,7 +370,7 @@ export async function generatePickFacePullSheetPDF(
   items: PullListItem[],
   meta: RunMeta
 ) {
-  const logoPath = getLogoPath();
+  const logoPath = getLogoBuffer();
   // Barcode encodes the first order TX ID (or run ID if no orders)
   const firstOrderId = meta.orderIds?.[0] ?? meta.runId;
   const barcodeBuffer = await makeBarcodeBuffer(String(firstOrderId));
@@ -593,7 +587,7 @@ export async function generateWarehousePullSheetPDF(
   items: PullListItem[],
   meta: RunMeta
 ) {
-  const logoPath = getLogoPath();
+  const logoPath = getLogoBuffer();
   // Barcode encodes the first order TX ID (or run ID if no orders)
   const firstOrderIdWh = meta.orderIds?.[0] ?? meta.runId;
   const barcodeBuffer = await makeBarcodeBuffer(String(firstOrderIdWh));
@@ -743,7 +737,7 @@ export async function generatePackListPDF(
     barcodeMap.set(o.orderId, await makeBarcodeBuffer(String(o.orderId)));
   }));
 
-  const logoPath = getLogoPath();
+  const logoPath = getLogoBuffer();
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
     margin: 0,

@@ -167,3 +167,4 @@
 - [x] Bug: Pack sheet total qty now aligned with QTY column (cx.qty, width 36)
 - [x] Bug: Pick face pull sheet TO location now shows staging (item.toLocationName ?? "STAGING")
 - [x] Bug: Warehouse location rows removed from pick face sheet — filter now only includes fromLocationType==="pick_face"
+- [x] Bug: GD logo not showing on PDFs in production — fixed by embedding logo as base64 in logo.ts; no file system dependency, works in all environments

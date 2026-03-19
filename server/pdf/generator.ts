@@ -399,17 +399,16 @@ export async function generatePickFacePullSheetPDF(
   const ROWS_P1 = 22;
   const totalPages = pfItems.length <= ROWS_P1 ? 1 : 2;
 
-  // Column x positions — FROM LOC | SKU | LOT # | ONHAND QTY | MOVE TO STAGING | MOVE TO PICK FACE
-  // Table width ~736pt; QTY_W=50 for onhand, DEST_W=65 for each destination column
+  // Column x positions — FROM LOC | SKU | LOT # | ONHAND QTY | MOVE TO STAGING
+  // Table width ~736pt; QTY_W=50 for onhand, DEST_W=90 for staging destination column
   const QTY_W  = 50;
-  const DEST_W = 65;
+  const DEST_W = 90;
   const cx = {
     from:    tableL + 4,           // FROM LOCATION (130pt wide)
     sku:     tableL + 4 + 130,     // SKU (165pt wide)
     lot:     tableL + 4 + 295,     // LOT # (100pt wide)
     unhand:  tableL + 4 + 395,     // ONHAND QTY — right edge at +445
-    staging: tableL + 4 + 455,     // MOVE TO STAGING — right edge at +520
-    pickFace:tableL + 4 + 530,     // MOVE TO PICK FACE — right edge at +595
+    staging: tableL + 4 + 455,     // MOVE TO STAGING — right edge at +545
     chk:     tableR - 26,
   };
 
@@ -457,12 +456,11 @@ export async function generatePickFacePullSheetPDF(
   }
 
   let rowY = drawTableHeaderRow(doc, tableTop, tableL, tableR, [
-    { label: "FROM LOC.",         x: cx.from },
-    { label: "SKU",               x: cx.sku },
-    { label: "LOT #",             x: cx.lot },
-    { label: "ONHAND QTY",        x: cx.unhand,   width: QTY_W,  align: "right" },
-    { label: "MOVE TO STAGING",   x: cx.staging,  width: DEST_W, align: "right" },
-    { label: "MOVE TO PICK FACE", x: cx.pickFace, width: DEST_W, align: "right" },
+    { label: "FROM LOC.",       x: cx.from },
+    { label: "SKU",             x: cx.sku },
+    { label: "LOT #",           x: cx.lot },
+    { label: "ONHAND QTY",      x: cx.unhand,  width: QTY_W,  align: "right" },
+    { label: "MOVE TO STAGING", x: cx.staging, width: DEST_W, align: "right" },
   ]);
 
   const n1 = Math.min(pfItems.length, ROWS_P1);
@@ -498,14 +496,11 @@ export async function generatePickFacePullSheetPDF(
     doc.fillColor(GD_GRAY).fontSize(9).font("Helvetica")
       .text(String(item.qty), cx.unhand, textY, { width: QTY_W, align: "right", lineBreak: false });
 
-    // Move to Staging qty — bold navy if this item goes to staging, else dash
+    // Move to Staging qty — bold navy; pick face items show a dash
     const totalReq = item.totalRequired ?? item.sourceQty;
     const stagingQty = item.movement !== "to_pick_face" ? (totalReq != null ? String(totalReq) : "—") : "—";
-    const pickFaceQty = item.movement === "to_pick_face" ? (totalReq != null ? String(totalReq) : "—") : "—";
     doc.fillColor(stagingQty !== "—" ? GD_NAVY : GD_GRAY).fontSize(9).font(stagingQty !== "—" ? "Helvetica-Bold" : "Helvetica")
       .text(stagingQty, cx.staging, textY, { width: DEST_W, align: "right", lineBreak: false });
-    doc.fillColor(pickFaceQty !== "—" ? GD_NAVY : GD_GRAY).fontSize(9).font(pickFaceQty !== "—" ? "Helvetica-Bold" : "Helvetica")
-      .text(pickFaceQty, cx.pickFace, textY, { width: DEST_W, align: "right", lineBreak: false });
 
     // Checkbox
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
@@ -516,7 +511,7 @@ export async function generatePickFacePullSheetPDF(
   const afterRows = rowY + n1 * ROW_H;
 
   if (totalPages === 1) {
-    const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, afterRows, cx.pickFace, DEST_W);
+    const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, afterRows, cx.staging, DEST_W);
     drawSignOff(doc, afterTotal, tableL, [
       { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
     ]);
@@ -529,12 +524,11 @@ export async function generatePickFacePullSheetPDF(
   drawChrome(doc, 2, totalPages);
   const mini2Y = drawMiniHeader(doc, "PICK FACE PULL SHEET", `Order: ${meta.runId}`, logoPath);
   let rowY2 = drawTableHeaderRow(doc, mini2Y, tableL, tableR, [
-    { label: "FROM LOC.",         x: cx.from },
-    { label: "SKU",               x: cx.sku },
-    { label: "LOT #",             x: cx.lot },
-    { label: "ONHAND QTY",        x: cx.unhand,   width: QTY_W,  align: "right" },
-    { label: "MOVE TO STAGING",   x: cx.staging,  width: DEST_W, align: "right" },
-    { label: "MOVE TO PICK FACE", x: cx.pickFace, width: DEST_W, align: "right" },
+    { label: "FROM LOC.",       x: cx.from },
+    { label: "SKU",             x: cx.sku },
+    { label: "LOT #",           x: cx.lot },
+    { label: "ONHAND QTY",      x: cx.unhand,  width: QTY_W,  align: "right" },
+    { label: "MOVE TO STAGING", x: cx.staging, width: DEST_W, align: "right" },
   ]);
 
   const rest = pfItems.slice(ROWS_P1);
@@ -561,16 +555,13 @@ export async function generatePickFacePullSheetPDF(
       .text(String(item.qty), cx.unhand, textY2, { width: QTY_W, align: "right", lineBreak: false });
     const totalReq2 = item.totalRequired ?? item.sourceQty;
     const stagingQty2 = item.movement !== "to_pick_face" ? (totalReq2 != null ? String(totalReq2) : "—") : "—";
-    const pickFaceQty2 = item.movement === "to_pick_face" ? (totalReq2 != null ? String(totalReq2) : "—") : "—";
     doc.fillColor(stagingQty2 !== "—" ? GD_NAVY : GD_GRAY).fontSize(9).font(stagingQty2 !== "—" ? "Helvetica-Bold" : "Helvetica")
       .text(stagingQty2, cx.staging, textY2, { width: DEST_W, align: "right", lineBreak: false });
-    doc.fillColor(pickFaceQty2 !== "—" ? GD_NAVY : GD_GRAY).fontSize(9).font(pickFaceQty2 !== "—" ? "Helvetica-Bold" : "Helvetica")
-      .text(pickFaceQty2, cx.pickFace, textY2, { width: DEST_W, align: "right", lineBreak: false });
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
   }
 
   const after2 = rowY2 + rest.length * ROW_H;
-  const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, after2, cx.pickFace, DEST_W);
+  const afterTotal2 = drawTotalBar(doc, "TOTAL UNITS TO PICK", totalQty, tableL, tableR, after2, cx.staging, DEST_W);
   drawSignOff(doc, afterTotal2, tableL, [
     { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
   ]);
@@ -673,7 +664,9 @@ export async function generateWarehousePullSheetPDF(
     { label: "MOVE TO PICK FACE",x: cx.pickFace, width: DEST_W_WH, align: "right" },
   ]);
 
-  let totalQty = 0;
+  let totalOnhand = 0;
+  let totalToStaging = 0;
+  let totalToPickFace = 0;
 
   for (let i = 0; i < whItems.length; i++) {
     const item = whItems[i]!;
@@ -717,14 +710,38 @@ export async function generateWarehousePullSheetPDF(
     // Checkbox
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);
 
-    totalQty += item.qty;
+    totalOnhand += item.qty;
+    const reqWh = item.totalRequired ?? item.sourceQty ?? 0;
+    const isPickFaceDestWh = item.movement === "to_pick_face" ||
+      (item.toLocationName && /^ACR/i.test(item.toLocationName));
+    if (isPickFaceDestWh) totalToPickFace += reqWh;
+    else totalToStaging += reqWh;
   }
 
+  // ── Three-column total bar ────────────────────────────────────────────────────
+  // Draw a single green total bar with three right-aligned numbers under their columns
   const afterRows = rowY + whItems.length * ROW_H;
-  const afterTotal = drawTotalBar(doc, "TOTAL UNITS TO PULL", totalQty, tableL, tableR, afterRows, cx.pickFace, DEST_W_WH);
-  drawSignOff(doc, afterTotal, tableL, [
-    { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
-  ]);
+  {
+    const th = 22;
+    const y2 = afterRows + 4;
+    doc.roundedRect(tableL, y2, tableR - tableL, th, 3).fill(TOTAL_BG);
+    doc.roundedRect(tableL, y2, 4, th, 1).fill(GD_GREEN);
+    doc.fillColor(GD_NAVY).fontSize(9).font("Helvetica-Bold")
+      .text("TOTALS", tableL + 8, y2 + 7, { lineBreak: false });
+    // Onhand total
+    doc.fillColor(GD_GRAY).fontSize(11).font("Helvetica-Bold")
+      .text(String(totalOnhand), cx.unhand, y2 + 5, { width: QTY_W_WH, align: "right", lineBreak: false });
+    // Staging total
+    doc.fillColor(GD_GREEN).fontSize(13).font("Helvetica-Bold")
+      .text(String(totalToStaging), cx.staging, y2 + 5, { width: DEST_W_WH, align: "right", lineBreak: false });
+    // Pick face total
+    doc.fillColor(GD_GREEN).fontSize(13).font("Helvetica-Bold")
+      .text(String(totalToPickFace), cx.pickFace, y2 + 5, { width: DEST_W_WH, align: "right", lineBreak: false });
+    const afterTotal = y2 + th;
+    drawSignOff(doc, afterTotal, tableL, [
+      { label: "PICKER NAME", x: tableL + 4, lineWidth: 340 },
+    ]);
+  }
 
   doc.end();
 }

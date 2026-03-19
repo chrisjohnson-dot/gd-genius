@@ -1,0 +1,110 @@
+{
+  "query": "\nSELECT \n  id,\n  status,\n  customerName,\n  createdAt,\n  JSON_LENGTH(pullList) AS pull_list_items,\n  JSON_EXTRACT(pullList, '$[0].movement') AS first_movement,\n  JSON_EXTRACT(pullList, '$[0].fromLocationType') AS first_from_type,\n  JSON_EXTRACT(pullList, '$[0].toLocationName') AS first_to_loc\nFROM allocation_runs\nWHERE pullList IS NOT NULL\nORDER BY createdAt DESC\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT \n  id,\n  status,\n  customerName,\n  createdAt,\n  JSON_LENGTH(pullList) AS pull_list_items,\n  JSON_EXTRACT(pullList, '$[0].movement') AS first_movement,\n  JSON_EXTRACT(pullList, '$[0].fromLocationType') AS first_from_type,\n  JSON_EXTRACT(pullList, '$[0].toLocationName') AS first_to_loc\nFROM allocation_runs\nWHERE pullList IS NOT NULL\nORDER BY createdAt DESC\nLIMIT 10;\n",
+  "rows": [
+    {
+      "id": "240001",
+      "status": "confirmed",
+      "customerName": "Amercare",
+      "createdAt": "2026-03-19 16:49:52",
+      "pull_list_items": "11",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"warehouse\"",
+      "first_to_loc": "\"ACR-Staging\""
+    },
+    {
+      "id": "210003",
+      "status": "confirmed",
+      "customerName": "ONCO",
+      "createdAt": "2026-03-19 15:16:19",
+      "pull_list_items": "44",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"pick_face\"",
+      "first_to_loc": "\"ONCO-Stage\""
+    },
+    {
+      "id": "210002",
+      "status": "confirmed",
+      "customerName": "KGP",
+      "createdAt": "2026-03-19 15:15:30",
+      "pull_list_items": "15",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"warehouse\"",
+      "first_to_loc": "\"KGP-Stage\""
+    },
+    {
+      "id": "210001",
+      "status": "confirmed",
+      "customerName": "BOBA",
+      "createdAt": "2026-03-19 15:13:38",
+      "pull_list_items": "21",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"pick_face\"",
+      "first_to_loc": "\"BOBA-Stage\""
+    },
+    {
+      "id": "180002",
+      "status": "cancelled",
+      "customerName": "ONCO",
+      "createdAt": "2026-03-18 19:11:15",
+      "pull_list_items": "44",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"pick_face\"",
+      "first_to_loc": "\"ONCO-Stage\""
+    },
+    {
+      "id": "180001",
+      "status": "cancelled",
+      "customerName": "KGP",
+      "createdAt": "2026-03-18 19:10:28",
+      "pull_list_items": "2",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"warehouse\"",
+      "first_to_loc": "\"KGP-Stage\""
+    },
+    {
+      "id": "150001",
+      "status": "failed",
+      "customerName": "Amercare",
+      "createdAt": "2026-03-18 18:38:24",
+      "pull_list_items": "22",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"warehouse\"",
+      "first_to_loc": "\"ACR-Staging\""
+    },
+    {
+      "id": "120001",
+      "status": "cancelled",
+      "customerName": "Amercare",
+      "createdAt": "2026-03-18 14:55:37",
+      "pull_list_items": "3",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"warehouse\"",
+      "first_to_loc": "\"ACR-Staging\""
+    },
+    {
+      "id": "90016",
+      "status": "proposed",
+      "customerName": "Amercare",
+      "createdAt": "2026-03-18 01:01:57",
+      "pull_list_items": "3",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"pick_face\"",
+      "first_to_loc": "\"ACR-Staging\""
+    },
+    {
+      "id": "90015",
+      "status": "confirmed",
+      "customerName": "Amercare",
+      "createdAt": "2026-03-18 00:34:07",
+      "pull_list_items": "3",
+      "first_movement": "\"to_staging\"",
+      "first_from_type": "\"staging\"",
+      "first_to_loc": "\"ACR-Staging\""
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\tcustomerName\tcreatedAt\tpull_list_items\tfirst_movement\tfirst_from_type\tfirst_to_loc\n240001\tconfirmed\tAmercare\t2026-03-19 16:49:52\t11\t\"to_staging\"\t\"warehouse\"\t\"ACR-Staging\"\n210003\tconfirmed\tONCO\t2026-03-19 15:16:19\t44\t\"to_staging\"\t\"pick_face\"\t\"ONCO-Stage\"\n210002\tconfirmed\tKGP\t2026-03-19 15:15:30\t15\t\"to_staging\"\t\"warehouse\"\t\"KGP-Stage\"\n210001\tconfirmed\tBOBA\t2026-03-19 15:13:38\t21\t\"to_staging\"\t\"pick_face\"\t\"BOBA-Stage\"\n180002\tcancelled\tONCO\t2026-03-18 19:11:15\t44\t\"to_staging\"\t\"pick_face\"\t\"ONCO-Stage\"\n180001\tcancelled\tKGP\t2026-03-18 19:10:28\t2\t\"to_staging\"\t\"warehouse\"\t\"KGP-Stage\"\n150001\tfailed\tAmercare\t2026-03-18 18:38:24\t22\t\"to_staging\"\t\"warehouse\"\t\"ACR-Staging\"\n120001\tcancelled\tAmercare\t2026-03-18 14:55:37\t3\t\"to_staging\"\t\"warehouse\"\t\"ACR-Staging\"\n90016\tproposed\tAmercare\t2026-03-18 01:01:57\t3\t\"to_staging\"\t\"pick_face\"\t\"ACR-Staging\"\n90015\tconfirmed\tAmercare\t2026-03-18 00:34:07\t3\t\"to_staging\"\t\"staging\"\t\"ACR-Staging\"\n",
+  "stderr": "",
+  "execution_time_ms": 61
+}

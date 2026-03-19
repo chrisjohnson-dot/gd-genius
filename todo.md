@@ -169,3 +169,6 @@
 - [x] Bug: Warehouse location rows removed from pick face sheet — filter now only includes fromLocationType==="pick_face"
 - [x] Bug: GD logo not showing on PDFs in production — fixed by embedding logo as base64 in logo.ts; no file system dependency, works in all environments
 - [x] Feature: Pull sheet redesign — removed TO LOCATION column; replaced QTY REQ. with MOVE TO STAGING and MOVE TO PICK FACE columns on both pick face and warehouse sheets; quantities split by movement type; LOT # added to warehouse sheet
+- [x] Fix: Pick face pull sheet — remove MOVE TO PICK FACE column, keep only MOVE TO STAGING
+- [x] Fix: Warehouse pull sheet — add separate totals for ONHAND QTY, MOVE TO STAGING, and MOVE TO PICK FACE columns
+- [x] Ensure existing run history reprints use the new pull sheet layout (verify movement field is stored in DB pull list JSON and PDF routes re-render from stored data)

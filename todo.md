@@ -175,3 +175,7 @@
 - [x] Fix: Warehouse pull sheet — order-required qty goes to MOVE TO STAGING, surplus/residual qty goes to MOVE TO PICK FACE
 - [x] Fix: Warehouse pull sheet — consolidate multiple rows from the same source location into a single row
 - [x] Warehouse pull sheet: add PICK FACE LOCATION column to the right of MOVE TO PICK FACE showing the destination pick face location name
+- [x] Reskin app to match WMS Customer Portal design (dark sidebar #0f111a, Inter font, blue accent #3b82f6, light grey bg, white cards)
+- [x] Update DashboardLayout sidebar: dark bg, section labels, active left-border, user avatar, nav badges
+- [x] Update topbar and page headers to match reference
+- [x] Update page components with new card/table/badge styles

@@ -278,12 +278,18 @@ function drawTableHeaderRow(
 
   doc.fillColor(WHITE).fontSize(7.5).font("Helvetica-Bold");
   for (const col of cols) {
-    // Multi-word labels that wrap get vertically centered in the taller row
+    // Multi-word labels: if width is supplied, allow wrapping within that width
+    // (lineBreak: true) so the text stays inside its column.
+    // Single-word or no-width labels stay on one line.
     const words = col.label.split(" ");
-    const textY = words.length > 2 ? y + 5 : y + 10;
+    const hasWidth = col.width != null;
+    const willWrap = hasWidth && words.length > 1;
+    const textY = (words.length > 2 || willWrap) ? y + 4 : y + 10;
     const colW = col.width ?? 40;
     if (col.align === "right") {
-      doc.text(col.label, col.x, textY, { width: colW, align: "right", lineBreak: false });
+      doc.text(col.label, col.x, textY, { width: colW, align: "right", lineBreak: willWrap });
+    } else if (hasWidth) {
+      doc.text(col.label, col.x, textY, { width: colW, lineBreak: willWrap });
     } else {
       doc.text(col.label, col.x, textY, { lineBreak: false });
     }
@@ -605,9 +611,10 @@ export async function generateWarehousePullSheetPDF(
     fromLocationName: string;
     sku: string;
     lotNumber?: string;
-    onhandQty: number;      // total available in source location (sourceQty)
-    stagingQty: number;     // qty to move to staging (order-required)
-    pickFaceQty: number;    // qty to move to pick face (surplus/residual)
+    onhandQty: number;           // total available in source location (sourceQty)
+    stagingQty: number;          // qty to move to staging (order-required)
+    pickFaceQty: number;         // qty to move to pick face (surplus/residual)
+    pickFaceLocationName: string; // destination pick face location name (empty when no surplus)
   }
 
   const whRowMap = new Map<string, WhRow>();
@@ -621,31 +628,41 @@ export async function generateWarehousePullSheetPDF(
         sku: item.sku,
         lotNumber: item.lotNumber,
         onhandQty: item.sourceQty ?? item.qty,
-        stagingQty:   item.movement === "to_staging"   ? reqQty : 0,
-        pickFaceQty:  item.movement === "to_pick_face" ? reqQty : 0,
+        stagingQty:          item.movement === "to_staging"   ? reqQty : 0,
+        pickFaceQty:         item.movement === "to_pick_face" ? reqQty : 0,
+        pickFaceLocationName: item.movement === "to_pick_face" ? (item.toLocationName ?? "") : "",
       });
     } else {
       // Merge: onhandQty is the same pallet so keep the max (sourceQty)
       existing.onhandQty = Math.max(existing.onhandQty, item.sourceQty ?? item.qty);
       if (item.movement === "to_staging")   existing.stagingQty  += reqQty;
-      if (item.movement === "to_pick_face") existing.pickFaceQty += reqQty;
+      if (item.movement === "to_pick_face") {
+        existing.pickFaceQty += reqQty;
+        if (!existing.pickFaceLocationName && item.toLocationName) {
+          existing.pickFaceLocationName = item.toLocationName;
+        }
+      }
     }
   }
 
   const whItems = Array.from(whRowMap.values())
     .sort((a, b) => a.fromLocationName.localeCompare(b.fromLocationName));
 
-  // Column x positions — FROM LOC | SKU | LOT # | ONHAND QTY | MOVE TO STAGING | MOVE TO PICK FACE
-  const QTY_W_WH = 50;
-  const DEST_W_WH = 65;
+  // Column layout (landscape letter = 792pt, tableL≈27.7, tableR≈764.3, usable≈736pt)
+  // FROM LOC(110) | SKU(145) | LOT#(90) | ONHAND(48) | STAGING(55) | PICK FACE(55) | PF LOCATION(95) | CHK(20)
+  // Total content: 110+145+90+48+55+55+95+20 = 618 + gaps ≈ fits fine
+  const QTY_W_WH  = 48;
+  const DEST_W_WH = 55;
+  const PF_LOC_W  = 95;
   const cx = {
-    from:     tableL + 4,           // FROM LOCATION (130pt wide)
-    sku:      tableL + 4 + 130,     // SKU (165pt wide)
-    lot:      tableL + 4 + 295,     // LOT # (100pt wide)
-    unhand:   tableL + 4 + 395,     // ONHAND QTY — right edge at +445
-    staging:  tableL + 4 + 455,     // MOVE TO STAGING — right edge at +520
-    pickFace: tableL + 4 + 530,     // MOVE TO PICK FACE — right edge at +595
-    chk:      tableR - 26,
+    from:       tableL + 4,           // FROM LOCATION (110pt wide)
+    sku:        tableL + 4 + 110,     // SKU (145pt wide)
+    lot:        tableL + 4 + 255,     // LOT # (90pt wide)
+    unhand:     tableL + 4 + 345,     // ONHAND QTY right-edge at +393
+    staging:    tableL + 4 + 401,     // MOVE TO STAGING right-edge at +456
+    pickFace:   tableL + 4 + 464,     // MOVE TO PICK FACE right-edge at +519
+    pfLoc:      tableL + 4 + 527,     // PICK FACE LOCATION (95pt wide)
+    chk:        tableR - 26,
   };
 
   const customerName = getCustomerName(meta);
@@ -690,12 +707,13 @@ export async function generateWarehousePullSheetPDF(
   }
 
   let rowY = drawTableHeaderRow(doc, tableTop, tableL, tableR, [
-    { label: "FROM LOCATION",    x: cx.from },
-    { label: "SKU",              x: cx.sku },
-    { label: "LOT #",            x: cx.lot },
-    { label: "ONHAND QTY",       x: cx.unhand,   width: QTY_W_WH,  align: "right" },
-    { label: "MOVE TO STAGING",  x: cx.staging,  width: DEST_W_WH, align: "right" },
-    { label: "MOVE TO PICK FACE",x: cx.pickFace, width: DEST_W_WH, align: "right" },
+    { label: "FROM LOCATION",     x: cx.from },
+    { label: "SKU",               x: cx.sku },
+    { label: "LOT #",             x: cx.lot },
+    { label: "ONHAND QTY",        x: cx.unhand,   width: QTY_W_WH,  align: "right" },
+    { label: "MOVE TO STAGING",   x: cx.staging,  width: DEST_W_WH, align: "right" },
+    { label: "MOVE TO PICK FACE", x: cx.pickFace, width: DEST_W_WH, align: "right" },
+    { label: "PICK FACE LOCATION",x: cx.pfLoc,    width: PF_LOC_W },
   ]);
 
   let totalOnhand = 0;
@@ -739,6 +757,13 @@ export async function generateWarehousePullSheetPDF(
     const pickFaceStr = row.pickFaceQty > 0 ? String(row.pickFaceQty) : "—";
     doc.fillColor(pickFaceStr !== "—" ? GD_GREEN : GD_GRAY).fontSize(9).font(pickFaceStr !== "—" ? "Helvetica-Bold" : "Helvetica")
       .text(pickFaceStr, cx.pickFace, textY, { width: DEST_W_WH, align: "right", lineBreak: false });
+
+    // PICK FACE LOCATION — destination name for surplus; dash if no surplus
+    const pfLocStr = row.pickFaceLocationName || (row.pickFaceQty > 0 ? "—" : "");
+    if (pfLocStr) {
+      doc.fillColor(row.pickFaceQty > 0 ? GD_DKGRAY : GD_GRAY).fontSize(8).font("Helvetica")
+        .text(pfLocStr, cx.pfLoc, textY, { width: PF_LOC_W, lineBreak: false });
+    }
 
     // Checkbox
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);

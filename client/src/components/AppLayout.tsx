@@ -114,9 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               GD Wizard
             </span>
           </div>
-          <p className="text-[11px] text-[#94a3b8] opacity-65 font-medium tracking-[0.4px]">
-            Powered by Go Direct Solutions.
-          </p>
+
         </div>
 
         {/* Navigation */}

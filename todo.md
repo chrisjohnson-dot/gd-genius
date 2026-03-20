@@ -184,3 +184,4 @@
 - [x] Style: Apply new card/table/page-header styles to Allocation Rules page
 - [x] Style: Apply new card/table/page-header styles to Location Config page
 - [x] UX: Add Last 7 / 30 / 90 days date-range filter to Run History page
+- [x] UX: Add search bar to Run History page to filter by customer name or TX ID

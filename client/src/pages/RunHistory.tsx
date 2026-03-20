@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { History, Loader2, Printer, Trash2 } from "lucide-react";
+import { History, Loader2, Printer, Search, Trash2, X } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 
@@ -48,7 +48,16 @@ const DATE_FILTERS = [
 export default function RunHistory() {
   const utils = trpc.useUtils();
   const [activeDays, setActiveDays] = useState<number | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState("");
   const { data: runs, isLoading } = trpc.allocation.history.useQuery({ limit: 200, days: activeDays });
+
+  const filteredRuns = runs?.filter((run) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const name = (run.customerName ?? `Customer ${run.customerId}`).toLowerCase();
+    const orderIds: number[] = (run as typeof run & { orderIds?: number[] }).orderIds ?? [];
+    return name.includes(q) || orderIds.some((id) => String(id).includes(q));
+  }) ?? [];
 
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const pendingRun = runs?.find((r) => r.id === pendingDeleteId);
@@ -57,7 +66,7 @@ export default function RunHistory() {
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  const allIds = runs?.map((r) => r.id) ?? [];
+  const allIds = filteredRuns.map((r) => r.id);
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
   const someSelected = selectedIds.size > 0 && !allSelected;
 
@@ -143,10 +152,34 @@ export default function RunHistory() {
             <h3 className="text-[15px] font-bold">
               {activeDays ? `Last ${activeDays} Days` : "All Allocation Runs"}
               {!isLoading && runs && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">{runs.length} run{runs.length !== 1 ? "s" : ""}</span>
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {filteredRuns.length}{searchQuery ? ` of ${runs.length}` : ""} run{filteredRuns.length !== 1 ? "s" : ""}
+                </span>
               )}
             </h3>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setSelectedIds(new Set()); }}
+                  placeholder="Search customer or TX ID…"
+                  className="pl-8 pr-7 py-1.5 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 w-52"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => { setSearchQuery(""); setSelectedIds(new Set()); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              {/* Date filter pills */}
+              <div className="flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5 text-muted-foreground mr-0.5" />
               {DATE_FILTERS.map((f) => (
                 <button
@@ -162,6 +195,7 @@ export default function RunHistory() {
                   {f.label}
                 </button>
               ))}
+              </div>
             </div>
           </div>
 
@@ -173,6 +207,12 @@ export default function RunHistory() {
             <div className="text-center py-16 text-muted-foreground">
               <History className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm font-medium">No allocation runs yet.</p>
+            </div>
+          ) : filteredRuns.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Search className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">No runs match your search.</p>
+              <button onClick={() => setSearchQuery("")} className="mt-2 text-xs text-primary hover:underline">Clear search</button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -201,7 +241,7 @@ export default function RunHistory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {runs.map((run) => {
+                  {filteredRuns.map((run) => {
                     const hasPrinted = !!run.documentsPrintedAt;
                     const orderIds: number[] = (run as typeof run & { orderIds?: number[] }).orderIds ?? [];
                     const isChecked = selectedIds.has(run.id);

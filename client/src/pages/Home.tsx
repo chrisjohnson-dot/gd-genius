@@ -254,35 +254,51 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((order) => (
-                    <tr key={order.orderId}>
-                      <td className="font-semibold text-foreground">
-                        {order.referenceNum || `#${order.orderId}`}
-                        {order.poNum && (
-                          <span className="block text-xs text-muted-foreground font-normal">PO: {order.poNum}</span>
-                        )}
-                      </td>
-                      <td className="text-muted-foreground">{order.clientName}</td>
-                      <td className="text-muted-foreground">{order.shipToName ?? "—"}</td>
-                      <td>
-                        <span className={`font-semibold ${
-                          order.ageDays >= 7 ? "text-red-500" :
-                          order.ageDays >= 3 ? "text-amber-500" : "text-muted-foreground"
-                        }`}>
-                          {order.ageDays === 0 ? "Today" : `${order.ageDays}d`}
-                        </span>
-                      </td>
-                      <td><PriorityPill priority={order.priority} /></td>
-                      <td className="text-muted-foreground">{order.lineCount}</td>
-                      <td className="text-right">
-                        <Link href="/allocate">
-                          <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs">
-                            Allocate
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredOrders.map((order) => {
+                    const isUrgent = order.ageDays >= 7;
+                    const isHigh   = order.ageDays >= 3 && order.ageDays < 7;
+                    const rowStyle = isUrgent
+                      ? { background: "rgba(239,68,68,0.06)", borderLeft: "3px solid #ef4444" }
+                      : isHigh
+                      ? { background: "rgba(245,158,11,0.06)", borderLeft: "3px solid #f59e0b" }
+                      : { borderLeft: "3px solid transparent" };
+                    return (
+                      <tr key={order.orderId} style={rowStyle}>
+                        <td className="font-semibold text-foreground">
+                          {order.referenceNum || `#${order.orderId}`}
+                          {order.poNum && (
+                            <span className="block text-xs text-muted-foreground font-normal">PO: {order.poNum}</span>
+                          )}
+                        </td>
+                        <td className="text-muted-foreground">{order.clientName}</td>
+                        <td className="text-muted-foreground">{order.shipToName ?? "—"}</td>
+                        <td>
+                          <span
+                            className={`inline-flex items-center gap-1 font-bold text-xs px-2 py-0.5 rounded-lg ${
+                              isUrgent
+                                ? "bg-red-100 text-red-600"
+                                : isHigh
+                                ? "bg-amber-100 text-amber-600"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            {isUrgent && <ShieldAlert className="h-3 w-3" />}
+                            {isHigh   && <AlertTriangle className="h-3 w-3" />}
+                            {order.ageDays === 0 ? "Today" : `${order.ageDays}d`}
+                          </span>
+                        </td>
+                        <td><PriorityPill priority={order.priority} /></td>
+                        <td className="text-muted-foreground">{order.lineCount}</td>
+                        <td className="text-right">
+                          <Link href="/allocate">
+                            <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs">
+                              Allocate
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

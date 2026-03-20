@@ -53,7 +53,7 @@ const configItems = [
   { href: "/diagnostics", label: "API Diagnostics",    icon: Stethoscope },
 ];
 
-const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdlogo-transparent_3a5013eb.png";
+const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/GDgenius_a71f2819.jpg";
 
 function NavItem({ href, label, icon: Icon, active }: { href: string; label: string; icon: React.ElementType; active: boolean }) {
   return (
@@ -101,8 +101,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <img src={GD_LOGO} alt="Go Direct" className="h-12 w-auto" />
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">GD Wizard</h1>
+            <img src={GD_LOGO} alt="GD Genius" className="h-12 w-auto" />
           </div>
           <p className="text-muted-foreground">Sign in to access the allocation dashboard.</p>
           <Button asChild size="lg" className="shadow-md">
@@ -125,14 +124,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         style={{ background: "#0f111a", position: "relative" }}
       >
         {/* Brand */}
-        <div className="px-4 pt-4 pb-3.5 flex flex-col gap-1.5 border-b border-white/[0.06]">
-          <div className="flex items-center gap-2.5">
-            <img src={GD_LOGO} alt="Go Direct" className="h-8 w-auto shrink-0" />
-            <span className="text-white font-bold text-[15px] tracking-tight leading-tight">
-              GD Wizard
-            </span>
-          </div>
-
+        <div className="px-4 pt-4 pb-3.5 border-b border-white/[0.06]">
+          <img src={GD_LOGO} alt="GD Genius" className="h-10 w-auto" />
         </div>
 
         {/* Navigation */}

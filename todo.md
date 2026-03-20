@@ -204,3 +204,4 @@
 - [x] UX: Replace KPI cards on Open Orders Dashboard (global + per-warehouse) with Unallocated, In Production, Ship Ready, Out of SLA
 - [x] UX: Remove status tab bar from Open Orders Dashboard
 - [x] Branding: Replace sidebar logo with GDgenius.jpg
+- [x] Branding: Update browser tab title from GD Wizard to GD Genius

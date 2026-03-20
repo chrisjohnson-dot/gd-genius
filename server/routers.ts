@@ -1288,9 +1288,12 @@ export const appRouter = router({
       }),
 
     history: protectedProcedure
-      .input(z.object({ limit: z.number().default(50) }))
+      .input(z.object({ limit: z.number().default(200), days: z.number().optional() }))
       .query(async ({ input }) => {
-        const runs = await getAllocationRuns(input.limit);
+        const sinceDate = input.days
+          ? new Date(Date.now() - input.days * 24 * 60 * 60 * 1000)
+          : undefined;
+        const runs = await getAllocationRuns(input.limit, sinceDate);
         // Attach allocated orderIds to each run for display in the history table
         const runsWithOrders = await Promise.all(
           runs.map(async (run) => {

@@ -1,4 +1,4 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -190,10 +190,14 @@ export async function updateAllocationRun(
   await db.update(allocationRuns).set(updates).where(eq(allocationRuns.id, id));
 }
 
-export async function getAllocationRuns(limit = 50): Promise<AllocationRun[]> {
+export async function getAllocationRuns(limit = 50, sinceDate?: Date): Promise<AllocationRun[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(allocationRuns).orderBy(desc(allocationRuns.createdAt)).limit(limit);
+  const query = db.select().from(allocationRuns);
+  if (sinceDate) {
+    return query.where(gte(allocationRuns.createdAt, sinceDate)).orderBy(desc(allocationRuns.createdAt)).limit(limit);
+  }
+  return query.orderBy(desc(allocationRuns.createdAt)).limit(limit);
 }
 
 export async function getAllocationRunById(id: number): Promise<AllocationRun | undefined> {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,9 +38,17 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+const DATE_FILTERS = [
+  { label: "All Time", days: undefined },
+  { label: "Last 7 Days", days: 7 },
+  { label: "Last 30 Days", days: 30 },
+  { label: "Last 90 Days", days: 90 },
+] as const;
+
 export default function RunHistory() {
   const utils = trpc.useUtils();
-  const { data: runs, isLoading } = trpc.allocation.history.useQuery({ limit: 100 });
+  const [activeDays, setActiveDays] = useState<number | undefined>(undefined);
+  const { data: runs, isLoading } = trpc.allocation.history.useQuery({ limit: 200, days: activeDays });
 
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const pendingRun = runs?.find((r) => r.id === pendingDeleteId);
@@ -130,8 +139,30 @@ export default function RunHistory() {
 
         {/* Table card */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <div className="px-6 py-5 border-b border-border">
-            <h3 className="text-[15px] font-bold">All Allocation Runs</h3>
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+            <h3 className="text-[15px] font-bold">
+              {activeDays ? `Last ${activeDays} Days` : "All Allocation Runs"}
+              {!isLoading && runs && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">{runs.length} run{runs.length !== 1 ? "s" : ""}</span>
+              )}
+            </h3>
+            <div className="flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground mr-0.5" />
+              {DATE_FILTERS.map((f) => (
+                <button
+                  key={f.label}
+                  onClick={() => { setActiveDays(f.days); setSelectedIds(new Set()); }}
+                  className={[
+                    "px-3 py-1 rounded-lg text-xs font-medium transition-colors",
+                    activeDays === f.days
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70",
+                  ].join(" ")}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {isLoading ? (

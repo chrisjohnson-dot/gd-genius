@@ -199,3 +199,5 @@
 - [x] UX: Apply amber border to warehouse cards with high-priority orders but no urgent ones
 - [x] UX: Add amber HIGH pill badge to warehouse card headers with high-priority orders
 - [x] UX: Replace Open Orders Dashboard filter buttons with four status tabs: Unallocated, In Production, Ship Ready, Out of SLA
+- [x] UX: Move status tabs (Unallocated/In Production/Ship Ready/Out of SLA) to page level on Open Orders Dashboard
+- [x] UX: Replace dark gradient warehouse card headers with a lighter style

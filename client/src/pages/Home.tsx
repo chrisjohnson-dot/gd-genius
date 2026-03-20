@@ -23,7 +23,7 @@ import {
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
-// ─── Types inferred from procedure ───────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 type OrderRow = {
   orderId: number;
   referenceNum: string;
@@ -51,6 +51,8 @@ type FacilityGroup = {
   normal: number;
   byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
 };
+
+type StatusTab = "all" | "unallocated" | "in_production" | "ship_ready" | "out_of_sla";
 
 // ─── Priority pill ────────────────────────────────────────────────────────────
 function PriorityPill({ priority }: { priority: "urgent" | "high" | "normal" }) {
@@ -84,13 +86,12 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 }
 
 // ─── Per-warehouse card ───────────────────────────────────────────────────────
-function WarehouseCard({ facility }: { facility: FacilityGroup }) {
-  const [search, setSearch]         = useState("");
+function WarehouseCard({ facility, statusTab }: { facility: FacilityGroup; statusTab: StatusTab }) {
+  const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState("all");
-  const [statusTab, setStatusTab]   = useState<"all" | "unallocated" | "in_production" | "ship_ready" | "out_of_sla">("all");
-  const [sortKey, setSortKey]       = useState<SortKey>("ageDays");
-  const [sortDir, setSortDir]       = useState<SortDir>("desc");
-  const [expanded, setExpanded]     = useState(false);
+  const [sortKey, setSortKey]           = useState<SortKey>("ageDays");
+  const [sortDir, setSortDir]           = useState<SortDir>("desc");
+  const [expanded, setExpanded]         = useState(false);
 
   const clientOptions = useMemo(
     () => Array.from(new Map(facility.orders.map((o) => [o.clientId, o.clientName])).entries()),
@@ -110,13 +111,13 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
       );
     }
     if (clientFilter !== "all") rows = rows.filter((o) => String(o.clientId) === clientFilter);
-    if (statusTab === "unallocated") rows = rows.filter((o) => o.orderStatus === 0);
+    if (statusTab === "unallocated")   rows = rows.filter((o) => o.orderStatus === 0);
     else if (statusTab === "in_production") rows = rows.filter((o) => o.orderStatus === 1);
-    else if (statusTab === "ship_ready") rows = rows.filter((o) => o.orderStatus === 2);
-    else if (statusTab === "out_of_sla") rows = rows.filter((o) => o.ageDays >= 7);
+    else if (statusTab === "ship_ready")    rows = rows.filter((o) => o.orderStatus === 2);
+    else if (statusTab === "out_of_sla")    rows = rows.filter((o) => o.ageDays >= 7);
     return [...rows].sort((a, b) => {
       let cmp = 0;
-      if (sortKey === "ageDays")     cmp = a.ageDays - b.ageDays;
+      if (sortKey === "ageDays")       cmp = a.ageDays - b.ageDays;
       else if (sortKey === "priority") cmp = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
       else if (sortKey === "lineCount") cmp = a.lineCount - b.lineCount;
       else cmp = String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""));
@@ -129,7 +130,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
     else { setSortKey(key); setSortDir("desc"); }
   }
 
-  const hasFilters = search || clientFilter !== "all" || statusTab !== "all";
+  const hasFilters = search || clientFilter !== "all";
 
   return (
     <div
@@ -149,22 +150,21 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
             : undefined,
       }}
     >
-      {/* Warehouse header with KPI stats */}
+      {/* Warehouse header — light style */}
       <div
-        className="px-6 py-5 cursor-pointer select-none"
-        style={{ background: "linear-gradient(135deg, #0f111a 0%, #1a1d2e 100%)" }}
+        className="px-6 py-5 cursor-pointer select-none bg-card border-b border-border"
         onClick={() => setExpanded((e) => !e)}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
-              <Warehouse className="h-5 w-5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Warehouse className="h-5 w-5 text-primary" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">{facility.facilityName}</h3>
+                <h3 className="text-base font-bold text-foreground">{facility.facilityName}</h3>
                 {facility.high > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
                     <AlertTriangle className="h-2.5 w-2.5" />
                     {facility.high} HIGH
                   </span>
@@ -173,42 +173,38 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                   <TooltipProvider delayDuration={150}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white cursor-default">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 cursor-default">
                           <ShieldAlert className="h-2.5 w-2.5" />
                           {facility.urgent} URGENT
                         </span>
                       </TooltipTrigger>
-                      <TooltipContent
-                        side="bottom"
-                        className="p-3 min-w-[160px]"
-                        style={{ background: "#1a1d2e", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" }}
-                      >
-                        <p className="text-[11px] font-semibold text-white/60 uppercase tracking-wide mb-2">Priority Breakdown</p>
+                      <TooltipContent side="bottom" className="p-3 min-w-[160px]">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Priority Breakdown</p>
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5 text-xs text-red-400 font-semibold">
+                            <span className="flex items-center gap-1.5 text-xs text-red-600 font-semibold">
                               <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
                               Urgent (&ge;7d)
                             </span>
-                            <span className="text-xs font-bold text-white">{facility.urgent}</span>
+                            <span className="text-xs font-bold">{facility.urgent}</span>
                           </div>
                           <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5 text-xs text-amber-400 font-semibold">
+                            <span className="flex items-center gap-1.5 text-xs text-amber-600 font-semibold">
                               <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
                               High (3–6d)
                             </span>
-                            <span className="text-xs font-bold text-white">{facility.high}</span>
+                            <span className="text-xs font-bold">{facility.high}</span>
                           </div>
                           <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
+                            <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
                               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                               Normal (&lt;3d)
                             </span>
-                            <span className="text-xs font-bold text-white">{facility.normal}</span>
+                            <span className="text-xs font-bold">{facility.normal}</span>
                           </div>
-                          <div className="border-t border-white/10 pt-1.5 mt-1 flex items-center justify-between">
-                            <span className="text-xs text-white/50">Total</span>
-                            <span className="text-xs font-bold text-white">{facility.total}</span>
+                          <div className="border-t border-border pt-1.5 mt-1 flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">Total</span>
+                            <span className="text-xs font-bold">{facility.total}</span>
                           </div>
                         </div>
                       </TooltipContent>
@@ -216,31 +212,31 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                   </TooltipProvider>
                 )}
               </div>
-              <p className="text-xs text-white/50">{facility.total} unallocated order{facility.total !== 1 ? "s" : ""}</p>
+              <p className="text-xs text-muted-foreground">{facility.total} unallocated order{facility.total !== 1 ? "s" : ""}</p>
             </div>
           </div>
-          <div className="text-white/40">
+          <div className="text-muted-foreground">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>
         </div>
 
         {/* KPI row */}
         <div className="grid grid-cols-4 gap-3">
-          <div className="bg-white/8 rounded-xl px-4 py-3 text-center">
-            <p className="text-[22px] font-extrabold text-white leading-none">{facility.total}</p>
-            <p className="text-[10px] text-white/50 mt-1 font-medium uppercase tracking-wide">Total Open</p>
+          <div className="bg-muted/50 rounded-xl px-4 py-3 text-center">
+            <p className="text-[22px] font-extrabold text-foreground leading-none">{facility.total}</p>
+            <p className="text-[10px] text-muted-foreground mt-1 font-medium uppercase tracking-wide">Total Open</p>
           </div>
-          <div className="bg-white/8 rounded-xl px-4 py-3 text-center">
-            <p className="text-[22px] font-extrabold text-red-400 leading-none">{facility.urgent}</p>
-            <p className="text-[10px] text-white/50 mt-1 font-medium uppercase tracking-wide">Urgent</p>
+          <div className="bg-red-50 rounded-xl px-4 py-3 text-center border border-red-100">
+            <p className="text-[22px] font-extrabold text-red-600 leading-none">{facility.urgent}</p>
+            <p className="text-[10px] text-red-400 mt-1 font-medium uppercase tracking-wide">Urgent</p>
           </div>
-          <div className="bg-white/8 rounded-xl px-4 py-3 text-center">
-            <p className="text-[22px] font-extrabold text-amber-400 leading-none">{facility.high}</p>
-            <p className="text-[10px] text-white/50 mt-1 font-medium uppercase tracking-wide">High</p>
+          <div className="bg-amber-50 rounded-xl px-4 py-3 text-center border border-amber-100">
+            <p className="text-[22px] font-extrabold text-amber-600 leading-none">{facility.high}</p>
+            <p className="text-[10px] text-amber-400 mt-1 font-medium uppercase tracking-wide">High</p>
           </div>
-          <div className="bg-white/8 rounded-xl px-4 py-3 text-center">
-            <p className="text-[22px] font-extrabold text-blue-400 leading-none">{facility.byClient.length}</p>
-            <p className="text-[10px] text-white/50 mt-1 font-medium uppercase tracking-wide">Clients</p>
+          <div className="bg-blue-50 rounded-xl px-4 py-3 text-center border border-blue-100">
+            <p className="text-[22px] font-extrabold text-blue-600 leading-none">{facility.byClient.length}</p>
+            <p className="text-[10px] text-blue-400 mt-1 font-medium uppercase tracking-wide">Clients</p>
           </div>
         </div>
       </div>
@@ -248,36 +244,6 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
       {/* Collapsible order table */}
       {expanded && (
         <>
-          {/* Status tab buttons */}
-          <div className="px-5 pt-3 pb-0 border-b border-border bg-muted/20">
-            <div className="flex items-center gap-1 flex-wrap">
-              {([
-                { key: "all",           label: "All" },
-                { key: "unallocated",   label: "Unallocated" },
-                { key: "in_production", label: "In Production" },
-                { key: "ship_ready",    label: "Ship Ready" },
-                { key: "out_of_sla",    label: "Out of SLA" },
-              ] as const).map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setStatusTab(key)}
-                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${
-                    statusTab === key
-                      ? key === "out_of_sla"
-                        ? "border-red-500 text-red-600"
-                        : "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                  {key === "out_of_sla" && facility.urgent > 0 && (
-                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{facility.urgent}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Filters row */}
           <div className="px-5 py-2.5 border-b border-border flex flex-wrap items-center gap-2 bg-muted/10">
             <div className="relative">
@@ -309,7 +275,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
 
             {hasFilters && (
               <button
-                onClick={() => { setSearch(""); setClientFilter("all"); setStatusTab("all"); }}
+                onClick={() => { setSearch(""); setClientFilter("all"); }}
                 className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 ml-auto"
               >
                 <X className="h-3 w-3" /> Clear
@@ -322,15 +288,14 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
           </div>
 
           {filteredOrders.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              <PackageSearch className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            <div className="py-10 text-center text-muted-foreground">
               {facility.orders.length === 0 ? (
-                <p className="text-sm font-medium">No open orders for this warehouse.</p>
+                <p className="text-sm font-medium">No unallocated orders.</p>
               ) : (
                 <>
                   <p className="text-sm font-medium">No orders match your filters.</p>
                   <button
-                    onClick={() => { setSearch(""); setClientFilter("all"); setStatusTab("all"); }}
+                    onClick={() => { setSearch(""); setClientFilter("all"); }}
                     className="text-xs text-primary hover:underline mt-1"
                   >
                     Clear filters
@@ -343,51 +308,57 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               <table className="w-full data-table">
                 <thead>
                   <tr>
-                    <th><button onClick={() => toggleSort("referenceNum")} className="flex items-center">Order # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} /></button></th>
-                    <th><button onClick={() => toggleSort("clientName")} className="flex items-center">Client <SortIcon col="clientName" sortKey={sortKey} sortDir={sortDir} /></button></th>
-                    <th><button onClick={() => toggleSort("shipToName")} className="flex items-center">Ship To <SortIcon col="shipToName" sortKey={sortKey} sortDir={sortDir} /></button></th>
-                    <th><button onClick={() => toggleSort("ageDays")} className="flex items-center">Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} /></button></th>
-                    <th><button onClick={() => toggleSort("priority")} className="flex items-center">Priority <SortIcon col="priority" sortKey={sortKey} sortDir={sortDir} /></button></th>
-                    <th><button onClick={() => toggleSort("lineCount")} className="flex items-center">Lines <SortIcon col="lineCount" sortKey={sortKey} sortDir={sortDir} /></button></th>
+                    <th onClick={() => toggleSort("referenceNum")} className="cursor-pointer select-none">
+                      Order # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("clientName")} className="cursor-pointer select-none">
+                      Client <SortIcon col="clientName" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("shipToName")} className="cursor-pointer select-none">
+                      Ship To <SortIcon col="shipToName" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none">
+                      Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("priority")} className="cursor-pointer select-none">
+                      Priority <SortIcon col="priority" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("lineCount")} className="cursor-pointer select-none">
+                      Lines <SortIcon col="lineCount" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((order) => {
-                    const isUrgent = order.ageDays >= 7;
-                    const isHigh   = order.ageDays >= 3 && order.ageDays < 7;
-                    const rowStyle = isUrgent
-                      ? { background: "rgba(239,68,68,0.06)", borderLeft: "3px solid #ef4444" }
-                      : isHigh
-                      ? { background: "rgba(245,158,11,0.06)", borderLeft: "3px solid #f59e0b" }
-                      : { borderLeft: "3px solid transparent" };
+                  {filteredOrders.map((o) => {
+                    const isUrgent = o.priority === "urgent";
+                    const isHigh   = o.priority === "high";
                     return (
-                      <tr key={order.orderId} style={rowStyle}>
+                      <tr
+                        key={o.orderId}
+                        style={
+                          isUrgent
+                            ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" }
+                            : isHigh
+                            ? { background: "rgba(245,158,11,0.04)", borderLeft: "3px solid #f59e0b" }
+                            : undefined
+                        }
+                      >
                         <td className="font-semibold text-foreground">
-                          {order.referenceNum || `#${order.orderId}`}
-                          {order.poNum && (
-                            <span className="block text-xs text-muted-foreground font-normal">PO: {order.poNum}</span>
+                          {o.referenceNum || `#${o.orderId}`}
+                          {(isUrgent || isHigh) && (
+                            <span className="ml-2 text-[10px]">
+                              {isUrgent ? "⚠" : "△"}
+                            </span>
                           )}
                         </td>
-                        <td className="text-muted-foreground">{order.clientName}</td>
-                        <td className="text-muted-foreground">{order.shipToName ?? "—"}</td>
-                        <td>
-                          <span
-                            className={`inline-flex items-center gap-1 font-bold text-xs px-2 py-0.5 rounded-lg ${
-                              isUrgent
-                                ? "bg-red-100 text-red-600"
-                                : isHigh
-                                ? "bg-amber-100 text-amber-600"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {isUrgent && <ShieldAlert className="h-3 w-3" />}
-                            {isHigh   && <AlertTriangle className="h-3 w-3" />}
-                            {order.ageDays === 0 ? "Today" : `${order.ageDays}d`}
-                          </span>
+                        <td className="text-muted-foreground">{o.clientName}</td>
+                        <td className="text-muted-foreground text-xs">{o.shipToName ?? "—"}</td>
+                        <td className="text-muted-foreground text-xs">
+                          {o.ageDays === 0 ? "Today" : `${o.ageDays}d`}
                         </td>
-                        <td><PriorityPill priority={order.priority} /></td>
-                        <td className="text-muted-foreground">{order.lineCount}</td>
+                        <td><PriorityPill priority={o.priority} /></td>
+                        <td className="text-muted-foreground text-xs">{o.lineCount}</td>
                         <td className="text-right">
                           <Link href="/allocate">
                             <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs">
@@ -411,9 +382,11 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { data, isLoading, refetch, isFetching } = trpc.allocation.openOrders.useQuery({});
+  const [pageStatusTab, setPageStatusTab] = useState<StatusTab>("all");
 
   const facilities: FacilityGroup[] = (data as { facilities?: FacilityGroup[] })?.facilities ?? [];
   const summary = data?.summary ?? { total: 0, urgent: 0, high: 0, normal: 0, byClient: [] };
+  const totalOutOfSla = summary.urgent;
 
   return (
     <AppLayout>
@@ -442,6 +415,34 @@ export default function Home() {
               </Link>
             </Button>
           </div>
+        </div>
+
+        {/* Page-level status tabs */}
+        <div className="bg-card border border-border rounded-2xl px-6 pt-1 pb-0 flex items-center gap-1 flex-wrap">
+          {([
+            { key: "all",           label: "All" },
+            { key: "unallocated",   label: "Unallocated" },
+            { key: "in_production", label: "In Production" },
+            { key: "ship_ready",    label: "Ship Ready" },
+            { key: "out_of_sla",    label: "Out of SLA" },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setPageStatusTab(key)}
+              className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                pageStatusTab === key
+                  ? key === "out_of_sla"
+                    ? "border-red-500 text-red-600"
+                    : "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+              {key === "out_of_sla" && totalOutOfSla > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{totalOutOfSla}</span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Global KPI bar */}
@@ -513,7 +514,7 @@ export default function Home() {
         {!isLoading && facilities.length > 0 && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {facilities.map((f) => (
-              <WarehouseCard key={f.facilityId} facility={f} />
+              <WarehouseCard key={f.facilityId} facility={f} statusTab={pageStatusTab} />
             ))}
           </div>
         )}

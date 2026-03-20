@@ -37,7 +37,7 @@ export default function Home() {
         <div className="flex items-center justify-between">
           <div>
             <p className="page-breadcrumb">Overview</p>
-            <h1 className="page-title">Dashboard</h1>
+            <h1 className="page-title">Open Orders Dashboard</h1>
           </div>
           <Button asChild className="shadow-sm">
             <Link href="/allocate" className="flex items-center gap-2">

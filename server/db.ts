@@ -23,6 +23,9 @@ import {
   scheduleConfigs,
   InsertScheduleConfig,
   ScheduleConfig,
+  orderTracking,
+  OrderTracking,
+  InsertOrderTracking,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -355,4 +358,163 @@ export async function getAutoRunCustomers(configId: number): Promise<CustomerRul
     .select()
     .from(customerRules)
     .where(and(eq(customerRules.configId, configId), eq(customerRules.autoRun, true)));
+}
+
+// ─── Order Tracking (Pick Schedule) ─────────────────────────────────────────
+
+/** Upsert a batch of orders from Extensiv into the tracking table.
+ *  - New orders → inserted with lifecycleStatus = 'unallocated'
+ *  - Existing orders → order details refreshed (shipTo, pieces, etc.) but
+ *    lifecycleStatus is NOT overwritten (preserves manual stage advances).
+ *  - Orders whose extensivOrderId is NOT in the provided set → deleted (shipped/closed).
+ */
+export async function upsertTrackedOrders(
+  orders: Array<{
+    extensivOrderId: number;
+    referenceNum: string | null;
+    poNum: string | null;
+    configId: number;
+    clientId: number;
+    clientName: string;
+    facilityId: number;
+    facilityName: string;
+    shipToName: string | null;
+    shipToCity: string | null;
+    totalPieces: number;
+    skuCount: number;
+    notes: string | null;
+    extensivStatus: number;
+    creationDate: string | null;
+  }>,
+  configId: number,
+  facilityId: number
+): Promise<{ inserted: number; updated: number; removed: number }> {
+  const db = await getDb();
+  if (!db) return { inserted: 0, updated: 0, removed: 0 };
+
+  // Fetch existing tracked orders for this config+facility
+  const existing = await db
+    .select({ id: orderTracking.id, extensivOrderId: orderTracking.extensivOrderId })
+    .from(orderTracking)
+    .where(and(eq(orderTracking.configId, configId), eq(orderTracking.facilityId, facilityId)));
+
+  const existingMap = new Map(existing.map((r) => [r.extensivOrderId, r.id]));
+  const incomingIds = new Set(orders.map((o) => o.extensivOrderId));
+
+  let inserted = 0;
+  let updated = 0;
+
+  for (const o of orders) {
+    const now = new Date();
+    if (existingMap.has(o.extensivOrderId)) {
+      // Update details only — do NOT touch lifecycleStatus
+      await db
+        .update(orderTracking)
+        .set({
+          referenceNum: o.referenceNum ?? undefined,
+          poNum: o.poNum ?? undefined,
+          clientName: o.clientName,
+          facilityName: o.facilityName,
+          shipToName: o.shipToName ?? undefined,
+          shipToCity: o.shipToCity ?? undefined,
+          totalPieces: o.totalPieces,
+          skuCount: o.skuCount,
+          notes: o.notes ?? undefined,
+          extensivStatus: o.extensivStatus,
+          creationDate: o.creationDate ?? undefined,
+          lastSyncedAt: now,
+        })
+        .where(eq(orderTracking.extensivOrderId, o.extensivOrderId));
+      updated++;
+    } else {
+      // Insert new order as unallocated
+      await db.insert(orderTracking).values({
+        extensivOrderId: o.extensivOrderId,
+        referenceNum: o.referenceNum ?? undefined,
+        poNum: o.poNum ?? undefined,
+        configId: o.configId,
+        clientId: o.clientId,
+        clientName: o.clientName,
+        facilityId: o.facilityId,
+        facilityName: o.facilityName,
+        shipToName: o.shipToName ?? undefined,
+        shipToCity: o.shipToCity ?? undefined,
+        totalPieces: o.totalPieces,
+        skuCount: o.skuCount,
+        notes: o.notes ?? undefined,
+        extensivStatus: o.extensivStatus,
+        creationDate: o.creationDate ?? undefined,
+        lifecycleStatus: "unallocated",
+        firstSeenAt: now,
+        lastSyncedAt: now,
+      });
+      inserted++;
+    }
+  }
+
+  // Remove orders that are no longer in Extensiv (shipped/closed)
+  let removed = 0;
+  for (const [extId, dbId] of Array.from(existingMap.entries())) {
+    if (!incomingIds.has(extId)) {
+      await db.delete(orderTracking).where(eq(orderTracking.id, dbId));
+      removed++;
+    }
+  }
+
+  return { inserted, updated, removed };
+}
+
+/** Advance an order to the next lifecycle stage. */
+export async function updateOrderLifecycleStatus(
+  extensivOrderId: number,
+  newStatus: OrderTracking["lifecycleStatus"]
+): Promise<OrderTracking | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const now = new Date();
+  const timestampField: Partial<Record<string, Date>> = {};
+  if (newStatus === "allocated")   timestampField.allocatedAt = now;
+  if (newStatus === "picking")     timestampField.pickingAt = now;
+  if (newStatus === "qc")          timestampField.qcAt = now;
+  if (newStatus === "qc_complete") timestampField.qcCompleteAt = now;
+  if (newStatus === "ship_ready")  timestampField.shipReadyAt = now;
+
+  await db
+    .update(orderTracking)
+    .set({ lifecycleStatus: newStatus, ...timestampField, lastSyncedAt: now })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+
+  const rows = await db
+    .select()
+    .from(orderTracking)
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Get all tracked orders, optionally filtered by facilityId. */
+export async function getTrackedOrders(facilityId?: number): Promise<OrderTracking[]> {
+  const db = await getDb();
+  if (!db) return [];
+  if (facilityId) {
+    return db
+      .select()
+      .from(orderTracking)
+      .where(eq(orderTracking.facilityId, facilityId))
+      .orderBy(orderTracking.firstSeenAt);
+  }
+  return db.select().from(orderTracking).orderBy(orderTracking.firstSeenAt);
+}
+
+/** Get the most recent lastSyncedAt across all tracked orders (for "last synced" display). */
+export async function getLastSyncTime(): Promise<Date | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ lastSyncedAt: orderTracking.lastSyncedAt })
+    .from(orderTracking)
+    .orderBy(desc(orderTracking.lastSyncedAt))
+    .limit(1);
+  return rows[0]?.lastSyncedAt ?? null;
 }

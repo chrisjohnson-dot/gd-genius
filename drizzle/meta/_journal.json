@@ -71,6 +71,13 @@
       "when": 1773785767528,
       "tag": "0009_confused_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1774040338217,
+      "tag": "0010_daily_doctor_strange",
+      "breakpoints": true
     }
   ]
 }

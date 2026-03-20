@@ -31,8 +31,12 @@ import {
   getScheduleConfig,
   upsertScheduleConfig,
   getAutoRunCustomers,
+  getTrackedOrders,
+  updateOrderLifecycleStatus,
+  getLastSyncTime,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
+import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -1736,6 +1740,57 @@ export const appRouter = router({
         return getAutoRunCustomers(input.configId);
       }),
   }),
-});
 
+  // ─── Order Lifecycle Tracking (Pick Schedule) ────────────────────────────────
+  pickSchedule: router({
+    /** Return all tracked orders, optionally filtered by facilityId */
+    list: protectedProcedure
+      .input(z.object({ facilityId: z.number().optional() }))
+      .query(async ({ input }) => {
+        const orders = await getTrackedOrders(input.facilityId);
+        const lastSync = await getLastSyncTime();
+        const syncInfo = getLastSyncInfo();
+        return {
+          orders,
+          lastSyncAt: lastSync,
+          syncRunning: syncInfo.syncRunning,
+        };
+      }),
+
+    /** Advance an order to the next lifecycle stage */
+    updateStatus: protectedProcedure
+      .input(
+        z.object({
+          extensivOrderId: z.number(),
+          status: z.enum(["unallocated", "allocated", "picking", "qc", "qc_complete", "ship_ready"]),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const updated = await updateOrderLifecycleStatus(input.extensivOrderId, input.status);
+        if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found in tracking table" });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "pickSchedule.updateStatus",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: { newStatus: input.status },
+        });
+        return updated;
+      }),
+
+    /** Manually trigger an immediate sync from Extensiv */
+    syncNow: protectedProcedure.mutation(async ({ ctx }) => {
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "pickSchedule.syncNow",
+        entityType: "order_tracking",
+        entityId: null,
+        details: {},
+      });
+      // Run async so UI gets immediate response
+      syncOrdersNow().catch((err) => console.error("[PickSchedule] Manual sync failed:", err));
+      return { success: true, message: "Sync started. Refresh in a moment to see updated orders." };
+    }),
+  }),
+});
 export type AppRouter = typeof appRouter;

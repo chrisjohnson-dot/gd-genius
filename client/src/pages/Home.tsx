@@ -1,5 +1,4 @@
 import AppLayout from "@/components/AppLayout";
-import { CheckCircle2, Clock, Package, ShipIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -11,9 +10,12 @@ import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
   ArrowUpDown,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Clock,
   MessageSquare,
+  Package,
   PackageSearch,
   RefreshCw,
   Search,
@@ -21,100 +23,161 @@ import {
   Users,
   Warehouse,
   X,
+  Truck,
+  FlaskConical,
+  ClipboardCheck,
+  ShipIcon,
+  ChevronRight,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
+import { toast } from "sonner";
+
+// ─── Lifecycle status config ──────────────────────────────────────────────────
+type LifecycleStatus = "unallocated" | "allocated" | "picking" | "qc" | "qc_complete" | "ship_ready";
+
+const LIFECYCLE_CONFIG: Record<
+  LifecycleStatus,
+  { label: string; bg: string; text: string; border: string; icon: React.ReactNode; nextStatus: LifecycleStatus | null; nextLabel: string | null }
+> = {
+  unallocated: {
+    label: "Unallocated",
+    bg: "#dbeafe", text: "#1d4ed8", border: "#bfdbfe",
+    icon: <Package className="h-2.5 w-2.5" />,
+    nextStatus: "allocated", nextLabel: "Mark Allocated",
+  },
+  allocated: {
+    label: "Allocated",
+    bg: "#e0e7ff", text: "#4338ca", border: "#c7d2fe",
+    icon: <ClipboardCheck className="h-2.5 w-2.5" />,
+    nextStatus: "picking", nextLabel: "Give to Associate →",
+  },
+  picking: {
+    label: "Picking",
+    bg: "#fef3c7", text: "#b45309", border: "#fde68a",
+    icon: <Truck className="h-2.5 w-2.5" />,
+    nextStatus: "qc", nextLabel: "Start QC →",
+  },
+  qc: {
+    label: "QC",
+    bg: "#fce7f3", text: "#be185d", border: "#fbcfe8",
+    icon: <FlaskConical className="h-2.5 w-2.5" />,
+    nextStatus: "qc_complete", nextLabel: "QC Complete →",
+  },
+  qc_complete: {
+    label: "QC Complete",
+    bg: "#d1fae5", text: "#065f46", border: "#a7f3d0",
+    icon: <CheckCircle2 className="h-2.5 w-2.5" />,
+    nextStatus: "ship_ready", nextLabel: "Ship Ready →",
+  },
+  ship_ready: {
+    label: "Ship Ready",
+    bg: "#dcfce7", text: "#15803d", border: "#bbf7d0",
+    icon: <ShipIcon className="h-2.5 w-2.5" />,
+    nextStatus: null, nextLabel: null,
+  },
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type OrderRow = {
-  orderId: number;
-  referenceNum: string;
+type TrackedOrder = {
+  id: number;
+  extensivOrderId: number;
+  referenceNum: string | null;
   poNum: string | null;
   clientId: number;
   clientName: string;
   facilityId: number;
-  facilityName: string;
-  creationDate: string;
-  ageDays: number;
-  priority: "urgent" | "high" | "normal";
-  lineCount: number;
-  totalPieces: number;
-  skuCount: number;
+  facilityName: string | null;
   shipToName: string | null;
   shipToCity: string | null;
+  totalPieces: number | null;
+  skuCount: number | null;
   notes: string | null;
-  configId: number;
-  orderStatus: number;
+  extensivStatus: number | null;
+  creationDate: string | null;
+  lifecycleStatus: LifecycleStatus;
+  firstSeenAt: string | Date;
+  lastSyncedAt: string | Date;
+  allocatedAt: string | Date | null;
+  pickingAt: string | Date | null;
+  qcAt: string | Date | null;
+  qcCompleteAt: string | Date | null;
+  shipReadyAt: string | Date | null;
 };
 
 type FacilityGroup = {
   facilityId: number;
   facilityName: string;
-  orders: OrderRow[];
-  total: number;
-  urgent: number;
-  high: number;
-  normal: number;
-  unallocated: number;
-  inProduction: number;
-  shipReady: number;
-  outOfSla: number;
-  byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
+  orders: TrackedOrder[];
 };
 
 // ─── Status pill ──────────────────────────────────────────────────────────────
-function StatusPill({ orderStatus, ageDays }: { orderStatus: number; ageDays: number }) {
-  if (ageDays >= 7) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 whitespace-nowrap">
-        <ShieldAlert className="h-2.5 w-2.5" /> Out of SLA
-      </span>
-    );
-  }
-  if (orderStatus === 2) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-        <CheckCircle2 className="h-2.5 w-2.5" /> Ship Ready
-      </span>
-    );
-  }
-  if (orderStatus === 1) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
-        <Clock className="h-2.5 w-2.5" /> In Production
-      </span>
-    );
-  }
+function LifecyclePill({ status }: { status: LifecycleStatus }) {
+  const cfg = LIFECYCLE_CONFIG[status];
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 whitespace-nowrap">
-      <Package className="h-2.5 w-2.5" /> Unallocated
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap"
+      style={{ background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}
+    >
+      {cfg.icon}
+      {cfg.label}
     </span>
   );
 }
 
-// ─── Priority pill ────────────────────────────────────────────────────────────
-function PriorityPill({ priority }: { priority: "urgent" | "high" | "normal" }) {
-  const map = {
-    urgent: { bg: "#fee2e2", text: "#ef4444", dot: "#ef4444", label: "Urgent" },
-    high:   { bg: "#fef3c7", text: "#d97706", dot: "#f59e0b", label: "High" },
-    normal: { bg: "#d1fae5", text: "#059669", dot: "#059669", label: "Normal" },
-  };
-  const s = map[priority];
+// ─── Advance button ───────────────────────────────────────────────────────────
+function AdvanceButton({
+  order,
+  onAdvanced,
+}: {
+  order: TrackedOrder;
+  onAdvanced: () => void;
+}) {
+  const cfg = LIFECYCLE_CONFIG[order.lifecycleStatus];
+  const utils = trpc.useUtils();
+
+  const updateStatus = trpc.pickSchedule.updateStatus.useMutation({
+    onSuccess: () => {
+      utils.pickSchedule.list.invalidate();
+      onAdvanced();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  if (!cfg.nextStatus) return null;
+
   return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
-      style={{ background: s.bg, color: s.text }}
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-[10px] h-6 px-2 font-semibold whitespace-nowrap"
+      style={{ color: cfg.text }}
+      disabled={updateStatus.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        updateStatus.mutate({ extensivOrderId: order.extensivOrderId, status: cfg.nextStatus! });
+      }}
     >
-      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.dot }} />
-      {s.label}
-    </span>
+      {updateStatus.isPending ? (
+        <RefreshCw className="h-3 w-3 animate-spin" />
+      ) : (
+        <>
+          {cfg.nextLabel}
+          <ChevronRight className="h-3 w-3 ml-0.5" />
+        </>
+      )}
+    </Button>
   );
 }
 
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
-type SortKey = "clientName" | "referenceNum" | "ageDays" | "priority" | "totalPieces" | "shipToName" | "shipToCity" | "poNum";
+type SortKey = "clientName" | "referenceNum" | "ageDays" | "lifecycleStatus" | "totalPieces" | "shipToName" | "shipToCity" | "poNum";
 type SortDir = "asc" | "desc";
-const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+const STATUS_RANK: Record<LifecycleStatus, number> = {
+  unallocated: 0, allocated: 1, picking: 2, qc: 3, qc_complete: 4, ship_ready: 5,
+};
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-30 inline" />;
@@ -123,12 +186,25 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <ChevronDown className="h-3 w-3 ml-1 inline" />;
 }
 
+function getAgeDays(order: TrackedOrder): number {
+  const d = order.firstSeenAt ? new Date(order.firstSeenAt) : null;
+  if (!d || isNaN(d.getTime())) return 0;
+  return Math.floor((Date.now() - d.getTime()) / 86_400_000);
+}
+
 // ─── Per-warehouse card ───────────────────────────────────────────────────────
-function WarehouseCard({ facility }: { facility: FacilityGroup }) {
+function WarehouseCard({
+  facility,
+  onStatusChanged,
+}: {
+  facility: FacilityGroup;
+  onStatusChanged: () => void;
+}) {
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState("all");
-  const [sortKey, setSortKey]           = useState<SortKey>("ageDays");
-  const [sortDir, setSortDir]           = useState<SortDir>("desc");
+  const [statusFilter, setStatusFilter] = useState<LifecycleStatus | "all">("all");
+  const [sortKey, setSortKey]           = useState<SortKey>("lifecycleStatus");
+  const [sortDir, setSortDir]           = useState<SortDir>("asc");
   const [expanded, setExpanded]         = useState(false);
   const [groupByClient, setGroupByClient] = useState(true);
 
@@ -143,7 +219,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
       const q = search.trim().toLowerCase();
       rows = rows.filter(
         (o) =>
-          o.referenceNum.toLowerCase().includes(q) ||
+          (o.referenceNum ?? "").toLowerCase().includes(q) ||
           o.clientName.toLowerCase().includes(q) ||
           (o.shipToName ?? "").toLowerCase().includes(q) ||
           (o.poNum ?? "").toLowerCase().includes(q) ||
@@ -152,70 +228,162 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
       );
     }
     if (clientFilter !== "all") rows = rows.filter((o) => String(o.clientId) === clientFilter);
+    if (statusFilter !== "all") rows = rows.filter((o) => o.lifecycleStatus === statusFilter);
     return [...rows].sort((a, b) => {
       let cmp = 0;
-      if (sortKey === "ageDays")        cmp = a.ageDays - b.ageDays;
-      else if (sortKey === "priority")  cmp = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-      else if (sortKey === "totalPieces") cmp = a.totalPieces - b.totalPieces;
-      else cmp = String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""));
+      if (sortKey === "ageDays")            cmp = getAgeDays(a) - getAgeDays(b);
+      else if (sortKey === "lifecycleStatus") cmp = STATUS_RANK[a.lifecycleStatus] - STATUS_RANK[b.lifecycleStatus];
+      else if (sortKey === "totalPieces")   cmp = (a.totalPieces ?? 0) - (b.totalPieces ?? 0);
+      else cmp = String(a[sortKey as keyof TrackedOrder] ?? "").localeCompare(String(b[sortKey as keyof TrackedOrder] ?? ""));
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [facility.orders, search, clientFilter, sortKey, sortDir]);
+  }, [facility.orders, search, clientFilter, statusFilter, sortKey, sortDir]);
 
-  // Group orders by client for the spreadsheet-style view
+  // Group orders by client
   const groupedByClient = useMemo(() => {
-    const map = new Map<number, { clientId: number; clientName: string; orders: OrderRow[] }>();
+    const map = new Map<number, { clientId: number; clientName: string; orders: TrackedOrder[] }>();
     for (const o of filteredOrders) {
-      if (!map.has(o.clientId)) {
-        map.set(o.clientId, { clientId: o.clientId, clientName: o.clientName, orders: [] });
-      }
+      if (!map.has(o.clientId)) map.set(o.clientId, { clientId: o.clientId, clientName: o.clientName, orders: [] });
       map.get(o.clientId)!.orders.push(o);
     }
-    // Sort client groups: urgent clients first, then by name
-    return Array.from(map.values()).sort((a, b) => {
-      const aUrgent = a.orders.some(o => o.priority === "urgent");
-      const bUrgent = b.orders.some(o => o.priority === "urgent");
-      if (aUrgent && !bUrgent) return -1;
-      if (!aUrgent && bUrgent) return 1;
-      const aHigh = a.orders.some(o => o.priority === "high");
-      const bHigh = b.orders.some(o => o.priority === "high");
-      if (aHigh && !bHigh) return -1;
-      if (!aHigh && bHigh) return 1;
-      return a.clientName.localeCompare(b.clientName);
-    });
+    return Array.from(map.values()).sort((a, b) => a.clientName.localeCompare(b.clientName));
   }, [filteredOrders]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("desc"); }
+    else { setSortKey(key); setSortDir("asc"); }
   }
 
-  const hasFilters = search || clientFilter !== "all";
+  const hasFilters = search || clientFilter !== "all" || statusFilter !== "all";
 
-  // Format date to short form
-  function fmtDate(d: string) {
+  function fmtDate(d: string | Date | null | undefined) {
     if (!d) return "—";
-    const dt = new Date(d);
-    if (isNaN(dt.getTime())) return d;
+    const dt = new Date(d as string);
+    if (isNaN(dt.getTime())) return "—";
     return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
+
+  // KPI counts
+  const counts = useMemo(() => {
+    const c: Record<LifecycleStatus, number> = { unallocated: 0, allocated: 0, picking: 0, qc: 0, qc_complete: 0, ship_ready: 0 };
+    for (const o of facility.orders) c[o.lifecycleStatus]++;
+    return c;
+  }, [facility.orders]);
+
+  const hasUrgent = facility.orders.some((o) => getAgeDays(o) >= 7);
+  const hasHigh   = !hasUrgent && facility.orders.some((o) => getAgeDays(o) >= 3);
+
+  const tableHeader = (showClient: boolean) => (
+    <thead>
+      <tr>
+        <th className="w-[120px]">
+          <button onClick={() => toggleSort("lifecycleStatus")} className="cursor-pointer select-none flex items-center gap-0.5">
+            Status <SortIcon col="lifecycleStatus" sortKey={sortKey} sortDir={sortDir} />
+          </button>
+        </th>
+        <th onClick={() => toggleSort("referenceNum")} className="cursor-pointer select-none">
+          TX # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
+        </th>
+        <th onClick={() => toggleSort("poNum")} className="cursor-pointer select-none">
+          PO # <SortIcon col="poNum" sortKey={sortKey} sortDir={sortDir} />
+        </th>
+        {showClient && (
+          <th onClick={() => toggleSort("clientName")} className="cursor-pointer select-none">
+            Client <SortIcon col="clientName" sortKey={sortKey} sortDir={sortDir} />
+          </th>
+        )}
+        <th onClick={() => toggleSort("shipToName")} className="cursor-pointer select-none">
+          Ship To <SortIcon col="shipToName" sortKey={sortKey} sortDir={sortDir} />
+        </th>
+        <th onClick={() => toggleSort("shipToCity")} className="cursor-pointer select-none">
+          City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
+        </th>
+        <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
+          Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
+        </th>
+        <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right">
+          Pcs <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
+        </th>
+        <th className="text-right">SKUs</th>
+        <th className="w-8"></th>
+        <th className="w-[130px]"></th>
+      </tr>
+    </thead>
+  );
+
+  const orderRow = (o: TrackedOrder, showClient: boolean) => {
+    const age = getAgeDays(o);
+    const isUrgent = age >= 7;
+    const isHigh   = age >= 3 && age < 7;
+    return (
+      <tr
+        key={o.extensivOrderId}
+        style={
+          isUrgent
+            ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" }
+            : isHigh
+            ? { background: "rgba(245,158,11,0.04)", borderLeft: "3px solid #f59e0b" }
+            : { borderLeft: "3px solid transparent" }
+        }
+      >
+        <td className="py-1.5">
+          <LifecyclePill status={o.lifecycleStatus} />
+        </td>
+        <td className="font-semibold text-foreground text-xs">
+          {o.referenceNum || `#${o.extensivOrderId}`}
+        </td>
+        <td className="text-muted-foreground text-xs font-mono">
+          {o.poNum ?? "—"}
+        </td>
+        {showClient && (
+          <td className="text-muted-foreground text-xs">{o.clientName}</td>
+        )}
+        <td className="text-muted-foreground text-xs max-w-[140px] truncate" title={o.shipToName ?? ""}>
+          {o.shipToName ?? "—"}
+        </td>
+        <td className="text-muted-foreground text-xs">
+          {o.shipToCity ?? "—"}
+        </td>
+        <td className="text-muted-foreground text-xs text-right">
+          {age === 0 ? "Today" : `${age}d`}
+        </td>
+        <td className="text-muted-foreground text-xs text-right">
+          {(o.totalPieces ?? 0) > 0 ? (o.totalPieces ?? 0).toLocaleString() : "—"}
+        </td>
+        <td className="text-muted-foreground text-xs text-right">
+          {(o.skuCount ?? 0) > 0 ? o.skuCount : "—"}
+        </td>
+        <td className="text-center">
+          {o.notes ? (
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <MessageSquare className="h-3.5 w-3.5 text-blue-400 cursor-default inline" />
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[220px] text-xs">
+                  {o.notes}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </td>
+        <td className="text-right">
+          <AdvanceButton order={o} onAdvanced={onStatusChanged} />
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div
       className="bg-card rounded-2xl overflow-hidden"
       style={{
-        border:
-          facility.urgent > 0
-            ? "2px solid #ef4444"
-            : facility.high > 0
-            ? "2px solid #f59e0b"
-            : "1px solid hsl(var(--border))",
-        boxShadow:
-          facility.urgent > 0
-            ? "0 0 0 1px rgba(239,68,68,0.15), 0 4px 16px rgba(239,68,68,0.10)"
-            : facility.high > 0
-            ? "0 0 0 1px rgba(245,158,11,0.15), 0 4px 16px rgba(245,158,11,0.10)"
-            : undefined,
+        border: hasUrgent ? "2px solid #ef4444" : hasHigh ? "2px solid #f59e0b" : "1px solid hsl(var(--border))",
+        boxShadow: hasUrgent
+          ? "0 0 0 1px rgba(239,68,68,0.15), 0 4px 16px rgba(239,68,68,0.10)"
+          : hasHigh
+          ? "0 0 0 1px rgba(245,158,11,0.15), 0 4px 16px rgba(245,158,11,0.10)"
+          : undefined,
       }}
     >
       {/* Warehouse header */}
@@ -231,56 +399,20 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-foreground">{facility.facilityName}</h3>
-                {facility.high > 0 && (
+                {hasHigh && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                    <AlertTriangle className="h-2.5 w-2.5" />
-                    {facility.high} HIGH
+                    <AlertTriangle className="h-2.5 w-2.5" /> HIGH
                   </span>
                 )}
-                {facility.urgent > 0 && (
-                  <TooltipProvider delayDuration={150}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 cursor-default">
-                          <ShieldAlert className="h-2.5 w-2.5" />
-                          {facility.urgent} URGENT
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="p-3 min-w-[160px]">
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Priority Breakdown</p>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5 text-xs text-red-600 font-semibold">
-                              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                              Urgent (&ge;7d)
-                            </span>
-                            <span className="text-xs font-bold">{facility.urgent}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5 text-xs text-amber-600 font-semibold">
-                              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                              High (3–6d)
-                            </span>
-                            <span className="text-xs font-bold">{facility.high}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                              Normal (&lt;3d)
-                            </span>
-                            <span className="text-xs font-bold">{facility.normal}</span>
-                          </div>
-                          <div className="border-t border-border pt-1.5 mt-1 flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">Total</span>
-                            <span className="text-xs font-bold">{facility.total}</span>
-                          </div>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                {hasUrgent && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+                    <ShieldAlert className="h-2.5 w-2.5" /> URGENT
+                  </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">{facility.total} order{facility.total !== 1 ? "s" : ""} · {facility.byClient.length} client{facility.byClient.length !== 1 ? "s" : ""}</p>
+              <p className="text-xs text-muted-foreground">
+                {facility.orders.length} order{facility.orders.length !== 1 ? "s" : ""} · {clientOptions.length} client{clientOptions.length !== 1 ? "s" : ""}
+              </p>
             </div>
           </div>
           <div className="text-muted-foreground">
@@ -288,24 +420,23 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
           </div>
         </div>
 
-        {/* KPI row */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="bg-blue-50 rounded-xl px-4 py-3 text-center border border-blue-100">
-            <p className="text-[22px] font-extrabold text-blue-600 leading-none">{facility.unallocated}</p>
-            <p className="text-[10px] text-blue-400 mt-1 font-medium uppercase tracking-wide">Unallocated</p>
-          </div>
-          <div className="bg-amber-50 rounded-xl px-4 py-3 text-center border border-amber-100">
-            <p className="text-[22px] font-extrabold text-amber-600 leading-none">{facility.inProduction}</p>
-            <p className="text-[10px] text-amber-400 mt-1 font-medium uppercase tracking-wide">In Production</p>
-          </div>
-          <div className="bg-emerald-50 rounded-xl px-4 py-3 text-center border border-emerald-100">
-            <p className="text-[22px] font-extrabold text-emerald-600 leading-none">{facility.shipReady}</p>
-            <p className="text-[10px] text-emerald-400 mt-1 font-medium uppercase tracking-wide">Ship Ready</p>
-          </div>
-          <div className="bg-red-50 rounded-xl px-4 py-3 text-center border border-red-100">
-            <p className="text-[22px] font-extrabold text-red-600 leading-none">{facility.outOfSla}</p>
-            <p className="text-[10px] text-red-400 mt-1 font-medium uppercase tracking-wide">Out of SLA</p>
-          </div>
+        {/* Lifecycle KPI row */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
+            <div
+              key={status}
+              className="rounded-xl px-3 py-2.5 text-center border cursor-pointer transition-opacity"
+              style={{ background: cfg.bg, borderColor: cfg.border, opacity: statusFilter === status ? 1 : statusFilter === "all" ? 1 : 0.45 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setStatusFilter((f) => (f === status ? "all" : status));
+                if (!expanded) setExpanded(true);
+              }}
+            >
+              <p className="text-[18px] font-extrabold leading-none" style={{ color: cfg.text }}>{counts[status]}</p>
+              <p className="text-[9px] mt-1 font-medium uppercase tracking-wide" style={{ color: cfg.text }}>{cfg.label}</p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -341,6 +472,17 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               ))}
             </select>
 
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as LifecycleStatus | "all")}
+              className="py-1.5 px-2.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="all">All Statuses</option>
+              {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([s, c]) => (
+                <option key={s} value={s}>{c.label}</option>
+              ))}
+            </select>
+
             {/* Group by client toggle */}
             <button
               onClick={(e) => { e.stopPropagation(); setGroupByClient((g) => !g); }}
@@ -356,7 +498,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
 
             {hasFilters && (
               <button
-                onClick={() => { setSearch(""); setClientFilter("all"); }}
+                onClick={() => { setSearch(""); setClientFilter("all"); setStatusFilter("all"); }}
                 className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
                 <X className="h-3 w-3" /> Clear
@@ -371,12 +513,12 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
           {filteredOrders.length === 0 ? (
             <div className="py-10 text-center text-muted-foreground">
               {facility.orders.length === 0 ? (
-                <p className="text-sm font-medium">No orders.</p>
+                <p className="text-sm font-medium">No orders tracked yet. Sync will run shortly.</p>
               ) : (
                 <>
                   <p className="text-sm font-medium">No orders match your filters.</p>
                   <button
-                    onClick={() => { setSearch(""); setClientFilter("all"); }}
+                    onClick={() => { setSearch(""); setClientFilter("all"); setStatusFilter("all"); }}
                     className="text-xs text-primary hover:underline mt-1"
                   >
                     Clear filters
@@ -385,229 +527,44 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               )}
             </div>
           ) : groupByClient ? (
-            /* ── Grouped by client (spreadsheet-style) ── */
+            /* ── Grouped by client ── */
             <div className="overflow-x-auto">
               <table className="w-full data-table">
-                <thead>
-                  <tr>
-                    <th className="w-[110px]">Status</th>
-                    <th onClick={() => toggleSort("referenceNum")} className="cursor-pointer select-none">
-                      TX # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("poNum")} className="cursor-pointer select-none">
-                      PO # <SortIcon col="poNum" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("shipToName")} className="cursor-pointer select-none">
-                      Ship To <SortIcon col="shipToName" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("shipToCity")} className="cursor-pointer select-none">
-                      City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
-                      Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right">
-                      Pcs <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th className="text-right">SKUs</th>
-                    <th className="w-8"></th>
-                    <th className="w-20"></th>
-                  </tr>
-                </thead>
+                {tableHeader(false)}
                 <tbody>
                   {groupedByClient.map((group) => {
-                    const groupUrgent = group.orders.some(o => o.priority === "urgent");
-                    const groupHigh   = !groupUrgent && group.orders.some(o => o.priority === "high");
                     const groupPieces = group.orders.reduce((s, o) => s + (o.totalPieces ?? 0), 0);
                     return [
-                      /* Client header row */
                       <tr
                         key={`hdr-${group.clientId}`}
-                        style={{
-                          background: groupUrgent ? "#1a0a0a" : groupHigh ? "#1a1200" : "#111827",
-                          borderLeft: groupUrgent ? "3px solid #ef4444" : groupHigh ? "3px solid #f59e0b" : "3px solid #374151",
-                        }}
+                        style={{ background: "#111827", borderLeft: "3px solid #374151" }}
                       >
                         <td colSpan={2} className="py-2 px-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-white uppercase tracking-wider">{group.clientName}</span>
-                            {groupUrgent && <span className="text-[9px] font-bold text-red-400 bg-red-900/40 px-1.5 py-0.5 rounded">URGENT</span>}
-                            {!groupUrgent && groupHigh && <span className="text-[9px] font-bold text-amber-400 bg-amber-900/40 px-1.5 py-0.5 rounded">HIGH</span>}
-                          </div>
+                          <span className="text-[11px] font-bold text-white uppercase tracking-wider">{group.clientName}</span>
                         </td>
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">PO #</td>
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">Ship To</td>
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">City</td>
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">Age</td>
-                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{groupPieces > 0 ? groupPieces.toLocaleString() : ""}</td>
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">
+                          {groupPieces > 0 ? groupPieces.toLocaleString() : ""}
+                        </td>
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{group.orders.length} ord</td>
                         <td colSpan={2}></td>
                       </tr>,
-                      /* Order rows */
-                      ...group.orders.map((o) => {
-                        const isUrgent = o.priority === "urgent";
-                        const isHigh   = o.priority === "high";
-                        return (
-                          <tr
-                            key={o.orderId}
-                            style={
-                              isUrgent
-                                ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" }
-                                : isHigh
-                                ? { background: "rgba(245,158,11,0.04)", borderLeft: "3px solid #f59e0b" }
-                                : { borderLeft: "3px solid transparent" }
-                            }
-                          >
-                            <td className="py-2">
-                              <StatusPill orderStatus={o.orderStatus} ageDays={o.ageDays} />
-                            </td>
-                            <td className="font-semibold text-foreground text-xs">
-                              {o.referenceNum || `#${o.orderId}`}
-                            </td>
-                            <td className="text-muted-foreground text-xs font-mono">
-                              {o.poNum ?? "—"}
-                            </td>
-                            <td className="text-muted-foreground text-xs max-w-[160px] truncate" title={o.shipToName ?? ""}>
-                              {o.shipToName ?? "—"}
-                            </td>
-                            <td className="text-muted-foreground text-xs">
-                              {o.shipToCity ?? "—"}
-                            </td>
-                            <td className="text-muted-foreground text-xs text-right">
-                              {o.ageDays === 0 ? "Today" : `${o.ageDays}d`}
-                            </td>
-                            <td className="text-muted-foreground text-xs text-right">
-                              {(o.totalPieces ?? 0) > 0 ? (o.totalPieces ?? 0).toLocaleString() : "—"}
-                            </td>
-                            <td className="text-muted-foreground text-xs text-right">
-                              {(o.skuCount ?? 0) > 0 ? o.skuCount : "—"}
-                            </td>
-                            <td className="text-center">
-                              {o.notes ? (
-                                <TooltipProvider delayDuration={100}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <MessageSquare className="h-3.5 w-3.5 text-blue-400 cursor-default inline" />
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="max-w-[220px] text-xs">
-                                      {o.notes}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              ) : null}
-                            </td>
-                            <td className="text-right">
-                              <Link href="/allocate">
-                                <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs h-7 px-2">
-                                  Allocate
-                                </Button>
-                              </Link>
-                            </td>
-                          </tr>
-                        );
-                      }),
+                      ...group.orders.map((o) => orderRow(o, false)),
                     ];
                   })}
                 </tbody>
               </table>
             </div>
           ) : (
-            /* ── Flat table (no grouping) ── */
+            /* ── Flat table ── */
             <div className="overflow-x-auto">
               <table className="w-full data-table">
-                <thead>
-                  <tr>
-                    <th className="w-[110px]">Status</th>
-                    <th onClick={() => toggleSort("referenceNum")} className="cursor-pointer select-none">
-                      TX # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("poNum")} className="cursor-pointer select-none">
-                      PO # <SortIcon col="poNum" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("clientName")} className="cursor-pointer select-none">
-                      Client <SortIcon col="clientName" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("shipToName")} className="cursor-pointer select-none">
-                      Ship To <SortIcon col="shipToName" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("shipToCity")} className="cursor-pointer select-none">
-                      City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
-                      Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right">
-                      Pcs <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th className="text-right">SKUs</th>
-                    <th className="w-8"></th>
-                    <th className="w-20"></th>
-                  </tr>
-                </thead>
+                {tableHeader(true)}
                 <tbody>
-                  {filteredOrders.map((o) => {
-                    const isUrgent = o.priority === "urgent";
-                    const isHigh   = o.priority === "high";
-                    return (
-                      <tr
-                        key={o.orderId}
-                        style={
-                          isUrgent
-                            ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" }
-                            : isHigh
-                            ? { background: "rgba(245,158,11,0.04)", borderLeft: "3px solid #f59e0b" }
-                            : { borderLeft: "3px solid transparent" }
-                        }
-                      >
-                        <td className="py-2">
-                          <StatusPill orderStatus={o.orderStatus} ageDays={o.ageDays} />
-                        </td>
-                        <td className="font-semibold text-foreground text-xs">
-                          {o.referenceNum || `#${o.orderId}`}
-                        </td>
-                        <td className="text-muted-foreground text-xs font-mono">
-                          {o.poNum ?? "—"}
-                        </td>
-                        <td className="text-muted-foreground text-xs">{o.clientName}</td>
-                        <td className="text-muted-foreground text-xs max-w-[140px] truncate" title={o.shipToName ?? ""}>
-                          {o.shipToName ?? "—"}
-                        </td>
-                        <td className="text-muted-foreground text-xs">
-                          {o.shipToCity ?? "—"}
-                        </td>
-                        <td className="text-muted-foreground text-xs text-right">
-                          {o.ageDays === 0 ? "Today" : `${o.ageDays}d`}
-                        </td>
-                        <td className="text-muted-foreground text-xs text-right">
-                          {(o.totalPieces ?? 0) > 0 ? (o.totalPieces ?? 0).toLocaleString() : "—"}
-                        </td>
-                        <td className="text-muted-foreground text-xs text-right">
-                          {(o.skuCount ?? 0) > 0 ? o.skuCount : "—"}
-                        </td>
-                        <td className="text-center">
-                          {o.notes ? (
-                            <TooltipProvider delayDuration={100}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <MessageSquare className="h-3.5 w-3.5 text-blue-400 cursor-default inline" />
-                                </TooltipTrigger>
-                                <TooltipContent side="left" className="max-w-[220px] text-xs">
-                                  {o.notes}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ) : null}
-                        </td>
-                        <td className="text-right">
-                          <Link href="/allocate">
-                            <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs h-7 px-2">
-                              Allocate
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filteredOrders.map((o) => orderRow(o, true))}
                 </tbody>
               </table>
             </div>
@@ -620,10 +577,45 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const { data, isLoading, refetch, isFetching } = trpc.allocation.openOrders.useQuery({});
+  const { data, isLoading, refetch, isFetching } = trpc.pickSchedule.list.useQuery({});
 
-  const facilities: FacilityGroup[] = (data as { facilities?: FacilityGroup[] })?.facilities ?? [];
-  const summary = data?.summary ?? { total: 0, unallocated: 0, inProduction: 0, shipReady: 0, outOfSla: 0, byClient: [] };
+  const syncNow = trpc.pickSchedule.syncNow.useMutation({
+    onSuccess: (res) => {
+      toast.success(res.message);
+      setTimeout(() => refetch(), 3000);
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  const orders: TrackedOrder[] = (data?.orders ?? []) as TrackedOrder[];
+  const lastSyncAt = data?.lastSyncAt ? new Date(data.lastSyncAt as string | Date) : null;
+  const syncRunning = data?.syncRunning ?? false;
+
+  // Group by facility
+  const facilities: FacilityGroup[] = useMemo(() => {
+    const map = new Map<number, FacilityGroup>();
+    for (const o of orders) {
+      const fid = o.facilityId;
+      if (!map.has(fid)) {
+        map.set(fid, {
+          facilityId: fid,
+          facilityName: o.facilityName ?? `Warehouse ${fid}`,
+          orders: [],
+        });
+      }
+      map.get(fid)!.orders.push(o);
+    }
+    return Array.from(map.values()).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
+  }, [orders]);
+
+  // Global KPIs
+  const kpis = useMemo(() => {
+    const c: Record<LifecycleStatus, number> = { unallocated: 0, allocated: 0, picking: 0, qc: 0, qc_complete: 0, ship_ready: 0 };
+    for (const o of orders) c[o.lifecycleStatus]++;
+    return c;
+  }, [orders]);
 
   return (
     <AppLayout>
@@ -632,18 +624,24 @@ export default function Home() {
         <div className="flex items-center justify-between">
           <div>
             <p className="page-breadcrumb">Overview</p>
-            <h1 className="page-title">Open Orders Dashboard</h1>
+            <h1 className="page-title">Pick Schedule</h1>
+            {lastSyncAt && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Last synced {lastSyncAt.toLocaleString()}
+                {syncRunning && <span className="ml-2 text-amber-500 font-medium animate-pulse">· Syncing…</span>}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
-              disabled={isFetching}
+              onClick={() => syncNow.mutate()}
+              disabled={syncNow.isPending || syncRunning}
               className="gap-1.5 text-xs"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
+              <RefreshCw className={`h-3.5 w-3.5 ${syncNow.isPending || syncRunning ? "animate-spin" : ""}`} />
+              Sync Now
             </Button>
             <Button asChild className="shadow-sm">
               <Link href="/allocate" className="flex items-center gap-2">
@@ -654,46 +652,28 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Global KPI bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="kpi-card">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <Package className="h-3.5 w-3.5 text-blue-500" /> Unallocated
-            </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none text-blue-600">
-              {isLoading ? "—" : summary.unallocated}
-            </p>
-          </div>
-          <div className="kpi-card">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <Clock className="h-3.5 w-3.5 text-amber-500" /> In Production
-            </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none text-amber-600">
-              {isLoading ? "—" : summary.inProduction}
-            </p>
-          </div>
-          <div className="kpi-card">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Ship Ready
-            </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none text-emerald-600">
-              {isLoading ? "—" : summary.shipReady}
-            </p>
-          </div>
-          <div className="kpi-card">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <ShieldAlert className="h-3.5 w-3.5 text-red-500" /> Out of SLA
-            </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none text-red-600">
-              {isLoading ? "—" : summary.outOfSla}
-            </p>
-          </div>
+        {/* Global KPI bar — lifecycle stages */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
+            <div
+              key={status}
+              className="rounded-2xl px-4 py-3 text-center border"
+              style={{ background: cfg.bg, borderColor: cfg.border }}
+            >
+              <p className="text-[28px] font-extrabold tracking-tight leading-none" style={{ color: cfg.text }}>
+                {isLoading ? "—" : kpis[status]}
+              </p>
+              <p className="text-[10px] mt-1.5 font-semibold uppercase tracking-wide" style={{ color: cfg.text }}>
+                {cfg.label}
+              </p>
+            </div>
+          ))}
         </div>
 
         {/* Loading skeletons */}
         {isLoading && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2].map((i) => (
               <div key={i} className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="h-36 bg-muted animate-pulse" />
                 <div className="p-5 space-y-3">
@@ -706,29 +686,29 @@ export default function Home() {
           </div>
         )}
 
-        {/* No config state */}
-        {!isLoading && facilities.length === 0 && (
+        {/* No orders yet */}
+        {!isLoading && orders.length === 0 && (
           <div className="text-center py-20 text-muted-foreground">
             <Warehouse className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">No warehouses found.</p>
+            <p className="text-sm font-medium">No orders tracked yet.</p>
             <p className="text-xs mt-1 opacity-70">
-              Configure an Extensiv connection in{" "}
-              <Link href="/settings" className="text-primary hover:underline">API Settings</Link>{" "}
-              to see open orders here.
+              Click <strong>Sync Now</strong> to pull open orders from Extensiv, or wait for the hourly auto-sync.
+              Make sure an Extensiv connection is configured in{" "}
+              <Link href="/settings" className="text-primary hover:underline">API Settings</Link>.
             </p>
           </div>
         )}
 
-        {/* Warehouse cards — 2-column grid on large screens */}
+        {/* Warehouse cards */}
         {!isLoading && facilities.length > 0 && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {facilities.map((f) => (
-              <WarehouseCard key={f.facilityId} facility={f} />
+              <WarehouseCard key={f.facilityId} facility={f} onStatusChanged={() => refetch()} />
             ))}
           </div>
         )}
 
-        {/* Recent Allocation Runs — compact secondary section */}
+        {/* Recent Allocation Runs */}
         {!isLoading && <RecentRunsSection />}
       </div>
     </AppLayout>

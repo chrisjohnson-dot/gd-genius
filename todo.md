@@ -215,3 +215,20 @@
 - [x] Open Orders: Group orders by GD Client within each warehouse card (matching spreadsheet layout)
 - [ ] Open Orders: Add Offsite flag indicator
 - [x] Open Orders: Update backend openOrders procedure to return all new fields from Extensiv API
+
+## Order Lifecycle Tracking (Pick Schedule)
+- [ ] DB: Add order_tracking table (extensiv_order_id, reference_num, po_num, client_id, client_name, facility_id, facility_name, ship_to_name, ship_to_city, total_pieces, sku_count, notes, lifecycle_status, first_seen_at, last_synced_at, allocated_at, picking_at, qc_at, qc_complete_at, ship_ready_at)
+- [ ] DB: lifecycle_status enum: unallocated | allocated | picking | qc | qc_complete | ship_ready
+- [ ] Backend: hourly sync job — fetch open orders from Extensiv, upsert into order_tracking, mark new as unallocated
+- [ ] Backend: tRPC updateOrderStatus mutation — advance order to next lifecycle stage
+- [ ] Backend: tRPC getTrackedOrders query — return all tracked orders grouped by facility/client
+- [ ] Backend: auto-remove shipped orders — if an order disappears from Extensiv (closed/shipped), remove from tracking table
+- [ ] Backend: sync now endpoint — manual trigger for immediate re-sync
+- [ ] Frontend: Replace openOrders live-fetch with tracked orders from DB
+- [ ] Frontend: Status column with dropdown/button to advance lifecycle stage
+- [ ] Frontend: Picking stage — button to mark "Given to Associate" → Picking
+- [ ] Frontend: QC stage — button to mark "QC Started" → QC
+- [ ] Frontend: QC Complete stage — button to mark "QC Finished" → QC Complete
+- [ ] Frontend: Ship Ready stage — button to mark "Shipping Details Sent" → Ship Ready
+- [ ] Frontend: Show "Last synced" timestamp and manual Sync Now button
+- [ ] Frontend: Shipped orders auto-disappear from the sheet (removed from DB on next sync)

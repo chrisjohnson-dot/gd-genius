@@ -164,3 +164,48 @@ export const scheduleConfigs = mysqlTable("schedule_configs", {
 
 export type ScheduleConfig = typeof scheduleConfigs.$inferSelect;
 export type InsertScheduleConfig = typeof scheduleConfigs.$inferInsert;
+
+// Order lifecycle tracking — the live pick schedule
+// One row per order. Synced from Extensiv hourly. Removed when shipped/closed.
+export const orderTracking = mysqlTable("order_tracking", {
+  id: int("id").autoincrement().primaryKey(),
+  // Extensiv identifiers
+  extensivOrderId: int("extensivOrderId").notNull(),          // readOnly.orderId (Extensiv TX ID)
+  referenceNum: varchar("referenceNum", { length: 256 }),     // customer's order ref
+  poNum: varchar("poNum", { length: 256 }),
+  // Customer / facility
+  configId: int("configId").notNull(),
+  clientId: int("clientId").notNull(),
+  clientName: varchar("clientName", { length: 256 }).notNull(),
+  facilityId: int("facilityId").notNull(),
+  facilityName: varchar("facilityName", { length: 256 }),
+  // Order details (refreshed on each sync)
+  shipToName: varchar("shipToName", { length: 512 }),
+  shipToCity: varchar("shipToCity", { length: 256 }),
+  totalPieces: int("totalPieces").default(0),
+  skuCount: int("skuCount").default(0),
+  notes: text("notes"),
+  extensivStatus: int("extensivStatus").default(0),           // raw Extensiv status code
+  creationDate: varchar("creationDate", { length: 64 }),      // ISO string from Extensiv
+  // Lifecycle status managed by GD Genius
+  lifecycleStatus: mysqlEnum("lifecycleStatus", [
+    "unallocated",
+    "allocated",
+    "picking",
+    "qc",
+    "qc_complete",
+    "ship_ready",
+  ]).notNull().default("unallocated"),
+  // Timestamps for each stage transition
+  firstSeenAt: timestamp("firstSeenAt").defaultNow().notNull(),
+  lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
+  allocatedAt: timestamp("allocatedAt"),
+  pickingAt: timestamp("pickingAt"),
+  qcAt: timestamp("qcAt"),
+  qcCompleteAt: timestamp("qcCompleteAt"),
+  shipReadyAt: timestamp("shipReadyAt"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type OrderTracking = typeof orderTracking.$inferSelect;
+export type InsertOrderTracking = typeof orderTracking.$inferInsert;

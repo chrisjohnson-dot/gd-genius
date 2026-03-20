@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { initScheduler } from "../scheduler/autoRun";
+import { startOrderSyncScheduler } from "../scheduler/orderSync";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -65,6 +66,8 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     // Initialize auto-run scheduler after server is up
     initScheduler().catch((err) => console.error("[Scheduler] Init failed:", err));
+    // Initialize hourly order sync scheduler
+    startOrderSyncScheduler();
   });
 }
 

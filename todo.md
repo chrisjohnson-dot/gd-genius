@@ -196,3 +196,4 @@
 - [x] UX: Highlight unallocated order rows older than 3 days with row background and left-border accent
 - [x] UX: Add red border to warehouse card headers that contain urgent orders
 - [x] UX: Add hover tooltip to urgent badge showing priority breakdown (Urgent/High/Normal)
+- [x] UX: Apply amber border to warehouse cards with high-priority orders but no urgent ones

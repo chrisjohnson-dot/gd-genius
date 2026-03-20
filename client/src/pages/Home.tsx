@@ -131,8 +131,18 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
     <div
       className="bg-card rounded-2xl overflow-hidden"
       style={{
-        border: facility.urgent > 0 ? "2px solid #ef4444" : "1px solid hsl(var(--border))",
-        boxShadow: facility.urgent > 0 ? "0 0 0 1px rgba(239,68,68,0.15), 0 4px 16px rgba(239,68,68,0.10)" : undefined,
+        border:
+          facility.urgent > 0
+            ? "2px solid #ef4444"
+            : facility.high > 0
+            ? "2px solid #f59e0b"
+            : "1px solid hsl(var(--border))",
+        boxShadow:
+          facility.urgent > 0
+            ? "0 0 0 1px rgba(239,68,68,0.15), 0 4px 16px rgba(239,68,68,0.10)"
+            : facility.high > 0
+            ? "0 0 0 1px rgba(245,158,11,0.15), 0 4px 16px rgba(245,158,11,0.10)"
+            : undefined,
       }}
     >
       {/* Warehouse header with KPI stats */}

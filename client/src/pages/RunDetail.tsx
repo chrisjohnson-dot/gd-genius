@@ -1,7 +1,5 @@
 import AppLayout from "@/components/AppLayout";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import {
@@ -72,30 +70,32 @@ interface AllocationDetail {
   packListItems: PackListItem[];
 }
 
-const statusClass: Record<string, string> = {
-  confirmed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  proposed: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  cancelled: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-  allocated: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  skipped: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  unallocated: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-};
+function StatusPill({ status }: { status: string }) {
+  const map: Record<string, { bg: string; text: string; dot: string }> = {
+    confirmed:   { bg: "#d1fae5", text: "#059669", dot: "#059669" },
+    proposed:    { bg: "#dbeafe", text: "#1d4ed8", dot: "#3b82f6" },
+    cancelled:   { bg: "#f3f4f6", text: "#6b7280", dot: "#9ca3af" },
+    failed:      { bg: "#fee2e2", text: "#ef4444", dot: "#ef4444" },
+    allocated:   { bg: "#d1fae5", text: "#059669", dot: "#059669" },
+    skipped:     { bg: "#fef9c3", text: "#b45309", dot: "#f59e0b" },
+    unallocated: { bg: "#ffedd5", text: "#c2410c", dot: "#f97316" },
+  };
+  const s = map[status] ?? { bg: "#f3f4f6", text: "#6b7280", dot: "#9ca3af" };
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
+      style={{ background: s.bg, color: s.text }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.dot }} />
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
 
-const locTypeBadge: Record<string, string> = {
-  staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  warehouse: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-};
-
-const movementBadge: Record<string, string> = {
-  to_staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  to_pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-};
-
-const movementLabel: Record<string, string> = {
-  to_staging: "→ Staging",
-  to_pick_face: "→ Pick Face",
+const locTypeBadge: Record<string, { bg: string; text: string }> = {
+  staging:   { bg: "#ede9fe", text: "#6d28d9" },
+  pick_face: { bg: "#dbeafe", text: "#1d4ed8" },
+  warehouse: { bg: "#ffedd5", text: "#c2410c" },
 };
 
 export default function RunDetail() {
@@ -109,11 +109,8 @@ export default function RunDetail() {
 
   const retryMoveMutation = trpc.allocation.retryMove.useMutation({
     onSuccess: (result) => {
-      if (result.success) {
-        toast.success(`Staging move succeeded — ${result.moved} item(s) moved.`);
-      } else {
-        toast.warning(`Move partially failed: ${result.errors.join("; ")}`);
-      }
+      if (result.success) toast.success(`Staging move succeeded — ${result.moved} item(s) moved.`);
+      else toast.warning(`Move partially failed: ${result.errors.join("; ")}`);
       utils.allocation.runDetail.invalidate({ runId });
     },
     onError: (e) => toast.error(`Retry failed: ${e.message}`),
@@ -121,7 +118,7 @@ export default function RunDetail() {
   });
 
   const handleRetryMove = () => {
-    if (!confirm("Re-attempt the staging inventory move for this run? This will try to move the same items again.")) return;
+    if (!confirm("Re-attempt the staging inventory move for this run?")) return;
     setRetrying(true);
     retryMoveMutation.mutate({ runId });
   };
@@ -154,7 +151,7 @@ export default function RunDetail() {
   if (error || !data) {
     return (
       <AppLayout>
-        <div className="p-6 text-center text-muted-foreground">
+        <div className="p-7 text-center text-muted-foreground">
           <AlertCircle className="h-8 w-8 mx-auto mb-2" />
           <p>Run not found or error loading data.</p>
           <Button variant="outline" className="mt-3" asChild>
@@ -166,53 +163,39 @@ export default function RunDetail() {
   }
 
   const { run, orders } = data;
-  const isConfirmed = run.status === "confirmed";
 
   const allocatedOrders = orders
     .filter((o) => o.status === "allocated" || o.status === "unallocated")
     .map((o) => ({ ...o, detail: o.allocationDetail as unknown as AllocationDetail }));
   const skippedOrders = orders.filter((o) => o.status === "skipped");
-  const unallocatedOrders = orders.filter((o) => o.status === "unallocated");
 
-  // Pull list is global (SKU-level, not per-order) — stored on the run
   const runPullList = (run as any).pullList as PullListItem[] | null | undefined;
   const pullList: PullListItem[] = Array.isArray(runPullList) && runPullList.length > 0
     ? runPullList
     : allocatedOrders.flatMap((o) => o.detail?.pullListItems ?? []);
   const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
 
-  const toStagingMoves = pullList.filter((p) => p.movement === "to_staging" || !p.movement);
+  const toStagingMoves  = pullList.filter((p) => p.movement === "to_staging" || !p.movement);
   const toPickFaceMoves = pullList.filter((p) => p.movement === "to_pick_face");
 
-  // Consolidate staging + pick face moves into one row per source location + SKU + lot
   type ConsolidatedRow = {
-    sku: string;
-    description?: string;
-    fromLocationName: string;
-    fromLocationType: string;
-    sourceQty?: number;
-    lotNumber?: string;
-    expirationDate?: string;
-    stagingLocationName: string;
-    pickFaceLocationName: string;
-    qtyToStaging: number;
-    qtyToPickFace: number;
+    sku: string; description?: string;
+    fromLocationName: string; fromLocationType: string;
+    sourceQty?: number; lotNumber?: string; expirationDate?: string;
+    stagingLocationName: string; pickFaceLocationName: string;
+    qtyToStaging: number; qtyToPickFace: number;
   };
   const consolidatedRowMap = new Map<string, ConsolidatedRow>();
   for (const item of pullList) {
     const key = `${item.sku}||${item.fromLocationName}||${item.lotNumber ?? ""}||${item.expirationDate ?? ""}`;
     if (!consolidatedRowMap.has(key)) {
       consolidatedRowMap.set(key, {
-        sku: item.sku,
-        description: item.description,
-        fromLocationName: item.fromLocationName,
-        fromLocationType: item.fromLocationType,
-        sourceQty: item.sourceQty,
-        lotNumber: item.lotNumber,
-        expirationDate: item.expirationDate,
-        stagingLocationName: item.movement === "to_staging" ? item.toLocationName : "",
+        sku: item.sku, description: item.description,
+        fromLocationName: item.fromLocationName, fromLocationType: item.fromLocationType,
+        sourceQty: item.sourceQty, lotNumber: item.lotNumber, expirationDate: item.expirationDate,
+        stagingLocationName:  item.movement === "to_staging"   ? item.toLocationName : "",
         pickFaceLocationName: item.movement === "to_pick_face" ? item.toLocationName : "",
-        qtyToStaging: item.movement === "to_staging" ? item.qty : 0,
+        qtyToStaging:  item.movement === "to_staging"   ? item.qty : 0,
         qtyToPickFace: item.movement === "to_pick_face" ? item.qty : 0,
       });
     } else {
@@ -227,35 +210,37 @@ export default function RunDetail() {
     }
   }
   const consolidatedRows = Array.from(consolidatedRowMap.values());
-  const hasPickFace = consolidatedRows.some((r) => r.qtyToPickFace > 0);
+  const hasPickFace  = consolidatedRows.some((r) => r.qtyToPickFace > 0);
   const hasSourceQty = consolidatedRows.some((r) => r.sourceQty != null);
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6 max-w-6xl">
-        {/* Header */}
+      <div className="p-7 space-y-6 page-enter">
+        {/* Page header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/history" className="flex items-center">
-                <ArrowLeft className="h-4 w-4 mr-1" />Back
+            <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground">
+              <Link href="/history" className="flex items-center gap-1">
+                <ArrowLeft className="h-4 w-4" />Back
               </Link>
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">Run #{run.id}</h1>
-              <p className="text-muted-foreground text-sm mt-0.5">
+              <p className="page-breadcrumb">Run History</p>
+              <h1 className="page-title">Run #{run.id}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
                 {run.customerName} · {new Date(run.createdAt).toLocaleString()}
                 {run.confirmedAt && ` · Confirmed ${new Date(run.confirmedAt).toLocaleString()}`}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge className={statusClass[run.status] ?? ""}>{run.status}</Badge>
+          <div className="flex items-center gap-2 mt-1">
+            <StatusPill status={run.status} />
             {run.status === "confirmed" && run.notes && toStagingMoves.length > 0 && (
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 border-orange-400 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                className="gap-1.5"
+                style={{ borderColor: "#fdba74", color: "#c2410c" }}
                 onClick={handleRetryMove}
                 disabled={retrying}
               >
@@ -266,8 +251,7 @@ export default function RunDetail() {
             {(run.status === "confirmed" || run.status === "proposed") && allocatedOrders.length > 0 && (
               <Button
                 size="sm"
-                variant="default"
-                className="gap-1.5"
+                className="gap-1.5 shadow-sm"
                 onClick={() => {
                   const alreadyPrinted = !!data?.run.documentsPrintedAt;
                   const firstPrintParam = alreadyPrinted ? "" : "?firstPrint=1";
@@ -282,102 +266,77 @@ export default function RunDetail() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="py-4 flex items-center gap-3">
-              <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
-              <div>
-                <p className="text-2xl font-bold">{run.allocatedCount}</p>
-                <p className="text-xs text-muted-foreground">Allocated</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4 flex items-center gap-3">
-              <PackageX className="h-6 w-6 text-yellow-600 shrink-0" />
-              <div>
-                <p className="text-2xl font-bold">{skippedOrders.length}</p>
-                <p className="text-xs text-muted-foreground">Skipped</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4 flex items-center gap-3">
-              <Truck className="h-6 w-6 text-purple-600 shrink-0" />
-              <div>
-                <p className="text-2xl font-bold">{toStagingMoves.length}</p>
-                <p className="text-xs text-muted-foreground">Moves to Staging</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4 flex items-center gap-3">
-              <RefreshCw className="h-6 w-6 text-blue-600 shrink-0" />
-              <div>
-                <p className="text-2xl font-bold">{toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length}</p>
-                <p className="text-xs text-muted-foreground">Pallet Replenishments</p>
-              </div>
-            </CardContent>
-          </Card>
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="kpi-card">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />Allocated
+            </p>
+            <p className="text-[28px] font-extrabold tracking-tight leading-none">{run.allocatedCount}</p>
+          </div>
+          <div className="kpi-card">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+              <PackageX className="h-3.5 w-3.5 text-amber-500" />Skipped
+            </p>
+            <p className="text-[28px] font-extrabold tracking-tight leading-none">{skippedOrders.length}</p>
+          </div>
+          <div className="kpi-card">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+              <Truck className="h-3.5 w-3.5 text-purple-500" />Moves to Staging
+            </p>
+            <p className="text-[28px] font-extrabold tracking-tight leading-none">{toStagingMoves.length}</p>
+          </div>
+          <div className="kpi-card">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+              <RefreshCw className="h-3.5 w-3.5 text-blue-500" />Pallet Replenishments
+            </p>
+            <p className="text-[28px] font-extrabold tracking-tight leading-none">
+              {toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length}
+            </p>
+          </div>
         </div>
 
-        {/* Notes */}
+        {/* Notes banner */}
         {run.notes && (
-          <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900">
-            <CardContent className="py-3 text-sm text-red-800 dark:text-red-300">
-              <strong>Notes:</strong> {run.notes}
-            </CardContent>
-          </Card>
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-3 text-sm text-red-800">
+            <strong>Notes:</strong> {run.notes}
+          </div>
         )}
 
-        {/* Skipped orders warning */}
+        {/* Skipped orders banner */}
         {skippedOrders.length > 0 && (
-          <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 dark:border-yellow-900">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" /> {skippedOrders.length} Orders Skipped
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-1 max-h-40 overflow-y-auto">
-                {skippedOrders.map((o) => (
-                  <div key={o.id} className="flex items-center justify-between text-sm py-1">
-                    <span className="font-medium text-yellow-900 dark:text-yellow-200">{o.referenceNum}</span>
-                    <span className="text-yellow-700 dark:text-yellow-400 text-xs">{o.skipReason}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 flex items-center gap-2 border-b border-amber-200">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-semibold text-amber-800">{skippedOrders.length} Orders Skipped</span>
+            </div>
+            <div className="divide-y divide-amber-100 max-h-40 overflow-y-auto">
+              {skippedOrders.map((o) => (
+                <div key={o.id} className="flex items-center justify-between px-5 py-2 text-sm">
+                  <span className="font-medium text-amber-900">{o.referenceNum}</span>
+                  <span className="text-amber-700 text-xs">{o.skipReason}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Tabs */}
         <Tabs defaultValue="summary">
-          <TabsList>
-            <TabsTrigger value="pull">
-              Pull List ({pullList.length})
-            </TabsTrigger>
-            <TabsTrigger value="pack">
-              Pack List ({packList.length})
-            </TabsTrigger>
-            <TabsTrigger value="summary">
-              Order Summary ({allocatedOrders.length})
-            </TabsTrigger>
-            <TabsTrigger value="orders">
-              All Orders ({orders.length})
-            </TabsTrigger>
+          <TabsList className="bg-muted/60 rounded-xl">
+            <TabsTrigger value="pull">Pull List ({pullList.length})</TabsTrigger>
+            <TabsTrigger value="pack">Pack List ({packList.length})</TabsTrigger>
+            <TabsTrigger value="summary">Order Summary ({allocatedOrders.length})</TabsTrigger>
+            <TabsTrigger value="orders">All Orders ({orders.length})</TabsTrigger>
           </TabsList>
 
-          {/* ── Pull List Tab ─────────────────────────────────────────────────── */}
+          {/* ── Pull List ── */}
           <TabsContent value="pull" className="mt-4 space-y-4">
             {pullList.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p>No pull list items.</p>
-                </CardContent>
-              </Card>
+              <div className="bg-card border border-border rounded-2xl py-12 text-center text-muted-foreground">
+                <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No pull list items.</p>
+              </div>
             ) : (
               <>
                 <div className="flex items-center justify-between">
@@ -387,306 +346,277 @@ export default function RunDetail() {
                     {toPickFaceMoves.length > 0 && ` · ${toPickFaceMoves.filter((p) => p.fromLocationType === "warehouse").length} pallet replenishments`}
                   </p>
                   <div className="flex items-center gap-4">
-                    <a
-                      href={`/api/pdf/pick-face-pull-sheet/${runId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                    >
-                      <FileDown className="h-4 w-4" />
-                      Pick Face PDF
+                    <a href={`/api/pdf/pick-face-pull-sheet/${runId}`} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+                      <FileDown className="h-4 w-4" />Pick Face PDF
                     </a>
-                    <a
-                      href={`/api/pdf/warehouse-pull-sheet/${runId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                    >
-                      <FileDown className="h-4 w-4" />
-                      Warehouse PDF
+                    <a href={`/api/pdf/warehouse-pull-sheet/${runId}`} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+                      <FileDown className="h-4 w-4" />Warehouse PDF
                     </a>
                   </div>
                 </div>
-
-                <Card>
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/50">
-                            <th className="text-left px-4 py-3 font-medium">SKU</th>
-                            <th className="text-left px-4 py-3 font-medium">Description</th>
-                            <th className="text-left px-4 py-3 font-medium">Source Location</th>
-                            {hasSourceQty && <th className="text-right px-4 py-3 font-medium">On Hand</th>}
-                            <th className="text-right px-4 py-3 font-medium">→ Staging</th>
-                            {hasPickFace && <th className="text-right px-4 py-3 font-medium">→ Pick Face</th>}
-                            <th className="text-left px-4 py-3 font-medium">Lot</th>
-                            <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {consolidatedRows.map((row, i) => (
-                            <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                              <td className="px-4 py-2 font-mono text-xs font-semibold">{row.sku}</td>
-                              <td className="px-4 py-2 text-muted-foreground text-xs">{row.description ?? "—"}</td>
-                              <td className="px-4 py-2">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${locTypeBadge[row.fromLocationType] ?? ""}`}>
+                <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                  <table className="w-full data-table">
+                    <thead>
+                      <tr>
+                        <th>SKU</th>
+                        <th>Description</th>
+                        <th>Source Location</th>
+                        {hasSourceQty && <th className="text-right">On Hand</th>}
+                        <th className="text-right">→ Staging</th>
+                        {hasPickFace && <th className="text-right">→ Pick Face</th>}
+                        <th>Lot</th>
+                        <th>Expiry</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {consolidatedRows.map((row, i) => {
+                        const lt = locTypeBadge[row.fromLocationType];
+                        return (
+                          <tr key={i}>
+                            <td className="font-mono text-xs font-semibold">{row.sku}</td>
+                            <td className="text-muted-foreground text-xs">{row.description ?? "—"}</td>
+                            <td>
+                              <div className="flex items-center gap-1.5">
+                                {lt && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded font-medium"
+                                    style={{ background: lt.bg, color: lt.text }}>
                                     {row.fromLocationType}
                                   </span>
-                                  <span className="text-xs font-medium">{row.fromLocationName}</span>
-                                </div>
+                                )}
+                                <span className="text-xs font-medium">{row.fromLocationName}</span>
+                              </div>
+                            </td>
+                            {hasSourceQty && (
+                              <td className="text-right text-muted-foreground text-xs">
+                                {row.sourceQty != null ? row.sourceQty : "—"}
                               </td>
-                              {hasSourceQty && (
-                                <td className="px-4 py-2 text-right text-muted-foreground text-xs">
-                                  {row.sourceQty != null ? row.sourceQty : "—"}
-                                </td>
-                              )}
-                              <td className="px-4 py-2 text-right">
-                                {row.qtyToStaging > 0 ? (
+                            )}
+                            <td className="text-right">
+                              {row.qtyToStaging > 0 ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="font-bold">{row.qtyToStaging}</span>
+                                  {row.stagingLocationName && (
+                                    <span className="text-xs text-muted-foreground">{row.stagingLocationName}</span>
+                                  )}
+                                </div>
+                              ) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            {hasPickFace && (
+                              <td className="text-right">
+                                {row.qtyToPickFace > 0 ? (
                                   <div className="flex items-center justify-end gap-1">
-                                    <span className="font-bold">{row.qtyToStaging}</span>
-                                    {row.stagingLocationName && (
-                                      <span className="text-xs text-muted-foreground">{row.stagingLocationName}</span>
+                                    <span className="font-bold">{row.qtyToPickFace}</span>
+                                    {row.pickFaceLocationName && (
+                                      <span className="text-xs text-muted-foreground">{row.pickFaceLocationName}</span>
                                     )}
                                   </div>
                                 ) : <span className="text-muted-foreground">—</span>}
                               </td>
-                              {hasPickFace && (
-                                <td className="px-4 py-2 text-right">
-                                  {row.qtyToPickFace > 0 ? (
-                                    <div className="flex items-center justify-end gap-1">
-                                      <span className="font-bold">{row.qtyToPickFace}</span>
-                                      {row.pickFaceLocationName && (
-                                        <span className="text-xs text-muted-foreground">{row.pickFaceLocationName}</span>
-                                      )}
-                                    </div>
-                                  ) : <span className="text-muted-foreground">—</span>}
-                                </td>
-                              )}
-                              <td className="px-4 py-2 text-xs">{row.lotNumber ?? "—"}</td>
-                              <td className="px-4 py-2 text-xs">{row.expirationDate ? new Date(row.expirationDate).toLocaleDateString() : "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
+                            )}
+                            <td className="text-xs">{row.lotNumber ?? "—"}</td>
+                            <td className="text-xs">{row.expirationDate ? new Date(row.expirationDate).toLocaleDateString() : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
           </TabsContent>
 
-          {/* ── Pack List Tab ─────────────────────────────────────────────────── */}
+          {/* ── Pack List ── */}
           <TabsContent value="pack" className="mt-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <PackageCheck className="h-4 w-4 text-green-600" />
-                    Pack List
-                  </CardTitle>
-                  {packList.length > 0 && (
-                    <a
-                      href={`/api/pdf/pack-list/${runId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                    >
-                      <FileDown className="h-4 w-4" />
-                      Export PDF
-                    </a>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-4 py-3 font-medium">Order</th>
-                        <th className="text-left px-4 py-3 font-medium">SKU</th>
-                        <th className="text-left px-4 py-3 font-medium">Description</th>
-                        <th className="text-right px-4 py-3 font-medium">Qty</th>
-                        <th className="text-left px-4 py-3 font-medium">Lot</th>
-                        <th className="text-left px-4 py-3 font-medium">Expiry</th>
-                        <th className="text-left px-4 py-3 font-medium">Location</th>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                <h3 className="text-[15px] font-bold flex items-center gap-2">
+                  <PackageCheck className="h-4 w-4 text-emerald-500" />Pack List
+                </h3>
+                {packList.length > 0 && (
+                  <a href={`/api/pdf/pack-list/${runId}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+                    <FileDown className="h-4 w-4" />Export PDF
+                  </a>
+                )}
+              </div>
+              <table className="w-full data-table">
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>SKU</th>
+                    <th>Description</th>
+                    <th className="text-right">Qty</th>
+                    <th>Lot</th>
+                    <th>Expiry</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocatedOrders.flatMap((order) =>
+                    (order.detail?.packListItems ?? []).map((item, i) => (
+                      <tr key={`${order.id}-${i}`}>
+                        <td className="font-medium">{item.referenceNum}</td>
+                        <td className="font-mono text-xs">{item.sku}</td>
+                        <td className="text-muted-foreground text-xs">{item.description ?? "—"}</td>
+                        <td className="text-right font-bold">{item.qty}</td>
+                        <td className="text-xs">{item.lotNumber ?? "—"}</td>
+                        <td className="text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
+                        <td className="text-xs">{item.locationName}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {allocatedOrders.flatMap((order) =>
-                        (order.detail?.packListItems ?? []).map((item, i) => (
-                          <tr key={`${order.id}-${i}`} className="border-b border-border/50 hover:bg-muted/30">
-                            <td className="px-4 py-2 font-medium">{item.referenceNum}</td>
-                            <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
-                            <td className="px-4 py-2 text-muted-foreground text-xs">{item.description ?? "—"}</td>
-                            <td className="px-4 py-2 text-right font-bold">{item.qty}</td>
-                            <td className="px-4 py-2 text-xs">{item.lotNumber ?? "—"}</td>
-                            <td className="px-4 py-2 text-xs">{item.expirationDate ? new Date(item.expirationDate).toLocaleDateString() : "—"}</td>
-                            <td className="px-4 py-2 text-xs">{item.locationName}</td>
-                          </tr>
-                        ))
-                      )}
-                      {packList.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No pack list items.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                    ))
+                  )}
+                  {packList.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">No pack list items.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </TabsContent>
 
-                    {/* ── Order Summary Tab ─────────────────────────────────────────────── */}
+          {/* ── Order Summary ── */}
           <TabsContent value="summary" className="mt-4">
             <div className="space-y-3">
               {allocatedOrders.length === 0 && (
-                <Card>
-                  <CardContent className="py-10 text-center text-muted-foreground">
-                    <p className="text-sm">No orders allocated.</p>
-                  </CardContent>
-                </Card>
+                <div className="bg-card border border-border rounded-2xl py-12 text-center text-muted-foreground text-sm">
+                  No orders allocated.
+                </div>
               )}
               {allocatedOrders.map((order) => {
                 const lineItems = order.detail?.lineItems ?? [];
-                const totalLines = lineItems.length;
+                const totalLines  = lineItems.length;
                 const totalPieces = lineItems.reduce((sum, l) => sum + l.qtyRequired, 0);
                 return (
-                  <Card key={order.id}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-sm flex items-center gap-2">
-                            #{order.orderId}
-                            {order.status === "unallocated" && (
-                              <Badge className="text-xs bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
-                                unallocated
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground space-x-2">
-                            {order.referenceNum && <span>Ref: {order.referenceNum}</span>}
-                            {order.poNum && <span>PO: {order.poNum}</span>}
-                          </div>
+                  <div key={order.id} className="bg-card border border-border rounded-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-sm flex items-center gap-2">
+                          #{order.orderId}
+                          {order.status === "unallocated" && <StatusPill status="unallocated" />}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">{totalLines} {totalLines === 1 ? "line" : "lines"}</Badge>
-                          <Badge variant="outline" className="text-xs">{totalPieces} {totalPieces === 1 ? "pc" : "pcs"}</Badge>
-                          {order.status === "allocated" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
-                              disabled={unallocatingId === order.id}
-                              onClick={() => handleUnallocate(order.id, order.referenceNum ?? null)}
-                            >
-                              {unallocatingId === order.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Undo2 className="h-3 w-3" />
-                              )}
-                              Unallocate
-                            </Button>
-                          )}
+                        <div className="text-xs text-muted-foreground space-x-2 mt-0.5">
+                          {order.referenceNum && <span>Ref: {order.referenceNum}</span>}
+                          {order.poNum && <span>PO: {order.poNum}</span>}
                         </div>
                       </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border bg-muted/50">
-                              <th className="text-left px-4 py-2 font-medium">SKU</th>
-                              <th className="text-left px-4 py-2 font-medium">Description</th>
-                              <th className="text-right px-4 py-2 font-medium">Qty</th>
-                              <th className="text-left px-4 py-2 font-medium">Lot</th>
-                              <th className="text-left px-4 py-2 font-medium">Expiry</th>
-                              <th className="text-left px-4 py-2 font-medium">Location</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {lineItems.flatMap((line) =>
-                              line.allocations.map((alloc, i) => (
-                                <tr key={`${order.orderId}-${line.sku}-${i}`} className="border-b border-border/50 hover:bg-muted/30">
-                                  <td className="px-4 py-2 font-mono text-xs">{line.sku}</td>
-                                  <td className="px-4 py-2 text-muted-foreground text-xs">{line.description ?? "—"}</td>
-                                  <td className="px-4 py-2 text-right font-semibold">{alloc.qty}</td>
-                                  <td className="px-4 py-2 text-xs">{alloc.lotNumber ?? "—"}</td>
-                                  <td className="px-4 py-2 text-xs">{alloc.expirationDate ? new Date(alloc.expirationDate).toLocaleDateString() : "—"}</td>
-                                  <td className="px-4 py-2 text-xs">
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${locTypeBadge[alloc.locationType] ?? ""}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-xs font-medium">
+                          {totalLines} {totalLines === 1 ? "line" : "lines"}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-border text-xs font-medium">
+                          {totalPieces} {totalPieces === 1 ? "pc" : "pcs"}
+                        </span>
+                        {order.status === "allocated" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs gap-1"
+                            style={{ borderColor: "#fdba74", color: "#c2410c" }}
+                            disabled={unallocatingId === order.id}
+                            onClick={() => handleUnallocate(order.id, order.referenceNum ?? null)}
+                          >
+                            {unallocatingId === order.id
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <Undo2 className="h-3 w-3" />
+                            }
+                            Unallocate
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <table className="w-full data-table">
+                      <thead>
+                        <tr>
+                          <th>SKU</th>
+                          <th>Description</th>
+                          <th className="text-right">Qty</th>
+                          <th>Lot</th>
+                          <th>Expiry</th>
+                          <th>Location</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lineItems.flatMap((line) =>
+                          line.allocations.map((alloc, i) => {
+                            const lt = locTypeBadge[alloc.locationType];
+                            return (
+                              <tr key={`${order.orderId}-${line.sku}-${i}`}>
+                                <td className="font-mono text-xs">{line.sku}</td>
+                                <td className="text-muted-foreground text-xs">{line.description ?? "—"}</td>
+                                <td className="text-right font-semibold">{alloc.qty}</td>
+                                <td className="text-xs">{alloc.lotNumber ?? "—"}</td>
+                                <td className="text-xs">{alloc.expirationDate ? new Date(alloc.expirationDate).toLocaleDateString() : "—"}</td>
+                                <td className="text-xs">
+                                  {lt ? (
+                                    <span className="px-1.5 py-0.5 rounded text-xs font-medium"
+                                      style={{ background: lt.bg, color: lt.text }}>
                                       {alloc.locationName}
                                     </span>
-                                  </td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
+                                  ) : alloc.locationName}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 );
               })}
             </div>
           </TabsContent>
 
-          {/* ── All Orders Tab ─────────────────────────────────────────────────── */}
+          {/* ── All Orders ── */}
           <TabsContent value="orders" className="mt-4">
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-4 py-3 font-medium">Order #</th>
-                        <th className="text-left px-4 py-3 font-medium">Customer Ref</th>
-                        <th className="text-left px-4 py-3 font-medium">PO #</th>
-                        <th className="text-left px-4 py-3 font-medium">Status</th>
-                        <th className="text-left px-4 py-3 font-medium">Skip Reason</th>
-                        <th className="text-right px-4 py-3 font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map((o) => (
-                        <tr key={o.id} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-4 py-2 font-semibold">#{o.orderId}</td>
-                          <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{o.referenceNum ?? "—"}</td>
-                          <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{o.poNum ?? "—"}</td>
-                          <td className="px-4 py-2">
-                            <Badge className={statusClass[o.status] ?? ""}>{o.status}</Badge>
-                          </td>
-                          <td className="px-4 py-2 text-xs text-muted-foreground">{o.skipReason ?? "—"}</td>
-                          <td className="px-4 py-2 text-right">
-                              {o.status === "allocated" && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
-                                  disabled={unallocatingId === o.id}
-                                  onClick={() => handleUnallocate(o.id, o.referenceNum ?? null)}
-                                >
-                                  {unallocatingId === o.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Undo2 className="h-3 w-3" />
-                                  )}
-                                  Unallocate
-                                </Button>
-                              )}
-                              {o.status === "unallocated" && (
-                                <span className="text-xs text-orange-600 dark:text-orange-400 italic">Unallocated</span>
-                              )}
-                            </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <table className="w-full data-table">
+                <thead>
+                  <tr>
+                    <th>Order #</th>
+                    <th>Customer Ref</th>
+                    <th>PO #</th>
+                    <th>Status</th>
+                    <th>Skip Reason</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o) => (
+                    <tr key={o.id}>
+                      <td className="font-semibold">#{o.orderId}</td>
+                      <td className="font-mono text-xs text-muted-foreground">{o.referenceNum ?? "—"}</td>
+                      <td className="font-mono text-xs text-muted-foreground">{o.poNum ?? "—"}</td>
+                      <td><StatusPill status={o.status} /></td>
+                      <td className="text-xs text-muted-foreground">{o.skipReason ?? "—"}</td>
+                      <td className="text-right">
+                        {o.status === "allocated" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1.5"
+                            style={{ borderColor: "#fdba74", color: "#c2410c" }}
+                            disabled={unallocatingId === o.id}
+                            onClick={() => handleUnallocate(o.id, o.referenceNum ?? null)}
+                          >
+                            {unallocatingId === o.id
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <Undo2 className="h-3 w-3" />
+                            }
+                            Unallocate
+                          </Button>
+                        )}
+                        {o.status === "unallocated" && (
+                          <span className="text-xs italic" style={{ color: "#f97316" }}>Unallocated</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

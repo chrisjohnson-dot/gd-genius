@@ -179,3 +179,5 @@
 - [x] Update DashboardLayout sidebar: dark bg, section labels, active left-border, user avatar, nav badges
 - [x] Update topbar and page headers to match reference
 - [x] Update page components with new card/table/badge styles
+- [x] Style: Apply new card/table/status-pill styles to Run History page
+- [x] Style: Apply new card/table/badge/page-header styles to Run Detail page

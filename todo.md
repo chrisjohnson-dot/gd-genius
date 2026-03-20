@@ -198,3 +198,4 @@
 - [x] UX: Add hover tooltip to urgent badge showing priority breakdown (Urgent/High/Normal)
 - [x] UX: Apply amber border to warehouse cards with high-priority orders but no urgent ones
 - [x] UX: Add amber HIGH pill badge to warehouse card headers with high-priority orders
+- [x] UX: Replace Open Orders Dashboard filter buttons with four status tabs: Unallocated, In Production, Ship Ready, Out of SLA

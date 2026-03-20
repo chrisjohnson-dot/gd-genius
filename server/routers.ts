@@ -1354,6 +1354,7 @@ export const appRouter = router({
           lineCount: number;
           shipToName: string | null;
           configId: number;
+          orderStatus: number;
         }> = [];
 
         for (const config of configs) {
@@ -1387,6 +1388,7 @@ export const appRouter = router({
                       lineCount: o.orderItems?.length ?? 0,
                       shipToName: o.shipTo?.companyName ?? o.shipTo?.name ?? null,
                       configId: config.id,
+                      orderStatus: o.readOnly.status ?? 0,
                     });
                   }
                 } catch (err) {

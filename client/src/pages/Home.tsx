@@ -38,6 +38,7 @@ type OrderRow = {
   lineCount: number;
   shipToName: string | null;
   configId: number;
+  orderStatus: number;
 };
 
 type FacilityGroup = {
@@ -86,7 +87,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 function WarehouseCard({ facility }: { facility: FacilityGroup }) {
   const [search, setSearch]         = useState("");
   const [clientFilter, setClientFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [statusTab, setStatusTab]   = useState<"all" | "unallocated" | "in_production" | "ship_ready" | "out_of_sla">("all");
   const [sortKey, setSortKey]       = useState<SortKey>("ageDays");
   const [sortDir, setSortDir]       = useState<SortDir>("desc");
   const [expanded, setExpanded]     = useState(false);
@@ -109,7 +110,10 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
       );
     }
     if (clientFilter !== "all") rows = rows.filter((o) => String(o.clientId) === clientFilter);
-    if (priorityFilter !== "all") rows = rows.filter((o) => o.priority === priorityFilter);
+    if (statusTab === "unallocated") rows = rows.filter((o) => o.orderStatus === 0);
+    else if (statusTab === "in_production") rows = rows.filter((o) => o.orderStatus === 1);
+    else if (statusTab === "ship_ready") rows = rows.filter((o) => o.orderStatus === 2);
+    else if (statusTab === "out_of_sla") rows = rows.filter((o) => o.ageDays >= 7);
     return [...rows].sort((a, b) => {
       let cmp = 0;
       if (sortKey === "ageDays")     cmp = a.ageDays - b.ageDays;
@@ -118,14 +122,14 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
       else cmp = String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""));
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [facility.orders, search, clientFilter, priorityFilter, sortKey, sortDir]);
+  }, [facility.orders, search, clientFilter, statusTab, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("desc"); }
   }
 
-  const hasFilters = search || clientFilter !== "all" || priorityFilter !== "all";
+  const hasFilters = search || clientFilter !== "all" || statusTab !== "all";
 
   return (
     <div
@@ -244,8 +248,38 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
       {/* Collapsible order table */}
       {expanded && (
         <>
-          {/* Filters */}
-          <div className="px-5 py-3 border-b border-border flex flex-wrap items-center gap-2 bg-muted/20">
+          {/* Status tab buttons */}
+          <div className="px-5 pt-3 pb-0 border-b border-border bg-muted/20">
+            <div className="flex items-center gap-1 flex-wrap">
+              {([
+                { key: "all",           label: "All" },
+                { key: "unallocated",   label: "Unallocated" },
+                { key: "in_production", label: "In Production" },
+                { key: "ship_ready",    label: "Ship Ready" },
+                { key: "out_of_sla",    label: "Out of SLA" },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setStatusTab(key)}
+                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                    statusTab === key
+                      ? key === "out_of_sla"
+                        ? "border-red-500 text-red-600"
+                        : "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                  {key === "out_of_sla" && facility.urgent > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{facility.urgent}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Filters row */}
+          <div className="px-5 py-2.5 border-b border-border flex flex-wrap items-center gap-2 bg-muted/10">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input
@@ -273,20 +307,9 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               ))}
             </select>
 
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="py-1.5 px-2.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="all">All Priorities</option>
-              <option value="urgent">Urgent</option>
-              <option value="high">High</option>
-              <option value="normal">Normal</option>
-            </select>
-
             {hasFilters && (
               <button
-                onClick={() => { setSearch(""); setClientFilter("all"); setPriorityFilter("all"); }}
+                onClick={() => { setSearch(""); setClientFilter("all"); setStatusTab("all"); }}
                 className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 ml-auto"
               >
                 <X className="h-3 w-3" /> Clear
@@ -307,7 +330,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                 <>
                   <p className="text-sm font-medium">No orders match your filters.</p>
                   <button
-                    onClick={() => { setSearch(""); setClientFilter("all"); setPriorityFilter("all"); }}
+                    onClick={() => { setSearch(""); setClientFilter("all"); setStatusTab("all"); }}
                     className="text-xs text-primary hover:underline mt-1"
                   >
                     Clear filters

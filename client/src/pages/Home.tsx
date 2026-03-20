@@ -159,6 +159,12 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white">{facility.facilityName}</h3>
+                {facility.high > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                    <AlertTriangle className="h-2.5 w-2.5" />
+                    {facility.high} HIGH
+                  </span>
+                )}
                 {facility.urgent > 0 && (
                   <TooltipProvider delayDuration={150}>
                     <Tooltip>

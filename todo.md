@@ -201,3 +201,5 @@
 - [x] UX: Replace Open Orders Dashboard filter buttons with four status tabs: Unallocated, In Production, Ship Ready, Out of SLA
 - [x] UX: Move status tabs (Unallocated/In Production/Ship Ready/Out of SLA) to page level on Open Orders Dashboard
 - [x] UX: Replace dark gradient warehouse card headers with a lighter style
+- [x] UX: Replace KPI cards on Open Orders Dashboard (global + per-warehouse) with Unallocated, In Production, Ship Ready, Out of SLA
+- [x] UX: Remove status tab bar from Open Orders Dashboard

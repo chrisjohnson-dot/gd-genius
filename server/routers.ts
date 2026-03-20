@@ -1404,10 +1404,27 @@ export const appRouter = router({
         // Sort by ageDays descending (oldest first)
         allOrders.sort((a, b) => b.ageDays - a.ageDays);
 
-        // Build summary
-        const urgent = allOrders.filter((o) => o.priority === "urgent").length;
-        const high   = allOrders.filter((o) => o.priority === "high").length;
-        const normal = allOrders.filter((o) => o.priority === "normal").length;
+        // Helper: classify order into one of the four business categories
+        // Out of SLA = any order >= 7 days old (regardless of status)
+        // Unallocated = status 0
+        // In Production = status 1
+        // Ship Ready = status 2+
+        const classifyOrder = (o: typeof allOrders[0]) => {
+          if (o.ageDays >= 7) return "outOfSla" as const;
+          if (o.orderStatus === 1) return "inProduction" as const;
+          if (o.orderStatus >= 2) return "shipReady" as const;
+          return "unallocated" as const;
+        };
+
+        // Build global summary
+        let unallocated = 0, inProduction = 0, shipReady = 0, outOfSla = 0;
+        for (const o of allOrders) {
+          const cat = classifyOrder(o);
+          if (cat === "outOfSla") outOfSla++;
+          else if (cat === "inProduction") inProduction++;
+          else if (cat === "shipReady") shipReady++;
+          else unallocated++;
+        }
 
         const clientMap = new Map<number, { clientId: number; clientName: string; count: number; urgent: number }>();
         for (const o of allOrders) {
@@ -1427,6 +1444,10 @@ export const appRouter = router({
           urgent: number;
           high: number;
           normal: number;
+          unallocated: number;
+          inProduction: number;
+          shipReady: number;
+          outOfSla: number;
           byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
         }>();
 
@@ -1441,6 +1462,10 @@ export const appRouter = router({
               urgent: 0,
               high: 0,
               normal: 0,
+              unallocated: 0,
+              inProduction: 0,
+              shipReady: 0,
+              outOfSla: 0,
               byClient: [],
             });
           }
@@ -1450,6 +1475,11 @@ export const appRouter = router({
           if (o.priority === "urgent") f.urgent++;
           else if (o.priority === "high") f.high++;
           else f.normal++;
+          const cat = classifyOrder(o);
+          if (cat === "outOfSla") f.outOfSla++;
+          else if (cat === "inProduction") f.inProduction++;
+          else if (cat === "shipReady") f.shipReady++;
+          else f.unallocated++;
         }
 
         // Build per-facility byClient
@@ -1472,12 +1502,16 @@ export const appRouter = router({
           urgent: number;
           high: number;
           normal: number;
+          unallocated: number;
+          inProduction: number;
+          shipReady: number;
+          outOfSla: number;
           byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
         }>).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
 
         return {
           orders: allOrders,
-          summary: { total: allOrders.length, urgent, high, normal, byClient },
+          summary: { total: allOrders.length, unallocated, inProduction, shipReady, outOfSla, byClient },
           facilities,
         };
       }),

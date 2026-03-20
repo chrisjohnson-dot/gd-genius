@@ -1,4 +1,5 @@
 import AppLayout from "@/components/AppLayout";
+import { CheckCircle2, Clock, Package, ShipIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -49,10 +50,14 @@ type FacilityGroup = {
   urgent: number;
   high: number;
   normal: number;
+  unallocated: number;
+  inProduction: number;
+  shipReady: number;
+  outOfSla: number;
   byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
 };
 
-type StatusTab = "all" | "unallocated" | "in_production" | "ship_ready" | "out_of_sla";
+
 
 // ─── Priority pill ────────────────────────────────────────────────────────────
 function PriorityPill({ priority }: { priority: "urgent" | "high" | "normal" }) {
@@ -86,7 +91,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 }
 
 // ─── Per-warehouse card ───────────────────────────────────────────────────────
-function WarehouseCard({ facility, statusTab }: { facility: FacilityGroup; statusTab: StatusTab }) {
+function WarehouseCard({ facility }: { facility: FacilityGroup }) {
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [sortKey, setSortKey]           = useState<SortKey>("ageDays");
@@ -111,10 +116,6 @@ function WarehouseCard({ facility, statusTab }: { facility: FacilityGroup; statu
       );
     }
     if (clientFilter !== "all") rows = rows.filter((o) => String(o.clientId) === clientFilter);
-    if (statusTab === "unallocated")   rows = rows.filter((o) => o.orderStatus === 0);
-    else if (statusTab === "in_production") rows = rows.filter((o) => o.orderStatus === 1);
-    else if (statusTab === "ship_ready")    rows = rows.filter((o) => o.orderStatus === 2);
-    else if (statusTab === "out_of_sla")    rows = rows.filter((o) => o.ageDays >= 7);
     return [...rows].sort((a, b) => {
       let cmp = 0;
       if (sortKey === "ageDays")       cmp = a.ageDays - b.ageDays;
@@ -123,7 +124,7 @@ function WarehouseCard({ facility, statusTab }: { facility: FacilityGroup; statu
       else cmp = String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""));
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [facility.orders, search, clientFilter, statusTab, sortKey, sortDir]);
+  }, [facility.orders, search, clientFilter, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -222,21 +223,21 @@ function WarehouseCard({ facility, statusTab }: { facility: FacilityGroup; statu
 
         {/* KPI row */}
         <div className="grid grid-cols-4 gap-3">
-          <div className="bg-muted/50 rounded-xl px-4 py-3 text-center">
-            <p className="text-[22px] font-extrabold text-foreground leading-none">{facility.total}</p>
-            <p className="text-[10px] text-muted-foreground mt-1 font-medium uppercase tracking-wide">Total Open</p>
-          </div>
-          <div className="bg-red-50 rounded-xl px-4 py-3 text-center border border-red-100">
-            <p className="text-[22px] font-extrabold text-red-600 leading-none">{facility.urgent}</p>
-            <p className="text-[10px] text-red-400 mt-1 font-medium uppercase tracking-wide">Urgent</p>
+          <div className="bg-blue-50 rounded-xl px-4 py-3 text-center border border-blue-100">
+            <p className="text-[22px] font-extrabold text-blue-600 leading-none">{facility.unallocated}</p>
+            <p className="text-[10px] text-blue-400 mt-1 font-medium uppercase tracking-wide">Unallocated</p>
           </div>
           <div className="bg-amber-50 rounded-xl px-4 py-3 text-center border border-amber-100">
-            <p className="text-[22px] font-extrabold text-amber-600 leading-none">{facility.high}</p>
-            <p className="text-[10px] text-amber-400 mt-1 font-medium uppercase tracking-wide">High</p>
+            <p className="text-[22px] font-extrabold text-amber-600 leading-none">{facility.inProduction}</p>
+            <p className="text-[10px] text-amber-400 mt-1 font-medium uppercase tracking-wide">In Production</p>
           </div>
-          <div className="bg-blue-50 rounded-xl px-4 py-3 text-center border border-blue-100">
-            <p className="text-[22px] font-extrabold text-blue-600 leading-none">{facility.byClient.length}</p>
-            <p className="text-[10px] text-blue-400 mt-1 font-medium uppercase tracking-wide">Clients</p>
+          <div className="bg-emerald-50 rounded-xl px-4 py-3 text-center border border-emerald-100">
+            <p className="text-[22px] font-extrabold text-emerald-600 leading-none">{facility.shipReady}</p>
+            <p className="text-[10px] text-emerald-400 mt-1 font-medium uppercase tracking-wide">Ship Ready</p>
+          </div>
+          <div className="bg-red-50 rounded-xl px-4 py-3 text-center border border-red-100">
+            <p className="text-[22px] font-extrabold text-red-600 leading-none">{facility.outOfSla}</p>
+            <p className="text-[10px] text-red-400 mt-1 font-medium uppercase tracking-wide">Out of SLA</p>
           </div>
         </div>
       </div>
@@ -382,11 +383,10 @@ function WarehouseCard({ facility, statusTab }: { facility: FacilityGroup; statu
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { data, isLoading, refetch, isFetching } = trpc.allocation.openOrders.useQuery({});
-  const [pageStatusTab, setPageStatusTab] = useState<StatusTab>("all");
+
 
   const facilities: FacilityGroup[] = (data as { facilities?: FacilityGroup[] })?.facilities ?? [];
-  const summary = data?.summary ?? { total: 0, urgent: 0, high: 0, normal: 0, byClient: [] };
-  const totalOutOfSla = summary.urgent;
+  const summary = data?.summary ?? { total: 0, unallocated: 0, inProduction: 0, shipReady: 0, outOfSla: 0, byClient: [] };
 
   return (
     <AppLayout>
@@ -417,66 +417,40 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Page-level status tabs */}
-        <div className="bg-card border border-border rounded-2xl px-6 pt-1 pb-0 flex items-center gap-1 flex-wrap">
-          {([
-            { key: "all",           label: "All" },
-            { key: "unallocated",   label: "Unallocated" },
-            { key: "in_production", label: "In Production" },
-            { key: "ship_ready",    label: "Ship Ready" },
-            { key: "out_of_sla",    label: "Out of SLA" },
-          ] as const).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setPageStatusTab(key)}
-              className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
-                pageStatusTab === key
-                  ? key === "out_of_sla"
-                    ? "border-red-500 text-red-600"
-                    : "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {label}
-              {key === "out_of_sla" && totalOutOfSla > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{totalOutOfSla}</span>
-              )}
-            </button>
-          ))}
-        </div>
+
 
         {/* Global KPI bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="kpi-card">
             <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <PackageSearch className="h-3.5 w-3.5" /> Total Open Orders
+              <Package className="h-3.5 w-3.5 text-blue-500" /> Unallocated
             </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none">
-              {isLoading ? "—" : summary.total}
-            </p>
-          </div>
-          <div className="kpi-card">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <ShieldAlert className="h-3.5 w-3.5 text-red-500" /> Urgent (&ge;7 days)
-            </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none text-red-500">
-              {isLoading ? "—" : summary.urgent}
+            <p className="text-[28px] font-extrabold tracking-tight leading-none text-blue-600">
+              {isLoading ? "—" : summary.unallocated}
             </p>
           </div>
           <div className="kpi-card">
             <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> High (3–6 days)
+              <Clock className="h-3.5 w-3.5 text-amber-500" /> In Production
             </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none text-amber-500">
-              {isLoading ? "—" : summary.high}
+            <p className="text-[28px] font-extrabold tracking-tight leading-none text-amber-600">
+              {isLoading ? "—" : summary.inProduction}
             </p>
           </div>
           <div className="kpi-card">
             <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
-              <Users className="h-3.5 w-3.5 text-blue-500" /> Warehouses Active
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Ship Ready
             </p>
-            <p className="text-[28px] font-extrabold tracking-tight leading-none text-blue-500">
-              {isLoading ? "—" : facilities.length}
+            <p className="text-[28px] font-extrabold tracking-tight leading-none text-emerald-600">
+              {isLoading ? "—" : summary.shipReady}
+            </p>
+          </div>
+          <div className="kpi-card">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+              <ShieldAlert className="h-3.5 w-3.5 text-red-500" /> Out of SLA
+            </p>
+            <p className="text-[28px] font-extrabold tracking-tight leading-none text-red-600">
+              {isLoading ? "—" : summary.outOfSla}
             </p>
           </div>
         </div>
@@ -514,7 +488,7 @@ export default function Home() {
         {!isLoading && facilities.length > 0 && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {facilities.map((f) => (
-              <WarehouseCard key={f.facilityId} facility={f} statusTab={pageStatusTab} />
+              <WarehouseCard key={f.facilityId} facility={f} />
             ))}
           </div>
         )}

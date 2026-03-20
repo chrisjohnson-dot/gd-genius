@@ -249,3 +249,7 @@
 - [x] Rename "Pick Schedule" heading to "Open Orders" on Home.tsx
 - [x] Full-screen warehouse card modal on Open Orders (Home.tsx)
 - [x] Full-screen warehouse card modal on SLA Tracker
+- [x] Export to CSV in full-screen mode (Open Orders)
+- [x] Export to PDF in full-screen mode (Open Orders)
+- [x] Export to CSV in full-screen mode (SLA Tracker)
+- [x] Export to PDF in full-screen mode (SLA Tracker)

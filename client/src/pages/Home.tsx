@@ -46,6 +46,9 @@ import { Label } from "@/components/ui/label";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { FileDown, FileText } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // ─── Lifecycle status config ──────────────────────────────────────────────────
 type LifecycleStatus = "unallocated" | "allocated" | "picking" | "qc" | "qc_complete" | "ship_ready";
@@ -589,6 +592,77 @@ function WarehouseCard({
                 </div>
               ))}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                const rows = filteredOrders.map((o) => [
+                  LIFECYCLE_CONFIG[o.lifecycleStatus]?.label ?? o.lifecycleStatus,
+                  o.referenceNum ?? "",
+                  o.poNum ?? "",
+                  o.clientName,
+                  o.shipToName ?? "",
+                  o.shipToCity ?? "",
+                  o.creationDate ? new Date(o.creationDate as string).toLocaleDateString() : "",
+                  String(getAgeDays(o)) + "d",
+                  String(o.totalPieces ?? 0),
+                  String(o.skuCount ?? 0),
+                  o.assignedAssociate ?? "",
+                  o.notes ?? "",
+                ]);
+                const header = ["Status","Order #","PO #","Client","Ship To","City","Create Date","Age","Pieces","SKUs","Associate","Notes"];
+                const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+                const blob = new Blob([csv], { type: "text/csv" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `${facility.facilityName.replace(/[^a-z0-9]/gi, "_")}_orders.csv`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+                toast.success("CSV exported");
+              }}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+                doc.setFontSize(14);
+                doc.text(`${facility.facilityName} — Open Orders`, 40, 36);
+                doc.setFontSize(9);
+                doc.text(`Exported ${new Date().toLocaleString()} · ${filteredOrders.length} orders`, 40, 52);
+                autoTable(doc, {
+                  startY: 64,
+                  head: [["Status","Order #","PO #","Client","Ship To","City","Date","Age","Pcs","SKUs","Associate"]],
+                  body: filteredOrders.map((o) => [
+                    LIFECYCLE_CONFIG[o.lifecycleStatus]?.label ?? o.lifecycleStatus,
+                    o.referenceNum ?? "",
+                    o.poNum ?? "",
+                    o.clientName,
+                    o.shipToName ?? "",
+                    o.shipToCity ?? "",
+                    o.creationDate ? new Date(o.creationDate as string).toLocaleDateString() : "",
+                    String(getAgeDays(o)) + "d",
+                    String(o.totalPieces ?? 0),
+                    String(o.skuCount ?? 0),
+                    o.assignedAssociate ?? "",
+                  ]),
+                  styles: { fontSize: 7, cellPadding: 3 },
+                  headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: "bold" },
+                  alternateRowStyles: { fillColor: [248, 250, 252] },
+                  margin: { left: 40, right: 40 },
+                });
+                doc.save(`${facility.facilityName.replace(/[^a-z0-9]/gi, "_")}_orders.pdf`);
+                toast.success("PDF exported");
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              PDF
+            </Button>
             <Button
               variant="outline"
               size="sm"

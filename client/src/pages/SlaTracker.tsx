@@ -39,6 +39,9 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { FileDown, FileText } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SlaOrder = {
@@ -180,6 +183,86 @@ function WarehouseSlaCard({ facilityName, orders }: { facilityName: string; orde
                 <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
               </button>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                const header = ["SLA Status","Order #","PO #","Client","Ship To","Create Date","Age","Stage","SLA Days","Notes"];
+                const rows = filtered.map((o) => [
+                  o.slaStatus === "in_sla" ? "In SLA" : "Out of SLA",
+                  o.referenceNum ?? "",
+                  o.poNum ?? "",
+                  o.clientName,
+                  o.shipToName ?? "",
+                  o.creationDate ? new Date(o.creationDate).toLocaleDateString() : "",
+                  o.ageCalendarDays === 0 ? "Today" : `${o.ageCalendarDays}d`,
+                  o.lifecycleStatus.replace("_", " "),
+                  `${o.slaDays}d`,
+                  o.notes ?? "",
+                ]);
+                const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+                const blob = new Blob([csv], { type: "text/csv" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `${facilityName.replace(/[^a-z0-9]/gi, "_")}_sla.csv`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+                toast.success("CSV exported");
+              }}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+                doc.setFontSize(14);
+                doc.text(`${facilityName} — SLA Tracker`, 40, 36);
+                doc.setFontSize(9);
+                doc.text(`Exported ${new Date().toLocaleString()} · ${filtered.length} orders`, 40, 52);
+                autoTable(doc, {
+                  startY: 64,
+                  head: [["SLA Status","Order #","PO #","Client","Ship To","Create Date","Age","Stage","SLA Days"]],
+                  body: filtered.map((o) => [
+                    o.slaStatus === "in_sla" ? "In SLA" : "Out of SLA",
+                    o.referenceNum ?? "",
+                    o.poNum ?? "",
+                    o.clientName,
+                    o.shipToName ?? "",
+                    o.creationDate ? new Date(o.creationDate).toLocaleDateString() : "",
+                    o.ageCalendarDays === 0 ? "Today" : `${o.ageCalendarDays}d`,
+                    o.lifecycleStatus.replace("_", " "),
+                    `${o.slaDays}d`,
+                  ]),
+                  styles: { fontSize: 7, cellPadding: 3 },
+                  headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: "bold" },
+                  alternateRowStyles: { fillColor: [248, 250, 252] },
+                  didDrawCell: (data) => {
+                    if (data.section === "body" && data.column.index === 0) {
+                      const val = data.cell.text[0];
+                      if (val === "Out of SLA") {
+                        doc.setFillColor(254, 226, 226);
+                        doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, "F");
+                        doc.setTextColor(185, 28, 28);
+                        doc.setFontSize(7);
+                        doc.text(val, data.cell.x + 3, data.cell.y + data.cell.height / 2 + 2.5);
+                        doc.setTextColor(0);
+                      }
+                    }
+                  },
+                  margin: { left: 40, right: 40 },
+                });
+                doc.save(`${facilityName.replace(/[^a-z0-9]/gi, "_")}_sla.pdf`);
+                toast.success("PDF exported");
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              PDF
+            </Button>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setIsFullScreen(false)}>
               <Minimize2 className="h-3.5 w-3.5" />
               Exit Full Screen

@@ -31,6 +31,8 @@ import {
   ShipIcon,
   ChevronRight,
   UserCheck,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import {
   Dialog,
@@ -322,9 +324,13 @@ function getAgeDays(order: TrackedOrder): number {
 function WarehouseCard({
   facility,
   onStatusChanged,
+  fullScreen = false,
+  onClose,
 }: {
   facility: FacilityGroup;
   onStatusChanged: () => void;
+  fullScreen?: boolean;
+  onClose?: () => void;
 }) {
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState("all");
@@ -333,6 +339,7 @@ function WarehouseCard({
   const [sortDir, setSortDir]           = useState<SortDir>("asc");
   const [expanded, setExpanded]         = useState(false);
   const [groupByClient, setGroupByClient] = useState(true);
+  const [isFullScreen, setIsFullScreen] = useState(fullScreen);
 
   const clientOptions = useMemo(
     () => Array.from(new Map(facility.orders.map((o) => [o.clientId, o.clientName])).entries()),
@@ -528,6 +535,173 @@ function WarehouseCard({
     );
   };
 
+  // When in full-screen mode, always show the table expanded
+  const tableExpanded = isFullScreen ? true : expanded;
+
+  if (isFullScreen) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col bg-background"
+        style={{ overflow: "hidden" }}
+      >
+        {/* Full-screen header */}
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b border-border bg-card shrink-0"
+          style={{
+            borderLeft: hasUrgent ? "4px solid #ef4444" : hasHigh ? "4px solid #f59e0b" : "4px solid transparent",
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Warehouse className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-foreground">{facility.facilityName}</h2>
+                {hasHigh && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                    <AlertTriangle className="h-2.5 w-2.5" /> HIGH
+                  </span>
+                )}
+                {hasUrgent && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+                    <ShieldAlert className="h-2.5 w-2.5" /> URGENT
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {facility.orders.length} order{facility.orders.length !== 1 ? "s" : ""} · {clientOptions.length} client{clientOptions.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Lifecycle KPI row in header */}
+            <div className="hidden md:flex items-center gap-2">
+              {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
+                <div
+                  key={status}
+                  className="rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-opacity"
+                  style={{ background: cfg.bg, borderColor: cfg.border, opacity: statusFilter === status ? 1 : statusFilter === "all" ? 1 : 0.45 }}
+                  onClick={() => setStatusFilter((f) => (f === status ? "all" : status))}
+                >
+                  <p className="text-[15px] font-extrabold leading-none" style={{ color: cfg.text }}>{counts[status]}</p>
+                  <p className="text-[8px] mt-0.5 font-medium uppercase tracking-wide" style={{ color: cfg.text }}>{cfg.label}</p>
+                </div>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => { setIsFullScreen(false); if (onClose) onClose(); }}
+            >
+              <Minimize2 className="h-3.5 w-3.5" />
+              Exit Full Screen
+            </Button>
+          </div>
+        </div>
+
+        {/* Filters row */}
+        <div className="px-5 py-2.5 border-b border-border flex flex-wrap items-center gap-2 bg-muted/10 shrink-0">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search order, client, PO, city…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 pr-8 py-1.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 w-52"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <select
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            className="py-1.5 px-2.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="all">All Clients</option>
+            {clientOptions.map(([id, name]) => (
+              <option key={id} value={String(id)}>{name}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as LifecycleStatus | "all")}
+            className="py-1.5 px-2.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="all">All Statuses</option>
+            {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([s, c]) => (
+              <option key={s} value={s}>{c.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setGroupByClient((g) => !g)}
+            className={`py-1.5 px-2.5 text-xs rounded-lg border transition-colors flex items-center gap-1.5 ${
+              groupByClient
+                ? "bg-primary/10 border-primary/30 text-primary font-semibold"
+                : "border-border bg-background text-muted-foreground"
+            }`}
+          >
+            <Users className="h-3 w-3" />
+            Group by Client
+          </button>
+          {hasFilters && (
+            <button
+              onClick={() => { setSearch(""); setClientFilter("all"); setStatusFilter("all"); }}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            >
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
+          <span className="text-xs text-muted-foreground ml-auto">
+            {hasFilters ? `${filteredOrders.length} of ${facility.orders.length}` : facility.orders.length} orders
+          </span>
+        </div>
+
+        {/* Scrollable table */}
+        <div className="flex-1 overflow-auto">
+          {filteredOrders.length === 0 ? (
+            <div className="py-10 text-center text-muted-foreground">
+              <p className="text-sm font-medium">No orders match your filters.</p>
+              <button onClick={() => { setSearch(""); setClientFilter("all"); setStatusFilter("all"); }} className="text-xs text-primary hover:underline mt-1">Clear filters</button>
+            </div>
+          ) : groupByClient ? (
+            <table className="w-full data-table">
+              {tableHeader(false)}
+              <tbody>
+                {groupedByClient.map((group) => {
+                  const groupPieces = group.orders.reduce((s, o) => s + (o.totalPieces ?? 0), 0);
+                  return [
+                    <tr key={`hdr-${group.clientId}`} style={{ background: "#111827", borderLeft: "3px solid #374151" }}>
+                      <td colSpan={2} className="py-2 px-3"><span className="text-[11px] font-bold text-white uppercase tracking-wider">{group.clientName}</span></td>
+                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">PO #</td>
+                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">Ship To</td>
+                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">City</td>
+                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">Age</td>
+                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{groupPieces > 0 ? groupPieces.toLocaleString() : ""}</td>
+                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{group.orders.length} ord</td>
+                      <td colSpan={2}></td>
+                    </tr>,
+                    ...group.orders.map((o) => orderRow(o, false)),
+                  ];
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full data-table">
+              {tableHeader(true)}
+              <tbody>{filteredOrders.map((o) => orderRow(o, true))}</tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="bg-card rounded-2xl overflow-hidden"
@@ -569,8 +743,15 @@ function WarehouseCard({
               </p>
             </div>
           </div>
-          <div className="text-muted-foreground">
-            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Expand to full screen"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+            {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
 
@@ -778,7 +959,7 @@ export default function Home() {
         <div className="flex items-center justify-between">
           <div>
             <p className="page-breadcrumb">Overview</p>
-            <h1 className="page-title">Pick Schedule</h1>
+            <h1 className="page-title">Open Orders</h1>
             {lastSyncAt && (
               <p className="text-xs text-muted-foreground mt-0.5">
                 Last synced {lastSyncAt.toLocaleString()}

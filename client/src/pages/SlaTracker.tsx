@@ -33,6 +33,9 @@ import {
   Trash2,
   Warehouse,
   ArrowUpDown,
+  Maximize2,
+  Minimize2,
+  Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -96,6 +99,7 @@ function WarehouseSlaCard({ facilityName, orders }: { facilityName: string; orde
   const [sortKey, setSortKey] = useState<SortKey>("slaStatus");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterStatus, setFilterStatus] = useState<"all" | "in_sla" | "out_of_sla">("all");
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   const inSlaCount = orders.filter((o) => o.slaStatus === "in_sla").length;
   const outOfSlaCount = orders.filter((o) => o.slaStatus === "out_of_sla").length;
@@ -130,6 +134,106 @@ function WarehouseSlaCard({ facilityName, orders }: { facilityName: string; orde
 
   const hasBreaches = outOfSlaCount > 0;
 
+  // ── Full-screen overlay ──
+  if (isFullScreen) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-background" style={{ overflow: "hidden" }}>
+        {/* Full-screen header */}
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b border-border bg-card shrink-0"
+          style={{ borderLeft: hasBreaches ? "4px solid #ef4444" : "4px solid transparent" }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center">
+              <Warehouse className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-foreground">{facilityName}</h2>
+                {hasBreaches && (
+                  <Badge className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold">
+                    <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                    {outOfSlaCount} Breached
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{orders.length} orders tracked</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* KPI pills in header */}
+            <div className="hidden md:flex items-center gap-2">
+              <button
+                className={`rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-all ${filterStatus === "in_sla" ? "ring-2 ring-green-400" : ""}`}
+                style={{ background: "#dcfce7", border: "1px solid #bbf7d0" }}
+                onClick={() => setFilterStatus(filterStatus === "in_sla" ? "all" : "in_sla")}
+              >
+                <p className="text-[15px] font-extrabold leading-none text-green-700">{inSlaCount}</p>
+                <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
+              </button>
+              <button
+                className={`rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-all ${filterStatus === "out_of_sla" ? "ring-2 ring-red-400" : ""}`}
+                style={{ background: "#fee2e2", border: "1px solid #fecaca" }}
+                onClick={() => setFilterStatus(filterStatus === "out_of_sla" ? "all" : "out_of_sla")}
+              >
+                <p className="text-[15px] font-extrabold leading-none text-red-700">{outOfSlaCount}</p>
+                <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
+              </button>
+            </div>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setIsFullScreen(false)}>
+              <Minimize2 className="h-3.5 w-3.5" />
+              Exit Full Screen
+            </Button>
+          </div>
+        </div>
+
+        {/* Scrollable table */}
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("slaStatus")}>SLA Status <SortIcon col="slaStatus" /></th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("referenceNum")}>Order # <SortIcon col="referenceNum" /></th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">PO #</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("clientName")}>Client <SortIcon col="clientName" /></th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("shipToName")}>Ship To <SortIcon col="shipToName" /></th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Create Date</th>
+                <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("ageCalendarDays")}>Age <SortIcon col="ageCalendarDays" /></th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Stage</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
+                <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              {filtered.length === 0 ? (
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground text-xs">No orders match the current filter.</td></tr>
+              ) : (
+                filtered.map((o) => (
+                  <tr key={o.extensivOrderId} style={o.slaStatus === "out_of_sla" ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" } : { borderLeft: "3px solid transparent" }}>
+                    <td className="px-4 py-2"><SlaPill status={o.slaStatus} daysRemaining={o.daysRemaining} /></td>
+                    <td className="px-4 py-2 font-semibold text-foreground">{o.referenceNum || `#${o.extensivOrderId}`}</td>
+                    <td className="px-4 py-2 text-muted-foreground font-mono">{o.poNum ?? "—"}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{o.clientName}</td>
+                    <td className="px-4 py-2 text-muted-foreground max-w-[140px] truncate" title={o.shipToName ?? ""}>{o.shipToName ?? "—"}</td>
+                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{o.creationDate ? new Date(o.creationDate).toLocaleDateString() : "—"}</td>
+                    <td className="px-4 py-2 text-muted-foreground text-right whitespace-nowrap">{o.ageCalendarDays === 0 ? "Today" : `${o.ageCalendarDays}d`}</td>
+                    <td className="px-4 py-2"><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground capitalize">{o.lifecycleStatus.replace("_", " ")}</span></td>
+                    <td className="px-4 py-2 text-muted-foreground text-center">{o.slaDays}d</td>
+                    <td className="px-4 py-2 text-center">
+                      {o.notes ? (
+                        <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild><MessageSquare className="h-3.5 w-3.5 text-blue-400 cursor-default inline" /></TooltipTrigger><TooltipContent side="left" className="max-w-[220px] text-xs">{o.notes}</TooltipContent></Tooltip></TooltipProvider>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="bg-card rounded-2xl overflow-hidden"
@@ -160,6 +264,13 @@ function WarehouseSlaCard({ facilityName, orders }: { facilityName: string; orde
                 {outOfSlaCount} Breached
               </Badge>
             )}
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Expand to full screen"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
             {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>

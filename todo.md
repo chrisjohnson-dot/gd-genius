@@ -246,3 +246,6 @@
 - [x] SLA tRPC procedures: list, upsert, delete sla requirements; getSlaStatus query
 - [x] SLA Tracker page: Dashboard tab (In SLA / Out of SLA per warehouse) + SLA Requirements tab
 - [x] Route /sla-tracker wired in App.tsx
+- [x] Rename "Pick Schedule" heading to "Open Orders" on Home.tsx
+- [x] Full-screen warehouse card modal on Open Orders (Home.tsx)
+- [x] Full-screen warehouse card modal on SLA Tracker

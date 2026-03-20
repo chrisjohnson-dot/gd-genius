@@ -194,3 +194,4 @@
 - [x] Feature: Add unallocated orders data table to Open Orders Dashboard (client, age, priority, KPI cards)
 - [x] UX: Restructure Open Orders Dashboard to show one card per warehouse with per-warehouse KPIs and order table
 - [x] UX: Highlight unallocated order rows older than 3 days with row background and left-border accent
+- [x] UX: Add red border to warehouse card headers that contain urgent orders

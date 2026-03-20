@@ -122,7 +122,13 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
   const hasFilters = search || clientFilter !== "all" || priorityFilter !== "all";
 
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+    <div
+      className="bg-card rounded-2xl overflow-hidden"
+      style={{
+        border: facility.urgent > 0 ? "2px solid #ef4444" : "1px solid hsl(var(--border))",
+        boxShadow: facility.urgent > 0 ? "0 0 0 1px rgba(239,68,68,0.15), 0 4px 16px rgba(239,68,68,0.10)" : undefined,
+      }}
+    >
       {/* Warehouse header with KPI stats */}
       <div
         className="px-6 py-5 cursor-pointer select-none"
@@ -135,7 +141,15 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               <Warehouse className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">{facility.facilityName}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">{facility.facilityName}</h3>
+                {facility.urgent > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white">
+                    <ShieldAlert className="h-2.5 w-2.5" />
+                    {facility.urgent} URGENT
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-white/50">{facility.total} unallocated order{facility.total !== 1 ? "s" : ""}</p>
             </div>
           </div>

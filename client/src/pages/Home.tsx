@@ -1,5 +1,11 @@
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
@@ -144,10 +150,50 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white">{facility.facilityName}</h3>
                 {facility.urgent > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white">
-                    <ShieldAlert className="h-2.5 w-2.5" />
-                    {facility.urgent} URGENT
-                  </span>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white cursor-default">
+                          <ShieldAlert className="h-2.5 w-2.5" />
+                          {facility.urgent} URGENT
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="bottom"
+                        className="p-3 min-w-[160px]"
+                        style={{ background: "#1a1d2e", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" }}
+                      >
+                        <p className="text-[11px] font-semibold text-white/60 uppercase tracking-wide mb-2">Priority Breakdown</p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="flex items-center gap-1.5 text-xs text-red-400 font-semibold">
+                              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                              Urgent (&ge;7d)
+                            </span>
+                            <span className="text-xs font-bold text-white">{facility.urgent}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="flex items-center gap-1.5 text-xs text-amber-400 font-semibold">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                              High (3–6d)
+                            </span>
+                            <span className="text-xs font-bold text-white">{facility.high}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                              Normal (&lt;3d)
+                            </span>
+                            <span className="text-xs font-bold text-white">{facility.normal}</span>
+                          </div>
+                          <div className="border-t border-white/10 pt-1.5 mt-1 flex items-center justify-between">
+                            <span className="text-xs text-white/50">Total</span>
+                            <span className="text-xs font-bold text-white">{facility.total}</span>
+                          </div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
               <p className="text-xs text-white/50">{facility.total} unallocated order{facility.total !== 1 ? "s" : ""}</p>

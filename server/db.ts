@@ -467,7 +467,8 @@ export async function upsertTrackedOrders(
 /** Advance an order to the next lifecycle stage. */
 export async function updateOrderLifecycleStatus(
   extensivOrderId: number,
-  newStatus: OrderTracking["lifecycleStatus"]
+  newStatus: OrderTracking["lifecycleStatus"],
+  assignedAssociate?: string | null
 ): Promise<OrderTracking | null> {
   const db = await getDb();
   if (!db) return null;
@@ -480,9 +481,19 @@ export async function updateOrderLifecycleStatus(
   if (newStatus === "qc_complete") timestampField.qcCompleteAt = now;
   if (newStatus === "ship_ready")  timestampField.shipReadyAt = now;
 
+  const updatePayload: Record<string, unknown> = {
+    lifecycleStatus: newStatus,
+    ...timestampField,
+    lastSyncedAt: now,
+  };
+  // Only set assignedAssociate when transitioning to picking (or if explicitly provided)
+  if (newStatus === "picking" && assignedAssociate !== undefined) {
+    updatePayload.assignedAssociate = assignedAssociate ?? null;
+  }
+
   await db
     .update(orderTracking)
-    .set({ lifecycleStatus: newStatus, ...timestampField, lastSyncedAt: now })
+    .set(updatePayload)
     .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 
   const rows = await db

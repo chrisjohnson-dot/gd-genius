@@ -196,6 +196,8 @@ export const orderTracking = mysqlTable("order_tracking", {
     "qc_complete",
     "ship_ready",
   ]).notNull().default("unallocated"),
+  // Associate assigned when order moves to Picking
+  assignedAssociate: varchar("assignedAssociate", { length: 256 }),
   // Timestamps for each stage transition
   firstSeenAt: timestamp("firstSeenAt").defaultNow().notNull(),
   lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),

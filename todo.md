@@ -232,3 +232,10 @@
 - [ ] Frontend: Ship Ready stage — button to mark "Shipping Details Sent" → Ship Ready
 - [ ] Frontend: Show "Last synced" timestamp and manual Sync Now button
 - [ ] Frontend: Shipped orders auto-disappear from the sheet (removed from DB on next sync)
+- [x] Add assignedAssociate column to order_tracking table
+- [x] Prompt for associate name when advancing order to Picking stage
+- [x] Display assigned associate name in order row
+- [ ] Shipwell API client with token auth (sandbox + production)
+- [ ] Shipwell credentials settings page (email, password, environment toggle)
+- [ ] Send to Shipwell action on Ship Ready orders (creates Shipwell purchase order)
+- [ ] Store Shipwell PO ID in order_tracking and display link in order row

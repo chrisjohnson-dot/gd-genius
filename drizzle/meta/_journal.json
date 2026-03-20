@@ -78,6 +78,13 @@
       "when": 1774040338217,
       "tag": "0010_daily_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1774041051303,
+      "tag": "0011_small_gladiator",
+      "breakpoints": true
     }
   ]
 }

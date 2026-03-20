@@ -1,0 +1,1 @@
+ALTER TABLE `order_tracking` ADD `assignedAssociate` varchar(256);

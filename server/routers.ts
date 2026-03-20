@@ -1763,17 +1763,22 @@ export const appRouter = router({
         z.object({
           extensivOrderId: z.number(),
           status: z.enum(["unallocated", "allocated", "picking", "qc", "qc_complete", "ship_ready"]),
+          assignedAssociate: z.string().max(256).nullable().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
-        const updated = await updateOrderLifecycleStatus(input.extensivOrderId, input.status);
+        const updated = await updateOrderLifecycleStatus(
+          input.extensivOrderId,
+          input.status,
+          input.assignedAssociate
+        );
         if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found in tracking table" });
         await createAuditLog({
           userId: ctx.user.id,
           action: "pickSchedule.updateStatus",
           entityType: "order_tracking",
           entityId: String(input.extensivOrderId),
-          details: { newStatus: input.status },
+          details: { newStatus: input.status, assignedAssociate: input.assignedAssociate ?? null },
         });
         return updated;
       }),

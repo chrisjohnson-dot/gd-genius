@@ -128,6 +128,33 @@ describe("updateOrderLifecycleStatus", () => {
       expect(result![timestampField as keyof typeof result]).toBeInstanceOf(Date);
     }
   });
+
+  it("should store assignedAssociate when transitioning to picking", async () => {
+    const mockResult = {
+      id: 1,
+      extensivOrderId: 1001,
+      lifecycleStatus: "picking",
+      pickingAt: new Date(),
+      assignedAssociate: "John Smith",
+    };
+    (updateOrderLifecycleStatus as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+    const result = await updateOrderLifecycleStatus(1001, "picking", "John Smith");
+    expect(result!.assignedAssociate).toBe("John Smith");
+  });
+
+  it("should not require assignedAssociate for non-picking transitions", async () => {
+    const mockResult = {
+      id: 1,
+      extensivOrderId: 1001,
+      lifecycleStatus: "qc",
+      qcAt: new Date(),
+      assignedAssociate: "John Smith", // preserved from picking stage
+    };
+    (updateOrderLifecycleStatus as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+    // No assignedAssociate passed — should still succeed
+    const result = await updateOrderLifecycleStatus(1001, "qc");
+    expect(result!.lifecycleStatus).toBe("qc");
+  });
 });
 
 // ─── upsertTrackedOrders ──────────────────────────────────────────────────────

@@ -28,7 +28,17 @@ import {
   ClipboardCheck,
   ShipIcon,
   ChevronRight,
+  UserCheck,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
@@ -103,6 +113,7 @@ type TrackedOrder = {
   qcAt: string | Date | null;
   qcCompleteAt: string | Date | null;
   shipReadyAt: string | Date | null;
+  assignedAssociate: string | null;
 };
 
 type FacilityGroup = {
@@ -135,10 +146,14 @@ function AdvanceButton({
 }) {
   const cfg = LIFECYCLE_CONFIG[order.lifecycleStatus];
   const utils = trpc.useUtils();
+  const [showDialog, setShowDialog] = useState(false);
+  const [associateName, setAssociateName] = useState("");
 
   const updateStatus = trpc.pickSchedule.updateStatus.useMutation({
     onSuccess: () => {
       utils.pickSchedule.list.invalidate();
+      setShowDialog(false);
+      setAssociateName("");
       onAdvanced();
     },
     onError: (err) => {
@@ -148,27 +163,89 @@ function AdvanceButton({
 
   if (!cfg.nextStatus) return null;
 
+  const needsAssociate = cfg.nextStatus === "picking";
+
+  function handleAdvance() {
+    if (needsAssociate) {
+      setShowDialog(true);
+    } else {
+      updateStatus.mutate({ extensivOrderId: order.extensivOrderId, status: cfg.nextStatus! });
+    }
+  }
+
+  function handleConfirmAssociate() {
+    if (!associateName.trim()) return;
+    updateStatus.mutate({
+      extensivOrderId: order.extensivOrderId,
+      status: "picking",
+      assignedAssociate: associateName.trim(),
+    });
+  }
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="text-[10px] h-6 px-2 font-semibold whitespace-nowrap"
-      style={{ color: cfg.text }}
-      disabled={updateStatus.isPending}
-      onClick={(e) => {
-        e.stopPropagation();
-        updateStatus.mutate({ extensivOrderId: order.extensivOrderId, status: cfg.nextStatus! });
-      }}
-    >
-      {updateStatus.isPending ? (
-        <RefreshCw className="h-3 w-3 animate-spin" />
-      ) : (
-        <>
-          {cfg.nextLabel}
-          <ChevronRight className="h-3 w-3 ml-0.5" />
-        </>
-      )}
-    </Button>
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-[10px] h-6 px-2 font-semibold whitespace-nowrap"
+        style={{ color: cfg.text }}
+        disabled={updateStatus.isPending}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleAdvance();
+        }}
+      >
+        {updateStatus.isPending && !showDialog ? (
+          <RefreshCw className="h-3 w-3 animate-spin" />
+        ) : (
+          <>
+            {cfg.nextLabel}
+            <ChevronRight className="h-3 w-3 ml-0.5" />
+          </>
+        )}
+      </Button>
+
+      {/* Associate name dialog — shown only when advancing to Picking */}
+      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) { setShowDialog(false); setAssociateName(""); } }}>
+        <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-amber-500" />
+              Assign to Associate
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Order <span className="font-semibold text-foreground">{order.referenceNum || `#${order.extensivOrderId}`}</span> is being given to an associate for picking.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="associate-name" className="text-xs font-semibold">Associate Name</Label>
+              <Input
+                id="associate-name"
+                placeholder="Enter associate name…"
+                value={associateName}
+                onChange={(e) => setAssociateName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && associateName.trim()) handleConfirmAssociate(); }}
+                autoFocus
+                className="text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setShowDialog(false); setAssociateName(""); }}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={!associateName.trim() || updateStatus.isPending}
+              onClick={handleConfirmAssociate}
+              className="gap-1.5"
+            >
+              {updateStatus.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Truck className="h-3.5 w-3.5" />}
+              Assign & Start Picking
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -306,6 +383,7 @@ function WarehouseCard({
         </th>
         <th className="text-right">SKUs</th>
         <th className="w-8"></th>
+        <th className="w-[140px]">Associate</th>
         <th className="w-[130px]"></th>
       </tr>
     </thead>
@@ -365,6 +443,14 @@ function WarehouseCard({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          ) : null}
+        </td>
+        <td className="text-xs">
+          {o.assignedAssociate ? (
+            <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-medium whitespace-nowrap">
+              <UserCheck className="h-3 w-3 shrink-0" />
+              {o.assignedAssociate}
+            </span>
           ) : null}
         </td>
         <td className="text-right">

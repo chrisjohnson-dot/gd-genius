@@ -5,26 +5,45 @@ import { cn } from "@/lib/utils";
 import {
   BarChart3,
   CalendarClock,
+  CheckSquare,
   ClipboardList,
   Cog,
+  FileBarChart2,
   History,
   ListChecks,
   LogOut,
   MapPin,
   Moon,
+  PackageCheck,
   PackageSearch,
+  ScrollText,
+  Ship,
   Stethoscope,
   Sun,
+  Truck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 
-const navItems = [
-  { href: "/",          label: "Dashboard",          icon: BarChart3 },
-  { href: "/allocate",  label: "Run Allocation Tool", icon: PackageSearch },
-  { href: "/history",   label: "Run History",         icon: History },
-  { href: "/audit",     label: "Audit Log",           icon: ClipboardList },
+const allocationItems = [
+  { href: "/",          label: "Dashboard",           icon: BarChart3 },
+  { href: "/allocate",  label: "Run Allocation Tool",  icon: PackageSearch },
+  { href: "/history",   label: "Run History",          icon: History },
+  { href: "/audit",     label: "Audit Log",            icon: ClipboardList },
+];
+
+const qcItems = [
+  { href: "/qc",              label: "QC Dashboard",    icon: BarChart3 },
+  { href: "/qc/inspections",  label: "Inspection Queue", icon: CheckSquare },
+  { href: "/qc/reports",      label: "QC Reports",       icon: FileBarChart2 },
+];
+
+const shippingItems = [
+  { href: "/shipping",         label: "Shipping Dashboard", icon: Ship },
+  { href: "/shipping/orders",  label: "Ship Orders",         icon: PackageCheck },
+  { href: "/shipping/history", label: "Shipping History",    icon: ScrollText },
+  { href: "/shipping/carriers",label: "Carriers",            icon: Truck },
 ];
 
 const configItems = [
@@ -119,13 +138,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
-          {/* Operations section */}
+          {/* Allocation section */}
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Operations
+              Allocation
             </p>
             <div className="space-y-0.5">
-              {navItems.map(item => (
+              {allocationItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
+              ))}
+            </div>
+          </div>
+
+          {/* QC section */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
+              QC
+            </p>
+            <div className="space-y-0.5">
+              {qcItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
+              ))}
+            </div>
+          </div>
+
+          {/* Shipping section */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
+              Shipping
+            </p>
+            <div className="space-y-0.5">
+              {shippingItems.map(item => (
                 <NavItem key={item.href} {...item} active={location === item.href} />
               ))}
             </div>

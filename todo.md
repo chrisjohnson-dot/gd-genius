@@ -187,3 +187,6 @@
 - [x] UX: Add search bar to Run History page to filter by customer name or TX ID
 - [x] Style: Apply new card/page-header styles to API Settings page
 - [x] Style: Apply new card/page-header styles to Auto-Run Schedule page
+- [x] Nav: Rename OPERATIONS section to ALLOCATION in sidebar
+- [x] Nav: Add QC section with placeholder nav items and stub pages
+- [x] Nav: Add SHIPPING section with placeholder nav items and stub pages

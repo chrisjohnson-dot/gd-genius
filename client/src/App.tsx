@@ -15,7 +15,14 @@ import RunDetail from "./pages/RunDetail";
 import AuditLog from "./pages/AuditLog";
 import ScheduleSettings from "./pages/ScheduleSettings";
 import Diagnostics from "./pages/Diagnostics";
-import PrintPage from "./pages/PrintPage";
+import PrintPage from "@/pages/PrintPage";
+import QCDashboard from "@/pages/QCDashboard";
+import QCInspections from "@/pages/QCInspections";
+import QCReports from "@/pages/QCReports";
+import ShippingDashboard from "@/pages/ShippingDashboard";
+import ShipOrders from "@/pages/ShipOrders";
+import ShippingHistory from "@/pages/ShippingHistory";
+import ShippingCarriers from "@/pages/ShippingCarriers";
 
 function Router() {
   return (
@@ -32,6 +39,13 @@ function Router() {
       <Route path="/schedule" component={ScheduleSettings} />
       <Route path="/diagnostics" component={Diagnostics} />
       <Route path="/print" component={PrintPage} />
+      <Route path="/qc" component={QCDashboard} />
+      <Route path="/qc/inspections" component={QCInspections} />
+      <Route path="/qc/reports" component={QCReports} />
+      <Route path="/shipping" component={ShippingDashboard} />
+      <Route path="/shipping/orders" component={ShipOrders} />
+      <Route path="/shipping/history" component={ShippingHistory} />
+      <Route path="/shipping/carriers" component={ShippingCarriers} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

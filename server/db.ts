@@ -26,6 +26,9 @@ import {
   orderTracking,
   OrderTracking,
   InsertOrderTracking,
+  shipwellConfigs,
+  ShipwellConfig,
+  InsertShipwellConfig,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -528,4 +531,61 @@ export async function getLastSyncTime(): Promise<Date | null> {
     .orderBy(desc(orderTracking.lastSyncedAt))
     .limit(1);
   return rows[0]?.lastSyncedAt ?? null;
+}
+
+// ─── Shipwell Config Helpers ──────────────────────────────────────────────────
+
+/** Get the active Shipwell config (there should only be one). */
+export async function getShipwellConfig(): Promise<ShipwellConfig | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(shipwellConfigs)
+    .where(eq(shipwellConfigs.isActive, true))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Upsert the Shipwell config (replace if one exists, insert if none). */
+export async function upsertShipwellConfig(
+  data: Omit<InsertShipwellConfig, "id" | "createdAt" | "updatedAt" | "cachedToken" | "tokenExpiresAt">
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Delete all existing configs then insert fresh (single-config model)
+  await db.delete(shipwellConfigs);
+  await db.insert(shipwellConfigs).values({
+    ...data,
+    cachedToken: null,
+    tokenExpiresAt: null,
+  });
+}
+
+/** Update the cached auth token on the active Shipwell config. */
+export async function updateShipwellToken(token: string, expiresAt: Date): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(shipwellConfigs)
+    .set({ cachedToken: token, tokenExpiresAt: expiresAt })
+    .where(eq(shipwellConfigs.isActive, true));
+}
+
+/** Mark an order as sent to Shipwell — store the PO ID, URL, and timestamp. */
+export async function markOrderSentToShipwell(
+  extensivOrderId: number,
+  shipwellOrderId: string,
+  shipwellPoUrl: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(orderTracking)
+    .set({
+      shipwellOrderId,
+      shipwellPoUrl,
+      shipwellSentAt: new Date(),
+    })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 }

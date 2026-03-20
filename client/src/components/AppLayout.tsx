@@ -21,6 +21,7 @@ import {
   Stethoscope,
   Sun,
   Truck,
+  Zap,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
@@ -50,7 +51,8 @@ const configItems = [
   { href: "/locations",   label: "Location Config",    icon: MapPin },
   { href: "/rules",       label: "Allocation Rules",   icon: ListChecks },
   { href: "/schedule",    label: "Auto-Run Schedule",  icon: CalendarClock },
-  { href: "/diagnostics", label: "API Diagnostics",    icon: Stethoscope },
+  { href: "/diagnostics",      label: "API Diagnostics",    icon: Stethoscope },
+  { href: "/shipwell-settings", label: "Shipwell Settings",  icon: Zap },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/GDgenius_a71f2819.jpg";

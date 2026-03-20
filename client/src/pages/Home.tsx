@@ -14,11 +14,13 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  ExternalLink,
   MessageSquare,
   Package,
   PackageSearch,
   RefreshCw,
   Search,
+  Send,
   ShieldAlert,
   Users,
   Warehouse,
@@ -114,6 +116,9 @@ type TrackedOrder = {
   qcCompleteAt: string | Date | null;
   shipReadyAt: string | Date | null;
   assignedAssociate: string | null;
+  shipwellOrderId: string | null;
+  shipwellPoUrl: string | null;
+  shipwellSentAt: string | Date | null;
 };
 
 type FacilityGroup = {
@@ -133,6 +138,50 @@ function LifecyclePill({ status }: { status: LifecycleStatus }) {
       {cfg.icon}
       {cfg.label}
     </span>
+  );
+}
+
+// ─── Send to Shipwell button ─────────────────────────────────────────────────
+function SendToShipwellButton({
+  order,
+  onSent,
+}: {
+  order: TrackedOrder;
+  onSent: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const sendOrder = trpc.shipwell.sendOrder.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Order sent to Shipwell. PO ID: ${data.shipwellOrderId}`);
+      utils.pickSchedule.list.invalidate();
+      onSent();
+    },
+    onError: (err) => {
+      toast.error(`Shipwell error: ${err.message}`);
+    },
+  });
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-[10px] h-6 px-2 font-semibold whitespace-nowrap text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+      disabled={sendOrder.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        sendOrder.mutate({ extensivOrderId: order.extensivOrderId });
+      }}
+      title="Create purchase order in Shipwell"
+    >
+      {sendOrder.isPending ? (
+        <RefreshCw className="h-3 w-3 animate-spin" />
+      ) : (
+        <>
+          <Send className="h-2.5 w-2.5 mr-1" />
+          Send to Shipwell
+        </>
+      )}
+    </Button>
   );
 }
 
@@ -454,7 +503,26 @@ function WarehouseCard({
           ) : null}
         </td>
         <td className="text-right">
-          <AdvanceButton order={o} onAdvanced={onStatusChanged} />
+          <div className="flex items-center justify-end gap-1">
+            {o.lifecycleStatus === "ship_ready" && (
+              o.shipwellOrderId ? (
+                <a
+                  href={o.shipwellPoUrl ?? "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 hover:bg-green-100 transition-colors whitespace-nowrap"
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Shipwell PO: ${o.shipwellOrderId}`}
+                >
+                  <ExternalLink className="h-2.5 w-2.5" />
+                  In Shipwell
+                </a>
+              ) : (
+                <SendToShipwellButton order={o} onSent={onStatusChanged} />
+              )
+            )}
+            <AdvanceButton order={o} onAdvanced={onStatusChanged} />
+          </div>
         </td>
       </tr>
     );

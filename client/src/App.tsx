@@ -22,6 +22,7 @@ import ShippingDashboard from "@/pages/ShippingDashboard";
 import ShipOrders from "@/pages/ShipOrders";
 import ShippingHistory from "@/pages/ShippingHistory";
 import ShippingCarriers from "@/pages/ShippingCarriers";
+import ShipwellSettings from "@/pages/ShipwellSettings";
 
 function Router() {
   return (
@@ -44,6 +45,7 @@ function Router() {
       <Route path="/shipping/orders" component={ShipOrders} />
       <Route path="/shipping/history" component={ShippingHistory} />
       <Route path="/shipping/carriers" component={ShippingCarriers} />
+      <Route path="/shipwell-settings" component={ShipwellSettings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

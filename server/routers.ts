@@ -34,12 +34,16 @@ import {
   getTrackedOrders,
   updateOrderLifecycleStatus,
   getLastSyncTime,
+  getShipwellConfig,
+  upsertShipwellConfig,
+  markOrderSentToShipwell,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
+import { createShipwellClient } from "./shipwell/api";
 
 export const appRouter = router({
   system: systemRouter,
@@ -1796,6 +1800,135 @@ export const appRouter = router({
       syncOrdersNow().catch((err) => console.error("[PickSchedule] Manual sync failed:", err));
       return { success: true, message: "Sync started. Refresh in a moment to see updated orders." };
     }),
+  }),
+
+  // ─── Shipwell TMS Integration ──────────────────────────────────────────────
+  shipwell: router({
+    /** Get the current Shipwell config (password masked). */
+    getConfig: protectedProcedure.query(async () => {
+      const config = await getShipwellConfig();
+      if (!config) return null;
+      return {
+        id: config.id,
+        name: config.name,
+        email: config.email,
+        environment: config.environment,
+        isActive: config.isActive,
+        hasPassword: !!config.password,
+        createdAt: config.createdAt,
+        updatedAt: config.updatedAt,
+      };
+    }),
+
+    /** Save or update Shipwell credentials. */
+    saveConfig: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(128).optional().default("Default"),
+        email: z.string().email(),
+        password: z.string().min(1),
+        environment: z.enum(["sandbox", "production"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await upsertShipwellConfig({
+          name: input.name,
+          email: input.email,
+          password: input.password,
+          environment: input.environment,
+          isActive: true,
+        });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "shipwell.saveConfig",
+          entityType: "shipwell_configs",
+          entityId: null,
+          details: { email: input.email, environment: input.environment },
+        });
+        return { success: true };
+      }),
+
+    /** Test the Shipwell credentials by authenticating. */
+    testConnection: protectedProcedure.mutation(async () => {
+      const config = await getShipwellConfig();
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "No Shipwell config found. Please save credentials first." });
+      const client = createShipwellClient({
+        email: config.email,
+        password: config.password,
+        environment: config.environment as "sandbox" | "production",
+      });
+      const result = await client.verifyCredentials();
+      if (!result.valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Shipwell authentication failed. Check your email and password." });
+      return { success: true, user: result.user };
+    }),
+
+    /** Send a Ship Ready order to Shipwell as a purchase order. */
+    sendOrder: protectedProcedure
+      .input(z.object({
+        extensivOrderId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "No Shipwell config found. Please configure Shipwell credentials first." });
+
+        // Fetch the tracked order
+        const orders = await getTrackedOrders();
+        const order = orders.find((o) => o.extensivOrderId === input.extensivOrderId);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found in tracking table." });
+        if (order.lifecycleStatus !== "ship_ready") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Only Ship Ready orders can be sent to Shipwell." });
+        }
+        if (order.shipwellOrderId) {
+          throw new TRPCError({ code: "CONFLICT", message: `Order already sent to Shipwell (PO ID: ${order.shipwellOrderId}).` });
+        }
+
+        const client = createShipwellClient({
+          email: config.email,
+          password: config.password,
+          environment: config.environment as "sandbox" | "production",
+        });
+
+        // Build the purchase order payload
+        // Origin address: Go Direct warehouse (facility name used as placeholder)
+        const originAddress = {
+          address_1: order.facilityName ?? "Go Direct Warehouse",
+          city: "Warehouse",
+          country: "CA",
+        };
+
+        // Destination: ship-to customer address (city from Extensiv)
+        const destinationAddress = {
+          address_1: order.shipToName ?? "Unknown",
+          city: order.shipToCity ?? "Unknown",
+          country: "CA",
+        };
+
+        const po = await client.createPurchaseOrder({
+          order_number: String(order.extensivOrderId),
+          purchase_order_number: order.poNum ?? undefined,
+          origin_address: originAddress,
+          destination_address: destinationAddress,
+          customer_name: order.clientName ?? undefined,
+          description: order.notes ?? undefined,
+          source: "SHIPWELL_WEB",
+          custom_data: {
+            gd_reference_num: order.referenceNum,
+            gd_client_id: order.clientId,
+            gd_facility: order.facilityName,
+          },
+        });
+
+        const poUrl = client.getPoUrl(po.id);
+        await markOrderSentToShipwell(input.extensivOrderId, po.id, poUrl);
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "shipwell.sendOrder",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: { shipwellOrderId: po.id, poUrl, environment: config.environment },
+        });
+
+        return { success: true, shipwellOrderId: po.id, poUrl };
+      }),
   }),
 });
 export type AppRouter = typeof appRouter;

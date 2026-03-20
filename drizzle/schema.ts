@@ -198,6 +198,10 @@ export const orderTracking = mysqlTable("order_tracking", {
   ]).notNull().default("unallocated"),
   // Associate assigned when order moves to Picking
   assignedAssociate: varchar("assignedAssociate", { length: 256 }),
+  // Shipwell integration
+  shipwellOrderId: varchar("shipwellOrderId", { length: 64 }),   // UUID returned by Shipwell
+  shipwellPoUrl: varchar("shipwellPoUrl", { length: 512 }),       // Deep link to Shipwell PO
+  shipwellSentAt: timestamp("shipwellSentAt"),                    // When it was sent to Shipwell
   // Timestamps for each stage transition
   firstSeenAt: timestamp("firstSeenAt").defaultNow().notNull(),
   lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
@@ -211,3 +215,21 @@ export const orderTracking = mysqlTable("order_tracking", {
 
 export type OrderTracking = typeof orderTracking.$inferSelect;
 export type InsertOrderTracking = typeof orderTracking.$inferInsert;
+
+// Shipwell TMS integration configuration
+export const shipwellConfigs = mysqlTable("shipwell_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull().default("Default"),
+  email: varchar("email", { length: 320 }).notNull(),
+  password: varchar("password", { length: 512 }).notNull(), // stored encrypted/hashed
+  environment: mysqlEnum("environment", ["sandbox", "production"]).notNull().default("sandbox"),
+  isActive: boolean("isActive").default(true).notNull(),
+  // Cached auth token (refreshed on use)
+  cachedToken: varchar("cachedToken", { length: 512 }),
+  tokenExpiresAt: timestamp("tokenExpiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ShipwellConfig = typeof shipwellConfigs.$inferSelect;
+export type InsertShipwellConfig = typeof shipwellConfigs.$inferInsert;

@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `shipwell_configs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`name` varchar(128) NOT NULL DEFAULT 'Default',\n\t`email` varchar(320) NOT NULL,\n\t`password` varchar(512) NOT NULL,\n\t`environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',\n\t`isActive` boolean NOT NULL DEFAULT true,\n\t`cachedToken` varchar(512),\n\t`tokenExpiresAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `shipwell_configs_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `order_tracking` ADD `shipwellOrderId` varchar(64);\nALTER TABLE `order_tracking` ADD `shipwellPoUrl` varchar(512);\nALTER TABLE `order_tracking` ADD `shipwellSentAt` timestamp;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `shipwell_configs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`name` varchar(128) NOT NULL DEFAULT 'Default',\n\t`email` varchar(320) NOT NULL,\n\t`password` varchar(512) NOT NULL,\n\t`environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',\n\t`isActive` boolean NOT NULL DEFAULT true,\n\t`cachedToken` varchar(512),\n\t`tokenExpiresAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `shipwell_configs_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `order_tracking` ADD `shipwellOrderId` varchar(64);\nALTER TABLE `order_tracking` ADD `shipwellPoUrl` varchar(512);\nALTER TABLE `order_tracking` ADD `shipwellSentAt` timestamp;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 3787
+}

@@ -1416,9 +1416,67 @@ export const appRouter = router({
         }
         const byClient = Array.from(clientMap.values()).sort((a, b) => b.count - a.count);
 
+        // Group by facility
+        const facilityMap = new Map<number, {
+          facilityId: number;
+          facilityName: string;
+          orders: typeof allOrders;
+          total: number;
+          urgent: number;
+          high: number;
+          normal: number;
+          byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
+        }>();
+
+        for (const o of allOrders) {
+          const fid = o.facilityId;
+          if (!facilityMap.has(fid)) {
+            facilityMap.set(fid, {
+              facilityId: fid,
+              facilityName: o.facilityName || `Warehouse ${fid}`,
+              orders: [],
+              total: 0,
+              urgent: 0,
+              high: 0,
+              normal: 0,
+              byClient: [],
+            });
+          }
+          const f = facilityMap.get(fid)!;
+          f.orders.push(o);
+          f.total++;
+          if (o.priority === "urgent") f.urgent++;
+          else if (o.priority === "high") f.high++;
+          else f.normal++;
+        }
+
+        // Build per-facility byClient
+        for (const f of Array.from(facilityMap.values())) {
+          const cm = new Map<number, { clientId: number; clientName: string; count: number; urgent: number }>();
+          for (const o of f.orders) {
+            const e = cm.get(o.clientId) ?? { clientId: o.clientId, clientName: o.clientName, count: 0, urgent: 0 };
+            e.count++;
+            if (o.priority === "urgent") e.urgent++;
+            cm.set(o.clientId, e);
+          }
+          f.byClient = Array.from(cm.values()).sort((a, b) => b.count - a.count);
+        }
+
+        const facilities = Array.from(facilityMap.values() as Iterable<{
+          facilityId: number;
+          facilityName: string;
+          orders: typeof allOrders;
+          total: number;
+          urgent: number;
+          high: number;
+          normal: number;
+          byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
+        }>).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
+
         return {
           orders: allOrders,
           summary: { total: allOrders.length, urgent, high, normal, byClient },
+          facilities,
         };
       }),
 

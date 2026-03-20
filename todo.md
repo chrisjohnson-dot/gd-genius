@@ -192,3 +192,4 @@
 - [x] Nav: Add SHIPPING section with placeholder nav items and stub pages
 - [x] Nav: Add "Open" item above Dashboard in Allocation section
 - [x] Feature: Add unallocated orders data table to Open Orders Dashboard (client, age, priority, KPI cards)
+- [x] UX: Restructure Open Orders Dashboard to show one card per warehouse with per-warehouse KPIs and order table

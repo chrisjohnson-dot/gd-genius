@@ -253,3 +253,4 @@
 - [x] Export to PDF in full-screen mode (Open Orders)
 - [x] Export to CSV in full-screen mode (SLA Tracker)
 - [x] Export to PDF in full-screen mode (SLA Tracker)
+- [x] Make sidebar logo 2.5x bigger

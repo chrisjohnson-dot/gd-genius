@@ -108,7 +108,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <img src={GD_LOGO} alt="GD Genius" className="h-12 w-auto" />
+            <img src={GD_LOGO} alt="GD Genius" className="h-28 w-auto" />
           </div>
           <p className="text-muted-foreground">Sign in to access the allocation dashboard.</p>
           <Button asChild size="lg" className="shadow-md">
@@ -132,7 +132,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {/* Brand */}
         <div className="px-4 pt-4 pb-3.5 border-b border-white/[0.06]">
-          <img src={GD_LOGO} alt="GD Genius" className="h-10 w-auto" />
+          <img src={GD_LOGO} alt="GD Genius" className="h-24 w-auto" />
         </div>
 
         {/* Navigation */}

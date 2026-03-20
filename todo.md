@@ -190,3 +190,4 @@
 - [x] Nav: Rename OPERATIONS section to ALLOCATION in sidebar
 - [x] Nav: Add QC section with placeholder nav items and stub pages
 - [x] Nav: Add SHIPPING section with placeholder nav items and stub pages
+- [x] Nav: Add "Open" item above Dashboard in Allocation section

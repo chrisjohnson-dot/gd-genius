@@ -23,6 +23,7 @@ import ShippingDashboard from "@/pages/ShippingDashboard";
 import ShipOrders from "@/pages/ShipOrders";
 import ShippingHistory from "@/pages/ShippingHistory";
 import ShippingCarriers from "@/pages/ShippingCarriers";
+import OpenOrders from "@/pages/OpenOrders";
 
 function Router() {
   return (
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/schedule" component={ScheduleSettings} />
       <Route path="/diagnostics" component={Diagnostics} />
       <Route path="/print" component={PrintPage} />
+      <Route path="/open" component={OpenOrders} />
       <Route path="/qc" component={QCDashboard} />
       <Route path="/qc/inspections" component={QCInspections} />
       <Route path="/qc/reports" component={QCReports} />

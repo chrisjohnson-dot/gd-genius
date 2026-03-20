@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Cog,
   FileBarChart2,
+  FolderOpen,
   History,
   ListChecks,
   LogOut,
@@ -27,7 +28,8 @@ import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 
 const allocationItems = [
-  { href: "/",          label: "Dashboard",           icon: BarChart3 },
+  { href: "/open",      label: "Open",                 icon: FolderOpen },
+  { href: "/",          label: "Dashboard",            icon: BarChart3 },
   { href: "/allocate",  label: "Run Allocation Tool",  icon: PackageSearch },
   { href: "/history",   label: "Run History",          icon: History },
   { href: "/audit",     label: "Audit Log",            icon: ClipboardList },

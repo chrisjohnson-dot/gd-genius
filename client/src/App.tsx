@@ -17,7 +17,6 @@ import ScheduleSettings from "./pages/ScheduleSettings";
 import Diagnostics from "./pages/Diagnostics";
 import PrintPage from "@/pages/PrintPage";
 import QCDashboard from "@/pages/QCDashboard";
-import QCInspections from "@/pages/QCInspections";
 import QCReports from "@/pages/QCReports";
 import ShippingDashboard from "@/pages/ShippingDashboard";
 import ShipOrders from "@/pages/ShipOrders";
@@ -40,7 +39,6 @@ function Router() {
       <Route path="/diagnostics" component={Diagnostics} />
       <Route path="/print" component={PrintPage} />
       <Route path="/qc" component={QCDashboard} />
-      <Route path="/qc/inspections" component={QCInspections} />
       <Route path="/qc/reports" component={QCReports} />
       <Route path="/shipping" component={ShippingDashboard} />
       <Route path="/shipping/orders" component={ShipOrders} />

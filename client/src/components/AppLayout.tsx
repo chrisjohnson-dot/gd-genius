@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import {
   BarChart3,
   CalendarClock,
-  CheckSquare,
   ClipboardList,
   Cog,
   FileBarChart2,
@@ -35,9 +34,8 @@ const allocationItems = [
 ];
 
 const qcItems = [
-  { href: "/qc",              label: "QC Dashboard",    icon: BarChart3 },
-  { href: "/qc/inspections",  label: "Inspection Queue", icon: CheckSquare },
-  { href: "/qc/reports",      label: "QC Reports",       icon: FileBarChart2 },
+  { href: "/qc",         label: "QC Dashboard", icon: BarChart3 },
+  { href: "/qc/reports", label: "QC Reports",   icon: FileBarChart2 },
 ];
 
 const shippingItems = [

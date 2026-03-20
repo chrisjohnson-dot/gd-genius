@@ -89,7 +89,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [sortKey, setSortKey]       = useState<SortKey>("ageDays");
   const [sortDir, setSortDir]       = useState<SortDir>("desc");
-  const [expanded, setExpanded]     = useState(true);
+  const [expanded, setExpanded]     = useState(false);
 
   const clientOptions = useMemo(
     () => Array.from(new Map(facility.orders.map((o) => [o.clientId, o.clientName])).entries()),

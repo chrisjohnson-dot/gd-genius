@@ -9,6 +9,7 @@
  *     that the engine uses to sort candidate locations before FEFO.
  *   - Notes — free-form instructions visible to the allocator.
  */
+import AppLayout from "@/components/AppLayout";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -307,11 +308,13 @@ export default function AllocationRules() {
   const hiddenCount = clients.length - visibleClients.length;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <AppLayout>
+    <div className="p-7 max-w-4xl space-y-6 page-enter">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Allocation Rules</h1>
+          <p className="page-breadcrumb">Configuration</p>
+          <h1 className="page-title">Allocation Rules</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Configure per-client allocation behaviour. Location priority patterns
             tell the engine which locations to prefer when picking inventory — the
@@ -342,12 +345,9 @@ export default function AllocationRules() {
       )}
 
       {!isLoading && clients.length === 0 && (
-        <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">
-            No clients found. Make sure your Extensiv API credentials are
-            configured in API Settings.
-          </CardContent>
-        </Card>
+        <div className="bg-card border border-border rounded-2xl py-10 text-center text-muted-foreground text-sm">
+          No clients found. Make sure your Extensiv API credentials are configured in API Settings.
+        </div>
       )}
 
       {/* ── Copy Rules Dialog ───────────────────────────────────────── */}
@@ -459,10 +459,10 @@ export default function AllocationRules() {
               )
             }
           >
-            <Card className="overflow-hidden">
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
               {/* ── Card header / trigger ─────────────────────────────── */}
               <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer select-none hover:bg-muted/40 transition-colors py-4">
+                <div className="cursor-pointer select-none hover:bg-muted/30 transition-colors px-5 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       {c.open ? (
@@ -470,9 +470,9 @@ export default function AllocationRules() {
                       ) : (
                         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                       )}
-                      <CardTitle className="text-base font-semibold truncate">
+                      <span className="text-[15px] font-bold truncate">
                         {c.customerName}
-                      </CardTitle>
+                      </span>
                       <span className="text-xs text-muted-foreground hidden sm:inline">
                         ID {c.customerId}
                       </span>
@@ -507,17 +507,16 @@ export default function AllocationRules() {
                       )}
                     </div>
                   </div>
-                </CardHeader>
+                </div>
               </CollapsibleTrigger>
 
               {/* ── Expanded content ──────────────────────────────────── */}
               <CollapsibleContent>
-                <CardContent className="pt-0 pb-5 space-y-6">
-                  <Separator />
+                <div className="px-5 pb-6 space-y-6 border-t border-border pt-5">
 
                   {/* ── Toggles row ─────────────────────────────────── */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 p-4">
                       <div>
                         <Label className="font-medium">No Lot Mixing</Label>
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -531,7 +530,7 @@ export default function AllocationRules() {
                         }
                       />
                     </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 p-4">
                       <div>
                         <Label className="font-medium">Auto-Run</Label>
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -572,7 +571,7 @@ export default function AllocationRules() {
                     </div>
 
                     {c.locationPriorityPatterns.length === 0 && (
-                      <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                      <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
                         No patterns configured. The engine will use the default
                         FEFO order across all locations.
                       </div>
@@ -581,7 +580,7 @@ export default function AllocationRules() {
                     {c.locationPriorityPatterns.map((p, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2"
+                        className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2"
                       >
                         {/* Rank badge */}
                         <span className="w-6 text-center text-xs font-bold text-muted-foreground shrink-0">
@@ -702,11 +701,13 @@ export default function AllocationRules() {
                       {c.saving ? "Saving…" : "Save Rules"}
                     </Button>
                   </div>
-                </CardContent>
+                </div>
               </CollapsibleContent>
-            </Card>
+            </div>
           </Collapsible>
-        ))}
+        ))
+      }
     </div>
+    </AppLayout>
   );
 }

@@ -406,10 +406,11 @@ export default function LocationConfig() {
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6 max-w-4xl">
+      <div className="p-7 space-y-6 max-w-4xl page-enter">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Staging Location Setup</h1>
+            <p className="page-breadcrumb">Configuration</p>
+            <h1 className="page-title">Location Config</h1>
             <p className="text-muted-foreground text-sm mt-1">
               Configure the staging location for each client — the temporary holding area where inventory moves during order fulfillment
             </p>
@@ -431,8 +432,7 @@ export default function LocationConfig() {
         </div>
 
         {/* Config selector */}
-        <Card>
-          <CardContent className="py-4">
+        <div className="bg-card border border-border rounded-2xl px-5 py-4">
             <div className="flex items-center gap-4">
               <Label className="shrink-0">API Configuration:</Label>
               <Select
@@ -449,21 +449,18 @@ export default function LocationConfig() {
                 </SelectContent>
               </Select>
             </div>
-          </CardContent>
-        </Card>
+        </div>
 
         {/* How staging works */}
-        <Card className="border-purple-200 dark:border-purple-900 bg-purple-50/50 dark:bg-purple-950/10">
-          <CardContent className="py-4">
-            <p className="text-sm font-medium mb-1 text-purple-900 dark:text-purple-300">How Staging Works</p>
+        <div className="rounded-2xl border px-5 py-4" style={{ background: "#f5f3ff", borderColor: "#ddd6fe" }}>
+            <p className="text-sm font-semibold mb-1" style={{ color: "#5b21b6" }}>How Staging Works</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               During allocation, inventory moves from <strong>warehouse locations</strong> and <strong>pick face locations</strong> into
               the client's <strong>staging area</strong>. Once the order is packed and shipped, staging is empty again.
               Each client needs exactly one staging location configured here — this is the Extensiv location ID that
               the allocation engine will move inventory into.
             </p>
-          </CardContent>
-        </Card>
+        </div>
 
         {!selectedConfigId ? (
           <div className="text-center py-12 text-muted-foreground">
@@ -477,8 +474,7 @@ export default function LocationConfig() {
             ))}
           </div>
         ) : Object.keys(grouped).length === 0 ? (
-          <Card>
-            <CardContent className="py-10 text-center">
+          <div className="bg-card border border-border rounded-2xl py-10 text-center">
               <MapPin className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
               <p className="text-muted-foreground text-sm">No staging locations configured yet.</p>
               <div className="flex items-center justify-center gap-2 mt-3">
@@ -489,8 +485,7 @@ export default function LocationConfig() {
                   <Plus className="h-3.5 w-3.5 mr-1" /> Add Manually
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+          </div>
         ) : (
           <div className="space-y-4">
             {Object.entries(grouped).map(([key, locs]) => {
@@ -500,13 +495,13 @@ export default function LocationConfig() {
               const noLotMixing = rule?.noLotMixing ?? false;
 
               return (
-                <Card key={key}>
-                  <CardHeader className="pb-2">
+                <div key={key} className="bg-card border border-border rounded-2xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-border">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Client: <span className="text-foreground">{customerName}</span>
-                        <span className="ml-2 text-xs">(ID: {customerIdStr})</span>
-                      </CardTitle>
+                      <span className="text-[15px] font-bold">
+                        {customerName}
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">(ID: {customerIdStr})</span>
+                      </span>
                       {/* Lot Mixing Rule Toggle */}
                       <div className="flex items-center gap-2 text-sm">
                         <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
@@ -534,13 +529,13 @@ export default function LocationConfig() {
                         </Badge>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="pt-0">
+                  </div>
+                  <div>
                     <div className="divide-y divide-border">
                       {(locs ?? []).map((loc) => (
-                        <div key={loc.id} className="py-2.5 flex items-center justify-between">
+                        <div key={loc.id} className="px-5 py-3 flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <Badge className={locTypeBadge[loc.locationType]}>{locTypeLabel[loc.locationType]}</Badge>
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold" style={loc.locationType === 'staging' ? {background:'#ede9fe',color:'#6d28d9'} : loc.locationType === 'pick_face' ? {background:'#dbeafe',color:'#1d4ed8'} : {background:'#ffedd5',color:'#c2410c'}}>{locTypeLabel[loc.locationType]}</span>
                             <div>
                               <p className="text-sm font-medium">{loc.locationName}</p>
                               <p className="text-xs text-muted-foreground">
@@ -564,8 +559,8 @@ export default function LocationConfig() {
                         </div>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               );
             })}
           </div>

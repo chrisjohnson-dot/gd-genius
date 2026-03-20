@@ -181,3 +181,5 @@
 - [x] Update page components with new card/table/badge styles
 - [x] Style: Apply new card/table/status-pill styles to Run History page
 - [x] Style: Apply new card/table/badge/page-header styles to Run Detail page
+- [x] Style: Apply new card/table/page-header styles to Allocation Rules page
+- [x] Style: Apply new card/table/page-header styles to Location Config page

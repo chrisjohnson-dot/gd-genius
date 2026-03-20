@@ -239,3 +239,10 @@
 - [x] Shipwell credentials settings page (email, password, environment toggle)
 - [x] Send to Shipwell action on Ship Ready orders (creates Shipwell purchase order)
 - [x] Store Shipwell PO ID in order_tracking and display link in order row
+- [x] Sidebar: add "Dashboard" section heading at top with Open Orders and SLA Tracker
+- [x] Rename "Open Orders Dashboard" nav label to "Open Orders"
+- [x] Build SLA Tracker page with per-warehouse cards and SLA status breakdown
+- [x] sla_requirements DB table (clientId, clientName, slaDays default 2)
+- [x] SLA tRPC procedures: list, upsert, delete sla requirements; getSlaStatus query
+- [x] SLA Tracker page: Dashboard tab (In SLA / Out of SLA per warehouse) + SLA Requirements tab
+- [x] Route /sla-tracker wired in App.tsx

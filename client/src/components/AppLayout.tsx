@@ -20,6 +20,7 @@ import {
   Ship,
   Stethoscope,
   Sun,
+  Timer,
   Truck,
   Zap,
 } from "lucide-react";
@@ -27,8 +28,12 @@ import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 
+const dashboardItems = [
+  { href: "/",           label: "Open Orders",  icon: FolderOpen },
+  { href: "/sla-tracker",label: "SLA Tracker",  icon: Timer },
+];
+
 const allocationItems = [
-  { href: "/",          label: "Open Orders Dashboard", icon: FolderOpen },
   { href: "/allocate",  label: "Run Allocation Tool",   icon: PackageSearch },
   { href: "/history",   label: "Run History",           icon: History },
   { href: "/audit",     label: "Audit Log",             icon: ClipboardList },
@@ -132,6 +137,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
+          {/* Dashboard section */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
+              Dashboard
+            </p>
+            <div className="space-y-0.5">
+              {dashboardItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
+              ))}
+            </div>
+          </div>
+
           {/* Allocation section */}
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">

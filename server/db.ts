@@ -29,6 +29,9 @@ import {
   shipwellConfigs,
   ShipwellConfig,
   InsertShipwellConfig,
+  slaRequirements,
+  SlaRequirement,
+  InsertSlaRequirement,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -588,4 +591,111 @@ export async function markOrderSentToShipwell(
       shipwellSentAt: new Date(),
     })
     .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+}
+
+// ─── SLA Requirements ────────────────────────────────────────────────────────
+
+/** Return all SLA requirement overrides, ordered by clientName. */
+export async function getSlaRequirements(): Promise<SlaRequirement[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(slaRequirements)
+    .orderBy(slaRequirements.clientName);
+}
+
+/** Return the SLA requirement for a specific client (or null if not set). */
+export async function getSlaRequirementByClient(
+  clientId: number
+): Promise<SlaRequirement | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(slaRequirements)
+    .where(eq(slaRequirements.clientId, clientId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Upsert an SLA requirement for a client (insert or update by clientId). */
+export async function upsertSlaRequirement(
+  data: Omit<InsertSlaRequirement, "id" | "createdAt" | "updatedAt">
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await getSlaRequirementByClient(data.clientId);
+  if (existing) {
+    await db
+      .update(slaRequirements)
+      .set({ slaDays: data.slaDays, clientName: data.clientName, notes: data.notes ?? null })
+      .where(eq(slaRequirements.clientId, data.clientId));
+  } else {
+    await db.insert(slaRequirements).values(data);
+  }
+}
+
+/** Delete an SLA requirement override for a client (reverts to default 2 days). */
+export async function deleteSlaRequirement(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(slaRequirements).where(eq(slaRequirements.id, id));
+}
+
+/**
+ * Compute SLA status for all currently tracked orders.
+ * Returns each order annotated with:
+ *   - slaDays: the applicable SLA threshold for this client
+ *   - ageCalendarDays: calendar days since creationDate (day 1 = day after create date)
+ *   - slaStatus: "in_sla" | "out_of_sla"
+ *   - daysRemaining: positive = days left, negative = days overdue
+ */
+export async function getOrderSlaStatuses(): Promise<
+  Array<
+    OrderTracking & {
+      slaDays: number;
+      ageCalendarDays: number;
+      slaStatus: "in_sla" | "out_of_sla";
+      daysRemaining: number;
+    }
+  >
+> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const [orders, requirements] = await Promise.all([
+    db.select().from(orderTracking),
+    db.select().from(slaRequirements),
+  ]);
+
+  // Build a map of clientId → slaDays for fast lookup
+  const slaMap = new Map<number, number>();
+  for (const req of requirements) {
+    slaMap.set(req.clientId, req.slaDays);
+  }
+
+  const DEFAULT_SLA_DAYS = 2;
+  const now = Date.now();
+
+  return orders.map((order) => {
+    const slaDays = slaMap.get(order.clientId) ?? DEFAULT_SLA_DAYS;
+
+    // Age in calendar days: day 1 starts the day AFTER the create date
+    let ageCalendarDays = 0;
+    if (order.creationDate) {
+      const createMs = new Date(order.creationDate).getTime();
+      // Subtract one day because "day 1" is the day after creation
+      ageCalendarDays = Math.max(
+        0,
+        Math.floor((now - createMs) / 86_400_000) - 1
+      );
+    }
+
+    const daysRemaining = slaDays - ageCalendarDays;
+    const slaStatus: "in_sla" | "out_of_sla" =
+      daysRemaining >= 0 ? "in_sla" : "out_of_sla";
+
+    return { ...order, slaDays, ageCalendarDays, slaStatus, daysRemaining };
+  });
 }

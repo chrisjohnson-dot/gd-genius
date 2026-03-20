@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `sla_requirements` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`clientId` int NOT NULL,\n\t`clientName` varchar(256) NOT NULL,\n\t`slaDays` int NOT NULL DEFAULT 2,\n\t`notes` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `sla_requirements_id` PRIMARY KEY(`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `sla_requirements` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`clientId` int NOT NULL,\n\t`clientName` varchar(256) NOT NULL,\n\t`slaDays` int NOT NULL DEFAULT 2,\n\t`notes` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `sla_requirements_id` PRIMARY KEY(`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 146
+}

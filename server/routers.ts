@@ -37,6 +37,11 @@ import {
   getShipwellConfig,
   upsertShipwellConfig,
   markOrderSentToShipwell,
+  getSlaRequirements,
+  getSlaRequirementByClient,
+  upsertSlaRequirement,
+  deleteSlaRequirement,
+  getOrderSlaStatuses,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
@@ -1929,6 +1934,71 @@ export const appRouter = router({
 
         return { success: true, shipwellOrderId: po.id, poUrl };
       }),
+  }),
+
+  // ─── SLA Tracker ──────────────────────────────────────────────────────────────
+  sla: router({
+    /** List all per-customer SLA requirement overrides. */
+    listRequirements: protectedProcedure.query(async () => {
+      return getSlaRequirements();
+    }),
+
+    /** Get the SLA requirement for a single client. */
+    getRequirement: protectedProcedure
+      .input(z.object({ clientId: z.number() }))
+      .query(async ({ input }) => {
+        return getSlaRequirementByClient(input.clientId);
+      }),
+
+    /** Create or update an SLA requirement for a client. */
+    upsertRequirement: protectedProcedure
+      .input(z.object({
+        clientId: z.number(),
+        clientName: z.string().min(1).max(256),
+        slaDays: z.number().int().min(1).max(365),
+        notes: z.string().max(512).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await upsertSlaRequirement({
+          clientId: input.clientId,
+          clientName: input.clientName,
+          slaDays: input.slaDays,
+          notes: input.notes,
+        });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.upsertRequirement",
+          entityType: "sla_requirements",
+          entityId: String(input.clientId),
+          details: { slaDays: input.slaDays, clientName: input.clientName },
+        });
+        return { success: true };
+      }),
+
+    /** Delete an SLA requirement override (reverts client to default 2-day SLA). */
+    deleteRequirement: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await deleteSlaRequirement(input.id);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.deleteRequirement",
+          entityType: "sla_requirements",
+          entityId: String(input.id),
+          details: {},
+        });
+        return { success: true };
+      }),
+
+    /**
+     * Get SLA status for all tracked orders.
+     * Returns orders annotated with slaDays, ageCalendarDays, slaStatus, daysRemaining.
+     * Excludes orders that have already shipped (lifecycle_status = 'shipped').
+     */
+    getStatus: protectedProcedure.query(async () => {
+      const orders = await getOrderSlaStatuses();
+      return orders;
+    }),
   }),
 });
 export type AppRouter = typeof appRouter;

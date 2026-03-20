@@ -233,3 +233,19 @@ export const shipwellConfigs = mysqlTable("shipwell_configs", {
 
 export type ShipwellConfig = typeof shipwellConfigs.$inferSelect;
 export type InsertShipwellConfig = typeof shipwellConfigs.$inferInsert;
+
+// SLA requirements per customer — default 2 days from Create Date
+export const slaRequirements = mysqlTable("sla_requirements", {
+  id: int("id").autoincrement().primaryKey(),
+  // Extensiv customer (client) identifiers
+  clientId: int("clientId").notNull(),
+  clientName: varchar("clientName", { length: 256 }).notNull(),
+  // Number of business days allowed from Create Date before SLA is breached
+  slaDays: int("slaDays").notNull().default(2),
+  // Optional notes / reason for custom SLA
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SlaRequirement = typeof slaRequirements.$inferSelect;
+export type InsertSlaRequirement = typeof slaRequirements.$inferInsert;

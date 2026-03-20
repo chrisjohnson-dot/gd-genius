@@ -1323,6 +1323,105 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // ─── Open Orders Dashboard ──────────────────────────────────────────────
+    openOrders: protectedProcedure
+      .input(
+        z.object({
+          configId: z.number().optional(),
+          facilityId: z.number().optional(),
+        })
+      )
+      .query(async ({ input }) => {
+        // Get all Extensiv configs (or just the one requested)
+        const configs = input.configId
+          ? [await getExtensivConfigById(input.configId)].filter(Boolean)
+          : await getExtensivConfigs();
+
+        if (configs.length === 0) return { orders: [], summary: { total: 0, urgent: 0, high: 0, normal: 0, byClient: [] } };
+
+        const now = Date.now();
+        const allOrders: Array<{
+          orderId: number;
+          referenceNum: string;
+          poNum: string | null;
+          clientId: number;
+          clientName: string;
+          facilityId: number;
+          facilityName: string;
+          creationDate: string;
+          ageDays: number;
+          priority: "urgent" | "high" | "normal";
+          lineCount: number;
+          shipToName: string | null;
+          configId: number;
+        }> = [];
+
+        for (const config of configs) {
+          if (!config) continue;
+          try {
+            // Get all customers for this config
+            const customers = await fetchCustomers(config);
+            const facilityId = input.facilityId ?? 0;
+
+            await Promise.all(
+              customers.map(async (customer) => {
+                try {
+                  const orders = await fetchOpenOrders(config, customer.id, facilityId);
+                  for (const o of orders) {
+                    const creationDate = o.readOnly.creationDate ?? "";
+                    const created = creationDate ? new Date(creationDate).getTime() : now;
+                    const ageDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+                    const priority: "urgent" | "high" | "normal" =
+                      ageDays >= 7 ? "urgent" : ageDays >= 3 ? "high" : "normal";
+                    allOrders.push({
+                      orderId: o.readOnly.orderId,
+                      referenceNum: o.referenceNum ?? "",
+                      poNum: (o as unknown as Record<string, unknown>).poNum as string | null ?? null,
+                      clientId: customer.id,
+                      clientName: customer.name,
+                      facilityId: o.readOnly.facilityIdentifier?.id ?? 0,
+                      facilityName: o.readOnly.facilityIdentifier?.name ?? "",
+                      creationDate,
+                      ageDays,
+                      priority,
+                      lineCount: o.orderItems?.length ?? 0,
+                      shipToName: o.shipTo?.companyName ?? o.shipTo?.name ?? null,
+                      configId: config.id,
+                    });
+                  }
+                } catch (err) {
+                  console.warn(`[openOrders] Failed to fetch orders for customer ${customer.id}:`, err);
+                }
+              })
+            );
+          } catch (err) {
+            console.warn(`[openOrders] Failed to fetch customers for config ${config.id}:`, err);
+          }
+        }
+
+        // Sort by ageDays descending (oldest first)
+        allOrders.sort((a, b) => b.ageDays - a.ageDays);
+
+        // Build summary
+        const urgent = allOrders.filter((o) => o.priority === "urgent").length;
+        const high   = allOrders.filter((o) => o.priority === "high").length;
+        const normal = allOrders.filter((o) => o.priority === "normal").length;
+
+        const clientMap = new Map<number, { clientId: number; clientName: string; count: number; urgent: number }>();
+        for (const o of allOrders) {
+          const entry = clientMap.get(o.clientId) ?? { clientId: o.clientId, clientName: o.clientName, count: 0, urgent: 0 };
+          entry.count++;
+          if (o.priority === "urgent") entry.urgent++;
+          clientMap.set(o.clientId, entry);
+        }
+        const byClient = Array.from(clientMap.values()).sort((a, b) => b.count - a.count);
+
+        return {
+          orders: allOrders,
+          summary: { total: allOrders.length, urgent, high, normal, byClient },
+        };
+      }),
+
     deleteRun: protectedProcedure
       .input(z.object({ runId: z.number() }))
       .mutation(async ({ input, ctx }) => {

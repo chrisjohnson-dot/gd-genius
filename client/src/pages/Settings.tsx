@@ -1,12 +1,10 @@
 import AppLayout from "@/components/AppLayout";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Pencil, Plus, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Pencil, Plus, Settings2, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -83,83 +81,101 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6 max-w-3xl">
-        <div className="flex items-center justify-between">
+      <div className="p-7 space-y-6 page-enter max-w-3xl">
+        {/* Page header */}
+        <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold">API Settings</h1>
-            <p className="text-muted-foreground text-sm mt-1">Configure your Extensiv WMS API connections</p>
+            <p className="page-breadcrumb">Configuration</p>
+            <h1 className="page-title">API Settings</h1>
           </div>
-          <Button onClick={openNew} className="flex items-center gap-2">
+          <Button onClick={openNew} className="gap-1.5 shadow-sm mt-1">
             <Plus className="h-4 w-4" /> Add Configuration
           </Button>
         </div>
 
+        {/* Configs list */}
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="h-24 bg-muted rounded-lg animate-pulse" />
-            ))}
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : !configs || configs.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground mb-4">No API configurations yet. Add your first Extensiv connection to get started.</p>
-              <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Add Configuration</Button>
-            </CardContent>
-          </Card>
+          <div className="bg-card border border-border rounded-2xl p-12 text-center">
+            <Settings2 className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-40" />
+            <p className="text-sm text-muted-foreground mb-4">No API configurations yet. Add your first Extensiv connection to get started.</p>
+            <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Add Configuration</Button>
+          </div>
         ) : (
           <div className="space-y-3">
             {configs.map((c) => (
-              <Card key={c.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-base">{c.name}</CardTitle>
-                      <CardDescription className="mt-1">
-                        Client ID: {c.clientId} · TPL GUID: {c.tplGuid}
-                      </CardDescription>
+              <div key={c.id} className="bg-card border border-border rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
+                      style={{ background: c.isActive ? "#d1fae5" : "#f3f4f6" }}
+                    >
+                      {c.isActive
+                        ? <CheckCircle2 className="h-4 w-4" style={{ color: "#059669" }} />
+                        : <XCircle className="h-4 w-4 text-muted-foreground" />
+                      }
                     </div>
-                    <Badge className={c.isActive ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-600"}>
-                      {c.isActive ? "Active" : "Inactive"}
-                    </Badge>
+                    <div>
+                      <p className="font-semibold text-foreground text-[15px]">{c.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Client ID: <span className="font-mono">{c.clientId}</span>
+                        {" · "}TPL GUID: <span className="font-mono">{c.tplGuid}</span>
+                      </p>
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-0 flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0"
+                    style={c.isActive
+                      ? { background: "#d1fae5", color: "#059669" }
+                      : { background: "#f3f4f6", color: "#6b7280" }
+                    }
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: c.isActive ? "#059669" : "#9ca3af" }}
+                    />
+                    {c.isActive ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <div className="px-6 pb-4 border-t border-border pt-3 flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
+                    className="text-xs"
                     onClick={() => testMutation.mutate({ id: c.id })}
                     disabled={testMutation.isPending}
                   >
-                    {testMutation.isPending ? "Testing..." : "Test Connection"}
+                    {testMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Testing...</> : "Test Connection"}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => openEdit(c)}>
-                    <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                  <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => openEdit(c)}>
+                    <Pencil className="h-3.5 w-3.5" /> Edit
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-destructive hover:text-destructive"
+                    className="text-xs gap-1 text-destructive hover:text-destructive"
                     onClick={() => { if (confirm("Delete this configuration?")) deleteMutation.mutate({ id: c.id }); }}
                   >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
                   </Button>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
         )}
 
-        {/* Info card */}
-        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-900">
-          <CardContent className="py-4">
-            <p className="text-sm text-blue-800 dark:text-blue-300 font-medium mb-1">Where to find your credentials</p>
-            <p className="text-xs text-blue-700 dark:text-blue-400">
-              Log into Extensiv 3PL Warehouse Manager → Admin → API Credentials. Your TPL GUID is found under Company Settings.
-              The User Login ID is the numeric ID of the API user account.
-            </p>
-          </CardContent>
-        </Card>
+        {/* Info panel */}
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+          <p className="text-sm font-semibold text-blue-800 mb-1">Where to find your credentials</p>
+          <p className="text-xs text-blue-700 leading-relaxed">
+            Log into Extensiv 3PL Warehouse Manager → Admin → API Credentials. Your TPL GUID is found under Company Settings.
+            The User Login ID is the numeric ID of the API user account.
+          </p>
+        </div>
       </div>
 
       {/* Add/Edit Dialog */}
@@ -197,7 +213,7 @@ export default function Settings() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving..." : "Save"}
+              {saveMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>

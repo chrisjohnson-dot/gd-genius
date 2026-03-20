@@ -28,7 +28,7 @@ import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 
 const allocationItems = [
-  { href: "/open",      label: "Open",                 icon: FolderOpen },
+  { href: "/open",      label: "Open Orders Dashboard", icon: FolderOpen },
   { href: "/",          label: "Dashboard",            icon: BarChart3 },
   { href: "/allocate",  label: "Run Allocation Tool",  icon: PackageSearch },
   { href: "/history",   label: "Run History",          icon: History },

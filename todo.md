@@ -205,3 +205,13 @@
 - [x] UX: Remove status tab bar from Open Orders Dashboard
 - [x] Branding: Replace sidebar logo with GDgenius.jpg
 - [x] Branding: Update browser tab title from GD Wizard to GD Genius
+- [x] Open Orders: Add PO # column to warehouse card order tables
+- [x] Open Orders: Add Allocation Date column to warehouse card order tables
+- [x] Open Orders: Add Ship To Customer (consignee) column
+- [x] Open Orders: Add City column
+- [x] Open Orders: Add # of SKUs column
+- [x] Open Orders: Add Cases/Eaches (total qty) column
+- [x] Open Orders: Add Notes/Comments field (editable inline or as tooltip)
+- [x] Open Orders: Group orders by GD Client within each warehouse card (matching spreadsheet layout)
+- [ ] Open Orders: Add Offsite flag indicator
+- [x] Open Orders: Update backend openOrders procedure to return all new fields from Extensiv API

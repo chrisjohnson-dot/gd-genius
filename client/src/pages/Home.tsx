@@ -13,6 +13,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
+  MessageSquare,
   PackageSearch,
   RefreshCw,
   Search,
@@ -37,7 +38,11 @@ type OrderRow = {
   ageDays: number;
   priority: "urgent" | "high" | "normal";
   lineCount: number;
+  totalPieces: number;
+  skuCount: number;
   shipToName: string | null;
+  shipToCity: string | null;
+  notes: string | null;
   configId: number;
   orderStatus: number;
 };
@@ -57,7 +62,35 @@ type FacilityGroup = {
   byClient: Array<{ clientId: number; clientName: string; count: number; urgent: number }>;
 };
 
-
+// ─── Status pill ──────────────────────────────────────────────────────────────
+function StatusPill({ orderStatus, ageDays }: { orderStatus: number; ageDays: number }) {
+  if (ageDays >= 7) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 whitespace-nowrap">
+        <ShieldAlert className="h-2.5 w-2.5" /> Out of SLA
+      </span>
+    );
+  }
+  if (orderStatus === 2) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+        <CheckCircle2 className="h-2.5 w-2.5" /> Ship Ready
+      </span>
+    );
+  }
+  if (orderStatus === 1) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+        <Clock className="h-2.5 w-2.5" /> In Production
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 whitespace-nowrap">
+      <Package className="h-2.5 w-2.5" /> Unallocated
+    </span>
+  );
+}
 
 // ─── Priority pill ────────────────────────────────────────────────────────────
 function PriorityPill({ priority }: { priority: "urgent" | "high" | "normal" }) {
@@ -79,7 +112,7 @@ function PriorityPill({ priority }: { priority: "urgent" | "high" | "normal" }) 
 }
 
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
-type SortKey = "clientName" | "referenceNum" | "ageDays" | "priority" | "lineCount" | "shipToName";
+type SortKey = "clientName" | "referenceNum" | "ageDays" | "priority" | "totalPieces" | "shipToName" | "shipToCity" | "poNum";
 type SortDir = "asc" | "desc";
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
 
@@ -97,6 +130,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
   const [sortKey, setSortKey]           = useState<SortKey>("ageDays");
   const [sortDir, setSortDir]           = useState<SortDir>("desc");
   const [expanded, setExpanded]         = useState(false);
+  const [groupByClient, setGroupByClient] = useState(true);
 
   const clientOptions = useMemo(
     () => Array.from(new Map(facility.orders.map((o) => [o.clientId, o.clientName])).entries()),
@@ -112,19 +146,44 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
           o.referenceNum.toLowerCase().includes(q) ||
           o.clientName.toLowerCase().includes(q) ||
           (o.shipToName ?? "").toLowerCase().includes(q) ||
-          (o.poNum ?? "").toLowerCase().includes(q)
+          (o.poNum ?? "").toLowerCase().includes(q) ||
+          (o.shipToCity ?? "").toLowerCase().includes(q) ||
+          (o.notes ?? "").toLowerCase().includes(q)
       );
     }
     if (clientFilter !== "all") rows = rows.filter((o) => String(o.clientId) === clientFilter);
     return [...rows].sort((a, b) => {
       let cmp = 0;
-      if (sortKey === "ageDays")       cmp = a.ageDays - b.ageDays;
-      else if (sortKey === "priority") cmp = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-      else if (sortKey === "lineCount") cmp = a.lineCount - b.lineCount;
+      if (sortKey === "ageDays")        cmp = a.ageDays - b.ageDays;
+      else if (sortKey === "priority")  cmp = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+      else if (sortKey === "totalPieces") cmp = a.totalPieces - b.totalPieces;
       else cmp = String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""));
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [facility.orders, search, clientFilter, sortKey, sortDir]);
+
+  // Group orders by client for the spreadsheet-style view
+  const groupedByClient = useMemo(() => {
+    const map = new Map<number, { clientId: number; clientName: string; orders: OrderRow[] }>();
+    for (const o of filteredOrders) {
+      if (!map.has(o.clientId)) {
+        map.set(o.clientId, { clientId: o.clientId, clientName: o.clientName, orders: [] });
+      }
+      map.get(o.clientId)!.orders.push(o);
+    }
+    // Sort client groups: urgent clients first, then by name
+    return Array.from(map.values()).sort((a, b) => {
+      const aUrgent = a.orders.some(o => o.priority === "urgent");
+      const bUrgent = b.orders.some(o => o.priority === "urgent");
+      if (aUrgent && !bUrgent) return -1;
+      if (!aUrgent && bUrgent) return 1;
+      const aHigh = a.orders.some(o => o.priority === "high");
+      const bHigh = b.orders.some(o => o.priority === "high");
+      if (aHigh && !bHigh) return -1;
+      if (!aHigh && bHigh) return 1;
+      return a.clientName.localeCompare(b.clientName);
+    });
+  }, [filteredOrders]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -132,6 +191,14 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
   }
 
   const hasFilters = search || clientFilter !== "all";
+
+  // Format date to short form
+  function fmtDate(d: string) {
+    if (!d) return "—";
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return d;
+    return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
 
   return (
     <div
@@ -151,7 +218,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
             : undefined,
       }}
     >
-      {/* Warehouse header — light style */}
+      {/* Warehouse header */}
       <div
         className="px-6 py-5 cursor-pointer select-none bg-card border-b border-border"
         onClick={() => setExpanded((e) => !e)}
@@ -213,7 +280,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                   </TooltipProvider>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">{facility.total} unallocated order{facility.total !== 1 ? "s" : ""}</p>
+              <p className="text-xs text-muted-foreground">{facility.total} order{facility.total !== 1 ? "s" : ""} · {facility.byClient.length} client{facility.byClient.length !== 1 ? "s" : ""}</p>
             </div>
           </div>
           <div className="text-muted-foreground">
@@ -251,10 +318,10 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search order, client, ship-to…"
+                placeholder="Search order, client, PO, city…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 pr-8 py-1.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 w-48"
+                className="pl-8 pr-8 py-1.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 w-52"
               />
               {search && (
                 <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -274,10 +341,23 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
               ))}
             </select>
 
+            {/* Group by client toggle */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setGroupByClient((g) => !g); }}
+              className={`py-1.5 px-2.5 text-xs rounded-lg border transition-colors flex items-center gap-1.5 ${
+                groupByClient
+                  ? "bg-primary/10 border-primary/30 text-primary font-semibold"
+                  : "border-border bg-background text-muted-foreground"
+              }`}
+            >
+              <Users className="h-3 w-3" />
+              Group by Client
+            </button>
+
             {hasFilters && (
               <button
                 onClick={() => { setSearch(""); setClientFilter("all"); }}
-                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 ml-auto"
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
                 <X className="h-3 w-3" /> Clear
               </button>
@@ -291,7 +371,7 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
           {filteredOrders.length === 0 ? (
             <div className="py-10 text-center text-muted-foreground">
               {facility.orders.length === 0 ? (
-                <p className="text-sm font-medium">No unallocated orders.</p>
+                <p className="text-sm font-medium">No orders.</p>
               ) : (
                 <>
                   <p className="text-sm font-medium">No orders match your filters.</p>
@@ -304,13 +384,145 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                 </>
               )}
             </div>
-          ) : (
+          ) : groupByClient ? (
+            /* ── Grouped by client (spreadsheet-style) ── */
             <div className="overflow-x-auto">
               <table className="w-full data-table">
                 <thead>
                   <tr>
+                    <th className="w-[110px]">Status</th>
                     <th onClick={() => toggleSort("referenceNum")} className="cursor-pointer select-none">
-                      Order # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
+                      TX # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("poNum")} className="cursor-pointer select-none">
+                      PO # <SortIcon col="poNum" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("shipToName")} className="cursor-pointer select-none">
+                      Ship To <SortIcon col="shipToName" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("shipToCity")} className="cursor-pointer select-none">
+                      City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
+                      Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right">
+                      Pcs <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th className="text-right">SKUs</th>
+                    <th className="w-8"></th>
+                    <th className="w-20"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedByClient.map((group) => {
+                    const groupUrgent = group.orders.some(o => o.priority === "urgent");
+                    const groupHigh   = !groupUrgent && group.orders.some(o => o.priority === "high");
+                    const groupPieces = group.orders.reduce((s, o) => s + (o.totalPieces ?? 0), 0);
+                    return [
+                      /* Client header row */
+                      <tr
+                        key={`hdr-${group.clientId}`}
+                        style={{
+                          background: groupUrgent ? "#1a0a0a" : groupHigh ? "#1a1200" : "#111827",
+                          borderLeft: groupUrgent ? "3px solid #ef4444" : groupHigh ? "3px solid #f59e0b" : "3px solid #374151",
+                        }}
+                      >
+                        <td colSpan={2} className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-white uppercase tracking-wider">{group.clientName}</span>
+                            {groupUrgent && <span className="text-[9px] font-bold text-red-400 bg-red-900/40 px-1.5 py-0.5 rounded">URGENT</span>}
+                            {!groupUrgent && groupHigh && <span className="text-[9px] font-bold text-amber-400 bg-amber-900/40 px-1.5 py-0.5 rounded">HIGH</span>}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">PO #</td>
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">Ship To</td>
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">City</td>
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">Age</td>
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{groupPieces > 0 ? groupPieces.toLocaleString() : ""}</td>
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{group.orders.length} ord</td>
+                        <td colSpan={2}></td>
+                      </tr>,
+                      /* Order rows */
+                      ...group.orders.map((o) => {
+                        const isUrgent = o.priority === "urgent";
+                        const isHigh   = o.priority === "high";
+                        return (
+                          <tr
+                            key={o.orderId}
+                            style={
+                              isUrgent
+                                ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" }
+                                : isHigh
+                                ? { background: "rgba(245,158,11,0.04)", borderLeft: "3px solid #f59e0b" }
+                                : { borderLeft: "3px solid transparent" }
+                            }
+                          >
+                            <td className="py-2">
+                              <StatusPill orderStatus={o.orderStatus} ageDays={o.ageDays} />
+                            </td>
+                            <td className="font-semibold text-foreground text-xs">
+                              {o.referenceNum || `#${o.orderId}`}
+                            </td>
+                            <td className="text-muted-foreground text-xs font-mono">
+                              {o.poNum ?? "—"}
+                            </td>
+                            <td className="text-muted-foreground text-xs max-w-[160px] truncate" title={o.shipToName ?? ""}>
+                              {o.shipToName ?? "—"}
+                            </td>
+                            <td className="text-muted-foreground text-xs">
+                              {o.shipToCity ?? "—"}
+                            </td>
+                            <td className="text-muted-foreground text-xs text-right">
+                              {o.ageDays === 0 ? "Today" : `${o.ageDays}d`}
+                            </td>
+                            <td className="text-muted-foreground text-xs text-right">
+                              {(o.totalPieces ?? 0) > 0 ? (o.totalPieces ?? 0).toLocaleString() : "—"}
+                            </td>
+                            <td className="text-muted-foreground text-xs text-right">
+                              {(o.skuCount ?? 0) > 0 ? o.skuCount : "—"}
+                            </td>
+                            <td className="text-center">
+                              {o.notes ? (
+                                <TooltipProvider delayDuration={100}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <MessageSquare className="h-3.5 w-3.5 text-blue-400 cursor-default inline" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="max-w-[220px] text-xs">
+                                      {o.notes}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : null}
+                            </td>
+                            <td className="text-right">
+                              <Link href="/allocate">
+                                <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs h-7 px-2">
+                                  Allocate
+                                </Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      }),
+                    ];
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* ── Flat table (no grouping) ── */
+            <div className="overflow-x-auto">
+              <table className="w-full data-table">
+                <thead>
+                  <tr>
+                    <th className="w-[110px]">Status</th>
+                    <th onClick={() => toggleSort("referenceNum")} className="cursor-pointer select-none">
+                      TX # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("poNum")} className="cursor-pointer select-none">
+                      PO # <SortIcon col="poNum" sortKey={sortKey} sortDir={sortDir} />
                     </th>
                     <th onClick={() => toggleSort("clientName")} className="cursor-pointer select-none">
                       Client <SortIcon col="clientName" sortKey={sortKey} sortDir={sortDir} />
@@ -318,16 +530,18 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                     <th onClick={() => toggleSort("shipToName")} className="cursor-pointer select-none">
                       Ship To <SortIcon col="shipToName" sortKey={sortKey} sortDir={sortDir} />
                     </th>
-                    <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none">
+                    <th onClick={() => toggleSort("shipToCity")} className="cursor-pointer select-none">
+                      City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
                       Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
                     </th>
-                    <th onClick={() => toggleSort("priority")} className="cursor-pointer select-none">
-                      Priority <SortIcon col="priority" sortKey={sortKey} sortDir={sortDir} />
+                    <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right">
+                      Pcs <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
                     </th>
-                    <th onClick={() => toggleSort("lineCount")} className="cursor-pointer select-none">
-                      Lines <SortIcon col="lineCount" sortKey={sortKey} sortDir={sortDir} />
-                    </th>
-                    <th></th>
+                    <th className="text-right">SKUs</th>
+                    <th className="w-8"></th>
+                    <th className="w-20"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -342,27 +556,51 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
                             ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" }
                             : isHigh
                             ? { background: "rgba(245,158,11,0.04)", borderLeft: "3px solid #f59e0b" }
-                            : undefined
+                            : { borderLeft: "3px solid transparent" }
                         }
                       >
-                        <td className="font-semibold text-foreground">
-                          {o.referenceNum || `#${o.orderId}`}
-                          {(isUrgent || isHigh) && (
-                            <span className="ml-2 text-[10px]">
-                              {isUrgent ? "⚠" : "△"}
-                            </span>
-                          )}
+                        <td className="py-2">
+                          <StatusPill orderStatus={o.orderStatus} ageDays={o.ageDays} />
                         </td>
-                        <td className="text-muted-foreground">{o.clientName}</td>
-                        <td className="text-muted-foreground text-xs">{o.shipToName ?? "—"}</td>
+                        <td className="font-semibold text-foreground text-xs">
+                          {o.referenceNum || `#${o.orderId}`}
+                        </td>
+                        <td className="text-muted-foreground text-xs font-mono">
+                          {o.poNum ?? "—"}
+                        </td>
+                        <td className="text-muted-foreground text-xs">{o.clientName}</td>
+                        <td className="text-muted-foreground text-xs max-w-[140px] truncate" title={o.shipToName ?? ""}>
+                          {o.shipToName ?? "—"}
+                        </td>
                         <td className="text-muted-foreground text-xs">
+                          {o.shipToCity ?? "—"}
+                        </td>
+                        <td className="text-muted-foreground text-xs text-right">
                           {o.ageDays === 0 ? "Today" : `${o.ageDays}d`}
                         </td>
-                        <td><PriorityPill priority={o.priority} /></td>
-                        <td className="text-muted-foreground text-xs">{o.lineCount}</td>
+                        <td className="text-muted-foreground text-xs text-right">
+                          {(o.totalPieces ?? 0) > 0 ? (o.totalPieces ?? 0).toLocaleString() : "—"}
+                        </td>
+                        <td className="text-muted-foreground text-xs text-right">
+                          {(o.skuCount ?? 0) > 0 ? o.skuCount : "—"}
+                        </td>
+                        <td className="text-center">
+                          {o.notes ? (
+                            <TooltipProvider delayDuration={100}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <MessageSquare className="h-3.5 w-3.5 text-blue-400 cursor-default inline" />
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[220px] text-xs">
+                                  {o.notes}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : null}
+                        </td>
                         <td className="text-right">
                           <Link href="/allocate">
-                            <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs">
+                            <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs h-7 px-2">
                               Allocate
                             </Button>
                           </Link>
@@ -383,7 +621,6 @@ function WarehouseCard({ facility }: { facility: FacilityGroup }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { data, isLoading, refetch, isFetching } = trpc.allocation.openOrders.useQuery({});
-
 
   const facilities: FacilityGroup[] = (data as { facilities?: FacilityGroup[] })?.facilities ?? [];
   const summary = data?.summary ?? { total: 0, unallocated: 0, inProduction: 0, shipReady: 0, outOfSla: 0, byClient: [] };
@@ -416,8 +653,6 @@ export default function Home() {
             </Button>
           </div>
         </div>
-
-
 
         {/* Global KPI bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

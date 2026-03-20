@@ -1352,7 +1352,11 @@ export const appRouter = router({
           ageDays: number;
           priority: "urgent" | "high" | "normal";
           lineCount: number;
+          totalPieces: number;
+          skuCount: number;
           shipToName: string | null;
+          shipToCity: string | null;
+          notes: string | null;
           configId: number;
           orderStatus: number;
         }> = [];
@@ -1374,10 +1378,13 @@ export const appRouter = router({
                     const ageDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
                     const priority: "urgent" | "high" | "normal" =
                       ageDays >= 7 ? "urgent" : ageDays >= 3 ? "high" : "normal";
+                    const oRaw = o as unknown as Record<string, unknown>;
+                    const totalPieces = (o.orderItems ?? []).reduce((sum, item) => sum + (item.qty ?? 0), 0);
+                    const skuCount = new Set((o.orderItems ?? []).map(item => item.itemIdentifier?.sku).filter(Boolean)).size;
                     allOrders.push({
                       orderId: o.readOnly.orderId,
                       referenceNum: o.referenceNum ?? "",
-                      poNum: (o as unknown as Record<string, unknown>).poNum as string | null ?? null,
+                      poNum: oRaw.poNum as string | null ?? null,
                       clientId: customer.id,
                       clientName: customer.name,
                       facilityId: o.readOnly.facilityIdentifier?.id ?? 0,
@@ -1386,7 +1393,11 @@ export const appRouter = router({
                       ageDays,
                       priority,
                       lineCount: o.orderItems?.length ?? 0,
+                      totalPieces,
+                      skuCount,
                       shipToName: o.shipTo?.companyName ?? o.shipTo?.name ?? null,
+                      shipToCity: o.shipTo?.city ?? null,
+                      notes: (oRaw.notes as string | null) ?? null,
                       configId: config.id,
                       orderStatus: o.readOnly.status ?? 0,
                     });

@@ -36,6 +36,8 @@ import {
   Maximize2,
   Minimize2,
   Users,
+  ArrowLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -97,8 +99,18 @@ function SlaPill({ status, daysRemaining }: { status: "in_sla" | "out_of_sla"; d
 type SortKey = "clientName" | "referenceNum" | "ageCalendarDays" | "slaStatus" | "shipToName";
 type SortDir = "asc" | "desc";
 
-function WarehouseSlaCard({ facilityName, orders }: { facilityName: string; orders: SlaOrder[] }) {
-  const [expanded, setExpanded] = useState(true);
+function WarehouseSlaCard({
+  facilityName,
+  orders,
+  drillDown = false,
+  onDrillDown,
+}: {
+  facilityName: string;
+  orders: SlaOrder[];
+  drillDown?: boolean;
+  onDrillDown?: () => void;
+}) {
+  const [expanded, setExpanded] = useState(drillDown ? true : true);
   const [sortKey, setSortKey] = useState<SortKey>("slaStatus");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterStatus, setFilterStatus] = useState<"all" | "in_sla" | "out_of_sla">("all");
@@ -327,8 +339,14 @@ function WarehouseSlaCard({ facilityName, orders }: { facilityName: string; orde
     >
       {/* Card header */}
       <div
-        className="px-6 py-5 cursor-pointer select-none bg-card border-b border-border"
-        onClick={() => setExpanded((e) => !e)}
+        className={`px-6 py-5 select-none bg-card border-b border-border ${onDrillDown ? "cursor-pointer hover:bg-muted/30 transition-colors" : "cursor-pointer"}`}
+        onClick={() => {
+          if (onDrillDown) {
+            onDrillDown();
+          } else {
+            setExpanded((e) => !e);
+          }
+        }}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -347,14 +365,18 @@ function WarehouseSlaCard({ facilityName, orders }: { facilityName: string; orde
                 {outOfSlaCount} Breached
               </Badge>
             )}
-            <button
-              onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="Expand to full screen"
-            >
-              <Maximize2 className="h-4 w-4" />
-            </button>
-            {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            {!drillDown && !onDrillDown && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Expand to full screen"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            )}
+            {onDrillDown
+              ? <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              : expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
 
@@ -728,6 +750,7 @@ export default function SlaTracker() {
   const { data: slaOrders = [], isLoading, refetch, isFetching } = trpc.sla.getStatus.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000, // refresh every 5 minutes
   });
+  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
 
   // Group orders by facility
   const facilityGroups = useMemo(() => {
@@ -742,6 +765,10 @@ export default function SlaTracker() {
     return Array.from(map.values()).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
   }, [slaOrders]);
 
+  const selectedGroup = selectedFacilityId !== null
+    ? facilityGroups.find((g) => g.facilityId === selectedFacilityId) ?? null
+    : null;
+
   const totalInSla = (slaOrders as SlaOrder[]).filter((o) => o.slaStatus === "in_sla").length;
   const totalOutOfSla = (slaOrders as SlaOrder[]).filter((o) => o.slaStatus === "out_of_sla").length;
 
@@ -751,13 +778,26 @@ export default function SlaTracker() {
         {/* Page header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
+            {selectedGroup && (
+              <button
+                onClick={() => setSelectedFacilityId(null)}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                All Warehouses
+              </button>
+            )}
             <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
               <Timer className="h-5 w-5 text-blue-500" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-foreground">SLA Tracker</h1>
+              <h1 className="text-xl font-semibold text-foreground">
+                {selectedGroup ? selectedGroup.facilityName : "SLA Tracker"}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                Tracks all open orders against SLA thresholds (default: 2 days from Create Date).
+                {selectedGroup
+                  ? `SLA Tracker › ${selectedGroup.facilityName}`
+                  : "Tracks all open orders against SLA thresholds (default: 2 days from Create Date)."}
               </p>
             </div>
           </div>
@@ -824,6 +864,13 @@ export default function SlaTracker() {
                   <p className="text-xs text-muted-foreground mt-1">Orders sync from Extensiv every hour.</p>
                 </CardContent>
               </Card>
+            ) : selectedGroup ? (
+              <WarehouseSlaCard
+                key={selectedGroup.facilityId}
+                facilityName={selectedGroup.facilityName}
+                orders={selectedGroup.orders}
+                drillDown
+              />
             ) : (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {facilityGroups.map((group) => (
@@ -831,6 +878,7 @@ export default function SlaTracker() {
                     key={group.facilityId}
                     facilityName={group.facilityName}
                     orders={group.orders}
+                    onDrillDown={() => setSelectedFacilityId(group.facilityId)}
                   />
                 ))}
               </div>

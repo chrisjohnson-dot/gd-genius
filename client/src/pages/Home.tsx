@@ -30,9 +30,11 @@ import {
   ClipboardCheck,
   ShipIcon,
   ChevronRight,
+  ChevronLeft,
   UserCheck,
   Maximize2,
   Minimize2,
+  ArrowLeft,
 } from "lucide-react";
 import {
   Dialog,
@@ -323,24 +325,67 @@ function getAgeDays(order: TrackedOrder): number {
   return Math.floor((Date.now() - d.getTime()) / 86_400_000);
 }
 
+// ─── Undo / step-back button ────────────────────────────────────────────────
+function UndoButton({ order, onUndone }: { order: TrackedOrder; onUndone: () => void }) {
+  const utils = trpc.useUtils();
+  const PREV_STATUS: Partial<Record<LifecycleStatus, string>> = {
+    allocated: "Unallocated",
+    picking: "Allocated",
+    qc: "Picking",
+    qc_complete: "QC",
+    ship_ready: "QC Complete",
+  };
+  const prevLabel = PREV_STATUS[order.lifecycleStatus];
+  if (!prevLabel) return null; // unallocated has no previous stage
+
+  const undoStatus = trpc.pickSchedule.undoStatus.useMutation({
+    onSuccess: () => {
+      utils.pickSchedule.list.invalidate();
+      onUndone();
+      toast.success(`Order moved back to ${prevLabel}`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  return (
+    <button
+      disabled={undoStatus.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        undoStatus.mutate({ extensivOrderId: order.extensivOrderId });
+      }}
+      title={`Undo — move back to ${prevLabel}`}
+      className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+    >
+      {undoStatus.isPending
+        ? <RefreshCw className="h-3 w-3 animate-spin" />
+        : <ChevronLeft className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 // ─── Per-warehouse card ───────────────────────────────────────────────────────
 function WarehouseCard({
   facility,
   onStatusChanged,
   fullScreen = false,
   onClose,
+  drillDown = false,
+  onDrillDown,
 }: {
   facility: FacilityGroup;
   onStatusChanged: () => void;
   fullScreen?: boolean;
   onClose?: () => void;
+  drillDown?: boolean;
+  onDrillDown?: () => void;
 }) {
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<LifecycleStatus | "all">("all");
   const [sortKey, setSortKey]           = useState<SortKey>("lifecycleStatus");
   const [sortDir, setSortDir]           = useState<SortDir>("asc");
-  const [expanded, setExpanded]         = useState(false);
+  const [expanded, setExpanded]         = useState(drillDown);
   const [groupByClient, setGroupByClient] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(fullScreen);
 
@@ -514,7 +559,8 @@ function WarehouseCard({
         </td>
         <td className="text-right">
           <div className="flex items-center justify-end gap-1">
-            {o.lifecycleStatus === "ship_ready" && (
+            {/* Send to Shipwell appears at QC Complete stage */}
+            {o.lifecycleStatus === "qc_complete" && (
               o.shipwellOrderId ? (
                 <a
                   href={o.shipwellPoUrl ?? "#"}
@@ -532,6 +578,7 @@ function WarehouseCard({
               )
             )}
             <AdvanceButton order={o} onAdvanced={onStatusChanged} />
+            <UndoButton order={o} onUndone={onStatusChanged} />
           </div>
         </td>
       </tr>
@@ -790,8 +837,14 @@ function WarehouseCard({
     >
       {/* Warehouse header */}
       <div
-        className="px-6 py-5 cursor-pointer select-none bg-card border-b border-border"
-        onClick={() => setExpanded((e) => !e)}
+        className={`px-6 py-5 select-none bg-card border-b border-border ${onDrillDown ? "cursor-pointer hover:bg-muted/30 transition-colors" : "cursor-pointer"}`}
+        onClick={() => {
+          if (onDrillDown) {
+            onDrillDown();
+          } else {
+            setExpanded((e) => !e);
+          }
+        }}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -818,14 +871,18 @@ function WarehouseCard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="Expand to full screen"
-            >
-              <Maximize2 className="h-4 w-4" />
-            </button>
-            {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            {!drillDown && !onDrillDown && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Expand to full screen"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            )}
+            {onDrillDown
+              ? <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              : expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
 
@@ -987,6 +1044,7 @@ function WarehouseCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { data, isLoading, refetch, isFetching } = trpc.pickSchedule.list.useQuery({});
+  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
 
   const syncNow = trpc.pickSchedule.syncNow.useMutation({
     onSuccess: (res) => {
@@ -1026,20 +1084,39 @@ export default function Home() {
     return c;
   }, [orders]);
 
+  const selectedFacility = selectedFacilityId !== null
+    ? facilities.find((f) => f.facilityId === selectedFacilityId) ?? null
+    : null;
+
   return (
     <AppLayout>
       <div className="p-7 space-y-6 page-enter">
         {/* Page header */}
         <div className="flex items-center justify-between">
-          <div>
-            <p className="page-breadcrumb">Overview</p>
-            <h1 className="page-title">Open Orders</h1>
-            {lastSyncAt && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Last synced {lastSyncAt.toLocaleString()}
-                {syncRunning && <span className="ml-2 text-amber-500 font-medium animate-pulse">· Syncing…</span>}
-              </p>
+          <div className="flex items-center gap-3">
+            {selectedFacility && (
+              <button
+                onClick={() => setSelectedFacilityId(null)}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                All Warehouses
+              </button>
             )}
+            <div>
+              <p className="page-breadcrumb">
+                {selectedFacility ? `Open Orders › ${selectedFacility.facilityName}` : "Overview"}
+              </p>
+              <h1 className="page-title">
+                {selectedFacility ? selectedFacility.facilityName : "Open Orders"}
+              </h1>
+              {lastSyncAt && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Last synced {lastSyncAt.toLocaleString()}
+                  {syncRunning && <span className="ml-2 text-amber-500 font-medium animate-pulse">· Syncing…</span>}
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -1061,23 +1138,25 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Global KPI bar — lifecycle stages */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
-            <div
-              key={status}
-              className="rounded-2xl px-4 py-3 text-center border"
-              style={{ background: cfg.bg, borderColor: cfg.border }}
-            >
-              <p className="text-[28px] font-extrabold tracking-tight leading-none" style={{ color: cfg.text }}>
-                {isLoading ? "—" : kpis[status]}
-              </p>
-              <p className="text-[10px] mt-1.5 font-semibold uppercase tracking-wide" style={{ color: cfg.text }}>
-                {cfg.label}
-              </p>
-            </div>
-          ))}
-        </div>
+        {/* Global KPI bar — lifecycle stages (shown only on grid view) */}
+        {!selectedFacility && (
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
+              <div
+                key={status}
+                className="rounded-2xl px-4 py-3 text-center border"
+                style={{ background: cfg.bg, borderColor: cfg.border }}
+              >
+                <p className="text-[28px] font-extrabold tracking-tight leading-none" style={{ color: cfg.text }}>
+                  {isLoading ? "—" : kpis[status]}
+                </p>
+                <p className="text-[10px] mt-1.5 font-semibold uppercase tracking-wide" style={{ color: cfg.text }}>
+                  {cfg.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Loading skeletons */}
         {isLoading && (
@@ -1108,17 +1187,32 @@ export default function Home() {
           </div>
         )}
 
-        {/* Warehouse cards */}
-        {!isLoading && facilities.length > 0 && (
+        {/* Drill-down: single warehouse expanded */}
+        {!isLoading && selectedFacility && (
+          <WarehouseCard
+            key={selectedFacility.facilityId}
+            facility={selectedFacility}
+            onStatusChanged={() => refetch()}
+            drillDown
+          />
+        )}
+
+        {/* Warehouse grid (no warehouse selected) */}
+        {!isLoading && !selectedFacility && facilities.length > 0 && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {facilities.map((f) => (
-              <WarehouseCard key={f.facilityId} facility={f} onStatusChanged={() => refetch()} />
+              <WarehouseCard
+                key={f.facilityId}
+                facility={f}
+                onStatusChanged={() => refetch()}
+                onDrillDown={() => setSelectedFacilityId(f.facilityId)}
+              />
             ))}
           </div>
         )}
 
-        {/* Recent Allocation Runs */}
-        {!isLoading && <RecentRunsSection />}
+        {/* Recent Allocation Runs (only on grid view) */}
+        {!isLoading && !selectedFacility && <RecentRunsSection />}
       </div>
     </AppLayout>
   );

@@ -254,3 +254,9 @@
 - [x] Export to CSV in full-screen mode (SLA Tracker)
 - [x] Export to PDF in full-screen mode (SLA Tracker)
 - [x] Make sidebar logo 2.5x bigger
+- [x] Move Send to Shipwell button to QC Complete stage
+- [ ] Add undo/step-back button to every order row
+- [ ] Add undoStatus tRPC procedure on backend
+- [ ] Inline warehouse drill-down on Open Orders (replaces grid, Back button)
+- [ ] Inline warehouse drill-down on SLA Tracker (replaces grid, Back button)
+- [ ] Remove full-screen overlay mode (replaced by inline drill-down)

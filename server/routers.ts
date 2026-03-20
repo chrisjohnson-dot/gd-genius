@@ -1792,6 +1792,38 @@ export const appRouter = router({
         return updated;
       }),
 
+    /** Step an order back one lifecycle stage */
+    undoStatus: protectedProcedure
+      .input(z.object({ extensivOrderId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const PREV_STATUS: Record<string, string> = {
+          allocated: "unallocated",
+          picking: "allocated",
+          qc: "picking",
+          qc_complete: "qc",
+          ship_ready: "qc_complete",
+        };
+        const orders = await getTrackedOrders();
+        const order = orders.find((o) => o.extensivOrderId === input.extensivOrderId);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
+        const prevStatus = PREV_STATUS[order.lifecycleStatus];
+        if (!prevStatus) throw new TRPCError({ code: "BAD_REQUEST", message: "Order is already at the first stage" });
+        const updated = await updateOrderLifecycleStatus(
+          input.extensivOrderId,
+          prevStatus as "unallocated" | "allocated" | "picking" | "qc" | "qc_complete" | "ship_ready",
+          null
+        );
+        if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found in tracking table" });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "pickSchedule.undoStatus",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: { prevStatus: order.lifecycleStatus, newStatus: prevStatus },
+        });
+        return updated;
+      }),
+
     /** Manually trigger an immediate sync from Extensiv */
     syncNow: protectedProcedure.mutation(async ({ ctx }) => {
       await createAuditLog({

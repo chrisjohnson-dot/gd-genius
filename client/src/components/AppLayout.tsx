@@ -60,7 +60,7 @@ const configItems = [
   { href: "/shipwell-settings", label: "Shipwell Settings",  icon: Zap },
 ];
 
-const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/GDgenius_a71f2819.jpg";
+const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";
 
 function NavItem({ href, label, icon: Icon, active }: { href: string; label: string; icon: React.ElementType; active: boolean }) {
   return (

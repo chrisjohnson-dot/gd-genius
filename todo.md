@@ -288,3 +288,4 @@
 - [x] Undo button already present on right side of each order row (confirmed working)
 - [x] Fix "Unallocated" label overflow in the summary stat boxes on Open Orders overview
 - [x] Shrink warehouse tab layout so everything fits on one page without horizontal scroll
+- [x] Shorten "QC Complete" display label to "QC Done" in full-screen stat boxes

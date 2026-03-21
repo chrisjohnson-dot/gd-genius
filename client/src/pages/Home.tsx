@@ -84,7 +84,7 @@ const LIFECYCLE_CONFIG: Record<
     nextStatus: "qc_complete", nextLabel: "QC Complete →",
   },
   qc_complete: {
-    label: "QC Complete",
+    label: "QC Done",
     bg: "#d1fae5", text: "#065f46", border: "#a7f3d0",
     icon: <CheckCircle2 className="h-2.5 w-2.5" />,
     nextStatus: "ship_ready", nextLabel: "Ship Ready →",

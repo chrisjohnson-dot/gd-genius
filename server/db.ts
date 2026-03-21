@@ -270,10 +270,30 @@ export async function createAuditLog(log: InsertAuditLog): Promise<void> {
   await db.insert(auditLogs).values(log);
 }
 
-export async function getAuditLogs(limit = 100) {
+export async function getAuditLogs(limit = 100, action?: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
+  const query = db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
+  if (action) {
+    return db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.action, action))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
+  }
+  return query;
+}
+
+/** Return the distinct action values present in audit_logs for the filter dropdown. */
+export async function getDistinctAuditActions(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ action: auditLogs.action })
+    .from(auditLogs)
+    .orderBy(auditLogs.action);
+  return rows.map((r) => r.action);
 }
 
 // ─── Customer Rules ───────────────────────────────────────────────────────────

@@ -312,3 +312,5 @@
 - [x] Add Dismiss Warning button to zero-bid order rows in the Open Orders table
 - [x] Update overdueAlert scheduler to re-include orders suppressed 2+ days with Escalated marker
 - [x] Update overdueAlert tests to cover escalation logic
+- [x] Update auditLog.list tRPC procedure to accept optional action filter
+- [x] Add action type filter dropdown to Audit Log page UI

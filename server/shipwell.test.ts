@@ -363,3 +363,79 @@ describe("Zero-bid alert threshold logic", () => {
     expect(hoursInQuoting).toBe(3);
   });
 });
+
+// ─── Lane threshold resolution tests ─────────────────────────────────────────
+
+describe("Lane threshold resolution", () => {
+  type LaneThresholdEntry = {
+    id: number;
+    laneName: string;
+    facilityCode: string | null;
+    destinationRegion: string | null;
+    thresholdHours: number;
+    isActive: boolean;
+  };
+
+  function resolveThreshold(facilityName: string | null, thresholds: LaneThresholdEntry[]): number {
+    const active = thresholds.filter((t) => t.isActive);
+    if (facilityName) {
+      const specific = active.find((t) => t.facilityCode === facilityName);
+      if (specific) return specific.thresholdHours;
+    }
+    const global = active.find((t) => !t.facilityCode);
+    return global?.thresholdHours ?? 2;
+  }
+
+  it("returns 2 (default) when no thresholds configured", () => {
+    expect(resolveThreshold("TOR-Toronto", [])).toBe(2);
+  });
+
+  it("returns facility-specific threshold when facilityCode matches", () => {
+    const thresholds: LaneThresholdEntry[] = [
+      { id: 1, laneName: "TOR Lane", facilityCode: "TOR-Toronto", destinationRegion: null, thresholdHours: 4, isActive: true },
+    ];
+    expect(resolveThreshold("TOR-Toronto", thresholds)).toBe(4);
+  });
+
+  it("falls back to global threshold when no facility-specific match", () => {
+    const thresholds: LaneThresholdEntry[] = [
+      { id: 1, laneName: "Global", facilityCode: null, destinationRegion: null, thresholdHours: 6, isActive: true },
+    ];
+    expect(resolveThreshold("TOR-Toronto", thresholds)).toBe(6);
+  });
+
+  it("prefers facility-specific over global when both exist", () => {
+    const thresholds: LaneThresholdEntry[] = [
+      { id: 1, laneName: "Global", facilityCode: null, destinationRegion: null, thresholdHours: 6, isActive: true },
+      { id: 2, laneName: "TOR Lane", facilityCode: "TOR-Toronto", destinationRegion: null, thresholdHours: 3, isActive: true },
+    ];
+    expect(resolveThreshold("TOR-Toronto", thresholds)).toBe(3);
+  });
+
+  it("ignores inactive thresholds", () => {
+    const thresholds: LaneThresholdEntry[] = [
+      { id: 1, laneName: "TOR Lane", facilityCode: "TOR-Toronto", destinationRegion: null, thresholdHours: 1, isActive: false },
+    ];
+    expect(resolveThreshold("TOR-Toronto", thresholds)).toBe(2);
+  });
+
+  it("returns 2 (default) when facilityName is null and no global threshold", () => {
+    const thresholds: LaneThresholdEntry[] = [
+      { id: 1, laneName: "TOR Lane", facilityCode: "TOR-Toronto", destinationRegion: null, thresholdHours: 4, isActive: true },
+    ];
+    expect(resolveThreshold(null, thresholds)).toBe(2);
+  });
+
+  it("applies custom threshold to zero-bid warning logic", () => {
+    const THRESHOLD_HOURS = 5;
+    const thresholdMs = THRESHOLD_HOURS * 60 * 60 * 1000;
+    // 4h 30m in quoting — should NOT trigger with 5h threshold
+    const quotingStarted = new Date(Date.now() - (4.5 * 60 * 60 * 1000));
+    const quotingAgeMs = Date.now() - quotingStarted.getTime();
+    expect(quotingAgeMs >= thresholdMs).toBe(false);
+    // 5h 30m in quoting — SHOULD trigger with 5h threshold
+    const quotingStarted2 = new Date(Date.now() - (5.5 * 60 * 60 * 1000));
+    const quotingAgeMs2 = Date.now() - quotingStarted2.getTime();
+    expect(quotingAgeMs2 >= thresholdMs).toBe(true);
+  });
+});

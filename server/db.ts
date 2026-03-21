@@ -32,6 +32,9 @@ import {
   slaRequirements,
   SlaRequirement,
   InsertSlaRequirement,
+  laneThresholds,
+  LaneThreshold,
+  InsertLaneThreshold,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -777,4 +780,68 @@ export async function getOrderSlaStatuses(): Promise<
 
     return { ...order, slaDays, ageCalendarDays, slaStatus, daysRemaining };
   });
+}
+
+// ─── Lane Threshold helpers ───────────────────────────────────────────────────
+
+export async function getLaneThresholds(): Promise<LaneThreshold[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(laneThresholds).orderBy(laneThresholds.laneName);
+}
+
+export async function getLaneThresholdById(id: number): Promise<LaneThreshold | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(laneThresholds).where(eq(laneThresholds.id, id));
+  return rows[0] ?? null;
+}
+
+export async function createLaneThreshold(data: Omit<InsertLaneThreshold, "id" | "createdAt" | "updatedAt">): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.insert(laneThresholds).values(data);
+  return (result as any)[0]?.insertId ?? 0;
+}
+
+export async function updateLaneThreshold(
+  id: number,
+  data: Partial<Omit<InsertLaneThreshold, "id" | "createdAt" | "updatedAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(laneThresholds).set(data).where(eq(laneThresholds.id, id));
+}
+
+export async function deleteLaneThreshold(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(laneThresholds).where(eq(laneThresholds.id, id));
+}
+
+/**
+ * Resolve the zero-bid threshold hours for a given facility code.
+ * Matches the most specific active threshold:
+ *   1. facilityCode match (exact)
+ *   2. facilityCode is null (global fallback)
+ * Returns DEFAULT_ZERO_BID_HOURS (2) if no threshold is configured.
+ */
+export const DEFAULT_ZERO_BID_HOURS = 2;
+
+export async function resolveZeroBidThreshold(facilityCode: string | null): Promise<number> {
+  const db = await getDb();
+  if (!db) return DEFAULT_ZERO_BID_HOURS;
+  const rows = await db
+    .select()
+    .from(laneThresholds)
+    .where(eq(laneThresholds.isActive, true));
+
+  // Prefer facility-specific match
+  if (facilityCode) {
+    const specific = rows.find((r: LaneThreshold) => r.facilityCode === facilityCode);
+    if (specific) return specific.thresholdHours;
+  }
+  // Fall back to global (null facilityCode)
+  const global = rows.find((r: LaneThreshold) => !r.facilityCode);
+  return global?.thresholdHours ?? DEFAULT_ZERO_BID_HOURS;
 }

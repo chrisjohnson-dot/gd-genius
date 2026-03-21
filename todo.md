@@ -276,3 +276,7 @@
 - [x] Fire owner notification when Quoting order has 0 bids for 2+ hours
 - [x] Show warning icon on Quoting status pill when 0 bids for 2+ hours
 - [x] Add Needs Attention filter pill to Open Orders KPI row
+- [x] Add lane_thresholds table to DB schema for configurable zero-bid alert thresholds
+- [x] Add tRPC procedures for lane threshold CRUD
+- [x] Add Lane Thresholds tab to Shipwell Settings page
+- [x] Update frontend warning logic to use per-lane threshold

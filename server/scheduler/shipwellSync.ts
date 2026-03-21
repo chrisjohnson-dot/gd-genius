@@ -19,6 +19,7 @@ import {
   setShipwellQuotingStartedAt,
   markZeroBidNotified,
   removeTrackedOrder,
+  resolveZeroBidThreshold,
 } from "../db";
 import { createShipwellClient } from "../shipwell/api";
 import { notifyOwner } from "../_core/notification";
@@ -103,18 +104,19 @@ export async function syncShipwellStatusNow(): Promise<{
           // Record when quoting started (only sets if not already set)
           await setShipwellQuotingStartedAt(order.extensivOrderId);
 
-          // Alert if 0 bids for more than 2 hours and we haven't already notified
+          // Alert if 0 bids for longer than the configured lane threshold
           if (bidCount === 0) {
             const quotingStarted = order.shipwellQuotingStartedAt
               ? new Date(order.shipwellQuotingStartedAt)
               : null;
             const alreadyNotified = !!order.shipwellZeroBidNotifiedAt;
-            const twoHoursMs = 2 * 60 * 60 * 1000;
+            const thresholdHours = await resolveZeroBidThreshold(order.facilityName ?? null);
+            const thresholdMs = thresholdHours * 60 * 60 * 1000;
             const quotingAgeMs = quotingStarted
               ? Date.now() - quotingStarted.getTime()
               : 0;
 
-            if (!alreadyNotified && quotingAgeMs >= twoHoursMs) {
+            if (!alreadyNotified && quotingAgeMs >= thresholdMs) {
               const orderLabel = order.referenceNum ?? String(order.extensivOrderId);
               const clientLabel = order.clientName ?? "Unknown Client";
               const warehouseLabel = order.facilityName ?? "Unknown Warehouse";
@@ -123,7 +125,7 @@ export async function syncShipwellStatusNow(): Promise<{
               await notifyOwner({
                 title: `⚠️ Zero Bids Alert — Order ${orderLabel}`,
                 content: [
-                  `Order **${orderLabel}** for **${clientLabel}** (${warehouseLabel}) has been in Quoting status for **${hoursInQuoting} hours** with **0 carrier bids**.`,
+                  `Order **${orderLabel}** for **${clientLabel}** (${warehouseLabel}) has been in Quoting status for **${hoursInQuoting} hours** with **0 carrier bids** (threshold: ${thresholdHours}h).`,
                   ``,
                   `Please review the shipment in Shipwell and consider reaching out to carriers directly.`,
                   ``,

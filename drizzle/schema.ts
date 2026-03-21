@@ -256,3 +256,25 @@ export const slaRequirements = mysqlTable("sla_requirements", {
 });
 export type SlaRequirement = typeof slaRequirements.$inferSelect;
 export type InsertSlaRequirement = typeof slaRequirements.$inferInsert;
+
+// Zero-bid alert thresholds per shipping lane
+// A "lane" is identified by origin facility + destination region/state
+// Default threshold is 2 hours; can be overridden per lane
+export const laneThresholds = mysqlTable("lane_thresholds", {
+  id: int("id").autoincrement().primaryKey(),
+  // Human-readable lane name (e.g., "TOR → Ontario", "CAL → BC")
+  laneName: varchar("laneName", { length: 256 }).notNull(),
+  // Optional: origin facility code (e.g., "TOR-Toronto") — null means applies to all facilities
+  facilityCode: varchar("facilityCode", { length: 64 }),
+  // Optional: destination region/state filter — null means any destination
+  destinationRegion: varchar("destinationRegion", { length: 128 }),
+  // Hours before zero-bid alert fires (default 2)
+  thresholdHours: int("thresholdHours").notNull().default(2),
+  // Whether this threshold is active
+  isActive: boolean("isActive").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LaneThreshold = typeof laneThresholds.$inferSelect;
+export type InsertLaneThreshold = typeof laneThresholds.$inferInsert;

@@ -135,6 +135,15 @@ type TrackedOrder = {
   shipwellStatusUpdatedAt: string | Date | null;
 };
 
+type LaneThresholdEntry = {
+  id: number;
+  laneName: string;
+  facilityCode: string | null;
+  destinationRegion: string | null;
+  thresholdHours: number;
+  isActive: boolean;
+};
+
 type FacilityGroup = {
   facilityId: number;
   facilityName: string;
@@ -209,20 +218,20 @@ const SHIPWELL_STATUS_CONFIG: Record<string, { label: string; bg: string; text: 
   unknown:           { label: "In Shipwell",      bg: "#f8fafc", text: "#475569", border: "#e2e8f0" },
 };
 
-function ShipwellStatusBadge({ order }: { order: TrackedOrder }) {
+function ShipwellStatusBadge({ order, thresholdHours = 2 }: { order: TrackedOrder; thresholdHours?: number }) {
   const status = order.shipwellStatus ?? "unknown";
   const cfg = SHIPWELL_STATUS_CONFIG[status] ?? SHIPWELL_STATUS_CONFIG.unknown;
   const href = order.shipwellShipmentUrl ?? order.shipwellPoUrl ?? "#";
   const isQuoting = status === "quoting";
   const bidCount = order.shipwellBidCount ?? 0;
 
-  // Determine if zero-bid warning should show: quoting, 0 bids, 2+ hours since quoting started
-  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  // Determine if zero-bid warning should show using per-lane threshold
+  const thresholdMs = thresholdHours * 60 * 60 * 1000;
   const quotingStarted = order.shipwellQuotingStartedAt
     ? new Date(order.shipwellQuotingStartedAt)
     : null;
   const quotingAgeMs = quotingStarted ? Date.now() - quotingStarted.getTime() : 0;
-  const showZeroBidWarning = isQuoting && bidCount === 0 && quotingAgeMs >= TWO_HOURS_MS;
+  const showZeroBidWarning = isQuoting && bidCount === 0 && quotingAgeMs >= thresholdMs;
   const hoursInQuoting = quotingStarted ? Math.floor(quotingAgeMs / (60 * 60 * 1000)) : 0;
 
   return (
@@ -239,7 +248,7 @@ function ShipwellStatusBadge({ order }: { order: TrackedOrder }) {
       }}
       title={
         showZeroBidWarning
-          ? `⚠️ Zero bids for ${hoursInQuoting}h — action required`
+          ? `⚠️ Zero bids for ${hoursInQuoting}h — action required (threshold: ${thresholdHours}h)`
           : `Shipwell status: ${cfg.label}${isQuoting ? ` — ${bidCount} bid${bidCount !== 1 ? "s" : ""} received` : ""}${order.shipwellStatusUpdatedAt ? ` (updated ${new Date(order.shipwellStatusUpdatedAt).toLocaleString()})` : ""}`
       }
     >
@@ -445,6 +454,7 @@ function WarehouseCard({
   onClose,
   drillDown = false,
   onDrillDown,
+  laneThresholds = [],
 }: {
   facility: FacilityGroup;
   onStatusChanged: () => void;
@@ -452,6 +462,7 @@ function WarehouseCard({
   onClose?: () => void;
   drillDown?: boolean;
   onDrillDown?: () => void;
+  laneThresholds?: LaneThresholdEntry[];
 }) {
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState("all");
@@ -467,13 +478,25 @@ function WarehouseCard({
     [facility.orders]
   );
 
+  // Helper: resolve per-lane threshold for a given facilityName
+  const resolveThreshold = (facilityName: string | null): number => {
+    if (laneThresholds.length === 0) return 2;
+    const active = laneThresholds.filter((t) => t.isActive);
+    if (facilityName) {
+      const specific = active.find((t) => t.facilityCode === facilityName);
+      if (specific) return specific.thresholdHours;
+    }
+    const global = active.find((t) => !t.facilityCode);
+    return global?.thresholdHours ?? 2;
+  };
+
   // Helper: is this order showing the zero-bid warning?
-  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
   const isZeroBidWarning = (o: TrackedOrder) => {
     if (o.shipwellStatus !== "quoting") return false;
     if ((o.shipwellBidCount ?? 0) > 0) return false;
     const started = o.shipwellQuotingStartedAt ? new Date(o.shipwellQuotingStartedAt as string).getTime() : 0;
-    return started > 0 && (Date.now() - started) >= TWO_HOURS_MS;
+    const thresholdMs = resolveThreshold(o.facilityName ?? null) * 60 * 60 * 1000;
+    return started > 0 && (Date.now() - started) >= thresholdMs;
   };
 
   const filteredOrders = useMemo(() => {
@@ -650,7 +673,7 @@ function WarehouseCard({
           <div className="flex items-center justify-end gap-1">
             {/* Send to Shipwell appears at QC Complete stage; live status badge for orders already in Shipwell */}
             {o.shipwellShipmentId ? (
-              <ShipwellStatusBadge order={o} />
+              <ShipwellStatusBadge order={o} thresholdHours={resolveThreshold(o.facilityName ?? null)} />
             ) : o.lifecycleStatus === "qc_complete" ? (
               o.shipwellOrderId ? (
                 <a
@@ -1325,6 +1348,7 @@ export default function Home() {
             facility={selectedFacility}
             onStatusChanged={() => refetch()}
             drillDown
+            laneThresholds={(data?.laneThresholds ?? []) as LaneThresholdEntry[]}
           />
         )}
 
@@ -1337,6 +1361,7 @@ export default function Home() {
                 facility={f}
                 onStatusChanged={() => refetch()}
                 onDrillDown={() => setSelectedFacilityId(f.facilityId)}
+                laneThresholds={(data?.laneThresholds ?? []) as LaneThresholdEntry[]}
               />
             ))}
           </div>

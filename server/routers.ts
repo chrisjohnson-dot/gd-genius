@@ -42,6 +42,11 @@ import {
   upsertSlaRequirement,
   deleteSlaRequirement,
   getOrderSlaStatuses,
+  getLaneThresholds,
+  getLaneThresholdById,
+  createLaneThreshold,
+  updateLaneThreshold,
+  deleteLaneThreshold,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
@@ -50,7 +55,7 @@ import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
 
-export const appRouter = router({
+const _appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
@@ -1759,10 +1764,12 @@ export const appRouter = router({
         const orders = await getTrackedOrders(input.facilityId);
         const lastSync = await getLastSyncTime();
         const syncInfo = getLastSyncInfo();
+        const thresholds = await getLaneThresholds();
         return {
           orders,
           lastSyncAt: lastSync,
           syncRunning: syncInfo.syncRunning,
+          laneThresholds: thresholds,
         };
       }),
 
@@ -2033,4 +2040,69 @@ export const appRouter = router({
     }),
   }),
 });
+// ─── Lane Threshold router ───────────────────────────────────────────────────
+export const laneThresholdRouter = router({
+  list: protectedProcedure.query(async () => {
+    return getLaneThresholds();
+  }),
+  get: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const threshold = await getLaneThresholdById(input.id);
+      if (!threshold) throw new TRPCError({ code: "NOT_FOUND", message: "Lane threshold not found" });
+      return threshold;
+    }),
+  create: protectedProcedure
+    .input(
+      z.object({
+        laneName: z.string().min(1).max(256),
+        facilityCode: z.string().max(64).nullable().optional(),
+        destinationRegion: z.string().max(128).nullable().optional(),
+        thresholdHours: z.number().int().min(1).max(168).default(2),
+        isActive: z.boolean().default(true),
+        notes: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const id = await createLaneThreshold({
+        laneName: input.laneName,
+        facilityCode: input.facilityCode ?? null,
+        destinationRegion: input.destinationRegion ?? null,
+        thresholdHours: input.thresholdHours,
+        isActive: input.isActive,
+        notes: input.notes ?? null,
+      });
+      return { id };
+    }),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        laneName: z.string().min(1).max(256).optional(),
+        facilityCode: z.string().max(64).nullable().optional(),
+        destinationRegion: z.string().max(128).nullable().optional(),
+        thresholdHours: z.number().int().min(1).max(168).optional(),
+        isActive: z.boolean().optional(),
+        notes: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateLaneThreshold(id, data);
+      return { success: true };
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteLaneThreshold(input.id);
+      return { success: true };
+    }),
+});
+
+// Extend _appRouter with laneThresholds (defined after to avoid hoisting issue)
+export const appRouter = router({
+  ..._appRouter._def.record,
+  laneThresholds: laneThresholdRouter,
+});
+
 export type AppRouter = typeof appRouter;

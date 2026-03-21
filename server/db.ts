@@ -926,3 +926,25 @@ export async function getAttentionCount(): Promise<{
 
   return { overdueCount, zeroBidCount, total: overdueCount + zeroBidCount };
 }
+
+/**
+ * Stamp the lastOverdueAlertSentAt timestamp on a set of orders to suppress
+ * re-notification on the same calendar day.
+ */
+export async function markOverdueAlertSent(extensivOrderIds: number[]): Promise<void> {
+  if (extensivOrderIds.length === 0) return;
+  const db = await getDb();
+  if (!db) return;
+  const now = new Date();
+  // Update in batches to avoid huge IN clauses
+  const BATCH = 100;
+  for (let i = 0; i < extensivOrderIds.length; i += BATCH) {
+    const batch = extensivOrderIds.slice(i, i + BATCH);
+    for (const id of batch) {
+      await db
+        .update(orderTracking)
+        .set({ lastOverdueAlertSentAt: now })
+        .where(eq(orderTracking.extensivOrderId, id));
+    }
+  }
+}

@@ -296,3 +296,7 @@
 - [x] Add getAttentionCount DB helper (overdue unallocated + zero-bid orders)
 - [x] Add tRPC pickSchedule.attentionCount query
 - [x] Wire red badge onto Open Orders sidebar nav item in AppLayout
+- [x] Add lastOverdueAlertSentAt column to order_tracking schema and migrate
+- [x] Add markOverdueAlertSent DB helper to stamp the timestamp per order
+- [x] Update overdueAlert scheduler to skip orders already notified today
+- [x] Update overdueAlert tests to cover suppression logic

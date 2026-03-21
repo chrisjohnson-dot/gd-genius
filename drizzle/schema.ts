@@ -208,6 +208,7 @@ export const orderTracking = mysqlTable("order_tracking", {
   shipwellBidCount: int("shipwellBidCount"),                       // Number of carrier bids when in Quoting status
   shipwellQuotingStartedAt: timestamp("shipwellQuotingStartedAt"),  // When order first entered Quoting status
   shipwellZeroBidNotifiedAt: timestamp("shipwellZeroBidNotifiedAt"), // When zero-bid alert was last sent (prevents duplicates)
+  lastOverdueAlertSentAt: timestamp("lastOverdueAlertSentAt"),       // When overdue morning alert was last sent for this order
   shipwellSentAt: timestamp("shipwellSentAt"),                    // When it was sent to Shipwell
   shipwellStatusUpdatedAt: timestamp("shipwellStatusUpdatedAt"),  // Last time status was polled
   // Timestamps for each stage transition

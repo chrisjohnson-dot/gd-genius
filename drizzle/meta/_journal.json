@@ -134,6 +134,13 @@
       "when": 1774132395620,
       "tag": "0018_goofy_warstar",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1774135271162,
+      "tag": "0019_sweet_ender_wiggin",
+      "breakpoints": true
     }
   ]
 }

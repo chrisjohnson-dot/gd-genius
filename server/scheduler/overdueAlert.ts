@@ -5,37 +5,68 @@
  * notification listing all unallocated orders whose Required Ship Date has
  * already passed.
  *
+ * Alert suppression: each order is only included in the notification once per
+ * calendar day. If `lastOverdueAlertSentAt` is already set to today's date the
+ * order is skipped. After a successful notification the timestamp is stamped on
+ * every included order so they won't appear again until tomorrow.
+ *
  * Also exports `sendOverdueAlertNow()` for manual on-demand triggering
  * (used by the tRPC test-trigger procedure).
  */
 
 import cron from "node-cron";
-import { getOverdueUnallocatedOrders } from "../db";
+import { getOverdueUnallocatedOrders, markOverdueAlertSent } from "../db";
 import { notifyOwner } from "../_core/notification";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Returns "YYYY-MM-DD" in the server's local timezone. */
+function todayDateStr(): string {
+  return new Date().toLocaleDateString("en-CA"); // always YYYY-MM-DD
+}
+
+/** True when the order was already alerted today. */
+function alreadyNotifiedToday(lastSentAt: Date | null | undefined): boolean {
+  if (!lastSentAt) return false;
+  return new Date(lastSentAt).toLocaleDateString("en-CA") === todayDateStr();
+}
 
 // ─── Core alert function ──────────────────────────────────────────────────────
 
 export async function sendOverdueAlertNow(): Promise<{
   success: boolean;
   overdueCount: number;
+  suppressedCount: number;
   message: string;
 }> {
-  let orders: Awaited<ReturnType<typeof getOverdueUnallocatedOrders>>;
+  let allOverdue: Awaited<ReturnType<typeof getOverdueUnallocatedOrders>>;
 
   try {
-    orders = await getOverdueUnallocatedOrders();
+    allOverdue = await getOverdueUnallocatedOrders();
   } catch (err) {
     console.error("[OverdueAlert] Failed to query overdue orders:", err);
-    return { success: false, overdueCount: 0, message: "DB query failed" };
+    return { success: false, overdueCount: 0, suppressedCount: 0, message: "DB query failed" };
+  }
+
+  // ── Suppression filter ────────────────────────────────────────────────────
+  const suppressedOrders = allOverdue.filter((o) => alreadyNotifiedToday(o.lastOverdueAlertSentAt));
+  const orders = allOverdue.filter((o) => !alreadyNotifiedToday(o.lastOverdueAlertSentAt));
+  const suppressedCount = suppressedOrders.length;
+
+  if (suppressedCount > 0) {
+    console.log(`[OverdueAlert] Suppressed ${suppressedCount} order(s) already notified today.`);
   }
 
   if (orders.length === 0) {
-    console.log("[OverdueAlert] No overdue unallocated orders — skipping notification.");
-    return { success: true, overdueCount: 0, message: "No overdue orders" };
+    const msg = suppressedCount > 0
+      ? `All ${suppressedCount} overdue order(s) already notified today — skipping.`
+      : "No overdue orders";
+    console.log(`[OverdueAlert] ${msg}`);
+    return { success: true, overdueCount: 0, suppressedCount, message: msg };
   }
 
-  // Build notification content
-  const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+  // ── Build notification ────────────────────────────────────────────────────
+  const today = todayDateStr();
 
   // Group by facility for a cleaner message
   const byFacility = new Map<string, typeof orders>();
@@ -64,23 +95,37 @@ export async function sendOverdueAlertNow(): Promise<{
     lines.push("");
   }
 
+  if (suppressedCount > 0) {
+    lines.push(`_${suppressedCount} additional order${suppressedCount !== 1 ? "s were" : " was"} already notified today and excluded from this alert._`);
+    lines.push("");
+  }
+
   lines.push("Please action these orders as soon as possible.");
 
   const content = lines.join("\n");
   const title = `⚠️ ${orders.length} Overdue Unallocated Order${orders.length !== 1 ? "s" : ""} — ${today}`;
 
+  // ── Send notification ─────────────────────────────────────────────────────
   try {
     const sent = await notifyOwner({ title, content });
     if (sent) {
-      console.log(`[OverdueAlert] Notification sent — ${orders.length} overdue orders.`);
-      return { success: true, overdueCount: orders.length, message: `Notified: ${orders.length} overdue orders` };
+      // Stamp all notified orders so they won't fire again today
+      const ids = orders.map((o) => o.extensivOrderId);
+      await markOverdueAlertSent(ids);
+      console.log(`[OverdueAlert] Notification sent — ${orders.length} orders notified, ${suppressedCount} suppressed.`);
+      return {
+        success: true,
+        overdueCount: orders.length,
+        suppressedCount,
+        message: `Notified: ${orders.length} overdue orders (${suppressedCount} suppressed)`,
+      };
     } else {
       console.warn("[OverdueAlert] Notification service returned false — may be temporarily unavailable.");
-      return { success: false, overdueCount: orders.length, message: "Notification service unavailable" };
+      return { success: false, overdueCount: orders.length, suppressedCount, message: "Notification service unavailable" };
     }
   } catch (err) {
     console.error("[OverdueAlert] Failed to send notification:", err);
-    return { success: false, overdueCount: orders.length, message: "Notification send failed" };
+    return { success: false, overdueCount: orders.length, suppressedCount, message: "Notification send failed" };
   }
 }
 

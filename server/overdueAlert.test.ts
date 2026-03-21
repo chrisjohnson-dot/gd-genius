@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ─── Mock db module ───────────────────────────────────────────────────────────
 vi.mock("./db", () => ({
   getOverdueUnallocatedOrders: vi.fn(),
+  markOverdueAlertSent: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ─── Mock notification module ─────────────────────────────────────────────────
@@ -13,13 +14,26 @@ vi.mock("./_core/notification", () => ({
   notifyOwner: vi.fn(),
 }));
 
-import { getOverdueUnallocatedOrders } from "./db";
+import { getOverdueUnallocatedOrders, markOverdueAlertSent } from "./db";
 import { notifyOwner } from "./_core/notification";
 import { sendOverdueAlertNow } from "./scheduler/overdueAlert";
 
 // Typed mock helpers
 const mockGetOverdue = getOverdueUnallocatedOrders as ReturnType<typeof vi.fn>;
+const mockMarkSent = markOverdueAlertSent as ReturnType<typeof vi.fn>;
 const mockNotify = notifyOwner as ReturnType<typeof vi.fn>;
+
+/** Returns a "YYYY-MM-DD" string for today (same logic as the scheduler). */
+function todayStr(): string {
+  return new Date().toLocaleDateString("en-CA");
+}
+
+/** Returns a Date representing yesterday. */
+function yesterday(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d;
+}
 
 // Minimal OrderTracking-like fixture
 function makeOrder(overrides: Partial<{
@@ -31,6 +45,7 @@ function makeOrder(overrides: Partial<{
   shipToName: string;
   shipToCity: string;
   requiredShipDate: string;
+  lastOverdueAlertSentAt: Date | null;
 }> = {}) {
   return {
     id: 1,
@@ -60,6 +75,9 @@ function makeOrder(overrides: Partial<{
     shipwellBidCount: null,
     shipwellQuotingStartedAt: null,
     shipwellZeroBidNotifiedAt: null,
+    lastOverdueAlertSentAt: overrides.lastOverdueAlertSentAt !== undefined
+      ? overrides.lastOverdueAlertSentAt
+      : null,
     firstSeenAt: new Date("2026-01-01"),
     lastSyncedAt: new Date("2026-01-01"),
     createdAt: new Date("2026-01-01"),
@@ -70,7 +88,11 @@ function makeOrder(overrides: Partial<{
 describe("sendOverdueAlertNow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: markOverdueAlertSent resolves cleanly
+    mockMarkSent.mockResolvedValue(undefined);
   });
+
+  // ── Basic behaviour ────────────────────────────────────────────────────────
 
   it("returns success with zero count and does NOT notify when there are no overdue orders", async () => {
     mockGetOverdue.mockResolvedValueOnce([]);
@@ -79,6 +101,7 @@ describe("sendOverdueAlertNow", () => {
 
     expect(result.success).toBe(true);
     expect(result.overdueCount).toBe(0);
+    expect(result.suppressedCount).toBe(0);
     expect(mockNotify).not.toHaveBeenCalled();
   });
 
@@ -91,6 +114,7 @@ describe("sendOverdueAlertNow", () => {
 
     expect(result.success).toBe(true);
     expect(result.overdueCount).toBe(1);
+    expect(result.suppressedCount).toBe(0);
     expect(mockNotify).toHaveBeenCalledOnce();
 
     const [payload] = mockNotify.mock.calls[0];
@@ -99,7 +123,127 @@ describe("sendOverdueAlertNow", () => {
     expect(payload.content).toContain("TOR-Toronto");
   });
 
-  it("includes all overdue orders in the notification body", async () => {
+  it("stamps markOverdueAlertSent on all notified orders after a successful notification", async () => {
+    const orders = [
+      makeOrder({ extensivOrderId: 1001 }),
+      makeOrder({ extensivOrderId: 1002, referenceNum: "REF-002" }),
+    ];
+    mockGetOverdue.mockResolvedValueOnce(orders);
+    mockNotify.mockResolvedValueOnce(true);
+
+    await sendOverdueAlertNow();
+
+    expect(mockMarkSent).toHaveBeenCalledOnce();
+    const [ids] = mockMarkSent.mock.calls[0];
+    expect(ids).toContain(1001);
+    expect(ids).toContain(1002);
+  });
+
+  it("does NOT stamp markOverdueAlertSent when the notification service fails", async () => {
+    mockGetOverdue.mockResolvedValueOnce([makeOrder()]);
+    mockNotify.mockResolvedValueOnce(false);
+
+    await sendOverdueAlertNow();
+
+    expect(mockMarkSent).not.toHaveBeenCalled();
+  });
+
+  // ── Suppression logic ──────────────────────────────────────────────────────
+
+  it("suppresses orders whose lastOverdueAlertSentAt is today", async () => {
+    const alreadyNotified = makeOrder({
+      extensivOrderId: 1001,
+      referenceNum: "REF-SUPPRESSED",
+      lastOverdueAlertSentAt: new Date(), // today
+    });
+    const fresh = makeOrder({
+      extensivOrderId: 1002,
+      referenceNum: "REF-FRESH",
+      lastOverdueAlertSentAt: null,
+    });
+    mockGetOverdue.mockResolvedValueOnce([alreadyNotified, fresh]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.overdueCount).toBe(1);   // only REF-FRESH
+    expect(result.suppressedCount).toBe(1); // REF-SUPPRESSED skipped
+    const content: string = mockNotify.mock.calls[0][0].content;
+    expect(content).toContain("REF-FRESH");
+    expect(content).not.toContain("REF-SUPPRESSED");
+  });
+
+  it("does NOT suppress orders whose lastOverdueAlertSentAt is yesterday", async () => {
+    const notifiedYesterday = makeOrder({
+      extensivOrderId: 1001,
+      referenceNum: "REF-YESTERDAY",
+      lastOverdueAlertSentAt: yesterday(),
+    });
+    mockGetOverdue.mockResolvedValueOnce([notifiedYesterday]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.overdueCount).toBe(1);
+    expect(result.suppressedCount).toBe(0);
+    const content: string = mockNotify.mock.calls[0][0].content;
+    expect(content).toContain("REF-YESTERDAY");
+  });
+
+  it("skips notification entirely when ALL overdue orders were already notified today", async () => {
+    const orders = [
+      makeOrder({ extensivOrderId: 1001, lastOverdueAlertSentAt: new Date() }),
+      makeOrder({ extensivOrderId: 1002, lastOverdueAlertSentAt: new Date() }),
+    ];
+    mockGetOverdue.mockResolvedValueOnce(orders);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.success).toBe(true);
+    expect(result.overdueCount).toBe(0);
+    expect(result.suppressedCount).toBe(2);
+    expect(mockNotify).not.toHaveBeenCalled();
+    expect(mockMarkSent).not.toHaveBeenCalled();
+  });
+
+  it("includes suppressed count note in notification when some orders were suppressed", async () => {
+    const suppressed = makeOrder({ extensivOrderId: 1001, lastOverdueAlertSentAt: new Date() });
+    const fresh = makeOrder({ extensivOrderId: 1002, referenceNum: "REF-NEW" });
+    mockGetOverdue.mockResolvedValueOnce([suppressed, fresh]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    await sendOverdueAlertNow();
+
+    const content: string = mockNotify.mock.calls[0][0].content;
+    // Should mention the suppressed count in the footer note
+    expect(content).toMatch(/1 additional order.*already notified today/i);
+  });
+
+  // ── Error paths ────────────────────────────────────────────────────────────
+
+  it("returns success=false when the DB query throws", async () => {
+    mockGetOverdue.mockRejectedValueOnce(new Error("DB connection lost"));
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.success).toBe(false);
+    expect(result.overdueCount).toBe(0);
+    expect(mockNotify).not.toHaveBeenCalled();
+  });
+
+  it("returns success=false when the notification service returns false", async () => {
+    mockGetOverdue.mockResolvedValueOnce([makeOrder()]);
+    mockNotify.mockResolvedValueOnce(false);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.success).toBe(false);
+    expect(result.overdueCount).toBe(1);
+  });
+
+  // ── Content ────────────────────────────────────────────────────────────────
+
+  it("includes all non-suppressed orders in the notification body", async () => {
     const orders = [
       makeOrder({ referenceNum: "REF-A", facilityName: "TOR-Toronto", requiredShipDate: "2026-01-05" }),
       makeOrder({ extensivOrderId: 1002, referenceNum: "REF-B", facilityName: "TOR-Toronto", requiredShipDate: "2026-01-08" }),
@@ -117,45 +261,6 @@ describe("sendOverdueAlertNow", () => {
     expect(content).toContain("REF-C");
     expect(content).toContain("TOR-Toronto");
     expect(content).toContain("CAL-Calgary");
-  });
-
-  it("groups orders by facility in the notification", async () => {
-    const orders = [
-      makeOrder({ referenceNum: "REF-T1", facilityName: "TOR-Toronto" }),
-      makeOrder({ extensivOrderId: 1002, referenceNum: "REF-T2", facilityName: "TOR-Toronto" }),
-      makeOrder({ extensivOrderId: 1003, referenceNum: "REF-C1", facilityName: "CAL-Calgary" }),
-    ];
-    mockGetOverdue.mockResolvedValueOnce(orders);
-    mockNotify.mockResolvedValueOnce(true);
-
-    await sendOverdueAlertNow();
-
-    const content: string = mockNotify.mock.calls[0][0].content;
-    // TOR-Toronto section should appear before CAL-Calgary (alphabetical via Map insertion)
-    const torIdx = content.indexOf("TOR-Toronto");
-    const calIdx = content.indexOf("CAL-Calgary");
-    expect(torIdx).toBeGreaterThanOrEqual(0);
-    expect(calIdx).toBeGreaterThanOrEqual(0);
-  });
-
-  it("returns success=false when the notification service returns false", async () => {
-    mockGetOverdue.mockResolvedValueOnce([makeOrder()]);
-    mockNotify.mockResolvedValueOnce(false);
-
-    const result = await sendOverdueAlertNow();
-
-    expect(result.success).toBe(false);
-    expect(result.overdueCount).toBe(1);
-  });
-
-  it("returns success=false when the DB query throws", async () => {
-    mockGetOverdue.mockRejectedValueOnce(new Error("DB connection lost"));
-
-    const result = await sendOverdueAlertNow();
-
-    expect(result.success).toBe(false);
-    expect(result.overdueCount).toBe(0);
-    expect(mockNotify).not.toHaveBeenCalled();
   });
 
   it("notification title includes the overdue order count", async () => {

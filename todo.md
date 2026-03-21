@@ -300,3 +300,4 @@
 - [x] Add markOverdueAlertSent DB helper to stamp the timestamp per order
 - [x] Update overdueAlert scheduler to skip orders already notified today
 - [x] Update overdueAlert tests to cover suppression logic
+- [x] Add Test Alert button to Shipwell Settings page to trigger overdueAlert.triggerNow

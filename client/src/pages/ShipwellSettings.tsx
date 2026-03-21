@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, CheckCircle2, Clock, Eye, EyeOff, Loader2, Pencil, Plus, Save, TestTube2, Trash2, Zap } from "lucide-react";
+import { AlertCircle, Bell, CheckCircle2, Clock, Eye, EyeOff, Loader2, Pencil, Plus, Save, TestTube2, Trash2, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -319,6 +319,112 @@ function LaneThresholdsTab() {
   );
 }
 
+// ─── Notifications Tab ───────────────────────────────────────────────────────
+function NotificationsTab() {
+  const [alertResult, setAlertResult] = useState<{
+    success: boolean;
+    overdueCount: number;
+    suppressedCount: number;
+    message: string;
+  } | null>(null);
+
+  const triggerAlert = trpc.overdueAlert.triggerNow.useMutation({
+    onSuccess: (data) => {
+      setAlertResult(data);
+      if (data.success && data.overdueCount > 0) {
+        toast.success(`Alert sent — ${data.overdueCount} overdue order${data.overdueCount !== 1 ? "s" : ""} notified.`);
+      } else if (data.success && data.overdueCount === 0) {
+        toast.info(data.suppressedCount > 0 ? `All ${data.suppressedCount} overdue orders already notified today.` : "No overdue unallocated orders right now.");
+      } else {
+        toast.error(`Alert failed: ${data.message}`);
+      }
+    },
+    onError: (err) => {
+      setAlertResult(null);
+      toast.error(`Failed to trigger alert: ${err.message}`);
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Overdue Order Morning Alert</CardTitle>
+          <CardDescription>
+            The system automatically sends an owner notification at <strong>7:00 AM</strong> each day listing all
+            unallocated orders whose Required Ship Date has passed. Each order is only included once per calendar
+            day (alert suppression). Use the button below to trigger a test run immediately.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => { setAlertResult(null); triggerAlert.mutate(); }}
+              disabled={triggerAlert.isPending}
+              className="gap-2"
+            >
+              {triggerAlert.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Bell className="h-4 w-4" />}
+              {triggerAlert.isPending ? "Sending…" : "Send Test Alert Now"}
+            </Button>
+            {alertResult && (
+              <span className="text-xs text-muted-foreground">
+                Last run: {new Date().toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+
+          {alertResult && (
+            <div className={`flex items-start gap-3 rounded-lg p-4 text-sm border ${
+              alertResult.success
+                ? alertResult.overdueCount > 0
+                  ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-300"
+                  : "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-300"
+                : "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-300"
+            }`}>
+              {alertResult.success
+                ? <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                : <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />}
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {alertResult.success
+                    ? alertResult.overdueCount > 0
+                      ? `Notification sent — ${alertResult.overdueCount} overdue order${alertResult.overdueCount !== 1 ? "s" : ""} included`
+                      : "No notification sent — no qualifying orders"
+                    : "Alert failed"}
+                </p>
+                <p className="text-xs opacity-80">{alertResult.message}</p>
+                {alertResult.suppressedCount > 0 && (
+                  <p className="text-xs opacity-70">
+                    {alertResult.suppressedCount} order{alertResult.suppressedCount !== 1 ? "s" : ""} suppressed (already notified today).
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800">
+        <CardContent className="pt-4">
+          <div className="flex gap-3">
+            <Bell className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+            <div className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+              <p className="font-medium">Alert suppression</p>
+              <p className="text-xs opacity-80">
+                Each overdue order is notified at most once per calendar day. If an order was already included in
+                today's alert it will be skipped on subsequent runs (including manual test runs) until midnight.
+                Orders that become overdue after the 7 AM run will appear in the next morning's alert.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ShipwellSettings() {
   return (
@@ -339,9 +445,11 @@ export default function ShipwellSettings() {
           <TabsList className="mb-4">
             <TabsTrigger value="credentials">Credentials</TabsTrigger>
             <TabsTrigger value="lanes">Lane Thresholds</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
           </TabsList>
           <TabsContent value="credentials"><CredentialsTab /></TabsContent>
           <TabsContent value="lanes"><LaneThresholdsTab /></TabsContent>
+          <TabsContent value="notifications"><NotificationsTab /></TabsContent>
         </Tabs>
       </div>
     </AppLayout>

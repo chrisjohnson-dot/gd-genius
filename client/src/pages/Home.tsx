@@ -60,7 +60,7 @@ const LIFECYCLE_CONFIG: Record<
   { label: string; bg: string; text: string; border: string; icon: React.ReactNode; nextStatus: LifecycleStatus | null; nextLabel: string | null }
 > = {
   unallocated: {
-    label: "Unallocated",
+    label: "Unalloc.",
     bg: "#dbeafe", text: "#1d4ed8", border: "#bfdbfe",
     icon: <Package className="h-2.5 w-2.5" />,
     nextStatus: "allocated", nextLabel: "Mark Allocated",
@@ -1016,7 +1016,7 @@ function WarehouseCard({
 
   return (
     <div
-      className="bg-card rounded-2xl overflow-hidden"
+      className="bg-card rounded-xl overflow-hidden"
       style={{
         border: hasUrgent ? "2px solid #ef4444" : hasHigh ? "2px solid #f59e0b" : "1px solid hsl(var(--border))",
         boxShadow: hasUrgent
@@ -1028,7 +1028,7 @@ function WarehouseCard({
     >
       {/* Warehouse header */}
       <div
-        className={`px-6 py-5 select-none bg-card border-b border-border ${onDrillDown ? "cursor-pointer hover:bg-muted/30 transition-colors" : "cursor-pointer"}`}
+        className={`px-5 py-4 select-none bg-card border-b border-border ${onDrillDown ? "cursor-pointer hover:bg-muted/30 transition-colors" : "cursor-pointer"}`}
         onClick={() => {
           if (onDrillDown) {
             onDrillDown();
@@ -1037,7 +1037,7 @@ function WarehouseCard({
           }
         }}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
               <Warehouse className="h-5 w-5 text-primary" />
@@ -1078,11 +1078,11 @@ function WarehouseCard({
         </div>
 
         {/* Lifecycle KPI row */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
             <div
               key={status}
-              className="rounded-xl px-3 py-2.5 text-center border cursor-pointer transition-opacity flex-1 min-w-[80px]"
+              className="rounded-xl px-2 py-2 text-center border cursor-pointer transition-opacity flex-1 min-w-[72px]"
               style={{ background: cfg.bg, borderColor: cfg.border, opacity: statusFilter === status ? 1 : statusFilter === "all" ? 1 : 0.45 }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1090,13 +1090,13 @@ function WarehouseCard({
                 if (!expanded) setExpanded(true);
               }}
             >
-              <p className="text-[18px] font-extrabold leading-none" style={{ color: cfg.text }}>{counts[status]}</p>
-              <p className="text-[9px] mt-1 font-medium uppercase tracking-wide" style={{ color: cfg.text }}>{cfg.label}</p>
+              <p className="text-[16px] font-extrabold leading-none" style={{ color: cfg.text }}>{counts[status]}</p>
+              <p className="text-[9px] mt-0.5 font-medium uppercase tracking-[0.04em] truncate" style={{ color: cfg.text }}>{cfg.label}</p>
             </div>
           ))}
           {needsAttentionCount > 0 && (
             <div
-              className="rounded-xl px-3 py-2.5 text-center border cursor-pointer transition-opacity flex-1 min-w-[80px]"
+              className="rounded-xl px-2 py-2 text-center border cursor-pointer transition-opacity flex-1 min-w-[72px]"
               style={{
                 background: "#fff7ed",
                 borderColor: statusFilter === "needs_attention" ? "#ea580c" : "#fed7aa",
@@ -1110,8 +1110,8 @@ function WarehouseCard({
               }}
               title="Orders in Quoting with zero bids for 2+ hours"
             >
-              <p className="text-[18px] font-extrabold leading-none text-orange-600 flex items-center justify-center gap-1">
-                <AlertTriangle className="h-4 w-4" />{needsAttentionCount}
+              <p className="text-[16px] font-extrabold leading-none text-orange-600 flex items-center justify-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" />{needsAttentionCount}
               </p>
               <p className="text-[9px] mt-1 font-medium uppercase tracking-wide text-orange-600">Attention</p>
             </div>
@@ -1303,7 +1303,7 @@ export default function Home() {
 
   return (
     <AppLayout>
-      <div className="p-7 space-y-6 page-enter">
+      <div className="p-5 space-y-4 page-enter">
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1355,15 +1355,15 @@ export default function Home() {
         {!selectedFacility && (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
-              <div
+                <div
                 key={status}
-                className="rounded-2xl px-4 py-3 text-center border"
+                className="rounded-xl px-3 py-2.5 text-center border"
                 style={{ background: cfg.bg, borderColor: cfg.border }}
               >
-                <p className="text-[28px] font-extrabold tracking-tight leading-none" style={{ color: cfg.text }}>
+                <p className="text-[22px] font-extrabold tracking-tight leading-none" style={{ color: cfg.text }}>
                   {isLoading ? "—" : kpis[status]}
                 </p>
-                <p className="text-[10px] mt-1.5 font-semibold uppercase tracking-wide" style={{ color: cfg.text }}>
+                <p className="text-[9px] mt-1 font-semibold uppercase tracking-[0.04em] truncate" style={{ color: cfg.text }}>
                   {cfg.label}
                 </p>
               </div>
@@ -1373,7 +1373,7 @@ export default function Home() {
 
         {/* Loading skeletons */}
         {isLoading && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {[1, 2].map((i) => (
               <div key={i} className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="h-36 bg-muted animate-pulse" />
@@ -1413,7 +1413,7 @@ export default function Home() {
 
         {/* Warehouse grid (no warehouse selected) */}
         {!isLoading && !selectedFacility && facilities.length > 0 && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {facilities.map((f) => (
               <WarehouseCard
                 key={f.facilityId}

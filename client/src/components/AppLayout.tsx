@@ -70,7 +70,7 @@ function NavItem({ href, label, icon: Icon, active }: { href: string; label: str
         "relative flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] text-[13.5px] font-medium transition-all duration-150",
         active
           ? "bg-[rgba(59,130,246,0.12)] text-white"
-          : "text-[#94a3b8] hover:bg-[#1a1d2e] hover:text-[#e2e8f0]"
+          : "text-[#94a3b8] hover:bg-[#252830] hover:text-[#e2e8f0]"
       )}
     >
       {active && <span className="nav-active-indicator" />}
@@ -88,7 +88,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex h-screen" style={{ background: "#f3f4f6" }}>
-        <div className="w-[260px] shrink-0" style={{ background: "#0f111a" }}>
+        <div className="w-[260px] shrink-0" style={{ background: "#1b1c21" }}>
           <div className="p-4 space-y-3 mt-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-9 w-full opacity-20" />
@@ -128,7 +128,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
         className="w-[260px] shrink-0 flex flex-col"
-        style={{ background: "#0f111a", position: "relative" }}
+        style={{ background: "#1b1c21", position: "relative" }}
       >
         {/* Brand */}
         <div className="px-4 pt-4 pb-3.5 border-b border-white/[0.06]">
@@ -200,7 +200,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Footer — user card */}
         <div className="p-3 border-t border-white/[0.06]">
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-[10px] hover:bg-[#1a1d2e] transition-colors cursor-default">
+          <div className="flex items-center gap-2.5 px-2 py-2 rounded-[10px] hover:bg-[#252830] transition-colors cursor-default">
             {/* Avatar with gradient */}
             <div
               className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-white font-bold text-[13px] shrink-0"

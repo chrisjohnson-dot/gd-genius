@@ -90,14 +90,14 @@
   --chart-4:            oklch(0.628 0.218 27);     /* red */
   --chart-5:            oklch(0.6 0.18 300);       /* purple */
 
-  /* Sidebar = very dark navy #0f111a */
-  --sidebar:                    oklch(0.108 0.022 264);  /* #0f111a */
+  /* Sidebar = GD Genius logo background #1b1c21 */
+  --sidebar:                    oklch(0.148 0.008 264);  /* #1b1c21 — matches logo bg */
   --sidebar-foreground:         oklch(0.672 0.018 247);  /* #94a3b8 slate */
   --sidebar-primary:            oklch(0.623 0.214 259);  /* blue accent */
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent:             oklch(0.155 0.025 264);  /* #1a1d2e hover */
+  --sidebar-accent:             oklch(0.19 0.012 264);   /* slightly lighter hover */
   --sidebar-accent-foreground:  oklch(0.89 0.01 247);    /* #e2e8f0 */
-  --sidebar-border:             oklch(0.2 0.018 264);    /* rgba(255,255,255,.06) approx */
+  --sidebar-border:             oklch(0.22 0.012 264);   /* subtle divider */
   --sidebar-ring:               oklch(0.623 0.214 259);
 }
 
@@ -127,13 +127,13 @@
   --chart-3:            oklch(0.72 0.165 65);
   --chart-4:            oklch(0.628 0.218 27);
   --chart-5:            oklch(0.6 0.18 300);
-  --sidebar:                    oklch(0.108 0.022 264);
+  --sidebar:                    oklch(0.148 0.008 264);  /* #1b1c21 — matches logo bg */
   --sidebar-foreground:         oklch(0.672 0.018 247);
   --sidebar-primary:            oklch(0.65 0.18 259);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent:             oklch(0.155 0.025 264);
+  --sidebar-accent:             oklch(0.19 0.012 264);
   --sidebar-accent-foreground:  oklch(0.89 0.01 247);
-  --sidebar-border:             oklch(0.2 0.018 264);
+  --sidebar-border:             oklch(0.22 0.012 264);
   --sidebar-ring:               oklch(0.65 0.18 259);
 }
 
@@ -233,11 +233,11 @@
 
   /* ── Table styles ─────────────────────────────────────────────────────── */
   .data-table thead th {
-    @apply text-left px-6 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted border-y border-border;
+    @apply text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted border-y border-border;
     letter-spacing: 0.5px;
   }
   .data-table tbody td {
-    @apply px-6 py-3.5 text-sm border-b border-border/60 align-middle;
+    @apply px-3 py-2 text-sm border-b border-border/60 align-middle;
   }
   .data-table tbody tr {
     @apply transition-colors duration-100;

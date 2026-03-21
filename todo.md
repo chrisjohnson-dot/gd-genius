@@ -283,3 +283,8 @@
 - [x] Add requiredShipDate column to order_tracking DB table
 - [x] Update Extensiv sync job to extract and store requiredShipDate from API response
 - [x] Display Required Ship Date column in Open Orders table with urgency styling
+- [x] Match sidebar/menu bar background colour to GD Genius logo background
+- [x] Show Send to Shipwell button at QC Complete stage (already implemented, confirmed working)
+- [x] Undo button already present on right side of each order row (confirmed working)
+- [x] Fix "Unallocated" label overflow in the summary stat boxes on Open Orders overview
+- [x] Shrink warehouse tab layout so everything fits on one page without horizontal scroll

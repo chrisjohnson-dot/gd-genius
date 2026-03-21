@@ -133,6 +133,7 @@ type TrackedOrder = {
   shipwellZeroBidNotifiedAt: string | Date | null;
   shipwellSentAt: string | Date | null;
   shipwellStatusUpdatedAt: string | Date | null;
+  requiredShipDate: string | null;
 };
 
 type LaneThresholdEntry = {
@@ -205,6 +206,54 @@ function SendToShipwellButton({
         </>
       )}
     </Button>
+  );
+}
+
+// ─── Required ship date badge ───────────────────────────────────────────────
+function RequiredShipDateBadge({ dateStr }: { dateStr: string }) {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return <span className="text-muted-foreground text-xs">{dateStr}</span>;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  // Urgency tiers: overdue (red), today (orange), tomorrow (amber), within 3 days (yellow), future (muted)
+  let bg = "transparent";
+  let color = "#64748b"; // muted
+  let border = "transparent";
+  let title = `Required ship date: ${date.toLocaleDateString()}`;
+
+  if (diffDays < 0) {
+    bg = "#fef2f2"; color = "#b91c1c"; border = "#fecaca";
+    title = `OVERDUE by ${Math.abs(diffDays)}d — required ship date was ${date.toLocaleDateString()}`;
+  } else if (diffDays === 0) {
+    bg = "#fff7ed"; color = "#c2410c"; border = "#fed7aa";
+    title = `Ships TODAY — ${date.toLocaleDateString()}`;
+  } else if (diffDays === 1) {
+    bg = "#fffbeb"; color = "#b45309"; border = "#fde68a";
+    title = `Ships TOMORROW — ${date.toLocaleDateString()}`;
+  } else if (diffDays <= 3) {
+    bg = "#fefce8"; color = "#a16207"; border = "#fef08a";
+    title = `Ships in ${diffDays} days — ${date.toLocaleDateString()}`;
+  } else {
+    title = `Ships in ${diffDays} days — ${date.toLocaleDateString()}`;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center text-[10px] font-semibold rounded px-1.5 py-0.5 whitespace-nowrap"
+      style={{ background: bg, color, border: `1px solid ${border}` }}
+      title={title}
+    >
+      {diffDays < 0 && <AlertTriangle className="h-2.5 w-2.5 mr-0.5 shrink-0" />}
+      {label}
+      {diffDays < 0 && <span className="ml-0.5 font-bold">({Math.abs(diffDays)}d late)</span>}
+    </span>
   );
 }
 
@@ -388,7 +437,7 @@ function AdvanceButton({
 }
 
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
-type SortKey = "clientName" | "referenceNum" | "ageDays" | "lifecycleStatus" | "totalPieces" | "shipToName" | "shipToCity" | "poNum";
+type SortKey = "clientName" | "referenceNum" | "ageDays" | "lifecycleStatus" | "totalPieces" | "shipToName" | "shipToCity" | "poNum" | "requiredShipDate";
 type SortDir = "asc" | "desc";
 const STATUS_RANK: Record<LifecycleStatus, number> = {
   unallocated: 0, allocated: 1, picking: 2, qc: 3, qc_complete: 4, ship_ready: 5,
@@ -591,6 +640,9 @@ function WarehouseCard({
         <th onClick={() => toggleSort("shipToCity")} className="cursor-pointer select-none">
           City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
         </th>
+        <th onClick={() => toggleSort("requiredShipDate")} className="cursor-pointer select-none">
+          Req. Ship <SortIcon col="requiredShipDate" sortKey={sortKey} sortDir={sortDir} />
+        </th>
         <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
           Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
         </th>
@@ -637,6 +689,13 @@ function WarehouseCard({
         </td>
         <td className="text-muted-foreground text-xs">
           {o.shipToCity ?? "—"}
+        </td>
+        <td className="text-xs whitespace-nowrap">
+          {o.requiredShipDate ? (
+            <RequiredShipDateBadge dateStr={o.requiredShipDate} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </td>
         <td className="text-muted-foreground text-xs text-right">
           {age === 0 ? "Today" : `${age}d`}

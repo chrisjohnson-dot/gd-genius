@@ -280,3 +280,6 @@
 - [x] Add tRPC procedures for lane threshold CRUD
 - [x] Add Lane Thresholds tab to Shipwell Settings page
 - [x] Update frontend warning logic to use per-lane threshold
+- [x] Add requiredShipDate column to order_tracking DB table
+- [x] Update Extensiv sync job to extract and store requiredShipDate from API response
+- [x] Display Required Ship Date column in Open Orders table with urgency styling

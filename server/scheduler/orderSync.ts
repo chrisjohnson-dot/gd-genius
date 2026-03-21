@@ -96,6 +96,7 @@ export async function syncOrdersNow(): Promise<{
                     notes: (oRaw.notes as string | null) ?? null,
                     extensivStatus: o.readOnly.status ?? 0,
                     creationDate: o.readOnly.creationDate ?? null,
+                    requiredShipDate: o.earliestShipDate ?? (oRaw.earliestShipDate as string | null) ?? null,
                   });
                 }
               } catch (err) {

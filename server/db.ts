@@ -394,6 +394,7 @@ export async function upsertTrackedOrders(
     notes: string | null;
     extensivStatus: number;
     creationDate: string | null;
+    requiredShipDate?: string | null;
   }>,
   configId: number,
   facilityId: number
@@ -431,6 +432,7 @@ export async function upsertTrackedOrders(
           notes: o.notes ?? undefined,
           extensivStatus: o.extensivStatus,
           creationDate: o.creationDate ?? undefined,
+          requiredShipDate: o.requiredShipDate ?? undefined,
           lastSyncedAt: now,
         })
         .where(eq(orderTracking.extensivOrderId, o.extensivOrderId));
@@ -453,6 +455,7 @@ export async function upsertTrackedOrders(
         notes: o.notes ?? undefined,
         extensivStatus: o.extensivStatus,
         creationDate: o.creationDate ?? undefined,
+        requiredShipDate: o.requiredShipDate ?? undefined,
         lifecycleStatus: "unallocated",
         firstSeenAt: now,
         lastSyncedAt: now,

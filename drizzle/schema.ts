@@ -187,6 +187,7 @@ export const orderTracking = mysqlTable("order_tracking", {
   notes: text("notes"),
   extensivStatus: int("extensivStatus").default(0),           // raw Extensiv status code
   creationDate: varchar("creationDate", { length: 64 }),      // ISO string from Extensiv
+  requiredShipDate: varchar("requiredShipDate", { length: 64 }), // earliestShipDate from Extensiv (ISO string)
   // Lifecycle status managed by GD Genius
   lifecycleStatus: mysqlEnum("lifecycleStatus", [
     "unallocated",

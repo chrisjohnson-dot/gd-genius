@@ -37,6 +37,8 @@ export interface ExtensivOrder {
   referenceNum: string;
   poNum?: string;
   notes?: string;
+  /** Earliest date the order should ship (from Extensiv earliestShipDate field) */
+  earliestShipDate?: string;
   /** Ship-to address — populated when detail=all is requested */
   shipTo?: {
     companyName?: string;

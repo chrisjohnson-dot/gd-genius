@@ -127,6 +127,13 @@
       "when": 1774131419002,
       "tag": "0017_aspiring_wolverine",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1774132395620,
+      "tag": "0018_goofy_warstar",
+      "breakpoints": true
     }
   ]
 }

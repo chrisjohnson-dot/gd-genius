@@ -1,5 +1,6 @@
 /**
  * Tests for the overdue order morning alert scheduler.
+ * Covers: basic behaviour, suppression, escalation, error paths, and content.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -7,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("./db", () => ({
   getOverdueUnallocatedOrders: vi.fn(),
   markOverdueAlertSent: vi.fn().mockResolvedValue(undefined),
+  getAlertTime: vi.fn().mockResolvedValue({ hour: 7, minute: 0 }),
 }));
 
 // ─── Mock notification module ─────────────────────────────────────────────────
@@ -16,22 +18,23 @@ vi.mock("./_core/notification", () => ({
 
 import { getOverdueUnallocatedOrders, markOverdueAlertSent } from "./db";
 import { notifyOwner } from "./_core/notification";
-import { sendOverdueAlertNow } from "./scheduler/overdueAlert";
+import {
+  sendOverdueAlertNow,
+  alreadyNotifiedToday,
+  isEscalated,
+  daysSinceLastAlert,
+  ESCALATION_THRESHOLD_DAYS,
+} from "./scheduler/overdueAlert";
 
 // Typed mock helpers
 const mockGetOverdue = getOverdueUnallocatedOrders as ReturnType<typeof vi.fn>;
 const mockMarkSent = markOverdueAlertSent as ReturnType<typeof vi.fn>;
 const mockNotify = notifyOwner as ReturnType<typeof vi.fn>;
 
-/** Returns a "YYYY-MM-DD" string for today (same logic as the scheduler). */
-function todayStr(): string {
-  return new Date().toLocaleDateString("en-CA");
-}
-
-/** Returns a Date representing yesterday. */
-function yesterday(): Date {
+/** Returns a Date N calendar days ago. */
+function daysAgo(n: number): Date {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
+  d.setDate(d.getDate() - n);
   return d;
 }
 
@@ -85,10 +88,58 @@ function makeOrder(overrides: Partial<{
   };
 }
 
+// ─── Unit tests for helper functions ─────────────────────────────────────────
+
+describe("alreadyNotifiedToday", () => {
+  it("returns false for null", () => {
+    expect(alreadyNotifiedToday(null)).toBe(false);
+  });
+  it("returns true when lastSentAt is today", () => {
+    expect(alreadyNotifiedToday(new Date())).toBe(true);
+  });
+  it("returns false when lastSentAt is yesterday", () => {
+    expect(alreadyNotifiedToday(daysAgo(1))).toBe(false);
+  });
+});
+
+describe("daysSinceLastAlert", () => {
+  it("returns null for null input", () => {
+    expect(daysSinceLastAlert(null)).toBeNull();
+  });
+  it("returns 0 for today", () => {
+    expect(daysSinceLastAlert(new Date())).toBe(0);
+  });
+  it("returns 1 for yesterday", () => {
+    expect(daysSinceLastAlert(daysAgo(1))).toBe(1);
+  });
+  it(`returns ${ESCALATION_THRESHOLD_DAYS} for ${ESCALATION_THRESHOLD_DAYS} days ago`, () => {
+    expect(daysSinceLastAlert(daysAgo(ESCALATION_THRESHOLD_DAYS))).toBe(ESCALATION_THRESHOLD_DAYS);
+  });
+});
+
+describe("isEscalated", () => {
+  it("returns false for null (never notified)", () => {
+    expect(isEscalated(null)).toBe(false);
+  });
+  it("returns false when notified today", () => {
+    expect(isEscalated(new Date())).toBe(false);
+  });
+  it("returns false when notified 1 day ago (below threshold)", () => {
+    expect(isEscalated(daysAgo(1))).toBe(false);
+  });
+  it(`returns true when notified exactly ${ESCALATION_THRESHOLD_DAYS} days ago`, () => {
+    expect(isEscalated(daysAgo(ESCALATION_THRESHOLD_DAYS))).toBe(true);
+  });
+  it("returns true when notified 5 days ago", () => {
+    expect(isEscalated(daysAgo(5))).toBe(true);
+  });
+});
+
+// ─── Integration tests for sendOverdueAlertNow ───────────────────────────────
+
 describe("sendOverdueAlertNow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: markOverdueAlertSent resolves cleanly
     mockMarkSent.mockResolvedValue(undefined);
   });
 
@@ -102,6 +153,7 @@ describe("sendOverdueAlertNow", () => {
     expect(result.success).toBe(true);
     expect(result.overdueCount).toBe(0);
     expect(result.suppressedCount).toBe(0);
+    expect(result.escalatedCount).toBe(0);
     expect(mockNotify).not.toHaveBeenCalled();
   });
 
@@ -115,6 +167,7 @@ describe("sendOverdueAlertNow", () => {
     expect(result.success).toBe(true);
     expect(result.overdueCount).toBe(1);
     expect(result.suppressedCount).toBe(0);
+    expect(result.escalatedCount).toBe(0);
     expect(mockNotify).toHaveBeenCalledOnce();
 
     const [payload] = mockNotify.mock.calls[0];
@@ -177,7 +230,7 @@ describe("sendOverdueAlertNow", () => {
     const notifiedYesterday = makeOrder({
       extensivOrderId: 1001,
       referenceNum: "REF-YESTERDAY",
-      lastOverdueAlertSentAt: yesterday(),
+      lastOverdueAlertSentAt: daysAgo(1),
     });
     mockGetOverdue.mockResolvedValueOnce([notifiedYesterday]);
     mockNotify.mockResolvedValueOnce(true);
@@ -190,7 +243,7 @@ describe("sendOverdueAlertNow", () => {
     expect(content).toContain("REF-YESTERDAY");
   });
 
-  it("skips notification entirely when ALL overdue orders were already notified today", async () => {
+  it("skips notification entirely when ALL overdue orders were already notified today (and none are escalated)", async () => {
     const orders = [
       makeOrder({ extensivOrderId: 1001, lastOverdueAlertSentAt: new Date() }),
       makeOrder({ extensivOrderId: 1002, lastOverdueAlertSentAt: new Date() }),
@@ -202,6 +255,7 @@ describe("sendOverdueAlertNow", () => {
     expect(result.success).toBe(true);
     expect(result.overdueCount).toBe(0);
     expect(result.suppressedCount).toBe(2);
+    expect(result.escalatedCount).toBe(0);
     expect(mockNotify).not.toHaveBeenCalled();
     expect(mockMarkSent).not.toHaveBeenCalled();
   });
@@ -215,8 +269,129 @@ describe("sendOverdueAlertNow", () => {
     await sendOverdueAlertNow();
 
     const content: string = mockNotify.mock.calls[0][0].content;
-    // Should mention the suppressed count in the footer note
     expect(content).toMatch(/1 additional order.*already notified today/i);
+  });
+
+  // ── Escalation logic ───────────────────────────────────────────────────────
+
+  it(`escalates orders notified exactly ${ESCALATION_THRESHOLD_DAYS} days ago`, async () => {
+    const escalated = makeOrder({
+      extensivOrderId: 2001,
+      referenceNum: "REF-ESCALATED",
+      lastOverdueAlertSentAt: daysAgo(ESCALATION_THRESHOLD_DAYS),
+    });
+    mockGetOverdue.mockResolvedValueOnce([escalated]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.escalatedCount).toBe(1);
+    expect(result.overdueCount).toBe(1);
+    expect(result.suppressedCount).toBe(0);
+
+    const content: string = mockNotify.mock.calls[0][0].content;
+    expect(content).toContain("REF-ESCALATED");
+    expect(content).toContain("ESCALATED");
+  });
+
+  it("escalates orders notified 5 days ago", async () => {
+    const escalated = makeOrder({
+      extensivOrderId: 2002,
+      referenceNum: "REF-OLD",
+      lastOverdueAlertSentAt: daysAgo(5),
+    });
+    mockGetOverdue.mockResolvedValueOnce([escalated]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.escalatedCount).toBe(1);
+    const content: string = mockNotify.mock.calls[0][0].content;
+    expect(content).toContain("ESCALATED");
+  });
+
+  it("does NOT escalate orders notified only 1 day ago", async () => {
+    const recent = makeOrder({
+      extensivOrderId: 2003,
+      referenceNum: "REF-RECENT",
+      lastOverdueAlertSentAt: daysAgo(1),
+    });
+    mockGetOverdue.mockResolvedValueOnce([recent]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.escalatedCount).toBe(0);
+    const content: string = mockNotify.mock.calls[0][0].content;
+    expect(content).not.toContain("ESCALATED");
+  });
+
+  it("sends notification even when all orders are escalated (bypasses today-suppression)", async () => {
+    // Both orders were notified today BUT are also escalated (edge case: clock skew or test)
+    // In practice escalated means 2+ days ago, so this tests that escalated always wins
+    const escalated = makeOrder({
+      extensivOrderId: 3001,
+      referenceNum: "REF-ESC-TODAY",
+      lastOverdueAlertSentAt: daysAgo(ESCALATION_THRESHOLD_DAYS),
+    });
+    mockGetOverdue.mockResolvedValueOnce([escalated]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.escalatedCount).toBe(1);
+    expect(result.overdueCount).toBe(1);
+    expect(mockNotify).toHaveBeenCalledOnce();
+  });
+
+  it("includes escalation header in notification when escalated orders are present", async () => {
+    const escalated = makeOrder({
+      extensivOrderId: 4001,
+      referenceNum: "REF-ESC",
+      lastOverdueAlertSentAt: daysAgo(3),
+    });
+    mockGetOverdue.mockResolvedValueOnce([escalated]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    await sendOverdueAlertNow();
+
+    const content: string = mockNotify.mock.calls[0][0].content;
+    // Should include the escalation callout block
+    expect(content).toMatch(/immediate action required/i);
+  });
+
+  it("includes escalated count in notification title when escalated orders are present", async () => {
+    const escalated = makeOrder({
+      extensivOrderId: 4002,
+      referenceNum: "REF-ESC-TITLE",
+      lastOverdueAlertSentAt: daysAgo(4),
+    });
+    mockGetOverdue.mockResolvedValueOnce([escalated]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    await sendOverdueAlertNow();
+
+    const title: string = mockNotify.mock.calls[0][0].title;
+    expect(title).toContain("Escalated");
+  });
+
+  it("correctly separates escalated, fresh, and suppressed orders in a mixed batch", async () => {
+    const escalated = makeOrder({ extensivOrderId: 5001, referenceNum: "REF-ESC", lastOverdueAlertSentAt: daysAgo(3) });
+    const fresh = makeOrder({ extensivOrderId: 5002, referenceNum: "REF-FRESH", lastOverdueAlertSentAt: null });
+    const suppressed = makeOrder({ extensivOrderId: 5003, referenceNum: "REF-SUPP", lastOverdueAlertSentAt: new Date() });
+    mockGetOverdue.mockResolvedValueOnce([escalated, fresh, suppressed]);
+    mockNotify.mockResolvedValueOnce(true);
+
+    const result = await sendOverdueAlertNow();
+
+    expect(result.escalatedCount).toBe(1);
+    expect(result.overdueCount).toBe(2); // escalated + fresh
+    expect(result.suppressedCount).toBe(1);
+
+    const content: string = mockNotify.mock.calls[0][0].content;
+    expect(content).toContain("REF-ESC");
+    expect(content).toContain("REF-FRESH");
+    expect(content).not.toContain("REF-SUPP");
   });
 
   // ── Error paths ────────────────────────────────────────────────────────────

@@ -310,3 +310,5 @@
 - [x] Add dismissZeroBidWarning DB helper to reset shipwellZeroBidNotifiedAt
 - [x] Add tRPC pickSchedule.dismissZeroBidWarning mutation
 - [x] Add Dismiss Warning button to zero-bid order rows in the Open Orders table
+- [x] Update overdueAlert scheduler to re-include orders suppressed 2+ days with Escalated marker
+- [x] Update overdueAlert tests to cover escalation logic

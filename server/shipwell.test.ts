@@ -305,3 +305,61 @@ describe("ShipwellClient.getBidCount", () => {
     expect(count).toBe(0);
   });
 });
+
+// ─── Zero-bid alert threshold logic tests ────────────────────────────────────
+
+describe("Zero-bid alert threshold logic", () => {
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+  it("should trigger alert when 0 bids and quoting for exactly 2 hours", () => {
+    const quotingStarted = new Date(Date.now() - TWO_HOURS_MS);
+    const alreadyNotified = false;
+    const bidCount = 0;
+    const quotingAgeMs = Date.now() - quotingStarted.getTime();
+    const shouldAlert = !alreadyNotified && bidCount === 0 && quotingAgeMs >= TWO_HOURS_MS;
+    expect(shouldAlert).toBe(true);
+  });
+
+  it("should NOT trigger alert when 0 bids but quoting for less than 2 hours", () => {
+    const quotingStarted = new Date(Date.now() - (TWO_HOURS_MS - 60_000)); // 1h 59m
+    const alreadyNotified = false;
+    const bidCount = 0;
+    const quotingAgeMs = Date.now() - quotingStarted.getTime();
+    const shouldAlert = !alreadyNotified && bidCount === 0 && quotingAgeMs >= TWO_HOURS_MS;
+    expect(shouldAlert).toBe(false);
+  });
+
+  it("should NOT trigger alert when bids > 0 even after 2 hours", () => {
+    const quotingStarted = new Date(Date.now() - (TWO_HOURS_MS + 30 * 60_000)); // 2h 30m
+    const alreadyNotified = false;
+    const bidCount = 3;
+    const quotingAgeMs = Date.now() - quotingStarted.getTime();
+    const shouldAlert = !alreadyNotified && bidCount === 0 && quotingAgeMs >= TWO_HOURS_MS;
+    expect(shouldAlert).toBe(false);
+  });
+
+  it("should NOT trigger alert when already notified", () => {
+    const quotingStarted = new Date(Date.now() - (TWO_HOURS_MS + 60_000)); // 2h 1m
+    const alreadyNotified = true;
+    const bidCount = 0;
+    const quotingAgeMs = Date.now() - quotingStarted.getTime();
+    const shouldAlert = !alreadyNotified && bidCount === 0 && quotingAgeMs >= TWO_HOURS_MS;
+    expect(shouldAlert).toBe(false);
+  });
+
+  it("should NOT trigger alert when quotingStartedAt is null (just entered quoting)", () => {
+    const quotingStarted: Date | null = null;
+    const alreadyNotified = false;
+    const bidCount = 0;
+    const quotingAgeMs = quotingStarted ? Date.now() - quotingStarted.getTime() : 0;
+    const shouldAlert = !alreadyNotified && bidCount === 0 && quotingAgeMs >= TWO_HOURS_MS;
+    expect(shouldAlert).toBe(false);
+  });
+
+  it("calculates hoursInQuoting correctly for 3h 45m", () => {
+    const quotingStarted = new Date(Date.now() - (3 * 60 * 60 * 1000 + 45 * 60_000));
+    const quotingAgeMs = Date.now() - quotingStarted.getTime();
+    const hoursInQuoting = Math.floor(quotingAgeMs / (60 * 60 * 1000));
+    expect(hoursInQuoting).toBe(3);
+  });
+});

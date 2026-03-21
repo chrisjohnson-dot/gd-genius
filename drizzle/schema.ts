@@ -205,6 +205,8 @@ export const orderTracking = mysqlTable("order_tracking", {
   shipwellShipmentUrl: varchar("shipwellShipmentUrl", { length: 512 }), // Deep link to Shipwell Shipment
   shipwellStatus: varchar("shipwellStatus", { length: 64 }),      // Live status from Shipwell: quoting, tendered, carrier_confirmed, in_transit, delivered
   shipwellBidCount: int("shipwellBidCount"),                       // Number of carrier bids when in Quoting status
+  shipwellQuotingStartedAt: timestamp("shipwellQuotingStartedAt"),  // When order first entered Quoting status
+  shipwellZeroBidNotifiedAt: timestamp("shipwellZeroBidNotifiedAt"), // When zero-bid alert was last sent (prevents duplicates)
   shipwellSentAt: timestamp("shipwellSentAt"),                    // When it was sent to Shipwell
   shipwellStatusUpdatedAt: timestamp("shipwellStatusUpdatedAt"),  // Last time status was polled
   // Timestamps for each stage transition

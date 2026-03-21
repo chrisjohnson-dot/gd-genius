@@ -270,3 +270,7 @@
 - [x] Add shipwellBidCount column to order_tracking DB
 - [x] Update status sync job to fetch and store bid count for Quoting orders
 - [x] Display bid count on Quoting badge in Open Orders UI
+- [x] Add shipwellQuotingStartedAt column to order_tracking DB
+- [x] Add shipwellZeroBidNotifiedAt column to prevent duplicate notifications
+- [x] Update sync job to record quotingStartedAt when order first enters Quoting status
+- [x] Fire owner notification when Quoting order has 0 bids for 2+ hours

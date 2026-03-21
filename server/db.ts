@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, isNotNull } from "drizzle-orm";
+import { eq, desc, and, gte, isNotNull, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -631,6 +631,36 @@ export async function getOrdersWithShipwellShipment(): Promise<OrderTracking[]> 
     .select()
     .from(orderTracking)
     .where(isNotNull(orderTracking.shipwellShipmentId));
+}
+
+/** Set shipwellQuotingStartedAt to now if not already set (first time order enters Quoting). */
+export async function setShipwellQuotingStartedAt(
+  extensivOrderId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Only set if not already set — we don't want to reset the clock on re-polls
+  await db
+    .update(orderTracking)
+    .set({ shipwellQuotingStartedAt: new Date() })
+    .where(
+      and(
+        eq(orderTracking.extensivOrderId, extensivOrderId),
+        isNull(orderTracking.shipwellQuotingStartedAt)
+      )
+    );
+}
+
+/** Record when the zero-bid alert was sent to prevent duplicate notifications. */
+export async function markZeroBidNotified(
+  extensivOrderId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(orderTracking)
+    .set({ shipwellZeroBidNotifiedAt: new Date() })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 }
 
 /** Delete an order from tracking (used when Shipwell marks it Delivered). */

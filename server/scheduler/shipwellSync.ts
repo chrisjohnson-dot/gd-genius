@@ -16,9 +16,12 @@ import {
   getOrdersWithShipwellShipment,
   updateShipwellStatus,
   updateShipwellBidCount,
+  setShipwellQuotingStartedAt,
+  markZeroBidNotified,
   removeTrackedOrder,
 } from "../db";
 import { createShipwellClient } from "../shipwell/api";
+import { notifyOwner } from "../_core/notification";
 
 let syncRunning = false;
 let lastSyncAt: Date | null = null;
@@ -96,6 +99,44 @@ export async function syncShipwellStatusNow(): Promise<{
         if (newStatus === "quoting" && order.shipwellShipmentId) {
           const bidCount = await client.getBidCount(order.shipwellShipmentId);
           await updateShipwellBidCount(order.extensivOrderId, bidCount);
+
+          // Record when quoting started (only sets if not already set)
+          await setShipwellQuotingStartedAt(order.extensivOrderId);
+
+          // Alert if 0 bids for more than 2 hours and we haven't already notified
+          if (bidCount === 0) {
+            const quotingStarted = order.shipwellQuotingStartedAt
+              ? new Date(order.shipwellQuotingStartedAt)
+              : null;
+            const alreadyNotified = !!order.shipwellZeroBidNotifiedAt;
+            const twoHoursMs = 2 * 60 * 60 * 1000;
+            const quotingAgeMs = quotingStarted
+              ? Date.now() - quotingStarted.getTime()
+              : 0;
+
+            if (!alreadyNotified && quotingAgeMs >= twoHoursMs) {
+              const orderLabel = order.referenceNum ?? String(order.extensivOrderId);
+              const clientLabel = order.clientName ?? "Unknown Client";
+              const warehouseLabel = order.facilityName ?? "Unknown Warehouse";
+              const hoursInQuoting = Math.floor(quotingAgeMs / (60 * 60 * 1000));
+
+              await notifyOwner({
+                title: `⚠️ Zero Bids Alert — Order ${orderLabel}`,
+                content: [
+                  `Order **${orderLabel}** for **${clientLabel}** (${warehouseLabel}) has been in Quoting status for **${hoursInQuoting} hours** with **0 carrier bids**.`,
+                  ``,
+                  `Please review the shipment in Shipwell and consider reaching out to carriers directly.`,
+                  ``,
+                  `Shipment link: ${order.shipwellShipmentUrl ?? order.shipwellPoUrl ?? "N/A"}`,
+                ].join("\n"),
+              });
+
+              await markZeroBidNotified(order.extensivOrderId);
+              console.log(
+                `[ShipwellSync] Zero-bid alert sent for order ${order.extensivOrderId} (${hoursInQuoting}h in quoting)`
+              );
+            }
+          }
         }
       }
     }

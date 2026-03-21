@@ -455,7 +455,7 @@ function WarehouseCard({
 }) {
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<LifecycleStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<LifecycleStatus | "all" | "needs_attention">("all");
   const [sortKey, setSortKey]           = useState<SortKey>("lifecycleStatus");
   const [sortDir, setSortDir]           = useState<SortDir>("asc");
   const [expanded, setExpanded]         = useState(drillDown);
@@ -466,6 +466,15 @@ function WarehouseCard({
     () => Array.from(new Map(facility.orders.map((o) => [o.clientId, o.clientName])).entries()),
     [facility.orders]
   );
+
+  // Helper: is this order showing the zero-bid warning?
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  const isZeroBidWarning = (o: TrackedOrder) => {
+    if (o.shipwellStatus !== "quoting") return false;
+    if ((o.shipwellBidCount ?? 0) > 0) return false;
+    const started = o.shipwellQuotingStartedAt ? new Date(o.shipwellQuotingStartedAt as string).getTime() : 0;
+    return started > 0 && (Date.now() - started) >= TWO_HOURS_MS;
+  };
 
   const filteredOrders = useMemo(() => {
     let rows = facility.orders;
@@ -482,7 +491,8 @@ function WarehouseCard({
       );
     }
     if (clientFilter !== "all") rows = rows.filter((o) => String(o.clientId) === clientFilter);
-    if (statusFilter !== "all") rows = rows.filter((o) => o.lifecycleStatus === statusFilter);
+    if (statusFilter === "needs_attention") rows = rows.filter((o) => isZeroBidWarning(o));
+    else if (statusFilter !== "all") rows = rows.filter((o) => o.lifecycleStatus === statusFilter);
     return [...rows].sort((a, b) => {
       let cmp = 0;
       if (sortKey === "ageDays")            cmp = getAgeDays(a) - getAgeDays(b);
@@ -523,6 +533,12 @@ function WarehouseCard({
     for (const o of facility.orders) c[o.lifecycleStatus]++;
     return c;
   }, [facility.orders]);
+
+  const needsAttentionCount = useMemo(
+    () => facility.orders.filter((o) => isZeroBidWarning(o)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [facility.orders]
+  );
 
   const hasUrgent = facility.orders.some((o) => getAgeDays(o) >= 7);
   const hasHigh   = !hasUrgent && facility.orders.some((o) => getAgeDays(o) >= 3);
@@ -713,6 +729,24 @@ function WarehouseCard({
                   <p className="text-[8px] mt-0.5 font-medium uppercase tracking-wide" style={{ color: cfg.text }}>{cfg.label}</p>
                 </div>
               ))}
+              {needsAttentionCount > 0 && (
+                <div
+                  className="rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-opacity"
+                  style={{
+                    background: statusFilter === "needs_attention" ? "#fff7ed" : "#fff7ed",
+                    borderColor: "#fed7aa",
+                    opacity: statusFilter === "needs_attention" ? 1 : statusFilter === "all" ? 1 : 0.45,
+                    outline: statusFilter === "needs_attention" ? "2px solid #ea580c" : "none",
+                  }}
+                  onClick={() => setStatusFilter((f) => (f === "needs_attention" ? "all" : "needs_attention"))}
+                  title="Orders in Quoting with zero bids for 2+ hours"
+                >
+                  <p className="text-[15px] font-extrabold leading-none text-orange-600 flex items-center justify-center gap-0.5">
+                    <AlertTriangle className="h-3 w-3" />{needsAttentionCount}
+                  </p>
+                  <p className="text-[8px] mt-0.5 font-medium uppercase tracking-wide text-orange-600">Attention</p>
+                </div>
+              )}
             </div>
             <Button
               variant="outline"
@@ -962,11 +996,11 @@ function WarehouseCard({
         </div>
 
         {/* Lifecycle KPI row */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <div className="flex flex-wrap gap-2">
           {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
             <div
               key={status}
-              className="rounded-xl px-3 py-2.5 text-center border cursor-pointer transition-opacity"
+              className="rounded-xl px-3 py-2.5 text-center border cursor-pointer transition-opacity flex-1 min-w-[80px]"
               style={{ background: cfg.bg, borderColor: cfg.border, opacity: statusFilter === status ? 1 : statusFilter === "all" ? 1 : 0.45 }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -978,6 +1012,28 @@ function WarehouseCard({
               <p className="text-[9px] mt-1 font-medium uppercase tracking-wide" style={{ color: cfg.text }}>{cfg.label}</p>
             </div>
           ))}
+          {needsAttentionCount > 0 && (
+            <div
+              className="rounded-xl px-3 py-2.5 text-center border cursor-pointer transition-opacity flex-1 min-w-[80px]"
+              style={{
+                background: "#fff7ed",
+                borderColor: statusFilter === "needs_attention" ? "#ea580c" : "#fed7aa",
+                opacity: statusFilter === "needs_attention" ? 1 : statusFilter === "all" ? 1 : 0.45,
+                outline: statusFilter === "needs_attention" ? "2px solid #ea580c" : "none",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setStatusFilter((f) => (f === "needs_attention" ? "all" : "needs_attention"));
+                if (!expanded) setExpanded(true);
+              }}
+              title="Orders in Quoting with zero bids for 2+ hours"
+            >
+              <p className="text-[18px] font-extrabold leading-none text-orange-600 flex items-center justify-center gap-1">
+                <AlertTriangle className="h-4 w-4" />{needsAttentionCount}
+              </p>
+              <p className="text-[9px] mt-1 font-medium uppercase tracking-wide text-orange-600">Attention</p>
+            </div>
+          )}
         </div>
       </div>
 

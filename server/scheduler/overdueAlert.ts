@@ -1,31 +1,28 @@
 /**
  * Overdue Order Morning Alert Scheduler
  *
- * Fires every day at 7:00 AM (server local time) and sends the owner a
- * notification listing all unallocated orders whose Required Ship Date has
- * already passed.
+ * Fires every day at a configurable time (default 07:00, stored in alert_settings)
+ * and sends the owner a notification listing all unallocated orders whose Required
+ * Ship Date has already passed.
  *
- * Alert suppression: each order is only included in the notification once per
- * calendar day. If `lastOverdueAlertSentAt` is already set to today's date the
- * order is skipped. After a successful notification the timestamp is stamped on
- * every included order so they won't appear again until tomorrow.
+ * Alert suppression: each order is only included once per calendar day.
  *
- * Also exports `sendOverdueAlertNow()` for manual on-demand triggering
- * (used by the tRPC test-trigger procedure).
+ * Exports:
+ *  - sendOverdueAlertNow()       — manual on-demand trigger (tRPC test button)
+ *  - startOverdueAlertScheduler() — call once at server startup
+ *  - rescheduleOverdueAlert()    — call after the user changes the alert time
  */
 
-import cron from "node-cron";
-import { getOverdueUnallocatedOrders, markOverdueAlertSent } from "../db";
+import cron, { ScheduledTask } from "node-cron";
+import { getOverdueUnallocatedOrders, markOverdueAlertSent, getAlertTime } from "../db";
 import { notifyOwner } from "../_core/notification";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Returns "YYYY-MM-DD" in the server's local timezone. */
 function todayDateStr(): string {
-  return new Date().toLocaleDateString("en-CA"); // always YYYY-MM-DD
+  return new Date().toLocaleDateString("en-CA");
 }
 
-/** True when the order was already alerted today. */
 function alreadyNotifiedToday(lastSentAt: Date | null | undefined): boolean {
   if (!lastSentAt) return false;
   return new Date(lastSentAt).toLocaleDateString("en-CA") === todayDateStr();
@@ -48,7 +45,6 @@ export async function sendOverdueAlertNow(): Promise<{
     return { success: false, overdueCount: 0, suppressedCount: 0, message: "DB query failed" };
   }
 
-  // ── Suppression filter ────────────────────────────────────────────────────
   const suppressedOrders = allOverdue.filter((o) => alreadyNotifiedToday(o.lastOverdueAlertSentAt));
   const orders = allOverdue.filter((o) => !alreadyNotifiedToday(o.lastOverdueAlertSentAt));
   const suppressedCount = suppressedOrders.length;
@@ -65,10 +61,7 @@ export async function sendOverdueAlertNow(): Promise<{
     return { success: true, overdueCount: 0, suppressedCount, message: msg };
   }
 
-  // ── Build notification ────────────────────────────────────────────────────
   const today = todayDateStr();
-
-  // Group by facility for a cleaner message
   const byFacility = new Map<string, typeof orders>();
   for (const o of orders) {
     const key = o.facilityName ?? `Facility #${o.facilityId}`;
@@ -85,9 +78,7 @@ export async function sendOverdueAlertNow(): Promise<{
     for (const o of facilityOrders) {
       const ref = o.referenceNum ?? `#${o.extensivOrderId}`;
       const shipDate = o.requiredShipDate?.slice(0, 10) ?? "unknown";
-      const daysLate = Math.floor(
-        (Date.now() - new Date(shipDate).getTime()) / 86_400_000
-      );
+      const daysLate = Math.floor((Date.now() - new Date(shipDate).getTime()) / 86_400_000);
       const client = o.clientName ?? "Unknown client";
       const dest = [o.shipToName, o.shipToCity].filter(Boolean).join(", ") || "—";
       lines.push(`  • ${ref} | ${client} → ${dest} | Ship date: ${shipDate} (${daysLate}d overdue)`);
@@ -105,11 +96,9 @@ export async function sendOverdueAlertNow(): Promise<{
   const content = lines.join("\n");
   const title = `⚠️ ${orders.length} Overdue Unallocated Order${orders.length !== 1 ? "s" : ""} — ${today}`;
 
-  // ── Send notification ─────────────────────────────────────────────────────
   try {
     const sent = await notifyOwner({ title, content });
     if (sent) {
-      // Stamp all notified orders so they won't fire again today
       const ids = orders.map((o) => o.extensivOrderId);
       await markOverdueAlertSent(ids);
       console.log(`[OverdueAlert] Notification sent — ${orders.length} orders notified, ${suppressedCount} suppressed.`);
@@ -120,7 +109,7 @@ export async function sendOverdueAlertNow(): Promise<{
         message: `Notified: ${orders.length} overdue orders (${suppressedCount} suppressed)`,
       };
     } else {
-      console.warn("[OverdueAlert] Notification service returned false — may be temporarily unavailable.");
+      console.warn("[OverdueAlert] Notification service returned false.");
       return { success: false, overdueCount: orders.length, suppressedCount, message: "Notification service unavailable" };
     }
   } catch (err) {
@@ -129,17 +118,42 @@ export async function sendOverdueAlertNow(): Promise<{
   }
 }
 
-// ─── Scheduler bootstrap ──────────────────────────────────────────────────────
+// ─── Dynamic scheduler ────────────────────────────────────────────────────────
+
+let _task: ScheduledTask | null = null;
+
+/** Build a cron expression for a given hour (0-23) and minute (0-59). */
+function buildCron(hour: number, minute: number): string {
+  return `${minute} ${hour} * * *`;
+}
 
 /**
- * Start the daily 7 AM overdue order alert cron job.
- * Call once at server startup.
+ * (Re)schedule the overdue alert cron job.
+ * Destroys the previous task if one exists, then creates a new one.
  */
-export function startOverdueAlertScheduler(): void {
-  // "0 7 * * *" = every day at 07:00 local server time
-  cron.schedule("0 7 * * *", async () => {
-    console.log("[OverdueAlert] Running daily 7 AM overdue order check…");
+export async function rescheduleOverdueAlert(): Promise<void> {
+  if (_task) {
+    _task.stop();
+    _task = null;
+  }
+
+  const { hour, minute } = await getAlertTime();
+  const expression = buildCron(hour, minute);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const timeStr = `${pad(hour)}:${pad(minute)}`;
+
+  _task = cron.schedule(expression, async () => {
+    console.log(`[OverdueAlert] Running daily ${timeStr} overdue order check…`);
     await sendOverdueAlertNow();
   });
-  console.log("[OverdueAlert] Scheduler registered — fires daily at 07:00.");
+
+  console.log(`[OverdueAlert] Scheduler registered — fires daily at ${timeStr}.`);
+}
+
+/**
+ * Start the overdue alert scheduler at server startup.
+ * Reads the configured time from the DB (falls back to 07:00).
+ */
+export async function startOverdueAlertScheduler(): Promise<void> {
+  await rescheduleOverdueAlert();
 }

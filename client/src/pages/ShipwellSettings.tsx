@@ -320,6 +320,18 @@ function LaneThresholdsTab() {
 }
 
 // ─── Notifications Tab ───────────────────────────────────────────────────────
+// Hours for the time picker (0-23 mapped to display strings)
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
+  value: i,
+  label: `${String(i).padStart(2, "0")}:00`,
+}));
+
+// Common minute options (every 15 min)
+const MINUTE_OPTIONS = [0, 15, 30, 45].map((m) => ({
+  value: m,
+  label: String(m).padStart(2, "0"),
+}));
+
 function NotificationsTab() {
   const [alertResult, setAlertResult] = useState<{
     success: boolean;
@@ -328,6 +340,34 @@ function NotificationsTab() {
     message: string;
   } | null>(null);
 
+  // ── Alert time state ────────────────────────────────────────────────────────
+  const { data: alertTimeData, refetch: refetchAlertTime } = trpc.overdueAlert.getAlertTime.useQuery();
+  const [selectedHour, setSelectedHour] = useState<number>(7);
+  const [selectedMinute, setSelectedMinute] = useState<number>(0);
+  const [timeInitialized, setTimeInitialized] = useState(false);
+
+  if (alertTimeData && !timeInitialized) {
+    setSelectedHour(alertTimeData.hour);
+    setSelectedMinute(alertTimeData.minute);
+    setTimeInitialized(true);
+  }
+
+  const saveAlertTime = trpc.overdueAlert.setAlertTime.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Alert time updated to ${data.time}. Scheduler rescheduled.`);
+      refetchAlertTime();
+    },
+    onError: (err) => toast.error(`Failed to save alert time: ${err.message}`),
+  });
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const currentTimeStr = alertTimeData
+    ? `${pad(alertTimeData.hour)}:${pad(alertTimeData.minute)}`
+    : "07:00";
+  const pendingTimeStr = `${pad(selectedHour)}:${pad(selectedMinute)}`;
+  const isDirty = pendingTimeStr !== currentTimeStr;
+
+  // ── Test alert state ────────────────────────────────────────────────────────
   const triggerAlert = trpc.overdueAlert.triggerNow.useMutation({
     onSuccess: (data) => {
       setAlertResult(data);
@@ -347,13 +387,71 @@ function NotificationsTab() {
 
   return (
     <div className="space-y-6">
+      {/* ── Alert Schedule Card ── */}
       <Card>
         <CardHeader>
-          <CardTitle>Overdue Order Morning Alert</CardTitle>
+          <CardTitle>Alert Schedule</CardTitle>
           <CardDescription>
-            The system automatically sends an owner notification at <strong>7:00 AM</strong> each day listing all
-            unallocated orders whose Required Ship Date has passed. Each order is only included once per calendar
-            day (alert suppression). Use the button below to trigger a test run immediately.
+            Set the time the overdue order notification fires each day. The scheduler updates immediately — no restart required.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="space-y-2">
+              <Label htmlFor="alert-hour">Hour</Label>
+              <Select
+                value={String(selectedHour)}
+                onValueChange={(v) => setSelectedHour(Number(v))}
+              >
+                <SelectTrigger id="alert-hour" className="w-[110px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {HOUR_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="alert-minute">Minute</Label>
+              <Select
+                value={String(selectedMinute)}
+                onValueChange={(v) => setSelectedMinute(Number(v))}
+              >
+                <SelectTrigger id="alert-minute" className="w-[90px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MINUTE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              onClick={() => saveAlertTime.mutate({ hour: selectedHour, minute: selectedMinute })}
+              disabled={saveAlertTime.isPending || !isDirty}
+              className="gap-2 mb-0.5"
+            >
+              {saveAlertTime.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Time
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Currently scheduled: <span className="font-medium text-foreground">{currentTimeStr}</span> daily
+            {isDirty && <span className="text-amber-500 ml-2">(unsaved: {pendingTimeStr})</span>}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ── Test Alert Card ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Send Test Alert</CardTitle>
+          <CardDescription>
+            Trigger the overdue order alert immediately to verify the notification arrives. Each order is only
+            included once per calendar day (alert suppression applies).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -415,7 +513,7 @@ function NotificationsTab() {
               <p className="text-xs opacity-80">
                 Each overdue order is notified at most once per calendar day. If an order was already included in
                 today's alert it will be skipped on subsequent runs (including manual test runs) until midnight.
-                Orders that become overdue after the 7 AM run will appear in the next morning's alert.
+                Orders that become overdue after the scheduled run will appear in the next day's alert.
               </p>
             </div>
           </div>

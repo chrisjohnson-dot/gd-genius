@@ -35,6 +35,7 @@ import {
   laneThresholds,
   LaneThreshold,
   InsertLaneThreshold,
+  alertSettings,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -947,4 +948,35 @@ export async function markOverdueAlertSent(extensivOrderIds: number[]): Promise<
         .where(eq(orderTracking.extensivOrderId, id));
     }
   }
+}
+
+// ─── Alert Settings ──────────────────────────────────────────────────────────
+
+const DEFAULT_ALERT_HOUR = 7;
+const DEFAULT_ALERT_MINUTE = 0;
+
+/** Returns the configured overdue-alert time as { hour, minute } (24-hour). Falls back to 07:00. */
+export async function getAlertTime(): Promise<{ hour: number; minute: number }> {
+  const db = await getDb();
+  if (!db) return { hour: DEFAULT_ALERT_HOUR, minute: DEFAULT_ALERT_MINUTE };
+  const rows = await db
+    .select()
+    .from(alertSettings)
+    .where(eq(alertSettings.key, "overdue_alert_time"));
+  if (!rows.length) return { hour: DEFAULT_ALERT_HOUR, minute: DEFAULT_ALERT_MINUTE };
+  const [h, m] = rows[0].value.split(":").map(Number);
+  const hour = Number.isFinite(h) && h >= 0 && h <= 23 ? h : DEFAULT_ALERT_HOUR;
+  const minute = Number.isFinite(m) && m >= 0 && m <= 59 ? m : DEFAULT_ALERT_MINUTE;
+  return { hour, minute };
+}
+
+/** Persists the overdue-alert time. Accepts hour (0-23) and minute (0-59). */
+export async function setAlertTime(hour: number, minute: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const value = `${hour}:${String(minute).padStart(2, "0")}`;
+  await db
+    .insert(alertSettings)
+    .values({ key: "overdue_alert_time", value })
+    .onDuplicateKeyUpdate({ set: { value } });
 }

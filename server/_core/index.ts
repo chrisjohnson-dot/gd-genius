@@ -72,8 +72,8 @@ async function startServer() {
     startOrderSyncScheduler();
     // Initialize Shipwell status sync scheduler (every 15 min)
     startShipwellSyncScheduler();
-    // Initialize daily 7 AM overdue order alert
-    startOverdueAlertScheduler();
+    // Initialize daily overdue order alert (time read from DB)
+    startOverdueAlertScheduler().catch((err) => console.error("[OverdueAlert] Init failed:", err));
   });
 }
 

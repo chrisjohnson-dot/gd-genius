@@ -48,9 +48,11 @@ import {
   updateLaneThreshold,
   deleteLaneThreshold,
   getAttentionCount,
+  getAlertTime,
+  setAlertTime,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
-import { sendOverdueAlertNow } from "./scheduler/overdueAlert";
+import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
@@ -2113,6 +2115,26 @@ export const overdueAlertRouter = router({
     const result = await sendOverdueAlertNow();
     return result;
   }),
+
+  /** Get the currently configured alert time. */
+  getAlertTime: protectedProcedure.query(async () => {
+    return getAlertTime();
+  }),
+
+  /** Save a new alert time and reschedule the cron job immediately. */
+  setAlertTime: protectedProcedure
+    .input(
+      z.object({
+        hour: z.number().int().min(0).max(23),
+        minute: z.number().int().min(0).max(59),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await setAlertTime(input.hour, input.minute);
+      await rescheduleOverdueAlert();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return { success: true, time: `${pad(input.hour)}:${pad(input.minute)}` };
+    }),
 });
 
 // Extend _appRouter with laneThresholds and overdueAlert (defined after to avoid hoisting issue)

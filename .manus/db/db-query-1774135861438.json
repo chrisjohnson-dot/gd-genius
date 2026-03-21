@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `alert_settings` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`key` varchar(64) NOT NULL,\n\t`value` text NOT NULL,\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `alert_settings_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `alert_settings_key_unique` UNIQUE(`key`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `alert_settings` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`key` varchar(64) NOT NULL,\n\t`value` text NOT NULL,\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `alert_settings_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `alert_settings_key_unique` UNIQUE(`key`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 526
+}

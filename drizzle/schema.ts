@@ -280,3 +280,13 @@ export const laneThresholds = mysqlTable("lane_thresholds", {
 });
 export type LaneThreshold = typeof laneThresholds.$inferSelect;
 export type InsertLaneThreshold = typeof laneThresholds.$inferInsert;
+
+// Configurable notification alert settings (singleton row, key=value store)
+export const alertSettings = mysqlTable("alert_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 64 }).notNull().unique(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AlertSetting = typeof alertSettings.$inferSelect;
+export type InsertAlertSetting = typeof alertSettings.$inferInsert;

@@ -303,3 +303,7 @@
 - [x] Add Test Alert button to Shipwell Settings page to trigger overdueAlert.triggerNow
 - [x] Return separate overdue/zeroBid counts from attentionCount tRPC procedure
 - [x] Add hover popover to sidebar badge showing overdue and zero-bid breakdown
+- [x] Add alert_settings table to DB schema for storing configurable alert time
+- [x] Add tRPC procedures for getAlertSettings and saveAlertSettings
+- [x] Update overdueAlert scheduler to read configured time from DB and reschedule dynamically
+- [x] Add time picker UI to Notifications tab in Shipwell Settings

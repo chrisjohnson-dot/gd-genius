@@ -265,3 +265,8 @@
 - [x] Add background status-sync job polling Shipwell every 15 min
 - [x] Auto-remove orders from Open Orders when Shipwell status = Delivered
 - [x] Show live Shipwell status badge on Open Orders rows
+- [x] Research Shipwell bids API endpoint
+- [x] Add getBidCount method to Shipwell API client
+- [x] Add shipwellBidCount column to order_tracking DB
+- [x] Update status sync job to fetch and store bid count for Quoting orders
+- [x] Display bid count on Quoting badge in Open Orders UI

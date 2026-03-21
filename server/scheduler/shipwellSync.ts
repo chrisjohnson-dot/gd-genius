@@ -15,6 +15,7 @@ import {
   getShipwellConfig,
   getOrdersWithShipwellShipment,
   updateShipwellStatus,
+  updateShipwellBidCount,
   removeTrackedOrder,
 } from "../db";
 import { createShipwellClient } from "../shipwell/api";
@@ -90,6 +91,11 @@ export async function syncShipwellStatusNow(): Promise<{
         if (newStatus !== order.shipwellStatus) {
           await updateShipwellStatus(order.extensivOrderId, newStatus);
           updated++;
+        }
+        // If the order is in Quoting status, fetch the current bid count
+        if (newStatus === "quoting" && order.shipwellShipmentId) {
+          const bidCount = await client.getBidCount(order.shipwellShipmentId);
+          await updateShipwellBidCount(order.extensivOrderId, bidCount);
         }
       }
     }

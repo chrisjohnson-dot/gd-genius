@@ -610,6 +610,19 @@ export async function updateShipwellStatus(
     .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 }
 
+/** Update the carrier bid count for a quoting order. */
+export async function updateShipwellBidCount(
+  extensivOrderId: number,
+  bidCount: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(orderTracking)
+    .set({ shipwellBidCount: bidCount })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+}
+
 /** Get all tracked orders that have a Shipwell Shipment ID (i.e., sent to Shipwell). */
 export async function getOrdersWithShipwellShipment(): Promise<OrderTracking[]> {
   const db = await getDb();

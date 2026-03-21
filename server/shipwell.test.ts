@@ -255,3 +255,53 @@ describe("ShipwellClient.batchGetShipmentStatuses", () => {
     expect(map.get("s-fail")?.isDelivered).toBe(false);
   });
 });
+
+// ─── getBidCount ──────────────────────────────────────────────────────────────
+describe("ShipwellClient.getBidCount", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns total_count from the carrier-bids endpoint", async () => {
+    const http = getMockHttp();
+    http.post.mockResolvedValueOnce({ data: { token: "tok_bids", api_key: null } });
+    http.get.mockResolvedValueOnce({
+      data: { page_size: 1, results: [], total_count: 5, total_pages: 1 },
+    });
+
+    const client = new ShipwellClient("test@example.com", "secret", "sandbox");
+    const count = await client.getBidCount("ship-uuid-123");
+
+    expect(count).toBe(5);
+    expect(http.get).toHaveBeenCalledWith(
+      "/v2/quoting/carrier-bids/",
+      expect.objectContaining({
+        params: { shipment_id: "ship-uuid-123", "page-size": 1 },
+      })
+    );
+  });
+
+  it("returns 0 when total_count is 0", async () => {
+    const http = getMockHttp();
+    http.post.mockResolvedValueOnce({ data: { token: "tok_zero", api_key: null } });
+    http.get.mockResolvedValueOnce({
+      data: { page_size: 1, results: [], total_count: 0, total_pages: 0 },
+    });
+
+    const client = new ShipwellClient("test@example.com", "secret", "sandbox");
+    const count = await client.getBidCount("ship-no-bids");
+
+    expect(count).toBe(0);
+  });
+
+  it("returns 0 without throwing when the API call fails", async () => {
+    const http = getMockHttp();
+    http.post.mockResolvedValueOnce({ data: { token: "tok_fail", api_key: null } });
+    http.get.mockRejectedValueOnce(new Error("Network error"));
+
+    const client = new ShipwellClient("test@example.com", "secret", "sandbox");
+    const count = await client.getBidCount("ship-error");
+
+    expect(count).toBe(0);
+  });
+});

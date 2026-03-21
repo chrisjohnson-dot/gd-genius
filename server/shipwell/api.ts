@@ -190,6 +190,27 @@ export class ShipwellClient {
     return `https://${host}/shipments/${shipmentId}`;
   }
 
+  // ─── Carrier Bids ─────────────────────────────────────────────────────────
+
+  /**
+   * Get the number of carrier bids for a shipment.
+   * Uses GET /v2/quoting/carrier-bids/?shipment_id={uuid}&page-size=1
+   * and reads total_count from the paginated response.
+   * Returns 0 if the call fails (non-fatal).
+   */
+  async getBidCount(shipmentId: string): Promise<number> {
+    try {
+      const token = await this.authenticate();
+      const res = await this.http.get<{ total_count: number }>("/v2/quoting/carrier-bids/", {
+        headers: { Authorization: `Token ${token}` },
+        params: { shipment_id: shipmentId, "page-size": 1 },
+      });
+      return res.data.total_count ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
   /**
    * List all shipments with optional status filter.
    * Returns up to `limit` results (default 100).

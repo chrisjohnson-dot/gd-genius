@@ -670,6 +670,20 @@ export async function markZeroBidNotified(
     .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 }
 
+/**
+ * Dismiss the zero-bid warning for an order by clearing shipwellZeroBidNotifiedAt.
+ * This resets the notification clock so the alert can re-fire after the next
+ * threshold period if the order still has no bids.
+ */
+export async function dismissZeroBidWarning(extensivOrderId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(orderTracking)
+    .set({ shipwellZeroBidNotifiedAt: null })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+}
+
 /** Delete an order from tracking (used when Shipwell marks it Delivered). */
 export async function removeTrackedOrder(extensivOrderId: number): Promise<void> {
   const db = await getDb();

@@ -307,3 +307,6 @@
 - [x] Add tRPC procedures for getAlertSettings and saveAlertSettings
 - [x] Update overdueAlert scheduler to read configured time from DB and reschedule dynamically
 - [x] Add time picker UI to Notifications tab in Shipwell Settings
+- [x] Add dismissZeroBidWarning DB helper to reset shipwellZeroBidNotifiedAt
+- [x] Add tRPC pickSchedule.dismissZeroBidWarning mutation
+- [x] Add Dismiss Warning button to zero-bid order rows in the Open Orders table

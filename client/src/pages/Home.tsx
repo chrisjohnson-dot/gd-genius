@@ -35,6 +35,7 @@ import {
   Maximize2,
   Minimize2,
   ArrowLeft,
+  BellOff,
 } from "lucide-react";
 import {
   Dialog,
@@ -494,10 +495,51 @@ function UndoButton({ order, onUndone }: { order: TrackedOrder; onUndone: () => 
     </button>
   );
 }
+// ─── Dismiss zero-bid warning button ────────────────────────────────────────
+function DismissWarningButton({
+  order,
+  onDismissed,
+}: {
+  order: TrackedOrder;
+  onDismissed: () => void;
+}) {
+  const utils = trpc.useUtils();
 
-// ─── Per-warehouse card ───────────────────────────────────────────────────────
-function WarehouseCard({
-  facility,
+  // Only show when the order is in Shipwell quoting with zero bids and a notification was sent
+  const isQuoting = order.shipwellStatus === "quoting";
+  const bidCount = order.shipwellBidCount ?? 0;
+  const wasNotified = !!order.shipwellZeroBidNotifiedAt;
+
+  if (!isQuoting || bidCount > 0 || !wasNotified) return null;
+
+  const dismiss = trpc.pickSchedule.dismissZeroBidWarning.useMutation({
+    onSuccess: () => {
+      utils.pickSchedule.list.invalidate();
+      onDismissed();
+      toast.success("Warning dismissed — clock reset. Alert will re-fire after the next threshold period.");
+    },
+    onError: (err) => toast.error(`Failed to dismiss warning: ${err.message}`),
+  });
+
+  return (
+    <button
+      disabled={dismiss.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        dismiss.mutate({ extensivOrderId: order.extensivOrderId });
+      }}
+      title="Dismiss zero-bid warning — resets the notification clock after manual outreach"
+      className="inline-flex items-center justify-center h-6 w-6 rounded text-orange-500 hover:text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-40"
+    >
+      {dismiss.isPending
+        ? <RefreshCw className="h-3 w-3 animate-spin" />
+        : <BellOff className="h-3 w-3" />}
+    </button>
+  );
+}
+
+// ─── Per-warehouse card ─────────────────────────────────────────────────────────
+function WarehouseCard({  facility,
   onStatusChanged,
   fullScreen = false,
   onClose,
@@ -732,7 +774,10 @@ function WarehouseCard({
           <div className="flex items-center justify-end gap-1">
             {/* Send to Shipwell appears at QC Complete stage; live status badge for orders already in Shipwell */}
             {o.shipwellShipmentId ? (
-              <ShipwellStatusBadge order={o} thresholdHours={resolveThreshold(o.facilityName ?? null)} />
+              <>
+                <ShipwellStatusBadge order={o} thresholdHours={resolveThreshold(o.facilityName ?? null)} />
+                <DismissWarningButton order={o} onDismissed={onStatusChanged} />
+              </>
             ) : o.lifecycleStatus === "qc_complete" ? (
               o.shipwellOrderId ? (
                 <a

@@ -50,6 +50,7 @@ import {
   getAttentionCount,
   getAlertTime,
   setAlertTime,
+  dismissZeroBidWarning,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
@@ -1840,6 +1841,21 @@ const _appRouter = router({
     attentionCount: publicProcedure.query(async () => {
       return getAttentionCount();
     }),
+
+    /** Reset the zero-bid notification clock for an order after manual outreach. */
+    dismissZeroBidWarning: protectedProcedure
+      .input(z.object({ extensivOrderId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await dismissZeroBidWarning(input.extensivOrderId);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "pickSchedule.dismissZeroBidWarning",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: { extensivOrderId: input.extensivOrderId },
+        });
+        return { success: true };
+      }),
 
     syncNow: protectedProcedure.mutation(async ({ ctx }) => {
       await createAuditLog({

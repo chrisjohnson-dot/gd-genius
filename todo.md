@@ -289,3 +289,7 @@
 - [x] Fix "Unallocated" label overflow in the summary stat boxes on Open Orders overview
 - [x] Shrink warehouse tab layout so everything fits on one page without horizontal scroll
 - [x] Shorten "QC Complete" display label to "QC Done" in full-screen stat boxes
+- [x] Add getOverdueUnallocatedOrders DB helper
+- [x] Build overdueAlertScheduler that fires at 7 AM daily
+- [x] Add tRPC procedure to manually trigger the alert for testing
+- [x] Write unit tests for the overdue alert logic

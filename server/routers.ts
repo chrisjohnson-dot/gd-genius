@@ -49,6 +49,7 @@ import {
   deleteLaneThreshold,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
+import { sendOverdueAlertNow } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
@@ -2099,10 +2100,20 @@ export const laneThresholdRouter = router({
     }),
 });
 
-// Extend _appRouter with laneThresholds (defined after to avoid hoisting issue)
+// ─── Overdue Alert router ────────────────────────────────────────────────────
+export const overdueAlertRouter = router({
+  /** Manually trigger the overdue order morning alert (for testing). */
+  triggerNow: protectedProcedure.mutation(async () => {
+    const result = await sendOverdueAlertNow();
+    return result;
+  }),
+});
+
+// Extend _appRouter with laneThresholds and overdueAlert (defined after to avoid hoisting issue)
 export const appRouter = router({
   ..._appRouter._def.record,
   laneThresholds: laneThresholdRouter,
+  overdueAlert: overdueAlertRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -848,3 +848,33 @@ export async function resolveZeroBidThreshold(facilityCode: string | null): Prom
   const global = rows.find((r: LaneThreshold) => !r.facilityCode);
   return global?.thresholdHours ?? DEFAULT_ZERO_BID_HOURS;
 }
+
+// ─── Overdue order alert ──────────────────────────────────────────────────────
+
+/**
+ * Returns all unallocated orders whose requiredShipDate is before today (UTC).
+ * Used by the morning alert scheduler.
+ */
+export async function getOverdueUnallocatedOrders(): Promise<OrderTracking[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Fetch all unallocated orders that have a requiredShipDate set
+  const rows = await db
+    .select()
+    .from(orderTracking)
+    .where(
+      and(
+        eq(orderTracking.lifecycleStatus, "unallocated"),
+        isNotNull(orderTracking.requiredShipDate)
+      )
+    )
+    .orderBy(orderTracking.requiredShipDate);
+
+  // Filter in JS: requiredShipDate is stored as an ISO date string (YYYY-MM-DD or full ISO)
+  const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  return rows.filter((o) => {
+    const d = o.requiredShipDate?.slice(0, 10);
+    return d !== undefined && d < todayStr;
+  });
+}

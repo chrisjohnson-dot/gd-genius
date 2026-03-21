@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { initScheduler } from "../scheduler/autoRun";
 import { startOrderSyncScheduler } from "../scheduler/orderSync";
 import { startShipwellSyncScheduler } from "../scheduler/shipwellSync";
+import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -71,6 +72,8 @@ async function startServer() {
     startOrderSyncScheduler();
     // Initialize Shipwell status sync scheduler (every 15 min)
     startShipwellSyncScheduler();
+    // Initialize daily 7 AM overdue order alert
+    startOverdueAlertScheduler();
   });
 }
 

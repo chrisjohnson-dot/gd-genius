@@ -47,6 +47,7 @@ import {
   createLaneThreshold,
   updateLaneThreshold,
   deleteLaneThreshold,
+  getAttentionCount,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow } from "./scheduler/overdueAlert";
@@ -1833,6 +1834,11 @@ const _appRouter = router({
       }),
 
     /** Manually trigger an immediate sync from Extensiv */
+    /** Returns the sidebar badge count: overdue unallocated + zero-bid orders. */
+    attentionCount: publicProcedure.query(async () => {
+      return getAttentionCount();
+    }),
+
     syncNow: protectedProcedure.mutation(async ({ ctx }) => {
       await createAuditLog({
         userId: ctx.user.id,

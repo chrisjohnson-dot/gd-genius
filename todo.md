@@ -293,3 +293,6 @@
 - [x] Build overdueAlertScheduler that fires at 7 AM daily
 - [x] Add tRPC procedure to manually trigger the alert for testing
 - [x] Write unit tests for the overdue alert logic
+- [x] Add getAttentionCount DB helper (overdue unallocated + zero-bid orders)
+- [x] Add tRPC pickSchedule.attentionCount query
+- [x] Wire red badge onto Open Orders sidebar nav item in AppLayout

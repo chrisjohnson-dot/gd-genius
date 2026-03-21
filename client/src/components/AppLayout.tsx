@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
+import { trpc } from "@/lib/trpc";
 import {
   BarChart3,
   CalendarClock,
@@ -29,8 +30,8 @@ import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 
 const dashboardItems = [
-  { href: "/",           label: "Open Orders",  icon: FolderOpen },
-  { href: "/sla-tracker",label: "SLA Tracker",  icon: Timer },
+  { href: "/",            label: "Open Orders",  icon: FolderOpen, badge: true },
+  { href: "/sla-tracker", label: "SLA Tracker",  icon: Timer },
 ];
 
 const allocationItems = [
@@ -52,17 +53,45 @@ const shippingItems = [
 ];
 
 const configItems = [
-  { href: "/settings",    label: "API Settings",       icon: Cog },
-  { href: "/locations",   label: "Location Config",    icon: MapPin },
-  { href: "/rules",       label: "Allocation Rules",   icon: ListChecks },
-  { href: "/schedule",    label: "Auto-Run Schedule",  icon: CalendarClock },
+  { href: "/settings",         label: "API Settings",       icon: Cog },
+  { href: "/locations",        label: "Location Config",    icon: MapPin },
+  { href: "/rules",            label: "Allocation Rules",   icon: ListChecks },
+  { href: "/schedule",         label: "Auto-Run Schedule",  icon: CalendarClock },
   { href: "/diagnostics",      label: "API Diagnostics",    icon: Stethoscope },
-  { href: "/shipwell-settings", label: "Shipwell Settings",  icon: Zap },
+  { href: "/shipwell-settings",label: "Shipwell Settings",  icon: Zap },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";
 
-function NavItem({ href, label, icon: Icon, active }: { href: string; label: string; icon: React.ElementType; active: boolean }) {
+// ─── Attention badge (small red pill) ────────────────────────────────────────
+
+function AttentionBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="ml-auto shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none"
+      title={`${count} order${count !== 1 ? "s" : ""} need attention`}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+// ─── NavItem ──────────────────────────────────────────────────────────────────
+
+function NavItem({
+  href,
+  label,
+  icon: Icon,
+  active,
+  badgeCount,
+}: {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  active: boolean;
+  badgeCount?: number;
+}) {
   return (
     <Link
       href={href}
@@ -75,15 +104,25 @@ function NavItem({ href, label, icon: Icon, active }: { href: string; label: str
     >
       {active && <span className="nav-active-indicator" />}
       <Icon className={cn("h-[18px] w-[18px] shrink-0", active ? "opacity-100" : "opacity-70")} />
-      <span>{label}</span>
+      <span className="flex-1 truncate">{label}</span>
+      {badgeCount !== undefined && <AttentionBadge count={badgeCount} />}
     </Link>
   );
 }
+
+// ─── AppLayout ────────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
+
+  // Poll the attention count every 60 seconds so the badge stays fresh
+  const { data: attentionData } = trpc.pickSchedule.attentionCount.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const attentionCount = attentionData?.total ?? 0;
 
   if (loading) {
     return (
@@ -144,7 +183,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </p>
             <div className="space-y-0.5">
               {dashboardItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
+                <NavItem
+                  key={item.href}
+                  {...item}
+                  active={location === item.href}
+                  badgeCount={item.badge ? attentionCount : undefined}
+                />
               ))}
             </div>
           </div>

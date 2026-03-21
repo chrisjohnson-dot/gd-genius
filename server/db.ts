@@ -878,3 +878,51 @@ export async function getOverdueUnallocatedOrders(): Promise<OrderTracking[]> {
     return d !== undefined && d < todayStr;
   });
 }
+
+/**
+ * Returns the total "needs attention" count for the sidebar badge:
+ *   - Unallocated orders whose requiredShipDate is before today (overdue)
+ *   - Orders in Shipwell Quoting status with zero bids for longer than their
+ *     configured threshold (zero-bid orders)
+ *
+ * Returns { overdueCount, zeroBidCount, total }.
+ */
+export async function getAttentionCount(): Promise<{
+  overdueCount: number;
+  zeroBidCount: number;
+  total: number;
+}> {
+  const db = await getDb();
+  if (!db) return { overdueCount: 0, zeroBidCount: 0, total: 0 };
+
+  // ── Overdue unallocated orders ────────────────────────────────────────────
+  const overdueRows = await getOverdueUnallocatedOrders();
+  const overdueCount = overdueRows.length;
+
+  // ── Zero-bid orders ───────────────────────────────────────────────────────
+  // Fetch all orders currently in Shipwell Quoting with zero bids and a
+  // quotingStartedAt timestamp, then check against the DEFAULT threshold.
+  // (We use the default here for a fast single query; per-lane precision is
+  //  only needed for the per-row badge in the table.)
+  const quotingRows = await db
+    .select()
+    .from(orderTracking)
+    .where(
+      and(
+        eq(orderTracking.shipwellStatus, "quoting"),
+        isNotNull(orderTracking.shipwellQuotingStartedAt)
+      )
+    );
+
+  const defaultThresholdMs = DEFAULT_ZERO_BID_HOURS * 60 * 60 * 1000;
+  const now = Date.now();
+  const zeroBidCount = quotingRows.filter((o) => {
+    const bids = o.shipwellBidCount ?? 0;
+    if (bids > 0) return false;
+    const startedAt = o.shipwellQuotingStartedAt;
+    if (!startedAt) return false;
+    return now - new Date(startedAt).getTime() >= defaultThresholdMs;
+  }).length;
+
+  return { overdueCount, zeroBidCount, total: overdueCount + zeroBidCount };
+}

@@ -25,6 +25,7 @@ import {
   Truck,
   Zap,
 } from "lucide-react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
@@ -63,16 +64,64 @@ const configItems = [
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";
 
-// ─── Attention badge (small red pill) ────────────────────────────────────────
+// ─── Attention badge with hover popover ──────────────────────────────────────
 
-function AttentionBadge({ count }: { count: number }) {
+function AttentionBadge({
+  count,
+  overdueCount,
+  zeroBidCount,
+}: {
+  count: number;
+  overdueCount: number;
+  zeroBidCount: number;
+}) {
+  const [hovered, setHovered] = useState(false);
   if (count <= 0) return null;
+
   return (
-    <span
-      className="ml-auto shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none"
-      title={`${count} order${count !== 1 ? "s" : ""} need attention`}
-    >
-      {count > 99 ? "99+" : count}
+    <span className="relative ml-auto shrink-0" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {/* Badge pill */}
+      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none cursor-default">
+        {count > 99 ? "99+" : count}
+      </span>
+
+      {/* Hover popover */}
+      {hovered && (
+        <div
+          className="absolute right-0 top-6 z-50 w-[190px] rounded-xl shadow-xl border border-white/10 overflow-hidden"
+          style={{ background: "#252830" }}
+        >
+          {/* Header */}
+          <div className="px-3 py-2 border-b border-white/10">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">Needs Attention</p>
+          </div>
+          {/* Rows */}
+          <div className="px-3 py-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] text-[#cbd5e1]">Overdue orders</span>
+              <span className={cn(
+                "text-[12px] font-bold tabular-nums",
+                overdueCount > 0 ? "text-red-400" : "text-[#64748b]"
+              )}>
+                {overdueCount}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] text-[#cbd5e1]">Zero-bid orders</span>
+              <span className={cn(
+                "text-[12px] font-bold tabular-nums",
+                zeroBidCount > 0 ? "text-orange-400" : "text-[#64748b]"
+              )}>
+                {zeroBidCount}
+              </span>
+            </div>
+          </div>
+          {/* Footer */}
+          <div className="px-3 py-1.5 border-t border-white/10">
+            <p className="text-[10px] text-[#64748b]">Click Open Orders to review</p>
+          </div>
+        </div>
+      )}
     </span>
   );
 }
@@ -84,13 +133,13 @@ function NavItem({
   label,
   icon: Icon,
   active,
-  badgeCount,
+  badgeData,
 }: {
   href: string;
   label: string;
   icon: React.ElementType;
   active: boolean;
-  badgeCount?: number;
+  badgeData?: { total: number; overdueCount: number; zeroBidCount: number };
 }) {
   return (
     <Link
@@ -105,7 +154,13 @@ function NavItem({
       {active && <span className="nav-active-indicator" />}
       <Icon className={cn("h-[18px] w-[18px] shrink-0", active ? "opacity-100" : "opacity-70")} />
       <span className="flex-1 truncate">{label}</span>
-      {badgeCount !== undefined && <AttentionBadge count={badgeCount} />}
+      {badgeData && (
+        <AttentionBadge
+          count={badgeData.total}
+          overdueCount={badgeData.overdueCount}
+          zeroBidCount={badgeData.zeroBidCount}
+        />
+      )}
     </Link>
   );
 }
@@ -122,7 +177,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  const attentionCount = attentionData?.total ?? 0;
+  const attentionBadge = attentionData
+    ? { total: attentionData.total, overdueCount: attentionData.overdueCount, zeroBidCount: attentionData.zeroBidCount }
+    : undefined;
 
   if (loading) {
     return (
@@ -187,7 +244,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   {...item}
                   active={location === item.href}
-                  badgeCount={item.badge ? attentionCount : undefined}
+                  badgeData={item.badge ? attentionBadge : undefined}
                 />
               ))}
             </div>

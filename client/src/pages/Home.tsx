@@ -129,6 +129,8 @@ type TrackedOrder = {
   shipwellShipmentUrl: string | null;
   shipwellStatus: string | null;
   shipwellBidCount: number | null;
+  shipwellQuotingStartedAt: string | Date | null;
+  shipwellZeroBidNotifiedAt: string | Date | null;
   shipwellSentAt: string | Date | null;
   shipwellStatusUpdatedAt: string | Date | null;
 };
@@ -213,6 +215,16 @@ function ShipwellStatusBadge({ order }: { order: TrackedOrder }) {
   const href = order.shipwellShipmentUrl ?? order.shipwellPoUrl ?? "#";
   const isQuoting = status === "quoting";
   const bidCount = order.shipwellBidCount ?? 0;
+
+  // Determine if zero-bid warning should show: quoting, 0 bids, 2+ hours since quoting started
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  const quotingStarted = order.shipwellQuotingStartedAt
+    ? new Date(order.shipwellQuotingStartedAt)
+    : null;
+  const quotingAgeMs = quotingStarted ? Date.now() - quotingStarted.getTime() : 0;
+  const showZeroBidWarning = isQuoting && bidCount === 0 && quotingAgeMs >= TWO_HOURS_MS;
+  const hoursInQuoting = quotingStarted ? Math.floor(quotingAgeMs / (60 * 60 * 1000)) : 0;
+
   return (
     <a
       href={href}
@@ -220,16 +232,28 @@ function ShipwellStatusBadge({ order }: { order: TrackedOrder }) {
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
       className="inline-flex items-center gap-1 text-[10px] font-bold rounded px-1.5 py-0.5 whitespace-nowrap hover:opacity-80 transition-opacity"
-      style={{ background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}
-      title={`Shipwell status: ${cfg.label}${isQuoting ? ` — ${bidCount} bid${bidCount !== 1 ? "s" : ""} received` : ""}${order.shipwellStatusUpdatedAt ? ` (updated ${new Date(order.shipwellStatusUpdatedAt).toLocaleString()})` : ""}`}
+      style={{
+        background: showZeroBidWarning ? "#fff7ed" : cfg.bg,
+        color: showZeroBidWarning ? "#c2410c" : cfg.text,
+        border: `1px solid ${showZeroBidWarning ? "#fed7aa" : cfg.border}`,
+      }}
+      title={
+        showZeroBidWarning
+          ? `⚠️ Zero bids for ${hoursInQuoting}h — action required`
+          : `Shipwell status: ${cfg.label}${isQuoting ? ` — ${bidCount} bid${bidCount !== 1 ? "s" : ""} received` : ""}${order.shipwellStatusUpdatedAt ? ` (updated ${new Date(order.shipwellStatusUpdatedAt).toLocaleString()})` : ""}`
+      }
     >
-      <ExternalLink className="h-2.5 w-2.5" />
+      {showZeroBidWarning ? (
+        <AlertTriangle className="h-2.5 w-2.5 text-orange-500" />
+      ) : (
+        <ExternalLink className="h-2.5 w-2.5" />
+      )}
       {cfg.label}
       {isQuoting && (
         <span
           className="ml-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-bold min-w-[16px] h-4 px-1"
           style={{
-            background: bidCount > 0 ? "#1d4ed8" : "#94a3b8",
+            background: showZeroBidWarning ? "#ea580c" : bidCount > 0 ? "#1d4ed8" : "#94a3b8",
             color: "#fff",
           }}
           title={`${bidCount} carrier bid${bidCount !== 1 ? "s" : ""} received`}

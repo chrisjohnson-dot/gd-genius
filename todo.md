@@ -274,3 +274,4 @@
 - [x] Add shipwellZeroBidNotifiedAt column to prevent duplicate notifications
 - [x] Update sync job to record quotingStartedAt when order first enters Quoting status
 - [x] Fire owner notification when Quoting order has 0 bids for 2+ hours
+- [x] Show warning icon on Quoting status pill when 0 bids for 2+ hours

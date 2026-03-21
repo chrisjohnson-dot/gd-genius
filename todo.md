@@ -260,3 +260,8 @@
 - [ ] Inline warehouse drill-down on Open Orders (replaces grid, Back button)
 - [ ] Inline warehouse drill-down on SLA Tracker (replaces grid, Back button)
 - [ ] Remove full-screen overlay mode (replaced by inline drill-down)
+- [x] Add shipwellStatus and shipwellShipmentId columns to order_tracking table
+- [x] Update Shipwell API client to create shipments and fetch live status
+- [x] Add background status-sync job polling Shipwell every 15 min
+- [x] Auto-remove orders from Open Orders when Shipwell status = Delivered
+- [x] Show live Shipwell status badge on Open Orders rows

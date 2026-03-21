@@ -1,11 +1,12 @@
 /**
  * Shipwell TMS API Client
  *
- * Handles authentication (token-based) and purchase order creation
- * for both sandbox and production environments.
+ * Handles authentication (token-based), purchase order creation,
+ * shipment creation, and live status polling.
  *
  * Docs: https://shipwell.redoc.ly/docs/get-connected/authentication/
- * PO:   https://shipwell.redoc.ly/openapi_pages/backend-core/tag/purchase-orders/paths/~1purchase-orders~1/post/
+ * PO:   https://shipwell.redoc.ly/openapi_pages/backend-core/tag/purchase-orders/
+ * Shipments: https://shipwell.redoc.ly/openapi_pages/backend-core/tag/shipments/
  */
 
 import axios, { type AxiosInstance } from "axios";
@@ -17,6 +18,29 @@ const BASE_URLS = {
 } as const;
 
 export type ShipwellEnvironment = keyof typeof BASE_URLS;
+
+// ─── Shipwell status values (normalized to lowercase) ─────────────────────────
+export type ShipwellShipmentStatus =
+  | "quoting"
+  | "tendered"
+  | "carrier_confirmed"
+  | "in_transit"
+  | "delivered"
+  | "cancelled"
+  | "unknown";
+
+/** Normalize raw Shipwell status strings to our canonical set */
+export function normalizeShipwellStatus(raw: string | null | undefined): ShipwellShipmentStatus {
+  if (!raw) return "unknown";
+  const s = raw.toLowerCase().replace(/[\s-]/g, "_");
+  if (s.includes("delivered")) return "delivered";
+  if (s.includes("in_transit") || s.includes("intransit") || s.includes("picked_up")) return "in_transit";
+  if (s.includes("carrier_confirmed") || s.includes("confirmed")) return "carrier_confirmed";
+  if (s.includes("tendered")) return "tendered";
+  if (s.includes("quoting") || s.includes("quote")) return "quoting";
+  if (s.includes("cancel")) return "cancelled";
+  return "unknown";
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ShipwellAddress {
@@ -60,6 +84,22 @@ export interface ShipwellPurchaseOrder {
   created_at?: string | null;
 }
 
+export interface ShipwellShipment {
+  id: string;
+  status?: string | null;
+  reference_id?: string | null;
+  customer_reference_number?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ShipwellShipmentStatusResult {
+  shipmentId: string;
+  rawStatus: string | null;
+  normalizedStatus: ShipwellShipmentStatus;
+  isDelivered: boolean;
+}
+
 // ─── Client class ─────────────────────────────────────────────────────────────
 export class ShipwellClient {
   private http: AxiosInstance;
@@ -82,7 +122,6 @@ export class ShipwellClient {
 
   /** Authenticate and cache the token. Tokens are valid for ~24h; we refresh after 23h. */
   async authenticate(): Promise<string> {
-    // Return cached token if still valid (with 5-minute buffer)
     if (this.token && this.tokenExpiresAt && this.tokenExpiresAt > new Date(Date.now() + 5 * 60_000)) {
       return this.token;
     }
@@ -93,7 +132,6 @@ export class ShipwellClient {
     });
 
     this.token = res.data.token;
-    // Shipwell tokens last ~24h; cache for 23h
     this.tokenExpiresAt = new Date(Date.now() + 23 * 60 * 60_000);
     return this.token;
   }
@@ -124,10 +162,90 @@ export class ShipwellClient {
 
   /** Get the deep-link URL to view the PO in Shipwell's web UI */
   getPoUrl(poId: string): string {
-    const host = this.environment === "production"
-      ? "app.shipwell.com"
-      : "sandbox.shipwell.com";
+    const host = this.environment === "production" ? "app.shipwell.com" : "sandbox.shipwell.com";
     return `https://${host}/purchase-orders/${poId}`;
+  }
+
+  // ─── Shipments ──────────────────────────────────────────────────────────────
+
+  /** Get a shipment by ID and return its live status */
+  async getShipmentStatus(shipmentId: string): Promise<ShipwellShipmentStatusResult> {
+    const token = await this.authenticate();
+    const res = await this.http.get<ShipwellShipment>(`/v2/shipments/${shipmentId}/`, {
+      headers: { Authorization: `Token ${token}` },
+    });
+    const rawStatus = res.data.status ?? null;
+    const normalizedStatus = normalizeShipwellStatus(rawStatus);
+    return {
+      shipmentId,
+      rawStatus,
+      normalizedStatus,
+      isDelivered: normalizedStatus === "delivered",
+    };
+  }
+
+  /** Get the deep-link URL to view a shipment in Shipwell's web UI */
+  getShipmentUrl(shipmentId: string): string {
+    const host = this.environment === "production" ? "app.shipwell.com" : "sandbox.shipwell.com";
+    return `https://${host}/shipments/${shipmentId}`;
+  }
+
+  /**
+   * List all shipments with optional status filter.
+   * Returns up to `limit` results (default 100).
+   */
+  async listShipments(opts?: {
+    status?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<{ results: ShipwellShipment[]; count: number }> {
+    const token = await this.authenticate();
+    const params: Record<string, string | number> = {
+      page_size: opts?.limit ?? 100,
+      page: opts?.page ?? 1,
+    };
+    if (opts?.status) params.status = opts.status;
+
+    const res = await this.http.get<{ results: ShipwellShipment[]; count: number }>("/v2/shipments/", {
+      headers: { Authorization: `Token ${token}` },
+      params,
+    });
+    return res.data;
+  }
+
+  /**
+   * Batch-poll status for multiple shipment IDs.
+   * Returns a map of shipmentId → status result.
+   */
+  async batchGetShipmentStatuses(
+    shipmentIds: string[]
+  ): Promise<Map<string, ShipwellShipmentStatusResult>> {
+    const results = new Map<string, ShipwellShipmentStatusResult>();
+    // Process in parallel with a concurrency limit of 5
+    const chunks: string[][] = [];
+    for (let i = 0; i < shipmentIds.length; i += 5) {
+      chunks.push(shipmentIds.slice(i, i + 5));
+    }
+    for (const chunk of chunks) {
+      const settled = await Promise.allSettled(
+        chunk.map((id) => this.getShipmentStatus(id))
+      );
+      for (let i = 0; i < chunk.length; i++) {
+        const result = settled[i];
+        if (result.status === "fulfilled") {
+          results.set(chunk[i], result.value);
+        } else {
+          // On error, mark as unknown so we don't remove the order
+          results.set(chunk[i], {
+            shipmentId: chunk[i],
+            rawStatus: null,
+            normalizedStatus: "unknown",
+            isDelivered: false,
+          });
+        }
+      }
+    }
+    return results;
   }
 }
 

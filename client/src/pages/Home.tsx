@@ -124,8 +124,12 @@ type TrackedOrder = {
   shipReadyAt: string | Date | null;
   assignedAssociate: string | null;
   shipwellOrderId: string | null;
+  shipwellShipmentId: string | null;
   shipwellPoUrl: string | null;
+  shipwellShipmentUrl: string | null;
+  shipwellStatus: string | null;
   shipwellSentAt: string | Date | null;
+  shipwellStatusUpdatedAt: string | Date | null;
 };
 
 type FacilityGroup = {
@@ -189,6 +193,36 @@ function SendToShipwellButton({
         </>
       )}
     </Button>
+  );
+}
+
+// ─── Shipwell live status badge ─────────────────────────────────────────────
+const SHIPWELL_STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; border: string }> = {
+  quoting:           { label: "Quoting",          bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe" },
+  tendered:          { label: "Tendered",         bg: "#fefce8", text: "#a16207", border: "#fde68a" },
+  carrier_confirmed: { label: "Carrier Confirmed",bg: "#f0fdf4", text: "#15803d", border: "#bbf7d0" },
+  in_transit:        { label: "In Transit",       bg: "#f0fdf4", text: "#166534", border: "#86efac" },
+  cancelled:         { label: "Cancelled",        bg: "#fef2f2", text: "#b91c1c", border: "#fecaca" },
+  unknown:           { label: "In Shipwell",      bg: "#f8fafc", text: "#475569", border: "#e2e8f0" },
+};
+
+function ShipwellStatusBadge({ order }: { order: TrackedOrder }) {
+  const status = order.shipwellStatus ?? "unknown";
+  const cfg = SHIPWELL_STATUS_CONFIG[status] ?? SHIPWELL_STATUS_CONFIG.unknown;
+  const href = order.shipwellShipmentUrl ?? order.shipwellPoUrl ?? "#";
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex items-center gap-1 text-[10px] font-bold rounded px-1.5 py-0.5 whitespace-nowrap hover:opacity-80 transition-opacity"
+      style={{ background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}
+      title={`Shipwell status: ${cfg.label}${order.shipwellStatusUpdatedAt ? ` (updated ${new Date(order.shipwellStatusUpdatedAt).toLocaleString()})` : ""}`}
+    >
+      <ExternalLink className="h-2.5 w-2.5" />
+      {cfg.label}
+    </a>
   );
 }
 
@@ -559,8 +593,10 @@ function WarehouseCard({
         </td>
         <td className="text-right">
           <div className="flex items-center justify-end gap-1">
-            {/* Send to Shipwell appears at QC Complete stage */}
-            {o.lifecycleStatus === "qc_complete" && (
+            {/* Send to Shipwell appears at QC Complete stage; live status badge for orders already in Shipwell */}
+            {o.shipwellShipmentId ? (
+              <ShipwellStatusBadge order={o} />
+            ) : o.lifecycleStatus === "qc_complete" ? (
               o.shipwellOrderId ? (
                 <a
                   href={o.shipwellPoUrl ?? "#"}
@@ -576,7 +612,7 @@ function WarehouseCard({
               ) : (
                 <SendToShipwellButton order={o} onSent={onStatusChanged} />
               )
-            )}
+            ) : null}
             <AdvanceButton order={o} onAdvanced={onStatusChanged} />
             <UndoButton order={o} onUndone={onStatusChanged} />
           </div>

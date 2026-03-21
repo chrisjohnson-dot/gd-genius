@@ -1,4 +1,4 @@
-import { eq, desc, and, gte } from "drizzle-orm";
+import { eq, desc, and, gte, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -575,11 +575,13 @@ export async function updateShipwellToken(token: string, expiresAt: Date): Promi
     .where(eq(shipwellConfigs.isActive, true));
 }
 
-/** Mark an order as sent to Shipwell — store the PO ID, URL, and timestamp. */
+/** Mark an order as sent to Shipwell — store the PO ID, URL, and optional Shipment ID. */
 export async function markOrderSentToShipwell(
   extensivOrderId: number,
   shipwellOrderId: string,
-  shipwellPoUrl: string
+  shipwellPoUrl: string,
+  shipwellShipmentId?: string,
+  shipwellShipmentUrl?: string
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -589,7 +591,41 @@ export async function markOrderSentToShipwell(
       shipwellOrderId,
       shipwellPoUrl,
       shipwellSentAt: new Date(),
+      ...(shipwellShipmentId ? { shipwellShipmentId } : {}),
+      ...(shipwellShipmentUrl ? { shipwellShipmentUrl } : {}),
     })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+}
+
+/** Update the live Shipwell status on an order row. */
+export async function updateShipwellStatus(
+  extensivOrderId: number,
+  shipwellStatus: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(orderTracking)
+    .set({ shipwellStatus, shipwellStatusUpdatedAt: new Date() })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+}
+
+/** Get all tracked orders that have a Shipwell Shipment ID (i.e., sent to Shipwell). */
+export async function getOrdersWithShipwellShipment(): Promise<OrderTracking[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(orderTracking)
+    .where(isNotNull(orderTracking.shipwellShipmentId));
+}
+
+/** Delete an order from tracking (used when Shipwell marks it Delivered). */
+export async function removeTrackedOrder(extensivOrderId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(orderTracking)
     .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 }
 

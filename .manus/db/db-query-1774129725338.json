@@ -1,0 +1,9 @@
+{
+  "query": "\nALTER TABLE `order_tracking` ADD `shipwellShipmentId` varchar(64);\nALTER TABLE `order_tracking` ADD `shipwellShipmentUrl` varchar(512);\nALTER TABLE `order_tracking` ADD `shipwellStatus` varchar(64);\nALTER TABLE `order_tracking` ADD `shipwellStatusUpdatedAt` timestamp;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nALTER TABLE `order_tracking` ADD `shipwellShipmentId` varchar(64);\nALTER TABLE `order_tracking` ADD `shipwellShipmentUrl` varchar(512);\nALTER TABLE `order_tracking` ADD `shipwellStatus` varchar(64);\nALTER TABLE `order_tracking` ADD `shipwellStatusUpdatedAt` timestamp;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 6353
+}

@@ -144,3 +144,114 @@ describe("createShipwellClient", () => {
     expect(client).toBeInstanceOf(ShipwellClient);
   });
 });
+
+// ─── normalizeShipwellStatus ──────────────────────────────────────────────────
+import { normalizeShipwellStatus } from "./shipwell/api";
+
+describe("normalizeShipwellStatus", () => {
+  it("maps 'DELIVERED' to 'delivered'", () => {
+    expect(normalizeShipwellStatus("DELIVERED")).toBe("delivered");
+  });
+
+  it("maps 'In Transit' to 'in_transit'", () => {
+    expect(normalizeShipwellStatus("In Transit")).toBe("in_transit");
+  });
+
+  it("maps 'CARRIER_CONFIRMED' to 'carrier_confirmed'", () => {
+    expect(normalizeShipwellStatus("CARRIER_CONFIRMED")).toBe("carrier_confirmed");
+  });
+
+  it("maps 'TENDERED' to 'tendered'", () => {
+    expect(normalizeShipwellStatus("TENDERED")).toBe("tendered");
+  });
+
+  it("maps 'quoting' to 'quoting'", () => {
+    expect(normalizeShipwellStatus("quoting")).toBe("quoting");
+  });
+
+  it("maps null to 'unknown'", () => {
+    expect(normalizeShipwellStatus(null)).toBe("unknown");
+  });
+
+  it("maps unknown string to 'unknown'", () => {
+    expect(normalizeShipwellStatus("SOME_WEIRD_STATUS")).toBe("unknown");
+  });
+});
+
+// ─── getShipmentStatus ────────────────────────────────────────────────────────
+describe("ShipwellClient.getShipmentStatus", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches shipment status and normalizes it", async () => {
+    const http = getMockHttp();
+    http.post.mockResolvedValueOnce({ data: { token: "tok_ship", api_key: null } });
+    http.get.mockResolvedValueOnce({ data: { id: "ship-123", status: "In Transit" } });
+
+    const client = new ShipwellClient("test@example.com", "secret", "sandbox");
+    const result = await client.getShipmentStatus("ship-123");
+
+    expect(result.shipmentId).toBe("ship-123");
+    expect(result.rawStatus).toBe("In Transit");
+    expect(result.normalizedStatus).toBe("in_transit");
+    expect(result.isDelivered).toBe(false);
+  });
+
+  it("returns isDelivered=true for DELIVERED status", async () => {
+    const http = getMockHttp();
+    http.post.mockResolvedValueOnce({ data: { token: "tok_del", api_key: null } });
+    http.get.mockResolvedValueOnce({ data: { id: "ship-456", status: "DELIVERED" } });
+
+    const client = new ShipwellClient("test@example.com", "secret", "sandbox");
+    const result = await client.getShipmentStatus("ship-456");
+
+    expect(result.isDelivered).toBe(true);
+    expect(result.normalizedStatus).toBe("delivered");
+  });
+
+  it("getShipmentUrl returns sandbox URL", () => {
+    const client = new ShipwellClient("a@b.com", "x", "sandbox");
+    expect(client.getShipmentUrl("ship-abc")).toBe("https://sandbox.shipwell.com/shipments/ship-abc");
+  });
+
+  it("getShipmentUrl returns production URL", () => {
+    const client = new ShipwellClient("a@b.com", "x", "production");
+    expect(client.getShipmentUrl("ship-abc")).toBe("https://app.shipwell.com/shipments/ship-abc");
+  });
+});
+
+// ─── batchGetShipmentStatuses ─────────────────────────────────────────────────
+describe("ShipwellClient.batchGetShipmentStatuses", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns a map with statuses for all shipment IDs", async () => {
+    const http = getMockHttp();
+    // auth token
+    http.post.mockResolvedValue({ data: { token: "tok_batch", api_key: null } });
+    // two shipment GET calls
+    http.get
+      .mockResolvedValueOnce({ data: { id: "s1", status: "TENDERED" } })
+      .mockResolvedValueOnce({ data: { id: "s2", status: "DELIVERED" } });
+
+    const client = new ShipwellClient("test@example.com", "secret", "sandbox");
+    const map = await client.batchGetShipmentStatuses(["s1", "s2"]);
+
+    expect(map.get("s1")?.normalizedStatus).toBe("tendered");
+    expect(map.get("s2")?.isDelivered).toBe(true);
+  });
+
+  it("marks failed shipment IDs as unknown without throwing", async () => {
+    const http = getMockHttp();
+    http.post.mockResolvedValue({ data: { token: "tok_err", api_key: null } });
+    http.get.mockRejectedValue(new Error("Network error"));
+
+    const client = new ShipwellClient("test@example.com", "secret", "sandbox");
+    const map = await client.batchGetShipmentStatuses(["s-fail"]);
+
+    expect(map.get("s-fail")?.normalizedStatus).toBe("unknown");
+    expect(map.get("s-fail")?.isDelivered).toBe(false);
+  });
+});

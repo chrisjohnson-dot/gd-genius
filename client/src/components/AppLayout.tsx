@@ -26,7 +26,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
@@ -173,6 +173,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const navRef = useRef<HTMLElement>(null);
+  const savedNavScroll = useRef(0);
+
+  // Save nav scroll position before navigation, restore after
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    // Restore saved scroll position after location change
+    nav.scrollTop = savedNavScroll.current;
+  }, [location]);
+
+  function handleNavScroll() {
+    if (navRef.current) {
+      savedNavScroll.current = navRef.current.scrollTop;
+    }
+  }
 
   // Poll the attention count every 60 seconds so the badge stays fresh
   const { data: attentionData } = trpc.pickSchedule.attentionCount.useQuery(undefined, {
@@ -225,7 +241,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6" }}>
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
-        className="w-[260px] shrink-0 flex flex-col"
+        className="w-[260px] shrink-0 flex flex-col h-full"
         style={{ background: "#1b1c21", position: "relative" }}
       >
         {/* Brand */}
@@ -234,7 +250,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
+        <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
           {/* Dashboard section */}
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">

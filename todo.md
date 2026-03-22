@@ -357,3 +357,4 @@
 - [x] Client Visibility: update Lock All Hidden to only lock, not change visibility
 - [x] Client Visibility: locked rows show a clickable lock icon to unlock; unlocked rows show an unlock icon to lock
 - [x] Client Visibility: 15 new unit tests for decoupled save/lock logic (203 tests total passing)
+- [x] Sidebar nav: clicking a menu item scrolls the main content area back to the top — fix so scroll position is held while navigating between sub-menu items

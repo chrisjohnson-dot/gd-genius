@@ -8,6 +8,12 @@ import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
 
+// Prevent the browser from auto-scrolling the sidebar (or any overflow container)
+// back to the top when SPA navigation fires a pushState event.
+if (typeof history !== 'undefined') {
+  history.scrollRestoration = 'manual';
+}
+
 const queryClient = new QueryClient();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {

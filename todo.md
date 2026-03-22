@@ -339,3 +339,4 @@
 - [x] SLA requirements table: list all clients pre-populated at 2 days with +/- one-day stepper buttons
 - [x] SLA sub-rules: per-client named rules (e.g. Labeling, B2B) with individual SLA day counts, expandable below each client row
 - [x] Store order savedElements from Extensiv API and match to SLA sub-rules automatically
+- [x] Replace Recent Allocation Runs section on Open Orders main page with per-client SLA breach summary table

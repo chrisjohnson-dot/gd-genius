@@ -36,6 +36,8 @@ import {
   Minimize2,
   ArrowLeft,
   BellOff,
+  TrendingUp,
+  AlertCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -1518,74 +1520,112 @@ export default function Home() {
           </div>
         )}
 
-        {/* Recent Allocation Runs (only on grid view) */}
-        {!isLoading && !selectedFacility && <RecentRunsSection />}
+        {/* SLA Breach Summary (only on grid view) */}
+        {!isLoading && !selectedFacility && <SlaBreachSummarySection />}
       </div>
     </AppLayout>
   );
 }
 
-// ─── Recent runs mini-table ───────────────────────────────────────────────────
-function RecentRunsSection() {
-  const { data: runs, isLoading } = trpc.allocation.history.useQuery({ limit: 5 });
-  if (isLoading || !runs || runs.length === 0) return null;
+// ─── SLA Breach Summary ───────────────────────────────────────────────────────
+function SlaBreachSummarySection() {
+  const { data: breachGroups, isLoading } = trpc.sla.clientBreachSummary.useQuery();
+
+  if (isLoading) {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertCircle className="h-4 w-4 text-red-500" />
+          <h3 className="text-[15px] font-bold">Orders Out of SLA</h3>
+        </div>
+        <div className="text-muted-foreground text-xs">Loading SLA data…</div>
+      </div>
+    );
+  }
+
+  if (!breachGroups || breachGroups.length === 0) {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertCircle className="h-4 w-4 text-red-500" />
+          <h3 className="text-[15px] font-bold">Orders Out of SLA</h3>
+        </div>
+        <div className="flex items-center gap-2 text-green-600 text-sm">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>All orders are within SLA — great work!</span>
+        </div>
+      </div>
+    );
+  }
+
+  const totalBreached = breachGroups.reduce((s, g) => s + g.breachCount, 0);
 
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-        <h3 className="text-[15px] font-bold">Recent Allocation Runs</h3>
-        <Link href="/history">
+    <div className="bg-card border-2 border-red-200 rounded-2xl overflow-hidden" style={{ boxShadow: "0 0 0 1px rgba(239,68,68,0.1), 0 4px 16px rgba(239,68,68,0.08)" }}>
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-red-50/40">
+        <div className="flex items-center gap-2.5">
+          <AlertCircle className="h-4.5 w-4.5 text-red-500" />
+          <h3 className="text-[15px] font-bold text-foreground">Orders Out of SLA</h3>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+            {totalBreached} order{totalBreached !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <Link href="/sla-tracker">
           <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs font-medium">
-            View All →
+            View SLA Tracker →
           </Button>
         </Link>
       </div>
+
+      {/* Table */}
       <table className="w-full data-table">
         <thead>
           <tr>
             <th>Client</th>
-            <th>Date</th>
-            <th>Allocated</th>
-            <th>Status</th>
-            <th></th>
+            <th>Warehouse</th>
+            <th className="text-center">Breached Orders</th>
+            <th className="text-right">Worst Overdue</th>
+            <th>Most Overdue Order</th>
+            <th>Stage</th>
           </tr>
         </thead>
         <tbody>
-          {runs.map((run) => (
-            <tr key={run.id}>
-              <td className="font-semibold text-foreground">
-                {run.customerName ?? `Customer ${run.customerId}`}
-              </td>
-              <td className="text-muted-foreground text-xs">
-                {new Date(run.createdAt).toLocaleString()}
-              </td>
-              <td className="text-muted-foreground">
-                {run.allocatedCount}/{run.orderCount} allocated
-              </td>
-              <td>
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
-                  style={{
-                    background: run.status === "confirmed" ? "#d1fae5" : run.status === "cancelled" ? "#fee2e2" : "#dbeafe",
-                    color: run.status === "confirmed" ? "#059669" : run.status === "cancelled" ? "#ef4444" : "#1d4ed8",
-                  }}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: run.status === "confirmed" ? "#059669" : run.status === "cancelled" ? "#ef4444" : "#3b82f6" }}
-                  />
-                  {run.status.charAt(0).toUpperCase() + run.status.slice(1)}
-                </span>
-              </td>
-              <td className="text-right">
-                <Link href={`/history/${run.id}`}>
-                  <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs">
-                    View
-                  </Button>
-                </Link>
-              </td>
-            </tr>
-          ))}
+          {breachGroups
+            .sort((a, b) => b.worstDaysOverdue - a.worstDaysOverdue)
+            .map((group) => {
+              const worst = group.orders[0];
+              return (
+                <tr key={group.clientId}>
+                  <td className="font-semibold text-foreground">{group.clientName}</td>
+                  <td className="text-muted-foreground text-xs">{group.facilityName ?? "—"}</td>
+                  <td className="text-center">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                      <TrendingUp className="h-2.5 w-2.5" />
+                      {group.breachCount}
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    <span className="text-red-600 font-bold text-xs">{group.worstDaysOverdue}d overdue</span>
+                  </td>
+                  <td className="text-muted-foreground font-mono text-xs">
+                    {worst?.referenceNum ?? (worst ? `#${worst.extensivOrderId}` : "—")}
+                    {worst?.requiredShipDate && (
+                      <span className="ml-1.5 text-[10px] text-muted-foreground/70">
+                        (req. {new Date(worst.requiredShipDate).toLocaleDateString()})
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {worst && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground capitalize">
+                        {worst.lifecycleStatus.replace("_", " ")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
         </tbody>
       </table>
     </div>

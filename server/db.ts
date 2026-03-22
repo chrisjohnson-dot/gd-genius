@@ -270,19 +270,38 @@ export async function createAuditLog(log: InsertAuditLog): Promise<void> {
   await db.insert(auditLogs).values(log);
 }
 
-export async function getAuditLogs(limit = 100, action?: string) {
+export async function getAuditLogs(
+  limit = 100,
+  action?: string,
+  userId?: number,
+) {
   const db = await getDb();
   if (!db) return [];
-  const query = db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
-  if (action) {
-    return db
-      .select()
-      .from(auditLogs)
-      .where(eq(auditLogs.action, action))
-      .orderBy(desc(auditLogs.createdAt))
-      .limit(limit);
-  }
-  return query;
+
+  // Build WHERE conditions
+  const conditions = [];
+  if (action) conditions.push(eq(auditLogs.action, action));
+  if (userId) conditions.push(eq(auditLogs.userId, userId));
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  return db
+    .select({
+      id: auditLogs.id,
+      userId: auditLogs.userId,
+      action: auditLogs.action,
+      entityType: auditLogs.entityType,
+      entityId: auditLogs.entityId,
+      details: auditLogs.details,
+      createdAt: auditLogs.createdAt,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(auditLogs)
+    .leftJoin(users, eq(auditLogs.userId, users.id))
+    .where(whereClause)
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
 }
 
 /** Return the distinct action values present in audit_logs for the filter dropdown. */
@@ -294,6 +313,22 @@ export async function getDistinctAuditActions(): Promise<string[]> {
     .from(auditLogs)
     .orderBy(auditLogs.action);
   return rows.map((r) => r.action);
+}
+
+/** Return users who have at least one audit log entry, for the user filter dropdown. */
+export async function getAuditLogUsers(): Promise<Array<{ id: number; name: string | null; email: string | null }>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(auditLogs)
+    .innerJoin(users, eq(auditLogs.userId, users.id))
+    .orderBy(users.name);
+  return rows;
 }
 
 // ─── Customer Rules ───────────────────────────────────────────────────────────

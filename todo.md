@@ -314,3 +314,6 @@
 - [x] Update overdueAlert tests to cover escalation logic
 - [x] Update auditLog.list tRPC procedure to accept optional action filter
 - [x] Add action type filter dropdown to Audit Log page UI
+- [x] Add getAuditLogUsers DB helper to get distinct users who appear in audit_logs
+- [x] Update audit.list tRPC procedure to accept optional userId filter
+- [x] Add user filter dropdown to Audit Log page UI alongside action filter

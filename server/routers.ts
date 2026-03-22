@@ -26,6 +26,7 @@ import {
   createAuditLog,
   getAuditLogs,
   getDistinctAuditActions,
+  getAuditLogUsers,
   getCustomerRules,
   getCustomerRule,
   upsertCustomerRule,
@@ -1579,13 +1580,21 @@ const _appRouter = router({
   // ─── Audit Logs ────────────────────────────────────────────────────────────
   audit: router({
     list: protectedProcedure
-      .input(z.object({ limit: z.number().default(200), action: z.string().optional() }))
+      .input(z.object({
+        limit: z.number().default(200),
+        action: z.string().optional(),
+        userId: z.number().optional(),
+      }))
       .query(async ({ input }) => {
-        return getAuditLogs(input.limit, input.action);
+        return getAuditLogs(input.limit, input.action, input.userId);
       }),
 
     distinctActions: protectedProcedure.query(async () => {
       return getDistinctAuditActions();
+    }),
+
+    users: protectedProcedure.query(async () => {
+      return getAuditLogUsers();
     }),
   }),
 

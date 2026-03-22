@@ -324,3 +324,5 @@
 - [x] Wire Open Orders (Home.tsx) to filter orders by visible clients
 - [x] Update pickSchedule.list tRPC procedure to filter out hidden clients using getHiddenClientIds
 - [x] Verify frontend KPI counts and warehouse cards automatically reflect filtered data
+- [x] Rewrite ClientVisibility page with per-warehouse tabs (one tab per extensiv config)
+- [x] Each tab shows its own independent client toggle list with search and bulk actions

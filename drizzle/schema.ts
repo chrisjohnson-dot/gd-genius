@@ -360,6 +360,11 @@ export const returnsSessions = mysqlTable("returns_sessions", {
   // Who created the session
   createdByName: varchar("createdByName", { length: 256 }),
   closedAt: timestamp("closedAt"),
+  // ClearSight push tracking
+  pushStatus: mysqlEnum("pushStatus", ["pending", "sent", "failed"]),
+  pushAttempts: int("pushAttempts").notNull().default(0),
+  pushError: text("pushError"),
+  lastPushedAt: timestamp("lastPushedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -14,6 +14,7 @@ import { startShipwellSyncScheduler } from "../scheduler/shipwellSync";
 import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 import { registerCortexRoutes } from "../cortex/routes";
 import { flushPendingWebhooks } from "../cortex/webhook";
+import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -80,6 +81,8 @@ async function startServer() {
     startOverdueAlertScheduler().catch((err) => console.error("[OverdueAlert] Init failed:", err));
     // Flush any pending Cortex webhooks every 5 minutes
     setInterval(() => flushPendingWebhooks(), 5 * 60 * 1000);
+    // Retry failed ClearSight webhook pushes with exponential backoff (1min, 5min, 15min)
+    startWebhookRetryScheduler();
   });
 }
 

@@ -1,6 +1,5 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   RotateCcw,
@@ -11,8 +10,12 @@ import {
   Plus,
   ArrowRight,
   Loader2,
+  Send,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react";
 import { Link } from "wouter";
+import { toast } from "sonner";
 
 type ReturnsSession = {
   id: number;
@@ -27,6 +30,9 @@ type ReturnsSession = {
   closedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  pushStatus?: "pending" | "sent" | "failed" | null;
+  pushAttempts?: number | null;
+  pushError?: string | null;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -75,7 +81,19 @@ function StatCard({
 }
 
 export default function ReturnsDashboard() {
+  const utils = trpc.useUtils();
   const { data: stats, isLoading } = trpc.returns.dashboardStats.useQuery();
+
+  const pushToClearSight = trpc.returns.pushSessionToClearSight.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Pushed to ClearSight — ${data.itemCount} item${data.itemCount !== 1 ? "s" : ""} sent.`);
+      utils.returns.dashboardStats.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Push failed: ${err.message}`);
+      utils.returns.dashboardStats.invalidate();
+    },
+  });
 
   if (isLoading) {
     return (
@@ -224,49 +242,112 @@ export default function ReturnsDashboard() {
                     <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Created By
                     </th>
-                    <th className="px-5 py-2.5" />
+                    <th className="px-5 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      ClearSight
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(s.recent as ReturnsSession[]).map((session) => (
-                    <tr
-                      key={session.id}
-                      className="border-b border-border/30 hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="px-5 py-3 font-medium text-foreground">
-                        #{session.id}
-                        {session.referenceNumber && (
-                          <span className="ml-2 text-xs text-muted-foreground font-normal">
-                            {session.referenceNumber}
+                  {(s.recent as ReturnsSession[]).map((session) => {
+                    const isSent = session.pushStatus === "sent";
+                    const isFailed = session.pushStatus === "failed";
+                    const isPushingThis = pushToClearSight.isPending && pushToClearSight.variables?.sessionId === session.id;
+
+                    return (
+                      <tr
+                        key={session.id}
+                        className="border-b border-border/30 hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-5 py-3 font-medium text-foreground">
+                          #{session.id}
+                          {session.referenceNumber && (
+                            <span className="ml-2 text-xs text-muted-foreground font-normal">
+                              {session.referenceNumber}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-muted-foreground">{session.warehouseName}</td>
+                        <td className="px-3 py-3 text-foreground font-medium">{session.clientName}</td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLES[session.status]}`}
+                          >
+                            {STATUS_LABELS[session.status]}
                           </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-muted-foreground">{session.warehouseName}</td>
-                      <td className="px-3 py-3 text-foreground font-medium">{session.clientName}</td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLES[session.status]}`}
-                        >
-                          {STATUS_LABELS[session.status]}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-muted-foreground text-xs">
-                        {new Date(session.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-3 py-3 text-muted-foreground text-xs">
-                        {session.createdByName ?? "—"}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        {session.status === "open" && (
-                          <Link href={`/returns/session/${session.id}`}>
-                            <Button size="sm" variant="outline" className="text-xs h-7 gap-1">
-                              Continue <ArrowRight className="h-3 w-3" />
-                            </Button>
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-3 py-3 text-muted-foreground text-xs">
+                          {new Date(session.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-3 text-muted-foreground text-xs">
+                          {session.createdByName ?? "—"}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {/* Open session — continue link */}
+                            {session.status === "open" && (
+                              <Link href={`/returns/session/${session.id}`}>
+                                <Button size="sm" variant="outline" className="text-xs h-7 gap-1">
+                                  Continue <ArrowRight className="h-3 w-3" />
+                                </Button>
+                              </Link>
+                            )}
+
+                            {/* Closed + sent — success badge only */}
+                            {session.status === "closed" && isSent && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                <CheckCircle className="h-3 w-3" /> Sent
+                              </span>
+                            )}
+
+                            {/* Closed + failed — error badge + retry button */}
+                            {session.status === "closed" && isFailed && (
+                              <>
+                                <span
+                                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 cursor-help"
+                                  title={session.pushError ?? "Unknown error"}
+                                >
+                                  <AlertCircle className="h-3 w-3" />
+                                  Failed {(session.pushAttempts ?? 0) > 0 ? `×${session.pushAttempts}` : ""}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-7 gap-1 border-red-300 text-red-600 hover:bg-red-50"
+                                  onClick={() => pushToClearSight.mutate({ sessionId: session.id })}
+                                  disabled={isPushingThis}
+                                >
+                                  {isPushingThis ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-3 w-3" />
+                                  )}
+                                  Retry
+                                </Button>
+                              </>
+                            )}
+
+                            {/* Closed + never pushed — push button */}
+                            {session.status === "closed" && !isSent && !isFailed && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7 gap-1 border-blue-300 text-blue-600 hover:bg-blue-50"
+                                onClick={() => pushToClearSight.mutate({ sessionId: session.id })}
+                                disabled={isPushingThis}
+                              >
+                                {isPushingThis ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                                Push
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

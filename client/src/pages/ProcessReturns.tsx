@@ -37,6 +37,8 @@ import {
   X,
   Pencil,
   Send,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -70,6 +72,10 @@ type Session = {
   referenceNumber?: string | null;
   notes?: string | null;
   createdByName?: string | null;
+  pushStatus?: "pending" | "sent" | "failed" | null;
+  pushAttempts?: number | null;
+  pushError?: string | null;
+  lastPushedAt?: Date | string | null;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -335,13 +341,13 @@ function StepScanItems({
 
   const pushToClearSight = trpc.returns.pushSessionToClearSight.useMutation({
     onSuccess: (data) => {
-      if (data.sent) {
-        toast.success(`Pushed to ClearSight — ${data.itemCount} item${data.itemCount !== 1 ? "s" : ""} sent.`);
-      } else {
-        toast.error("ClearSight webhook not configured or unreachable. Check Cortex Integration settings.");
-      }
+      toast.success(`Pushed to ClearSight — ${data.itemCount} item${data.itemCount !== 1 ? "s" : ""} sent.`);
+      utils.returns.getSession.invalidate({ id: session.id });
     },
-    onError: (err) => toast.error(`Push failed: ${err.message}`),
+    onError: (err) => {
+      toast.error(`Push failed: ${err.message}`);
+      utils.returns.getSession.invalidate({ id: session.id });
+    },
   });
 
   // Auto-focus SKU input on mount
@@ -657,29 +663,85 @@ function StepScanItems({
       </AlertDialog>
 
       {/* Post-close: Push to ClearSight */}
-      {session.status === "closed" && (
-        <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-800 flex items-center gap-3">
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Session Closed</p>
-            <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-              Push this session to ClearSight to notify them of the processed return.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
-            onClick={() => pushToClearSight.mutate({ sessionId: session.id })}
-            disabled={pushToClearSight.isPending}
-          >
-            {pushToClearSight.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="h-3.5 w-3.5" />
+      {session.status === "closed" && (() => {
+        const ps = session.pushStatus;
+        const attempts = session.pushAttempts ?? 0;
+        const isSent = ps === "sent";
+        const isFailed = ps === "failed";
+        const isPending = pushToClearSight.isPending;
+        const maxAttemptsReached = attempts >= 3;
+
+        // Colour scheme per status
+        const panelCls = isSent
+          ? "border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20 dark:border-emerald-800"
+          : isFailed
+          ? "border-red-200 bg-red-50/60 dark:bg-red-950/20 dark:border-red-800"
+          : "border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-800";
+
+        return (
+          <div className={`mt-4 p-4 rounded-xl border ${panelCls} flex items-start gap-3`}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                {isSent ? (
+                  <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                ) : isFailed ? (
+                  <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                ) : null}
+                <p className={`text-sm font-semibold ${
+                  isSent ? "text-emerald-900 dark:text-emerald-200"
+                  : isFailed ? "text-red-900 dark:text-red-200"
+                  : "text-blue-900 dark:text-blue-200"
+                }`}>
+                  {isSent ? "Pushed to ClearSight" : isFailed ? "Push Failed" : "Session Closed"}
+                </p>
+                {attempts > 0 && (
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                    isSent ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                  }`}>
+                    {attempts} attempt{attempts !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+              {isFailed && session.pushError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-0.5 break-words">
+                  {session.pushError}
+                </p>
+              )}
+              {!isSent && !isFailed && (
+                <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                  Push this session to ClearSight to notify them of the processed return.
+                </p>
+              )}
+              {isFailed && maxAttemptsReached && (
+                <p className="text-xs text-red-500 mt-1">
+                  Maximum auto-retry attempts (3) reached. Use the button to retry manually.
+                </p>
+              )}
+            </div>
+            {!isSent && (
+              <Button
+                size="sm"
+                className={`gap-1.5 shrink-0 ${
+                  isFailed
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
+                onClick={() => pushToClearSight.mutate({ sessionId: session.id })}
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : isFailed ? (
+                  <RotateCcw className="h-3.5 w-3.5" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                {isFailed ? "Retry Push" : "Push to ClearSight"}
+              </Button>
             )}
-            Push to ClearSight
-          </Button>
-        </div>
-      )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

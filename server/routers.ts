@@ -76,6 +76,7 @@ import {
   updateReturnsItem,
   deleteReturnsItem,
   getReturnsDashboardStats,
+  getFailedReturnSessions,
   getAllCortexConnections,
   getCortexConnection,
   upsertCortexConnection,
@@ -2562,15 +2563,36 @@ const returnsRouter = router({
         totalUnits: items.reduce((sum, i) => sum + i.quantity, 0),
         totalSkus: items.length,
       };
-      const sent = await fireCortexWebhook("clearsight", "return.session.closed", payload);
+      const newAttempts = (session.pushAttempts ?? 0) + 1;
+      let sent = false;
+      let pushError: string | null = null;
+      try {
+        sent = await fireCortexWebhook("clearsight", "return.session.closed", payload);
+        if (!sent) pushError = "Webhook returned failure (no active ClearSight connection or non-2xx response)";
+      } catch (err: unknown) {
+        pushError = err instanceof Error ? err.message : String(err);
+      }
+      const newStatus = sent ? "sent" : "failed";
+      await updateReturnsSession(input.sessionId, {
+        pushStatus: newStatus,
+        pushAttempts: newAttempts,
+        pushError: sent ? null : pushError,
+        lastPushedAt: new Date(),
+      });
       await createAuditLog({
         userId: ctx.user.id,
         action: "returns.pushToClearSight",
         entityType: "returns_session",
         entityId: String(session.id),
-        details: { sessionId: session.id, sent, itemCount: items.length },
+        details: { sessionId: session.id, sent, itemCount: items.length, attempt: newAttempts, error: pushError },
       });
-      return { success: true, sent, itemCount: items.length };
+      if (!sent) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: pushError ?? "Push to ClearSight failed",
+        });
+      }
+      return { success: true, sent, itemCount: items.length, pushAttempts: newAttempts };
     }),
 });
 // ─── Cortex Integration Router ────────────────────────────────────────────────

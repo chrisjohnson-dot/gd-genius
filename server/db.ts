@@ -1479,7 +1479,7 @@ export async function getReturnsSession(id: number) {
 
 export async function updateReturnsSession(
   id: number,
-  data: Partial<Pick<InsertReturnsSession, "status" | "notes" | "referenceNumber" | "closedAt">>
+  data: Partial<Pick<InsertReturnsSession, "status" | "notes" | "referenceNumber" | "closedAt" | "pushStatus" | "pushAttempts" | "pushError" | "lastPushedAt">>
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1536,9 +1536,20 @@ export async function getReturnsDashboardStats() {
     .sort((a: ReturnsSession, b: ReturnsSession) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 10);
 
-  return { open, closed, totalItems, totalQty, conditionBreakdown, recent };
+   return { open, closed, totalItems, totalQty, conditionBreakdown, recent };
 }
 
+/** Returns sessions with pushStatus='failed' and pushAttempts < 3 that are eligible for auto-retry */
+export async function getFailedReturnSessions(): Promise<ReturnsSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(returnsSessions)
+    .where(eq(returnsSessions.pushStatus, "failed"));
+  // Only retry sessions that have fewer than 3 attempts
+  return rows.filter((s: ReturnsSession) => (s.pushAttempts ?? 0) < 3);
+}
 // ─── GD Cortex DB Helpers ──────────────────────────────────────────────────────
 
 export async function getCortexConnection(platform: string): Promise<CortexConnection | null> {

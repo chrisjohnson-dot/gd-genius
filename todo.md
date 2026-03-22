@@ -386,3 +386,12 @@
 - [x] Push to ClearSight button on ProcessReturns closed-session view (appears after session is closed)
 - [x] Audit log entry on each push (action: returns.pushToClearSight)
 - [x] 242 tests passing total
+
+## Webhook Retry Mechanism
+- [x] DB schema: add push_status (pending/sent/failed), push_attempts, push_error, last_pushed_at to returns_sessions
+- [x] DB migration: applied
+- [x] Backend: pushSessionToClearSight persists push_status/push_attempts/push_error after each attempt
+- [x] Backend: server-side auto-retry scheduler — retries failed sessions up to 3 times with exponential backoff (1min, 5min, 15min)
+- [x] UI ProcessReturns: push panel shows Sent (green) / Failed (red) badge with error message, attempt count, and Retry Push button
+- [x] UI ReturnsDashboard: session rows show Sent badge, Failed badge with attempt count, Push button (not yet pushed), Retry button (failed)
+- [x] 242 tests passing total

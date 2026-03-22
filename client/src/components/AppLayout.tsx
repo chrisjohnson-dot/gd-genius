@@ -23,6 +23,7 @@ import {
   Sun,
   Timer,
   Truck,
+  Users,
   Zap,
 } from "lucide-react";
 import { useState } from "react";
@@ -59,7 +60,8 @@ const configItems = [
   { href: "/rules",            label: "Allocation Rules",   icon: ListChecks },
   { href: "/schedule",         label: "Auto-Run Schedule",  icon: CalendarClock },
   { href: "/diagnostics",      label: "API Diagnostics",    icon: Stethoscope },
-  { href: "/shipwell-settings",label: "Shipwell Settings",  icon: Zap },
+  { href: "/shipwell-settings",  label: "Shipwell Settings",   icon: Zap },
+  { href: "/client-visibility",   label: "Client Visibility",   icon: Users },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

@@ -290,3 +290,21 @@ export const alertSettings = mysqlTable("alert_settings", {
 });
 export type AlertSetting = typeof alertSettings.$inferSelect;
 export type InsertAlertSetting = typeof alertSettings.$inferInsert;
+
+// Client visibility settings — controls which clients appear in Open Orders view
+// One row per (configId, clientId) pair. isVisible defaults to true.
+// Clients not yet in this table are treated as visible.
+export const clientVisibility = mysqlTable("client_visibility", {
+  id: int("id").autoincrement().primaryKey(),
+  // FK to extensiv_configs (warehouse config)
+  configId: int("configId").notNull(),
+  // Extensiv client ID (integer, matches orderTracking.clientId)
+  clientId: int("clientId").notNull(),
+  // Human-readable name cached from the last sync
+  clientName: varchar("clientName", { length: 256 }).notNull(),
+  // Whether this client's orders are shown in the Open Orders view
+  isVisible: boolean("isVisible").notNull().default(true),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ClientVisibility = typeof clientVisibility.$inferSelect;
+export type InsertClientVisibility = typeof clientVisibility.$inferInsert;

@@ -317,3 +317,8 @@
 - [x] Add getAuditLogUsers DB helper to get distinct users who appear in audit_logs
 - [x] Update audit.list tRPC procedure to accept optional userId filter
 - [x] Add user filter dropdown to Audit Log page UI alongside action filter
+- [x] Add client_visibility table to DB schema (clientId, clientName, isVisible, configId)
+- [x] Add DB helpers: getClientVisibility, upsertClientVisibility, getHiddenClientIds, syncClientVisibilityFromOrders
+- [x] Add tRPC procedures: clientVisibility.list, clientVisibility.save
+- [x] Build Client Visibility settings page with searchable toggle list and unallocated counts
+- [x] Wire Open Orders (Home.tsx) to filter orders by visible clients

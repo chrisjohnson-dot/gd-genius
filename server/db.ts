@@ -36,6 +36,9 @@ import {
   LaneThreshold,
   InsertLaneThreshold,
   alertSettings,
+  clientVisibility,
+  ClientVisibility,
+  InsertClientVisibility,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1048,4 +1051,81 @@ export async function setAlertTime(hour: number, minute: number): Promise<void> 
     .insert(alertSettings)
     .values({ key: "overdue_alert_time", value })
     .onDuplicateKeyUpdate({ set: { value } });
+}
+
+// ─── Client Visibility ────────────────────────────────────────────────────────
+
+/**
+ * Return all client visibility rows for a given configId.
+ * Rows are sorted alphabetically by clientName.
+ */
+export async function getClientVisibility(configId: number): Promise<ClientVisibility[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(clientVisibility)
+    .where(eq(clientVisibility.configId, configId))
+    .orderBy(clientVisibility.clientName);
+}
+
+/**
+ * Upsert a batch of client visibility rows.
+ * Each row is identified by (configId, clientId).
+ */
+export async function upsertClientVisibility(
+  rows: Array<{ configId: number; clientId: number; clientName: string; isVisible: boolean }>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  for (const row of rows) {
+    await db
+      .insert(clientVisibility)
+      .values(row)
+      .onDuplicateKeyUpdate({ set: { isVisible: row.isVisible, clientName: row.clientName } });
+  }
+}
+
+/**
+ * Return the set of hidden clientIds for a given configId.
+ * Clients not in client_visibility are treated as visible.
+ */
+export async function getHiddenClientIds(configId: number): Promise<Set<number>> {
+  const db = await getDb();
+  if (!db) return new Set();
+  const rows = await db
+    .select({ clientId: clientVisibility.clientId })
+    .from(clientVisibility)
+    .where(
+      and(
+        eq(clientVisibility.configId, configId),
+        eq(clientVisibility.isVisible, false)
+      )
+    );
+  return new Set(rows.map((r) => r.clientId));
+}
+
+/**
+ * Sync the client_visibility table from the current order_tracking data.
+ * Inserts new clients (defaulting to visible=true) without touching existing rows.
+ */
+export async function syncClientVisibilityFromOrders(configId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Get distinct clients from order_tracking for this configId
+  const { sql } = await import("drizzle-orm");
+  const rows = await db
+    .selectDistinct({
+      clientId: orderTracking.clientId,
+      clientName: orderTracking.clientName,
+    })
+    .from(orderTracking)
+    .where(eq(orderTracking.configId, configId));
+
+  for (const row of rows) {
+    await db
+      .insert(clientVisibility)
+      .values({ configId, clientId: row.clientId, clientName: row.clientName, isVisible: true })
+      .onDuplicateKeyUpdate({ set: { clientName: row.clientName } }); // update name only, preserve isVisible
+  }
 }

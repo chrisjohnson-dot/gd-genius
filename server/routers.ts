@@ -52,6 +52,10 @@ import {
   getAttentionCount,
   getAlertTime,
   setAlertTime,
+  getClientVisibility,
+  upsertClientVisibility,
+  syncClientVisibilityFromOrders,
+  getHiddenClientIds,
   dismissZeroBidWarning,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
@@ -2167,11 +2171,49 @@ export const overdueAlertRouter = router({
     }),
 });
 
-// Extend _appRouter with laneThresholds and overdueAlert (defined after to avoid hoisting issue)
+/// ─── Client Visibility Router ────────────────────────────────────────────────
+const clientVisibilityRouter = router({
+  /** List all clients for a configId, syncing from orders first */
+  list: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .query(async ({ input }) => {
+      // Sync new clients from order_tracking into client_visibility
+      await syncClientVisibilityFromOrders(input.configId);
+      return getClientVisibility(input.configId);
+    }),
+
+  /** Save visibility toggles for a batch of clients */
+  save: protectedProcedure
+    .input(
+      z.object({
+        rows: z.array(
+          z.object({
+            configId: z.number(),
+            clientId: z.number(),
+            clientName: z.string(),
+            isVisible: z.boolean(),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await upsertClientVisibility(input.rows);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "settings.clientVisibility.save",
+        entityType: "client_visibility",
+        entityId: null,
+        details: { count: input.rows.length },
+      });
+      return { success: true };
+    }),
+});
+
+// Extend _appRouter with laneThresholds, overdueAlert, and clientVisibility
 export const appRouter = router({
   ..._appRouter._def.record,
   laneThresholds: laneThresholdRouter,
   overdueAlert: overdueAlertRouter,
+  clientVisibility: clientVisibilityRouter,
 });
-
 export type AppRouter = typeof appRouter;

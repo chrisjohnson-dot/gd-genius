@@ -106,7 +106,7 @@ import { fireCortexWebhook } from "./cortex/webhook";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations } from "./extensiv/api";
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -2809,6 +2809,74 @@ const qcScannerRouter = router({
         await updateQcSession(input.sessionId, input.orderMeta as any);
       }
       return { success: true };
+    }),
+
+  // Fetch order items from Extensiv by reference number and seed the session
+  // This auto-populates SKU, description, expected qty, and lot number from Extensiv
+  fetchFromExtensiv: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      referenceNumber: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      // Get the first active Extensiv config
+      const configs = await getExtensivConfigs();
+      const config = configs.find((c) => c.isActive) ?? configs[0];
+      if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found. Please set up an Extensiv API config first." });
+
+      // Search Extensiv for orders matching this reference number
+      const orders = await fetchOrdersByReferenceNum(config, input.referenceNumber);
+      if (orders.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `No orders found in Extensiv for reference number "${input.referenceNumber}". Check the reference number and try again.` });
+      }
+
+      // Use the first matching order (most recent if multiple)
+      const order = orders[0]!;
+      const orderItems = order.orderItems ?? [];
+
+      if (orderItems.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Order found in Extensiv but it has no line items. The order may not have items loaded yet.` });
+      }
+
+      // Fetch item descriptions for the customer (to fill in description field)
+      let descMap = new Map<string, string>();
+      try {
+        const customerId = order.readOnly?.customerIdentifier?.id;
+        if (customerId) {
+          descMap = await fetchItemDescriptions(config, customerId);
+        }
+      } catch (err) {
+        console.warn(`[qcScanner.fetchFromExtensiv] Could not fetch item descriptions:`, err);
+      }
+
+      // Seed each order item into the session
+      let seededCount = 0;
+      for (const item of orderItems) {
+        const sku = item.itemIdentifier?.sku;
+        if (!sku) continue;
+        const description = descMap.get(sku) ?? undefined;
+        await upsertQcScanItem(input.sessionId, sku, null, {
+          description,
+          lotNumber: item.lotNumber ?? null,
+          expectedQty: item.qty ?? 0,
+          caseAmount: 1,
+          scannedQty: 0,
+          scanTimestamps: [],
+        });
+        seededCount++;
+      }
+
+      // Update session metadata from the order
+      const customerName = order.readOnly?.customerIdentifier?.name ?? undefined;
+      const poNumber = (order as unknown as Record<string, unknown>).poNum as string | undefined;
+      await updateQcSession(input.sessionId, {
+        customerName: customerName ?? undefined,
+        poNumber: poNumber ?? undefined,
+      } as any);
+
+      // Return the freshly seeded items
+      const items = await getQcScanItems(input.sessionId);
+      return { success: true, seededCount, items, customerName: customerName ?? null, poNumber: poNumber ?? null };
     }),
 
   // Record a barcode scan — increments scannedQty for the matching SKU/UPC

@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
-  Package, Layers, ClipboardList, ChevronRight
+  Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download
 } from "lucide-react";
 
 type ScanItem = {
@@ -281,6 +281,19 @@ export default function QcScanner() {
   const barcodeRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
 
+  const fetchFromExtensiv = trpc.qcScanner.fetchFromExtensiv.useMutation({
+    onSuccess: (data) => {
+      setItems(data.items as ScanItem[]);
+      if (data.customerName && session) setSession((s) => s ? { ...s, customerName: data.customerName } : s);
+      if (data.poNumber && session) setSession((s) => s ? { ...s, poNumber: data.poNumber } : s);
+      toast.success(`Loaded ${data.seededCount} item${data.seededCount !== 1 ? "s" : ""} from Extensiv`, {
+        description: data.customerName ? `Customer: ${data.customerName}` : undefined,
+      });
+      setTimeout(() => barcodeRef.current?.focus(), 100);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const startSession = trpc.qcScanner.startSession.useMutation({
     onSuccess: (data) => {
       setSession(data.session as Session);
@@ -452,6 +465,21 @@ export default function QcScanner() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!session) return;
+              fetchFromExtensiv.mutate({ sessionId: session.id, referenceNumber: session.referenceNumber });
+            }}
+            disabled={fetchFromExtensiv.isPending}
+            title="Fetch expected items and lot numbers from Extensiv"
+          >
+            {fetchFromExtensiv.isPending
+              ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+              : <Download className="w-4 h-4 mr-1 text-blue-500" />}
+            {fetchFromExtensiv.isPending ? "Loading…" : "Load from Extensiv"}
+          </Button>
           <Button
             variant="outline"
             size="sm"

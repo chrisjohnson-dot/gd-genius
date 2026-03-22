@@ -414,3 +414,10 @@
 - [x] Add Lot # column to QC Scanner item table (frontend)
 - [x] Verify lotNumber field flows from qc_scan_items DB column through tRPC to the UI
 - [x] 5 new unit tests for lotNumber field (247 tests passing total)
+
+## QC Scanner — Lot # Auto-Population from Extensiv
+- [x] Locate lot number field in Extensiv order line item API response (ExtensivOrderItem.lotNumber)
+- [x] Add fetchOrdersByReferenceNum to extensiv/api.ts (RQL search by referenceNum)
+- [x] Add fetchFromExtensiv tRPC procedure to qcScannerRouter (seeds items + lot numbers + descriptions)
+- [x] Add Load from Extensiv button to QC Scanner scanning phase UI
+- [x] 7 unit tests for fetchFromExtensiv (254 tests passing total)

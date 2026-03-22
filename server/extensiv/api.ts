@@ -702,3 +702,58 @@ export async function fetchExtensivLocations(
   console.log(`[Extensiv] fetchExtensivLocations: ${allLocations.length} locations for facilityId=${facilityId}`);
   return allLocations;
 }
+
+/**
+ * Search Extensiv orders by reference number (customer's order ref).
+ * Uses RQL filter: referenceNum=={value}
+ * Returns up to 10 matching orders with full item detail (including lotNumber).
+ */
+export async function fetchOrdersByReferenceNum(
+  config: ExtensivClientConfig,
+  referenceNum: string
+): Promise<ExtensivOrder[]> {
+  const client = createExtensivClient(config);
+  // RQL filter on the referenceNum field — Extensiv supports this natively
+  const rql = `referenceNum==${encodeURIComponent(referenceNum)}`;
+  const data = (await client.get("/orders", {
+    pgsiz: 10,
+    pgnum: 1,
+    rql,
+    detail: "all",
+    itemdetail: "all",
+  })) as {
+    totalResults?: number;
+    _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: ExtensivOrder[] };
+  };
+
+  const orders = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];
+
+  // Normalise orderItems from HAL embedded (same logic as fetchOpenOrders)
+  const REL_ITEM = "http://api.3plCentral.com/rels/orders/item";
+  const REL_ORDERITEM = "http://api.3plCentral.com/rels/orders/orderitem";
+
+  function extractItemsFromOrder(o: ExtensivOrder): ExtensivOrderItem[] {
+    const raw = o as ExtensivOrder & { _embedded?: Record<string, unknown>; orderItems?: unknown };
+    if (Array.isArray(raw.orderItems) && (raw.orderItems as ExtensivOrderItem[]).length > 0) {
+      return raw.orderItems as ExtensivOrderItem[];
+    }
+    const embedded = (raw._embedded ?? {}) as Record<string, unknown>;
+    for (const key of [REL_ITEM, REL_ORDERITEM, "orderItem", "orderItems", "item"]) {
+      const candidate = embedded[key];
+      if (!candidate) continue;
+      if (Array.isArray(candidate) && candidate.length > 0) return candidate as ExtensivOrderItem[];
+      const obj = candidate as Record<string, unknown>;
+      if (Array.isArray(obj.item) && obj.item.length > 0) return obj.item as ExtensivOrderItem[];
+      if (obj.itemIdentifier || obj.readOnly) return [obj as unknown as ExtensivOrderItem];
+    }
+    return [];
+  }
+
+  const normalized = orders.map((o) => {
+    const items = extractItemsFromOrder(o);
+    return { ...o, orderItems: items };
+  });
+
+  console.log(`[Extensiv] fetchOrdersByReferenceNum: referenceNum="${referenceNum}" found ${normalized.length} orders, items: ${normalized.map(o => o.orderItems?.length ?? 0).join(",")}`);
+  return normalized;
+}

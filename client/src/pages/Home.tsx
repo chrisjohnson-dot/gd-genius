@@ -1593,6 +1593,30 @@ function SlaBreachSummarySection({ onClientClick }: {
 
   const totalBreached = breachGroups.reduce((s, g) => s + g.breachCount, 0);
 
+  // Group by warehouse, then sort clients within each warehouse by worstDaysOverdue desc
+  const warehouseMap = new Map<string, { facilityName: string; facilityId: number | null; totalBreached: number; worstDaysOverdue: number; clients: typeof breachGroups }>();
+  for (const g of breachGroups) {
+    const key = g.facilityName ?? "Unknown";
+    if (!warehouseMap.has(key)) {
+      warehouseMap.set(key, { facilityName: key, facilityId: g.facilityId ?? null, totalBreached: 0, worstDaysOverdue: 0, clients: [] });
+    }
+    const wh = warehouseMap.get(key)!;
+    wh.clients.push(g);
+    wh.totalBreached += g.breachCount;
+    wh.worstDaysOverdue = Math.max(wh.worstDaysOverdue, g.worstDaysOverdue);
+  }
+  // Sort warehouses by worst days overdue desc, clients within each by worst days overdue desc
+  const warehouses = Array.from(warehouseMap.values())
+    .sort((a, b) => b.worstDaysOverdue - a.worstDaysOverdue)
+    .map(wh => ({ ...wh, clients: [...wh.clients].sort((a, b) => b.worstDaysOverdue - a.worstDaysOverdue) }));
+
+  const [collapsedWarehouses, setCollapsedWarehouses] = useState<Set<string>>(new Set());
+  const toggleWarehouse = (name: string) => setCollapsedWarehouses(prev => {
+    const next = new Set(prev);
+    next.has(name) ? next.delete(name) : next.add(name);
+    return next;
+  });
+
   return (
     <div className="bg-card border-2 border-red-200 rounded-2xl overflow-hidden" style={{ boxShadow: "0 0 0 1px rgba(239,68,68,0.1), 0 4px 16px rgba(239,68,68,0.08)" }}>
       {/* Header */}
@@ -1611,64 +1635,90 @@ function SlaBreachSummarySection({ onClientClick }: {
         </Link>
       </div>
 
-      {/* Table */}
-      <table className="w-full data-table">
-        <thead>
-          <tr>
-            <th>Client</th>
-            <th>Warehouse</th>
-            <th className="text-center">Breached Orders</th>
-            <th className="text-right">Worst Overdue</th>
-            <th>Most Overdue Order</th>
-            <th>Stage</th>
-          </tr>
-        </thead>
-        <tbody>
-          {breachGroups
-            .sort((a, b) => b.worstDaysOverdue - a.worstDaysOverdue)
-            .map((group) => {
-              const worst = group.orders[0];
-              return (
-                <tr key={group.clientId}>
-                  <td>
-                    <button
-                      onClick={() => onClientClick(group.clientId, group.facilityId ?? null)}
-                      className="font-semibold text-primary hover:underline hover:text-primary/80 transition-colors text-left cursor-pointer"
-                      title={`Filter Open Orders for ${group.clientName}`}
-                    >
-                      {group.clientName}
-                    </button>
-                  </td>
-                  <td className="text-muted-foreground text-xs">{group.facilityName ?? "—"}</td>
-                  <td className="text-center">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
-                      <TrendingUp className="h-2.5 w-2.5" />
-                      {group.breachCount}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    <span className="text-red-600 font-bold text-xs">{group.worstDaysOverdue}d overdue</span>
-                  </td>
-                  <td className="text-muted-foreground font-mono text-xs">
-                    {worst?.referenceNum ?? (worst ? `#${worst.extensivOrderId}` : "—")}
-                    {worst?.requiredShipDate && (
-                      <span className="ml-1.5 text-[10px] text-muted-foreground/70">
-                        (req. {new Date(worst.requiredShipDate).toLocaleDateString()})
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    {worst && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground capitalize">
-                        {worst.lifecycleStatus.replace("_", " ")}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-        </tbody>
-      </table>
+      {/* Warehouse sections */}
+      <div className="divide-y divide-border">
+        {warehouses.map((wh) => {
+          const isCollapsed = collapsedWarehouses.has(wh.facilityName);
+          return (
+            <div key={wh.facilityName}>
+              {/* Warehouse header row */}
+              <button
+                onClick={() => toggleWarehouse(wh.facilityName)}
+                className="w-full flex items-center justify-between px-6 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2.5">
+                  {isCollapsed
+                    ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                  <span className="text-[13px] font-bold text-foreground">{wh.facilityName}</span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+                    {wh.totalBreached} order{wh.totalBreached !== 1 ? "s" : ""}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">{wh.clients.length} client{wh.clients.length !== 1 ? "s" : ""}</span>
+                </div>
+                <span className="text-red-600 font-bold text-xs">{wh.worstDaysOverdue}d worst overdue</span>
+              </button>
+
+              {/* Client rows table */}
+              {!isCollapsed && (
+                <table className="w-full data-table">
+                  <thead>
+                    <tr>
+                      <th className="pl-10">Client</th>
+                      <th className="text-center">Breached Orders</th>
+                      <th className="text-right">Worst Overdue</th>
+                      <th>Most Overdue Order</th>
+                      <th>Stage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wh.clients.map((group) => {
+                      const worst = group.orders[0];
+                      return (
+                        <tr key={group.clientId}>
+                          <td className="pl-10">
+                            <button
+                              onClick={() => onClientClick(group.clientId, group.facilityId ?? null)}
+                              className="font-semibold text-primary hover:underline hover:text-primary/80 transition-colors text-left cursor-pointer"
+                              title={`Filter Open Orders for ${group.clientName}`}
+                            >
+                              {group.clientName}
+                            </button>
+                          </td>
+                          <td className="text-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                              <TrendingUp className="h-2.5 w-2.5" />
+                              {group.breachCount}
+                            </span>
+                          </td>
+                          <td className="text-right">
+                            <span className="text-red-600 font-bold text-xs">{group.worstDaysOverdue}d overdue</span>
+                          </td>
+                          <td className="text-muted-foreground font-mono text-xs">
+                            {worst?.referenceNum ?? (worst ? `#${worst.extensivOrderId}` : "—")}
+                            {worst?.requiredShipDate && (
+                              <span className="ml-1.5 text-[10px] text-muted-foreground/70">
+                                (req. {new Date(worst.requiredShipDate).toLocaleDateString()})
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {worst && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground capitalize">
+                                {worst.lifecycleStatus.replace("_", " ")}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

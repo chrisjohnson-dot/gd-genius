@@ -342,3 +342,4 @@
 - [x] Replace Recent Allocation Runs section on Open Orders main page with per-client SLA breach summary table
 - [x] Orders Out of SLA: make each client name a clickable link that filters the Open Orders warehouse cards for that client
 - [x] Add colour-coded Days Overdue column to Open Orders drill-down table (amber 1-2d, red 3d+)
+- [x] Orders Out of SLA: group by warehouse first, then by customer within each warehouse, sorted by worst days overdue descending

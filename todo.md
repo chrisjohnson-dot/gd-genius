@@ -346,3 +346,8 @@
 - [x] Add red overdue count badge to each warehouse card subtitle on Open Orders main page
 - [x] Pre-sort order rows by Required Ship Date ascending within each customer group in the Open Orders drill-down table
 - [x] Add colour-coded Days Overdue column to SLA Tracker order table (amber 1-2d, red 3d+)
+- [x] Per-order SLA extension: add slaExtensionDays and slaExtensionNote columns to order_tracking schema
+- [x] Per-order SLA extension: tRPC mutation to set/clear extension, breach engine applies extension to deadline
+- [x] Per-order SLA extension: UI in Open Orders and SLA Tracker rows (extend button, days stepper, reason note, clear)
+- [x] Per-order SLA extension: Extension indicator badge in SLA Tracker table (purple +Nd badge with tooltip)
+- [x] Per-order SLA extension: 12 unit tests covering extension logic and input validation (188 tests total passing)

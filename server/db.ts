@@ -887,11 +887,14 @@ export async function getOrderSlaStatuses(): Promise<
       );
     }
 
-    const daysRemaining = slaDays - ageCalendarDays;
+    // Apply any per-order extension (customer-requested later date)
+    const extensionDays = order.slaExtensionDays ?? 0;
+    const effectiveSlaDays = slaDays + extensionDays;
+    const daysRemaining = effectiveSlaDays - ageCalendarDays;
     const slaStatus: "in_sla" | "out_of_sla" =
       daysRemaining >= 0 ? "in_sla" : "out_of_sla";
 
-    return { ...order, slaDays, ageCalendarDays, slaStatus, daysRemaining, matchedRuleName };
+    return { ...order, slaDays: effectiveSlaDays, ageCalendarDays, slaStatus, daysRemaining, matchedRuleName, slaExtensionDays: extensionDays };
   });
 }
 
@@ -1377,4 +1380,35 @@ export async function deleteSlaRule(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(slaRules).where(eq(slaRules.id, id));
+}
+
+// ─── Per-order SLA extension ─────────────────────────────────────────────────
+
+/**
+ * Set or update the SLA extension for a specific order.
+ * extensionDays is added to the order's base SLA deadline when evaluating breaches.
+ */
+export async function setSlaExtension(
+  extensivOrderId: number,
+  extensionDays: number,
+  note: string | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(orderTracking)
+    .set({ slaExtensionDays: extensionDays, slaExtensionNote: note })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+}
+
+/**
+ * Clear the SLA extension for a specific order (reset to 0 days, no note).
+ */
+export async function clearSlaExtension(extensivOrderId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(orderTracking)
+    .set({ slaExtensionDays: 0, slaExtensionNote: null })
+    .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 }

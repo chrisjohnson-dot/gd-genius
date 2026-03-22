@@ -64,6 +64,8 @@ import {
   getSlaRulesForClient,
   upsertSlaRule,
   deleteSlaRule,
+  setSlaExtension,
+  clearSlaExtension,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
@@ -2175,6 +2177,40 @@ const _appRouter = router({
           action: "sla.deleteRule",
           entityType: "sla_rules",
           entityId: String(input.id),
+          details: {},
+        });
+        return { success: true };
+      }),
+
+    setExtension: protectedProcedure
+      .input(
+        z.object({
+          extensivOrderId: z.number().int(),
+          extensionDays: z.number().int().min(1).max(365),
+          note: z.string().max(512).nullable().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        await setSlaExtension(input.extensivOrderId, input.extensionDays, input.note ?? null);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.setExtension",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: { extensionDays: input.extensionDays, note: input.note },
+        });
+        return { success: true };
+      }),
+
+    clearExtension: protectedProcedure
+      .input(z.object({ extensivOrderId: z.number().int() }))
+      .mutation(async ({ input, ctx }) => {
+        await clearSlaExtension(input.extensivOrderId);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.clearExtension",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
           details: {},
         });
         return { success: true };

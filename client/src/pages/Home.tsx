@@ -38,6 +38,8 @@ import {
   BellOff,
   TrendingUp,
   AlertCircle,
+  CalendarPlus,
+  CalendarX,
 } from "lucide-react";
 import {
   Dialog,
@@ -137,6 +139,8 @@ type TrackedOrder = {
   shipwellSentAt: string | Date | null;
   shipwellStatusUpdatedAt: string | Date | null;
   requiredShipDate: string | null;
+  slaExtensionDays: number | null;
+  slaExtensionNote: string | null;
 };
 
 type LaneThresholdEntry = {
@@ -497,6 +501,131 @@ function UndoButton({ order, onUndone }: { order: TrackedOrder; onUndone: () => 
     </button>
   );
 }
+// ─── SLA Extension button ──────────────────────────────────────────────────
+function SlaExtensionButton({
+  order,
+  onChanged,
+}: {
+  order: TrackedOrder;
+  onChanged: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const [days, setDays] = useState<number>(order.slaExtensionDays ?? 1);
+  const [note, setNote] = useState<string>(order.slaExtensionNote ?? "");
+
+  const hasExtension = (order.slaExtensionDays ?? 0) > 0;
+
+  const setExt = trpc.sla.setExtension.useMutation({
+    onSuccess: () => {
+      utils.pickSchedule.list.invalidate();
+      onChanged();
+      setOpen(false);
+      toast.success(`SLA extended by ${days} day${days !== 1 ? "s" : ""} for order ${order.referenceNum ?? `#${order.extensivOrderId}`}`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const clearExt = trpc.sla.clearExtension.useMutation({
+    onSuccess: () => {
+      utils.pickSchedule.list.invalidate();
+      onChanged();
+      toast.success(`SLA extension cleared for order ${order.referenceNum ?? `#${order.extensivOrderId}`}`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  return (
+    <>
+      <TooltipProvider delayDuration={100}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={(e) => { e.stopPropagation(); setDays(order.slaExtensionDays ?? 1); setNote(order.slaExtensionNote ?? ""); setOpen(true); }}
+              className={`inline-flex items-center justify-center h-6 w-6 rounded transition-colors ${
+                hasExtension
+                  ? "text-purple-600 bg-purple-50 hover:bg-purple-100"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              title={hasExtension ? `SLA extended +${order.slaExtensionDays}d${order.slaExtensionNote ? `: ${order.slaExtensionNote}` : ""}` : "Extend SLA deadline"}
+            >
+              <CalendarPlus className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">
+            {hasExtension
+              ? `SLA extended +${order.slaExtensionDays}d${order.slaExtensionNote ? ` - ${order.slaExtensionNote}` : ""}`
+              : "Extend SLA deadline for this order"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-4 w-4 text-purple-600" />
+              Extend SLA Deadline
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Order <span className="font-semibold text-foreground">{order.referenceNum ?? `#${order.extensivOrderId}`}</span>
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Additional Days</Label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDays((d) => Math.max(1, d - 1))}
+                  className="h-8 w-8 rounded border flex items-center justify-center hover:bg-muted"
+                >-</button>
+                <span className="w-10 text-center font-semibold text-lg">{days}</span>
+                <button
+                  onClick={() => setDays((d) => d + 1)}
+                  className="h-8 w-8 rounded border flex items-center justify-center hover:bg-muted"
+                >+</button>
+                <span className="text-xs text-muted-foreground ml-1">day{days !== 1 ? "s" : ""}</span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Reason (optional)</Label>
+              <Input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. Customer requested later date"
+                className="text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            {hasExtension && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 mr-auto"
+                disabled={clearExt.isPending}
+                onClick={() => clearExt.mutate({ extensivOrderId: order.extensivOrderId })}
+              >
+                <CalendarX className="h-3.5 w-3.5 mr-1" />
+                Clear Extension
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={setExt.isPending}
+              onClick={() => setExt.mutate({ extensivOrderId: order.extensivOrderId, extensionDays: days, note: note || null })}
+            >
+              {setExt.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Apply Extension
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ─── Dismiss zero-bid warning button ────────────────────────────────────────
 function DismissWarningButton({
   order,
@@ -828,6 +957,7 @@ function WarehouseCard({
             ) : null}
             <AdvanceButton order={o} onAdvanced={onStatusChanged} />
             <UndoButton order={o} onUndone={onStatusChanged} />
+            <SlaExtensionButton order={o} onChanged={onStatusChanged} />
           </div>
         </td>
       </tr>

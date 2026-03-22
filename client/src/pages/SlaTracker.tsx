@@ -39,6 +39,8 @@ import {
   ArrowLeft,
   ChevronRight,
   Search,
+  CalendarPlus,
+  CalendarX,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -68,6 +70,9 @@ type SlaOrder = {
   daysRemaining: number;
   matchedRuleName: string | null;
   savedElements: string | null;
+  slaExtensionDays: number | null;
+  slaExtensionNote: string | null;
+  requiredShipDate: string | null;
 };
 
 type SlaRequirement = {
@@ -301,12 +306,13 @@ function WarehouseSlaCard({
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Rule Applied</th>
                 <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap">Overdue</th>
+                <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap">Extension</th>
                 <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {filtered.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-muted-foreground text-xs">No orders match the current filter.</td></tr>
+                <tr><td colSpan={12} className="px-4 py-8 text-center text-muted-foreground text-xs">No orders match the current filter.</td></tr>
               ) : (
                 filtered.map((o) => (
                   <tr key={o.extensivOrderId} style={o.slaStatus === "out_of_sla" ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" } : { borderLeft: "3px solid transparent" }}>
@@ -335,6 +341,17 @@ function WarehouseSlaCard({
                         if (d >= 3) return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200">{d}d</span>;
                         return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">{d}d</span>;
                       })()}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      {(o.slaExtensionDays ?? 0) > 0 ? (
+                        <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 border border-purple-200 cursor-default">
+                            <CalendarPlus className="h-2.5 w-2.5" />+{o.slaExtensionDays}d
+                          </span>
+                        </TooltipTrigger><TooltipContent side="left" className="text-xs max-w-[200px]">
+                          SLA extended by {o.slaExtensionDays} day{o.slaExtensionDays !== 1 ? "s" : ""}{o.slaExtensionNote ? `: ${o.slaExtensionNote}` : ""}
+                        </TooltipContent></Tooltip></TooltipProvider>
+                      ) : <span className="text-muted-foreground text-xs">-</span>}
                     </td>
                     <td className="px-4 py-2 text-center">
                       {o.notes ? (
@@ -450,6 +467,7 @@ function WarehouseSlaCard({
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Rule Applied</th>
                 <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap">Overdue</th>
+                <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap">Extension</th>
                 <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
               </tr>
             </thead>
@@ -504,6 +522,26 @@ function WarehouseSlaCard({
                         if (d >= 3) return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200">{d}d</span>;
                         return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">{d}d</span>;
                       })()}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      {(o.slaExtensionDays ?? 0) > 0 ? (
+                        <TooltipProvider delayDuration={100}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 border border-purple-200 cursor-default">
+                                <CalendarPlus className="h-2.5 w-2.5" />
+                                +{o.slaExtensionDays}d
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="text-xs max-w-[200px]">
+                              SLA extended by {o.slaExtensionDays} day{o.slaExtensionDays !== 1 ? "s" : ""}
+                              {o.slaExtensionNote ? `: ${o.slaExtensionNote}` : ""}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-center">
                       {o.notes ? (

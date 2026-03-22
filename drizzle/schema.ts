@@ -211,6 +211,9 @@ export const orderTracking = mysqlTable("order_tracking", {
   shipwellQuotingStartedAt: timestamp("shipwellQuotingStartedAt"),  // When order first entered Quoting status
   shipwellZeroBidNotifiedAt: timestamp("shipwellZeroBidNotifiedAt"), // When zero-bid alert was last sent (prevents duplicates)
   lastOverdueAlertSentAt: timestamp("lastOverdueAlertSentAt"),       // When overdue morning alert was last sent for this order
+  // Per-order SLA extension (customer-requested later date)
+  slaExtensionDays: int("slaExtensionDays").default(0),               // Extra days added to this order's SLA deadline
+  slaExtensionNote: text("slaExtensionNote"),                         // Reason for extension (e.g. "Customer requested delay")
   shipwellSentAt: timestamp("shipwellSentAt"),                    // When it was sent to Shipwell
   shipwellStatusUpdatedAt: timestamp("shipwellStatusUpdatedAt"),  // Last time status was polled
   // Timestamps for each stage transition

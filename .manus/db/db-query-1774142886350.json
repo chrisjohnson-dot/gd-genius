@@ -1,0 +1,74 @@
+{
+  "query": "SELECT clientId, clientName FROM client_visibility WHERE configId = 3 AND isVisible = 0 ORDER BY clientName;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT clientId, clientName FROM client_visibility WHERE configId = 3 AND isVisible = 0 ORDER BY clientName;",
+  "rows": [
+    {
+      "clientId": "231",
+      "clientName": "Birch Babe"
+    },
+    {
+      "clientId": "168",
+      "clientName": "Boom Beverages"
+    },
+    {
+      "clientId": "177",
+      "clientName": "Caboo"
+    },
+    {
+      "clientId": "100",
+      "clientName": "Chlorophyll Water"
+    },
+    {
+      "clientId": "202",
+      "clientName": "Daily Nouri"
+    },
+    {
+      "clientId": "218",
+      "clientName": "Drink Proxies"
+    },
+    {
+      "clientId": "1",
+      "clientName": "GD Test Customer"
+    },
+    {
+      "clientId": "173",
+      "clientName": "Joyburst"
+    },
+    {
+      "clientId": "83",
+      "clientName": "JUUL USA  - D2C"
+    },
+    {
+      "clientId": "130",
+      "clientName": "K18 Inc. - D2C"
+    },
+    {
+      "clientId": "203",
+      "clientName": "Pantheryx"
+    },
+    {
+      "clientId": "186",
+      "clientName": "Perrigo"
+    },
+    {
+      "clientId": "14",
+      "clientName": "Shaper Tools"
+    },
+    {
+      "clientId": "149",
+      "clientName": "Squishable"
+    },
+    {
+      "clientId": "176",
+      "clientName": "Threshold"
+    },
+    {
+      "clientId": "157",
+      "clientName": "Well Played Toys"
+    }
+  ],
+  "messages": [],
+  "stdout": "clientId\tclientName\n231\tBirch Babe\n168\tBoom Beverages\n177\tCaboo\n100\tChlorophyll Water\n202\tDaily Nouri\n218\tDrink Proxies\n1\tGD Test Customer\n173\tJoyburst\n83\tJUUL USA  - D2C\n130\tK18 Inc. - D2C\n203\tPantheryx\n186\tPerrigo\n14\tShaper Tools\n149\tSquishable\n176\tThreshold\n157\tWell Played Toys\n",
+  "stderr": "",
+  "execution_time_ms": 69
+}

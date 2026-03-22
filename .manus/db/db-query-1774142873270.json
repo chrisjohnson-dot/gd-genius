@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE client_visibility SET isVisible = 0 WHERE configId = 3 AND clientId IN (168, 1, 203, 186, 149);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute UPDATE client_visibility SET isVisible = 0 WHERE configId = 3 AND clientId IN (168, 1, 203, 186, 149);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 69
+}

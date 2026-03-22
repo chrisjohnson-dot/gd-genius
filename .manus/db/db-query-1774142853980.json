@@ -1,0 +1,76 @@
+{
+  "query": "SELECT COUNT(*) as total FROM client_visibility WHERE configId = 3;\nSELECT clientName, isVisible FROM client_visibility WHERE configId = 3 ORDER BY clientName LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT COUNT(*) as total FROM client_visibility WHERE configId = 3;\nSELECT clientName, isVisible FROM client_visibility WHERE configId = 3 ORDER BY clientName LIMIT 20;",
+  "rows": [
+    {
+      "total": "98"
+    },
+    {
+      "total": "clientName\tisVisible"
+    },
+    {
+      "total": "Amercare\t1"
+    },
+    {
+      "total": "Bamboo Sports and Skateboards\t1"
+    },
+    {
+      "total": "BeatBox\t1"
+    },
+    {
+      "total": "BigBoi\t1"
+    },
+    {
+      "total": "Biggest Little Skincare Co.\t1"
+    },
+    {
+      "total": "Birch Babe\t0"
+    },
+    {
+      "total": "Bliss Beauty\t1"
+    },
+    {
+      "total": "BOBA\t1"
+    },
+    {
+      "total": "Boom Beverages\t0"
+    },
+    {
+      "total": "Browluxe\t1"
+    },
+    {
+      "total": "Bubblegum Kids\t1"
+    },
+    {
+      "total": "Caboo\t0"
+    },
+    {
+      "total": "CanPrev\t1"
+    },
+    {
+      "total": "Chlorophyll Water\t0"
+    },
+    {
+      "total": "Clew\t1"
+    },
+    {
+      "total": "Click & Grow\t1"
+    },
+    {
+      "total": "CorporateGifts.com\t1"
+    },
+    {
+      "total": "Daily Nouri\t0"
+    },
+    {
+      "total": "David White's SitePro\t1"
+    },
+    {
+      "total": "Deep Relief CBD\t1"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\n98\nclientName\tisVisible\nAmercare\t1\nBamboo Sports and Skateboards\t1\nBeatBox\t1\nBigBoi\t1\nBiggest Little Skincare Co.\t1\nBirch Babe\t0\nBliss Beauty\t1\nBOBA\t1\nBoom Beverages\t0\nBrowluxe\t1\nBubblegum Kids\t1\nCaboo\t0\nCanPrev\t1\nChlorophyll Water\t0\nClew\t1\nClick & Grow\t1\nCorporateGifts.com\t1\nDaily Nouri\t0\nDavid White's SitePro\t1\nDeep Relief CBD\t1\n",
+  "stderr": "",
+  "execution_time_ms": 67
+}

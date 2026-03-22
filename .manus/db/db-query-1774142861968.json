@@ -1,0 +1,35 @@
+{
+  "query": "SELECT clientId, clientName, isVisible FROM client_visibility WHERE configId = 3 AND clientId NOT IN (145,205,160,179,220,231,154,191,37,204,177,226,100,212,113,208,202,233,158,144,229,218,170,111,147,237,44,131,234,228,213,188,235,224,173,81,86,3,33,34,79,83,85,82,116,93,129,217,130,185,192,197,209,151,216,222,166,214,24,11,10,26,6,55,56,12,13,171,190,156,143,142,223,183,165,196,161,201,236,71,141,14,215,140,193,227,174,176,221,225,157,172,232) ORDER BY clientName;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT clientId, clientName, isVisible FROM client_visibility WHERE configId = 3 AND clientId NOT IN (145,205,160,179,220,231,154,191,37,204,177,226,100,212,113,208,202,233,158,144,229,218,170,111,147,237,44,131,234,228,213,188,235,224,173,81,86,3,33,34,79,83,85,82,116,93,129,217,130,185,192,197,209,151,216,222,166,214,24,11,10,26,6,55,56,12,13,171,190,156,143,142,223,183,165,196,161,201,236,71,141,14,215,140,193,227,174,176,221,225,157,172,232) ORDER BY clientName;",
+  "rows": [
+    {
+      "clientId": "168",
+      "clientName": "Boom Beverages",
+      "isVisible": "0"
+    },
+    {
+      "clientId": "1",
+      "clientName": "GD Test Customer",
+      "isVisible": "0"
+    },
+    {
+      "clientId": "203",
+      "clientName": "Pantheryx",
+      "isVisible": "1"
+    },
+    {
+      "clientId": "186",
+      "clientName": "Perrigo",
+      "isVisible": "0"
+    },
+    {
+      "clientId": "149",
+      "clientName": "Squishable",
+      "isVisible": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "clientId\tclientName\tisVisible\n168\tBoom Beverages\t0\n1\tGD Test Customer\t0\n203\tPantheryx\t1\n186\tPerrigo\t0\n149\tSquishable\t0\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}

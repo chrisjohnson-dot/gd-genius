@@ -1,0 +1,55 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "alert_settings"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "allocation_run_orders"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "allocation_runs"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "audit_logs"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "client_visibility"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "customer_rules"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "extensiv_configs"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "lane_thresholds"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "location_configs"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "order_tracking"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "schedule_configs"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "shipwell_configs"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "sla_requirements"
+    },
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_K5ogkLhSXtccCnqH4Vm3fs\n__drizzle_migrations\nalert_settings\nallocation_run_orders\nallocation_runs\naudit_logs\nclient_visibility\ncustomer_rules\nextensiv_configs\nlane_thresholds\nlocation_configs\norder_tracking\nschedule_configs\nshipwell_configs\nsla_requirements\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

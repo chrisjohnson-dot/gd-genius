@@ -1,0 +1,26 @@
+{
+  "query": "SELECT DISTINCT facilityId, facilityName FROM order_tracking ORDER BY facilityName;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT DISTINCT facilityId, facilityName FROM order_tracking ORDER BY facilityName;",
+  "rows": [
+    {
+      "facilityId": "4",
+      "facilityName": "CAL-Calgary"
+    },
+    {
+      "facilityId": "2",
+      "facilityName": "COL-Columbus"
+    },
+    {
+      "facilityId": "3",
+      "facilityName": "RENO - Reno"
+    },
+    {
+      "facilityId": "1",
+      "facilityName": "TOR-Toronto"
+    }
+  ],
+  "messages": [],
+  "stdout": "facilityId\tfacilityName\n4\tCAL-Calgary\n2\tCOL-Columbus\n3\tRENO - Reno\n1\tTOR-Toronto\n",
+  "stderr": "",
+  "execution_time_ms": 78
+}

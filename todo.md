@@ -330,3 +330,4 @@
 - [x] Fix duplicate client entries in Client Visibility tab
 - [x] Show unallocated order count beside each customer name in the Open Orders detail table
 - [x] Show total unallocated order count on each warehouse card summary subtitle
+- [x] Seed client_visibility table from selected-customers TSV (master customer list with facility assignments)

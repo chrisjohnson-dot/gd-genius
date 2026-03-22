@@ -1,0 +1,130 @@
+{
+  "query": "SELECT configId, clientId, clientName, isVisible FROM client_visibility ORDER BY configId, clientName LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT configId, clientId, clientName, isVisible FROM client_visibility ORDER BY configId, clientName LIMIT 20;",
+  "rows": [
+    {
+      "configId": "3",
+      "clientId": "145",
+      "clientName": "Amercare",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "205",
+      "clientName": "Bamboo Sports and Skateboards",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "160",
+      "clientName": "BeatBox",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "179",
+      "clientName": "BigBoi",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "231",
+      "clientName": "Birch Babe",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "191",
+      "clientName": "BOBA",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "168",
+      "clientName": "Boom Beverages",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "177",
+      "clientName": "Caboo",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "100",
+      "clientName": "Chlorophyll Water",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "202",
+      "clientName": "Daily Nouri",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "229",
+      "clientName": "Drink Pres",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "218",
+      "clientName": "Drink Proxies",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "1",
+      "clientName": "GD Test Customer",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "131",
+      "clientName": "Growl Products INC.",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "224",
+      "clientName": "IBG Group",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "173",
+      "clientName": "Joyburst",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "33",
+      "clientName": "JUUL – Juul Labs - D2C",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "83",
+      "clientName": "JUUL USA  - D2C",
+      "isVisible": "0"
+    },
+    {
+      "configId": "3",
+      "clientId": "82",
+      "clientName": "JUUL USA - B2B",
+      "isVisible": "1"
+    },
+    {
+      "configId": "3",
+      "clientId": "93",
+      "clientName": "JUUL USA - RETB",
+      "isVisible": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "configId\tclientId\tclientName\tisVisible\n3\t145\tAmercare\t1\n3\t205\tBamboo Sports and Skateboards\t1\n3\t160\tBeatBox\t1\n3\t179\tBigBoi\t1\n3\t231\tBirch Babe\t0\n3\t191\tBOBA\t1\n3\t168\tBoom Beverages\t0\n3\t177\tCaboo\t0\n3\t100\tChlorophyll Water\t0\n3\t202\tDaily Nouri\t0\n3\t229\tDrink Pres\t1\n3\t218\tDrink Proxies\t0\n3\t1\tGD Test Customer\t0\n3\t131\tGrowl Products INC.\t1\n3\t224\tIBG Group\t1\n3\t173\tJoyburst\t0\n3\t33\tJUUL – Juul Labs - D2C\t1\n3\t83\tJUUL USA  - D2C\t0\n3\t82\tJUUL USA - B2B\t1\n3\t93\tJUUL USA - RETB\t1\n",
+  "stderr": "",
+  "execution_time_ms": 54
+}

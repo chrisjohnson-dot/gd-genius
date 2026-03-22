@@ -84,6 +84,23 @@ import {
   getProcessedCortexReturns,
   getCortexReturn,
   updateCortexReturn,
+  createQcSession,
+  getQcSessionById,
+  getQcSessionByRef,
+  updateQcSession,
+  listQcSessions,
+  getQcScanItems,
+  upsertQcScanItem,
+  incrementQcScanItem,
+  createQcPallet,
+  getQcPallets,
+  updateQcPallet,
+  createQcFlaggedScan,
+  listQcFlaggedScans,
+  resolveQcFlaggedScan,
+  createPalletScan,
+  listPalletScans,
+  updatePalletScanStatus,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
@@ -2708,7 +2725,259 @@ const cortexRouter = router({
     }),
 
 });
-// Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, and cortex
+// ─── QC Scanner Router ───────────────────────────────────────────────────────
+const qcScannerRouter = router({
+  // Look up an order by reference number from Extensiv and create/resume a session
+  startSession: protectedProcedure
+    .input(z.object({
+      referenceNumber: z.string().min(1),
+      warehouseId: z.number().optional(),
+      warehouseName: z.string().optional(),
+      batchMode: z.boolean().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Try to find an existing open session for this reference number
+      const existing = await getQcSessionByRef(input.referenceNumber);
+      if (existing && existing.status === "scanning") {
+        const items = await getQcScanItems(existing.id);
+        const pallets = await getQcPallets(existing.id);
+        return { session: existing, items, pallets, resumed: true };
+      }
+      // Create a new session
+      const sessionId = await createQcSession({
+        referenceNumber: input.referenceNumber,
+        warehouseId: input.warehouseId,
+        warehouseName: input.warehouseName,
+        batchIdentifiers: input.batchMode ? input.referenceNumber : null,
+        status: "scanning",
+        createdBy: ctx.user.name,
+      });
+      const session = await getQcSessionById(sessionId);
+      // Create first pallet automatically
+      await createQcPallet({ sessionId, palletNumber: 1, items: [] });
+      const pallets = await getQcPallets(sessionId);
+      return { session, items: [], pallets, resumed: false };
+    }),
+
+  // Load a session with all items and pallets
+  getSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+      const items = await getQcScanItems(input.sessionId);
+      const pallets = await getQcPallets(input.sessionId);
+      return { session, items, pallets };
+    }),
+
+  // List recent sessions
+  listSessions: protectedProcedure
+    .input(z.object({ limit: z.number().optional() }))
+    .query(async ({ input }) => listQcSessions(input.limit ?? 50)),
+
+  // Seed expected items from Extensiv order data (called after fetching order)
+  seedItems: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      items: z.array(z.object({
+        sku: z.string(),
+        upc: z.string().optional(),
+        description: z.string().optional(),
+        expectedQty: z.number(),
+        caseAmount: z.number().optional(),
+      })),
+      orderMeta: z.object({
+        customerName: z.string().optional(),
+        destinationAddress: z.string().optional(),
+        distributionCenter: z.string().optional(),
+        poNumber: z.string().optional(),
+      }).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      for (const item of input.items) {
+        await upsertQcScanItem(input.sessionId, item.sku, item.upc ?? null, {
+          description: item.description,
+          expectedQty: item.expectedQty,
+          caseAmount: item.caseAmount ?? 1,
+          scannedQty: 0,
+          scanTimestamps: [],
+        });
+      }
+      if (input.orderMeta) {
+        await updateQcSession(input.sessionId, input.orderMeta as any);
+      }
+      return { success: true };
+    }),
+
+  // Record a barcode scan — increments scannedQty for the matching SKU/UPC
+  scanBarcode: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      barcode: z.string().min(1),
+      scanAsCase: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const items = await getQcScanItems(input.sessionId);
+      const match = items.find(
+        (i) => i.sku.toUpperCase() === input.barcode.toUpperCase() ||
+               (i.upc && i.upc.toUpperCase() === input.barcode.toUpperCase())
+      );
+      if (!match) {
+        return { found: false, item: null, sessionComplete: false };
+      }
+      const amount = input.scanAsCase ? (match.caseAmount ?? 1) : 1;
+      const updated = await incrementQcScanItem(input.sessionId, match.sku, amount);
+      // Check if all items are complete
+      const allItems = await getQcScanItems(input.sessionId);
+      const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);
+      return { found: true, item: updated, sessionComplete };
+    }),
+
+  // Manual quantity adjustment
+  adjustQty: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      sku: z.string(),
+      delta: z.number(), // +1 or -1
+    }))
+    .mutation(async ({ input }) => {
+      const updated = await incrementQcScanItem(input.sessionId, input.sku, input.delta);
+      const allItems = await getQcScanItems(input.sessionId);
+      const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);
+      return { item: updated, sessionComplete };
+    }),
+
+  // Complete the order
+  completeSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await updateQcSession(input.sessionId, { status: "complete", completedAt: new Date() });
+      await createAuditLog({
+        action: "qc.completeSession",
+        entityType: "qc_scan_session",
+        entityId: String(input.sessionId),
+        userId: ctx.user.id,
+        details: JSON.stringify({ sessionId: input.sessionId, completedBy: ctx.user.name }),
+      });
+      return { success: true };
+    }),
+
+  // Add a new pallet to the session
+  addPallet: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const existing = await getQcPallets(input.sessionId);
+      const palletNumber = existing.length + 1;
+      const id = await createQcPallet({ sessionId: input.sessionId, palletNumber, items: [] });
+      return { id, palletNumber };
+    }),
+
+  // Assign a scan to a pallet
+  assignToPallet: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      sku: z.string(),
+      upc: z.string().optional(),
+      qty: z.number(),
+    }))
+    .mutation(async ({ input }) => {
+      // Fetch the pallet and append the item to its items JSON array
+      const pallets = await getQcPallets(input.palletId);
+      const pallet = pallets[0] ?? null;
+      if (pallet) {
+        const items = (pallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+        const existing = items.find((i) => i.sku === input.sku);
+        if (existing) {
+          existing.qty += input.qty;
+        } else {
+          items.push({ sku: input.sku, upc: input.upc, qty: input.qty });
+        }
+        await updateQcPallet(pallet.id, { items });
+      }
+      return { success: true };
+    }),
+
+  // Flag an unrecognised scan
+  flagScan: protectedProcedure
+    .input(z.object({
+      sessionId: z.number().optional(),
+      referenceNumber: z.string().optional(),
+      upc: z.string().optional(),
+      sku: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const id = await createQcFlaggedScan({
+        sessionId: input.sessionId ?? null,
+        referenceNumber: input.referenceNumber ?? null,
+        upc: input.upc ?? null,
+        sku: input.sku ?? null,
+        description: input.description ?? null,
+        flaggedBy: ctx.user.name,
+        status: "open",
+      });
+      return { id };
+    }),
+
+  // List flagged scans
+  listFlaggedScans: protectedProcedure
+    .input(z.object({ status: z.string().optional() }))
+    .query(async ({ input }) => listQcFlaggedScans(input.status ?? undefined)),
+
+  // Resolve a flagged scan
+  resolveFlaggedScan: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await resolveQcFlaggedScan(input.id, ctx.user.name ?? "unknown");
+      return { success: true };
+    }),
+});
+
+// Pallet Scanner router (Shipping section)
+const palletScannerRouter = router({
+  // Log a new pallet scan
+  logScan: protectedProcedure
+    .input(z.object({
+      trackingNumber: z.string().min(1),
+      doorNumber: z.string().optional(),
+      warehouseName: z.string().optional(),
+      carrierName: z.string().optional(),
+      referenceNumber: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const scan = await createPalletScan({
+        trackingNumber: input.trackingNumber,
+        doorNumber: input.doorNumber ?? null,
+        warehouseName: input.warehouseName ?? null,
+        carrierName: input.carrierName ?? null,
+        referenceNumber: input.referenceNumber ?? null,
+        notes: input.notes ?? null,
+        scannedBy: ctx.user.name ?? ctx.user.email ?? "unknown",
+        status: "loaded",
+      });
+      return scan;
+    }),
+
+  // List recent pallet scans
+  list: protectedProcedure
+    .input(z.object({
+      warehouseName: z.string().optional(),
+      doorNumber: z.string().optional(),
+      limit: z.number().optional(),
+    }))
+    .query(async ({ input }) => listPalletScans(input)),
+
+  // Update status (loaded → departed)
+  updateStatus: protectedProcedure
+    .input(z.object({ id: z.number(), status: z.enum(["loaded", "departed", "pending"]) }))
+    .mutation(async ({ input }) => {
+      await updatePalletScanStatus(input.id, input.status);
+      return { success: true };
+    }),
+});
+
+// Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
 export const appRouter = router({
   ..._appRouter._def.record,
   laneThresholds: laneThresholdRouter,
@@ -2716,5 +2985,7 @@ export const appRouter = router({
   clientVisibility: clientVisibilityRouter,
   returns: returnsRouter,
   cortex: cortexRouter,
+  qcScanner: qcScannerRouter,
+  palletScanner: palletScannerRouter,
 });
 export type AppRouter = typeof appRouter;

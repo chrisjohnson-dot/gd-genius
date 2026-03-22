@@ -460,3 +460,102 @@ export const cortexReturns = mysqlTable("cortex_returns", {
 });
 export type CortexReturn = typeof cortexReturns.$inferSelect;
 export type InsertCortexReturn = typeof cortexReturns.$inferInsert;
+
+// ─── QC Scanner ──────────────────────────────────────────────────────────────
+// A QC scan session corresponds to one order/reference number being scanned
+export const qcScanSessions = mysqlTable("qc_scan_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  referenceNumber: varchar("referenceNumber", { length: 128 }).notNull(),
+  // Optional batch — comma-separated reference numbers
+  batchIdentifiers: text("batchIdentifiers"),
+  warehouseId: int("warehouseId"),
+  warehouseName: varchar("warehouseName", { length: 128 }),
+  customerId: int("customerId"),
+  customerName: varchar("customerName", { length: 256 }),
+  destinationAddress: text("destinationAddress"),
+  distributionCenter: varchar("distributionCenter", { length: 128 }),
+  poNumber: varchar("poNumber", { length: 128 }),
+  trackingNumber: varchar("trackingNumber", { length: 256 }),
+  // Status: scanning | complete | shipped
+  status: varchar("status", { length: 32 }).notNull().default("scanning"),
+  // Whether the order was found in Extensiv (false = manual label)
+  foundInExtensiv: boolean("foundInExtensiv").notNull().default(true),
+  completedAt: timestamp("completedAt"),
+  shippedAt: timestamp("shippedAt"),
+  createdBy: varchar("createdBy", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type QcScanSession = typeof qcScanSessions.$inferSelect;
+export type InsertQcScanSession = typeof qcScanSessions.$inferInsert;
+
+// Each expected SKU line item in a QC scan session
+export const qcScanItems = mysqlTable("qc_scan_items", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  sku: varchar("sku", { length: 128 }).notNull(),
+  upc: varchar("upc", { length: 128 }),
+  description: varchar("description", { length: 512 }),
+  expectedQty: int("expectedQty").notNull().default(0),
+  scannedQty: int("scannedQty").notNull().default(0),
+  caseAmount: int("caseAmount").notNull().default(1),
+  // Individual scan timestamps stored as JSON array
+  scanTimestamps: json("scanTimestamps"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type QcScanItem = typeof qcScanItems.$inferSelect;
+export type InsertQcScanItem = typeof qcScanItems.$inferInsert;
+
+// Pallets created during a QC scan session
+export const qcPallets = mysqlTable("qc_pallets", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  palletUpc: varchar("palletUpc", { length: 128 }),
+  palletNumber: int("palletNumber").notNull().default(1),
+  // JSON array of { sku, upc, qty } items on this pallet
+  items: json("items"),
+  builtAt: timestamp("builtAt").defaultNow(),
+  shippedAt: timestamp("shippedAt"),
+  deletedAt: timestamp("deletedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type QcPallet = typeof qcPallets.$inferSelect;
+export type InsertQcPallet = typeof qcPallets.$inferInsert;
+
+// Flagged scans — UPCs/SKUs that didn't match the expected order
+export const qcFlaggedScans = mysqlTable("qc_flagged_scans", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId"),
+  referenceNumber: varchar("referenceNumber", { length: 128 }),
+  upc: varchar("upc", { length: 128 }),
+  sku: varchar("sku", { length: 128 }),
+  description: text("description"),
+  flaggedBy: varchar("flaggedBy", { length: 256 }),
+  // resolved | open
+  status: varchar("status", { length: 32 }).notNull().default("open"),
+  resolvedBy: varchar("resolvedBy", { length: 256 }),
+  resolvedAt: timestamp("resolvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type QcFlaggedScan = typeof qcFlaggedScans.$inferSelect;
+export type InsertQcFlaggedScan = typeof qcFlaggedScans.$inferInsert;
+
+// ─── Pallet Scanner (Shipping) ─────────────────────────────────────────────
+// Tracks dock-door pallet scans when pallets are loaded onto trucks
+export const palletScans = mysqlTable("pallet_scans", {
+  id: int("id").autoincrement().primaryKey(),
+  trackingNumber: varchar("trackingNumber", { length: 256 }).notNull(),
+  doorNumber: varchar("doorNumber", { length: 64 }),
+  warehouseName: varchar("warehouseName", { length: 256 }),
+  carrierName: varchar("carrierName", { length: 256 }),
+  referenceNumber: varchar("referenceNumber", { length: 256 }),
+  notes: text("notes"),
+  scannedBy: varchar("scannedBy", { length: 256 }),
+  // pending | loaded | departed
+  status: varchar("status", { length: 32 }).notNull().default("loaded"),
+  scannedAt: timestamp("scannedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PalletScan = typeof palletScans.$inferSelect;
+export type InsertPalletScan = typeof palletScans.$inferInsert;

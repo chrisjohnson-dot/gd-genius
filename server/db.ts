@@ -54,6 +54,21 @@ import {
   InsertCortexConnection,
   CortexReturn,
   InsertCortexReturn,
+  qcScanSessions,
+  QcScanSession,
+  InsertQcScanSession,
+  qcScanItems,
+  QcScanItem,
+  InsertQcScanItem,
+  qcPallets,
+  QcPallet,
+  InsertQcPallet,
+  qcFlaggedScans,
+  QcFlaggedScan,
+  InsertQcFlaggedScan,
+  palletScans,
+  PalletScan,
+  InsertPalletScan,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1651,4 +1666,171 @@ export async function getPendingWebhookCortexReturns(): Promise<CortexReturn[]> 
     .from(cortexReturns)
     .where(eq(cortexReturns.webhookSent, false))
     .orderBy(cortexReturns.updatedAt);
+}
+
+
+// ─── QC Scanner helpers ───────────────────────────────────────────────────────
+
+export async function createQcSession(data: InsertQcScanSession): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.insert(qcScanSessions).values(data);
+  return (result as any).insertId ?? 0;
+}
+
+export async function getQcSessionById(id: number): Promise<QcScanSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(qcScanSessions).where(eq(qcScanSessions.id, id));
+  return rows[0] ?? null;
+}
+
+export async function getQcSessionByRef(referenceNumber: string): Promise<QcScanSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(qcScanSessions)
+    .where(eq(qcScanSessions.referenceNumber, referenceNumber))
+    .orderBy(desc(qcScanSessions.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateQcSession(id: number, data: Partial<QcScanSession>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(qcScanSessions).set(data).where(eq(qcScanSessions.id, id));
+}
+
+export async function listQcSessions(limit = 50): Promise<QcScanSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(qcScanSessions).orderBy(desc(qcScanSessions.createdAt)).limit(limit);
+}
+
+// QC Scan Items
+
+export async function upsertQcScanItem(sessionId: number, sku: string, upc: string | null, data: Partial<InsertQcScanItem>): Promise<QcScanItem | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const existing = await db
+    .select()
+    .from(qcScanItems)
+    .where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
+  if (existing.length > 0) {
+    await db.update(qcScanItems).set(data).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
+    const updated = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
+    return updated[0] ?? null;
+  } else {
+    const insert: InsertQcScanItem = { sessionId, sku, upc: upc ?? undefined, ...data } as InsertQcScanItem;
+    await db.insert(qcScanItems).values(insert);
+    const rows = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
+    return rows[0] ?? null;
+  }
+}
+
+export async function getQcScanItems(sessionId: number): Promise<QcScanItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(qcScanItems).where(eq(qcScanItems.sessionId, sessionId));
+}
+
+export async function incrementQcScanItem(sessionId: number, sku: string, amount: number): Promise<QcScanItem | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
+  if (rows.length === 0) return null;
+  const item = rows[0];
+  const newQty = Math.max(0, item.scannedQty + amount);
+  const timestamps = (item.scanTimestamps as number[] | null) ?? [];
+  if (amount > 0) timestamps.push(Date.now());
+  await db.update(qcScanItems)
+    .set({ scannedQty: newQty, scanTimestamps: timestamps })
+    .where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
+  return { ...item, scannedQty: newQty, scanTimestamps: timestamps };
+}
+
+// QC Pallets
+
+export async function createQcPallet(data: InsertQcPallet): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.insert(qcPallets).values(data);
+  return (result as any).insertId ?? 0;
+}
+
+export async function getQcPallets(sessionId: number): Promise<QcPallet[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(qcPallets)
+    .where(and(eq(qcPallets.sessionId, sessionId), isNull(qcPallets.deletedAt)));
+}
+
+export async function updateQcPallet(id: number, data: Partial<QcPallet>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(qcPallets).set(data).where(eq(qcPallets.id, id));
+}
+
+// QC Flagged Scans
+
+export async function createQcFlaggedScan(data: InsertQcFlaggedScan): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.insert(qcFlaggedScans).values(data);
+  return (result as any).insertId ?? 0;
+}
+
+export async function listQcFlaggedScans(status?: string): Promise<QcFlaggedScan[]> {
+  const db = await getDb();
+  if (!db) return [];
+  if (status) {
+    return db.select().from(qcFlaggedScans).where(eq(qcFlaggedScans.status, status)).orderBy(desc(qcFlaggedScans.createdAt));
+  }
+  return db.select().from(qcFlaggedScans).orderBy(desc(qcFlaggedScans.createdAt));
+}
+
+export async function resolveQcFlaggedScan(id: number, resolvedBy: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(qcFlaggedScans).set({ status: "resolved", resolvedBy, resolvedAt: new Date() }).where(eq(qcFlaggedScans.id, id));
+}
+
+// ─── Pallet Scanner (Shipping) ─────────────────────────────────────────────
+
+export async function createPalletScan(data: InsertPalletScan): Promise<PalletScan | null> {
+  const db = _db;
+  if (!db) return null;
+  const [row] = await db.insert(palletScans).values(data).$returningId();
+  if (!row) return null;
+  const [scan] = await db.select().from(palletScans).where(eq(palletScans.id, row.id));
+  return scan ?? null;
+}
+
+export async function listPalletScans(opts?: {
+  warehouseName?: string;
+  doorNumber?: string;
+  limit?: number;
+}): Promise<PalletScan[]> {
+  const db = _db;
+  if (!db) return [];
+  const conditions = [];
+  if (opts?.warehouseName) conditions.push(eq(palletScans.warehouseName, opts.warehouseName));
+  if (opts?.doorNumber) conditions.push(eq(palletScans.doorNumber, opts.doorNumber));
+  const query = db
+    .select()
+    .from(palletScans)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(palletScans.scannedAt))
+    .limit(opts?.limit ?? 100);
+  return query;
+}
+
+export async function updatePalletScanStatus(id: number, status: string): Promise<void> {
+  const db = _db;
+  if (!db) return;
+  await db.update(palletScans).set({ status }).where(eq(palletScans.id, id));
 }

@@ -395,3 +395,17 @@
 - [x] UI ProcessReturns: push panel shows Sent (green) / Failed (red) badge with error message, attempt count, and Retry Push button
 - [x] UI ReturnsDashboard: session rows show Sent badge, Failed badge with attempt count, Push button (not yet pushed), Retry button (failed)
 - [x] 242 tests passing total
+
+## QC Scanner Module (from GD Scanner App)
+- [x] QC Scanner: DB schema — qc_scan_sessions, qc_scan_items, qc_pallets, qc_flagged_scans tables
+- [x] QC Scanner: tRPC procedures — create/get session by reference number, scan SKU, manage pallets, flag scan, list flagged scans, complete session
+- [x] QC Scanner page — reference number input → SKU checklist with expected vs scanned qty → pallet management tabs
+- [x] QC Scanner: audio feedback on scan (correct beep, wrong buzz, complete chime via Web Audio API)
+- [x] QC Scanner: manual quantity entry, new pallet button, pallet tab view with items per pallet
+- [x] Flagged Scans page — table of all flagged scans with UPC, SKU, description, date, resolve action
+- [x] QC section sidebar nav — QC Scanner and Flagged Scans links added
+- [x] Pallet Scanner (Shipping): DB schema — pallet_scans table (tracking, door, warehouse, carrier, reference, scanned by, status, timestamp)
+- [x] Pallet Scanner (Shipping): tRPC procedures — logScan, list, updateStatus
+- [x] Pallet Scanner (Shipping): page — tracking scan input, door/carrier/reference fields, audio feedback, recent scans table, Mark Departed action
+- [x] Pallet Scanner (Shipping): sidebar nav entry under Shipping section
+- [x] 242 tests passing total

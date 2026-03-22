@@ -28,6 +28,7 @@ import {
   Users,
   Zap,
   Network,
+  Flag,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -46,13 +47,16 @@ const allocationItems = [
 ];
 
 const qcItems = [
-  { href: "/qc",         label: "QC Dashboard", icon: BarChart3 },
-  { href: "/qc/reports", label: "QC Reports",   icon: FileBarChart2 },
+  { href: "/qc",              label: "QC Dashboard",  icon: BarChart3 },
+  { href: "/qc/reports",     label: "QC Reports",    icon: FileBarChart2 },
+  { href: "/qc/scanner",     label: "QC Scanner",    icon: ScanBarcode },
+  { href: "/qc/flagged",     label: "Flagged Scans", icon: Flag },
 ];
 
 const shippingItems = [
-  { href: "/shipping",         label: "Shipping Dashboard", icon: Ship },
-  { href: "/shipping/orders",  label: "Ship Orders",         icon: PackageCheck },
+  { href: "/shipping",              label: "Shipping Dashboard", icon: Ship },
+  { href: "/shipping/orders",       label: "Ship Orders",         icon: PackageCheck },
+  { href: "/shipping/pallet-scan",  label: "Pallet Scanner",      icon: ScanBarcode },
   { href: "/shipping/history", label: "Shipping History",    icon: ScrollText },
   { href: "/shipping/carriers",label: "Carriers",            icon: Truck },
 ];

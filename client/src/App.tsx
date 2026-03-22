@@ -29,6 +29,9 @@ import ClientVisibility from "@/pages/ClientVisibility";
 import ReturnsDashboard from "@/pages/ReturnsDashboard";
 import ProcessReturns from "@/pages/ProcessReturns";
 import CortexSettings from "@/pages/CortexSettings";
+import QcScanner from "@/pages/QcScanner";
+import FlaggedScans from "@/pages/FlaggedScans";
+import PalletScanner from "@/pages/PalletScanner";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -68,6 +71,9 @@ function AppRoutes() {
         <Route path="/returns/process" component={ProcessReturns} />
         <Route path="/returns/session/:id" component={ProcessReturns} />
         <Route path="/cortex-settings" component={CortexSettings} />
+        <Route path="/qc/scanner" component={QcScanner} />
+        <Route path="/qc/flagged" component={FlaggedScans} />
+        <Route path="/shipping/pallet-scan" component={PalletScanner} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

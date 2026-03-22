@@ -296,13 +296,23 @@ export default function QcScanner() {
 
   const startSession = trpc.qcScanner.startSession.useMutation({
     onSuccess: (data) => {
-      setSession(data.session as Session);
+      const sess = data.session as Session;
+      setSession(sess);
       setItems((data.items as ScanItem[]) ?? []);
       setPallets((data.pallets as Pallet[]) ?? []);
       setPhase("scanning");
-      if (data.resumed) toast.info(`Resumed session for ${data.session?.referenceNumber}`);
-      else toast.success(`Session started for ${data.session?.referenceNumber}`);
-      setTimeout(() => barcodeRef.current?.focus(), 100);
+      if (data.resumed) {
+        toast.info(`Resumed session for ${sess?.referenceNumber}`);
+        setTimeout(() => barcodeRef.current?.focus(), 100);
+      } else {
+        toast.success(`Session started for ${sess?.referenceNumber}`);
+        // Auto-load items and lot numbers from Extensiv for new sessions
+        if (sess?.id && sess?.referenceNumber) {
+          fetchFromExtensiv.mutate({ sessionId: sess.id, referenceNumber: sess.referenceNumber });
+        } else {
+          setTimeout(() => barcodeRef.current?.focus(), 100);
+        }
+      }
     },
     onError: (e) => toast.error(e.message),
   });

@@ -421,3 +421,6 @@
 - [x] Add fetchFromExtensiv tRPC procedure to qcScannerRouter (seeds items + lot numbers + descriptions)
 - [x] Add Load from Extensiv button to QC Scanner scanning phase UI
 - [x] 7 unit tests for fetchFromExtensiv (254 tests passing total)
+
+## QC Scanner — Auto-Load from Extensiv on Session Start
+- [x] Auto-trigger fetchFromExtensiv after new session creation (not on resume)

@@ -80,6 +80,18 @@ export async function syncOrdersNow(): Promise<{
                   const skuCount = new Set(
                     (o.orderItems ?? []).map((item) => item.itemIdentifier?.sku).filter(Boolean)
                   ).size;
+                  // Capture savedElements (order-level custom fields) from Extensiv
+                  const rawSavedElements = oRaw.savedElements;
+                  let savedElementsJson: string | null = null;
+                  if (Array.isArray(rawSavedElements) && rawSavedElements.length > 0) {
+                    savedElementsJson = JSON.stringify(
+                      rawSavedElements.map((el: unknown) => {
+                        const e = el as Record<string, unknown>;
+                        return { name: String(e.name ?? ""), value: String(e.value ?? "") };
+                      })
+                    );
+                  }
+
                   ordersForFacility.push({
                     extensivOrderId: o.readOnly.orderId,
                     referenceNum: o.referenceNum ?? null,
@@ -94,6 +106,7 @@ export async function syncOrdersNow(): Promise<{
                     totalPieces,
                     skuCount,
                     notes: (oRaw.notes as string | null) ?? null,
+                    savedElements: savedElementsJson,
                     extensivStatus: o.readOnly.status ?? 0,
                     creationDate: o.readOnly.creationDate ?? null,
                     requiredShipDate: o.earliestShipDate ?? (oRaw.earliestShipDate as string | null) ?? null,

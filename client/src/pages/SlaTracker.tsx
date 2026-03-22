@@ -66,6 +66,8 @@ type SlaOrder = {
   ageCalendarDays: number;
   slaStatus: "in_sla" | "out_of_sla";
   daysRemaining: number;
+  matchedRuleName: string | null;
+  savedElements: string | null;
 };
 
 type SlaRequirement = {
@@ -297,6 +299,7 @@ function WarehouseSlaCard({
                 <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("ageCalendarDays")}>Age <SortIcon col="ageCalendarDays" /></th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Stage</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Rule Applied</th>
                 <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
               </tr>
             </thead>
@@ -315,6 +318,15 @@ function WarehouseSlaCard({
                     <td className="px-4 py-2 text-muted-foreground text-right whitespace-nowrap">{o.ageCalendarDays === 0 ? "Today" : `${o.ageCalendarDays}d`}</td>
                     <td className="px-4 py-2"><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground capitalize">{o.lifecycleStatus.replace("_", " ")}</span></td>
                     <td className="px-4 py-2 text-muted-foreground text-center">{o.slaDays}d</td>
+                    <td className="px-4 py-2">
+                      {o.matchedRuleName ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 border border-purple-200 whitespace-nowrap">
+                          {o.matchedRuleName}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-[10px]">Base</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-center">
                       {o.notes ? (
                         <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild><MessageSquare className="h-3.5 w-3.5 text-blue-400 cursor-default inline" /></TooltipTrigger><TooltipContent side="left" className="max-w-[220px] text-xs">{o.notes}</TooltipContent></Tooltip></TooltipProvider>
@@ -427,6 +439,7 @@ function WarehouseSlaCard({
                 </th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Stage</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Rule Applied</th>
                 <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
               </tr>
             </thead>

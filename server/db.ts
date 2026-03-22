@@ -454,6 +454,7 @@ export async function upsertTrackedOrders(
     totalPieces: number;
     skuCount: number;
     notes: string | null;
+    savedElements: string | null;  // JSON string of [{name,value}] from Extensiv
     extensivStatus: number;
     creationDate: string | null;
     requiredShipDate?: string | null;
@@ -492,6 +493,7 @@ export async function upsertTrackedOrders(
           totalPieces: o.totalPieces,
           skuCount: o.skuCount,
           notes: o.notes ?? undefined,
+          savedElements: o.savedElements ?? undefined,
           extensivStatus: o.extensivStatus,
           creationDate: o.creationDate ?? undefined,
           requiredShipDate: o.requiredShipDate ?? undefined,
@@ -515,6 +517,7 @@ export async function upsertTrackedOrders(
         totalPieces: o.totalPieces,
         skuCount: o.skuCount,
         notes: o.notes ?? undefined,
+        savedElements: o.savedElements ?? undefined,
         extensivStatus: o.extensivStatus,
         creationDate: o.creationDate ?? undefined,
         requiredShipDate: o.requiredShipDate ?? undefined,
@@ -819,28 +822,59 @@ export async function getOrderSlaStatuses(): Promise<
       ageCalendarDays: number;
       slaStatus: "in_sla" | "out_of_sla";
       daysRemaining: number;
+      matchedRuleName: string | null;
     }
   >
 > {
   const db = await getDb();
   if (!db) return [];
 
-  const [orders, requirements] = await Promise.all([
+  const [orders, requirements, allRules] = await Promise.all([
     db.select().from(orderTracking),
     db.select().from(slaRequirements),
+    db.select().from(slaRules),
   ]);
 
-  // Build a map of clientId → slaDays for fast lookup
+  // Build a map of clientId → base slaDays for fast lookup
   const slaMap = new Map<number, number>();
   for (const req of requirements) {
     slaMap.set(req.clientId, req.slaDays);
+  }
+
+  // Build a map of clientId → sub-rules array for matching savedElements
+  const rulesMap = new Map<number, Array<{ ruleName: string; slaDays: number }>>();
+  for (const rule of allRules) {
+    if (!rulesMap.has(rule.clientId)) rulesMap.set(rule.clientId, []);
+    rulesMap.get(rule.clientId)!.push({ ruleName: rule.ruleName, slaDays: rule.slaDays });
   }
 
   const DEFAULT_SLA_DAYS = 2;
   const now = Date.now();
 
   return orders.map((order) => {
-    const slaDays = slaMap.get(order.clientId) ?? DEFAULT_SLA_DAYS;
+    let slaDays = slaMap.get(order.clientId) ?? DEFAULT_SLA_DAYS;
+    let matchedRuleName: string | null = null;
+
+    // Try to match savedElements values against client sub-rules
+    const clientRules = rulesMap.get(order.clientId);
+    if (clientRules && clientRules.length > 0 && order.savedElements) {
+      try {
+        const elements = JSON.parse(order.savedElements) as Array<{ name: string; value: string }>;
+        for (const el of elements) {
+          // Match by value (case-insensitive) against any rule name for this client
+          const matched = clientRules.find(
+            (r) => r.ruleName.toLowerCase() === el.value.toLowerCase()
+          );
+          if (matched) {
+            slaDays = matched.slaDays;
+            matchedRuleName = matched.ruleName;
+            break;
+          }
+        }
+      } catch {
+        // Malformed JSON — ignore and fall back to base SLA
+      }
+    }
 
     // Age in calendar days: day 1 starts the day AFTER the create date
     let ageCalendarDays = 0;
@@ -857,7 +891,7 @@ export async function getOrderSlaStatuses(): Promise<
     const slaStatus: "in_sla" | "out_of_sla" =
       daysRemaining >= 0 ? "in_sla" : "out_of_sla";
 
-    return { ...order, slaDays, ageCalendarDays, slaStatus, daysRemaining };
+    return { ...order, slaDays, ageCalendarDays, slaStatus, daysRemaining, matchedRuleName };
   });
 }
 

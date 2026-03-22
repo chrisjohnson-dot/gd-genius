@@ -186,6 +186,7 @@ export const orderTracking = mysqlTable("order_tracking", {
   totalPieces: int("totalPieces").default(0),
   skuCount: int("skuCount").default(0),
   notes: text("notes"),
+  savedElements: text("savedElements"),                       // JSON array of {name, value} from Extensiv savedElements
   extensivStatus: int("extensivStatus").default(0),           // raw Extensiv status code
   creationDate: varchar("creationDate", { length: 64 }),      // ISO string from Extensiv
   requiredShipDate: varchar("requiredShipDate", { length: 64 }), // earliestShipDate from Extensiv (ISO string)

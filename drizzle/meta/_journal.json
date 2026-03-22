@@ -176,6 +176,13 @@
       "when": 1774147138175,
       "tag": "0024_slow_triton",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1774148460522,
+      "tag": "0025_supreme_hedge_knight",
+      "breakpoints": true
     }
   ]
 }

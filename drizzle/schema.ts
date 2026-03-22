@@ -305,6 +305,8 @@ export const clientVisibility = mysqlTable("client_visibility", {
   clientName: varchar("clientName", { length: 256 }).notNull(),
   // Whether this client's orders are shown in the Open Orders view
   isVisible: boolean("isVisible").notNull().default(true),
+  // When true, the sync job will never override isVisible back to true
+  isLocked: boolean("isLocked").notNull().default(false),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
   uniqConfigClient: uniqueIndex("client_visibility_config_client_idx").on(t.configId, t.clientId),

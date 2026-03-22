@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import {
-  Loader2, Search, Users, Eye, EyeOff, Save, RotateCcw, Warehouse,
+  Loader2, Search, Users, Eye, EyeOff, Save, RotateCcw, Warehouse, Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ interface ClientRow {
   clientId: number;
   clientName: string;
   isVisible: boolean;
+  isLocked: boolean;
 }
 
 // ─── Per-warehouse panel ──────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
       .map((c) => ({
         ...c,
         isVisible: c.clientId in edits ? edits[c.clientId] : c.isVisible,
+        isLocked: c.isLocked ?? false,
       }))
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   }, [clients, edits]);
@@ -180,6 +182,15 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {/* Lock badge — shown when client is hidden & locked (sync-protected) */}
+                      {row.isLocked && !isEdited && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 px-1.5 py-0.5 rounded"
+                          title="Sync-locked: this client will not be re-shown by the background sync"
+                        >
+                          <Lock className="h-2.5 w-2.5" /> Locked
+                        </span>
+                      )}
                       {isEdited && (
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
                           Unsaved

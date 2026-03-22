@@ -162,6 +162,13 @@
       "when": 1774140146572,
       "tag": "0022_zippy_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1774143140224,
+      "tag": "0023_secret_lilandra",
+      "breakpoints": true
     }
   ]
 }

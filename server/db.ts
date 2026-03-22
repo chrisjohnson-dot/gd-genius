@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, isNotNull, isNull } from "drizzle-orm";
+import { eq, desc, and, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -1079,10 +1079,12 @@ export async function upsertClientVisibility(
   const db = await getDb();
   if (!db) return;
   for (const row of rows) {
+    // Auto-lock when a client is manually hidden; unlock when manually shown
+    const isLocked = !row.isVisible;
     await db
       .insert(clientVisibility)
-      .values(row)
-      .onDuplicateKeyUpdate({ set: { isVisible: row.isVisible, clientName: row.clientName } });
+      .values({ ...row, isLocked })
+      .onDuplicateKeyUpdate({ set: { isVisible: row.isVisible, clientName: row.clientName, isLocked } });
   }
 }
 
@@ -1113,7 +1115,6 @@ export async function syncClientVisibilityFromOrders(configId: number): Promise<
   const db = await getDb();
   if (!db) return;
   // Get distinct clients from order_tracking for this configId
-  const { sql } = await import("drizzle-orm");
   const rows = await db
     .selectDistinct({
       clientId: orderTracking.clientId,
@@ -1125,7 +1126,17 @@ export async function syncClientVisibilityFromOrders(configId: number): Promise<
   for (const row of rows) {
     await db
       .insert(clientVisibility)
-      .values({ configId, clientId: row.clientId, clientName: row.clientName, isVisible: true })
-      .onDuplicateKeyUpdate({ set: { clientName: row.clientName } }); // update name only, preserve isVisible
+      .values({ configId, clientId: row.clientId, clientName: row.clientName, isVisible: true, isLocked: false })
+      // Only update the cached name; never touch isVisible/isLocked for existing rows
+      // (locked rows stay hidden, and we never re-enable manually hidden clients)
+      .onDuplicateKeyUpdate({
+        set: {
+          // Update name if it changed in Extensiv
+          clientName: row.clientName,
+          // Only set isVisible=true for rows that are NOT locked
+          // MySQL conditional: IF(isLocked = 0, 1, isVisible)
+          isVisible: sql`IF(${clientVisibility.isLocked} = 0, 1, ${clientVisibility.isVisible})`,
+        },
+      });
   }
 }

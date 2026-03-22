@@ -1,0 +1,1 @@
+ALTER TABLE `client_visibility` ADD `isLocked` boolean DEFAULT false NOT NULL;

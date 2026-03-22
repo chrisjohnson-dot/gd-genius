@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `client_visibility` ADD CONSTRAINT `client_visibility_config_client_idx` UNIQUE(`configId`,`clientId`);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute ALTER TABLE `client_visibility` ADD CONSTRAINT `client_visibility_config_client_idx` UNIQUE(`configId`,`clientId`);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 917
+}

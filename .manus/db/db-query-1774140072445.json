@@ -1,0 +1,110 @@
+{
+  "query": "SELECT configId, clientId, COUNT(*) as cnt FROM client_visibility GROUP BY configId, clientId HAVING cnt > 1 LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT configId, clientId, COUNT(*) as cnt FROM client_visibility GROUP BY configId, clientId HAVING cnt > 1 LIMIT 20;",
+  "rows": [
+    {
+      "configId": "3",
+      "clientId": "218",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "6",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "143",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "83",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "130",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "168",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "157",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "171",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "149",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "186",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "33",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "129",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "11",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "179",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "100",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "173",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "231",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "216",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "1",
+      "cnt": "3"
+    },
+    {
+      "configId": "3",
+      "clientId": "205",
+      "cnt": "3"
+    }
+  ],
+  "messages": [],
+  "stdout": "configId\tclientId\tcnt\n3\t218\t3\n3\t6\t3\n3\t143\t3\n3\t83\t3\n3\t130\t3\n3\t168\t3\n3\t157\t3\n3\t171\t3\n3\t149\t3\n3\t186\t3\n3\t33\t3\n3\t129\t3\n3\t11\t3\n3\t179\t3\n3\t100\t3\n3\t173\t3\n3\t231\t3\n3\t216\t3\n3\t1\t3\n3\t205\t3\n",
+  "stderr": "",
+  "execution_time_ms": 66
+}

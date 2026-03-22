@@ -327,3 +327,4 @@
 - [x] Rewrite ClientVisibility page with per-warehouse tabs (one tab per extensiv config)
 - [x] Each tab shows its own independent client toggle list with search and bulk actions
 - [x] Rename "Show all" / "Hide all" buttons to "Select All" / "Deselect All" in Client Visibility page
+- [x] Fix duplicate client entries in Client Visibility tab

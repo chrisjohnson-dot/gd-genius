@@ -1,0 +1,1 @@
+ALTER TABLE `client_visibility` ADD CONSTRAINT `client_visibility_config_client_idx` UNIQUE(`configId`,`clientId`);

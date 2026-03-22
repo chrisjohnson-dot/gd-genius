@@ -8,6 +8,7 @@ import {
   json,
   boolean,
   decimal,
+  uniqueIndex,
 } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
@@ -305,6 +306,8 @@ export const clientVisibility = mysqlTable("client_visibility", {
   // Whether this client's orders are shown in the Open Orders view
   isVisible: boolean("isVisible").notNull().default(true),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => ({
+  uniqConfigClient: uniqueIndex("client_visibility_config_client_idx").on(t.configId, t.clientId),
+}));
 export type ClientVisibility = typeof clientVisibility.$inferSelect;
 export type InsertClientVisibility = typeof clientVisibility.$inferInsert;

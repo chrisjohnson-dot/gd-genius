@@ -59,6 +59,18 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
   const visibleCount = rows.filter((r) => (r.clientId in edits ? edits[r.clientId] : r.isVisible)).length;
   const hiddenCount = rows.length - visibleCount;
 
+  const lockAllHiddenMutation = trpc.clientVisibility.lockAllHidden.useMutation({
+    onSuccess: (data) => {
+      toast.success(
+        data.lockedCount > 0
+          ? `${data.lockedCount} hidden client${data.lockedCount !== 1 ? "s" : ""} locked — sync will no longer re-enable them.`
+          : "No hidden clients to lock."
+      );
+      utils.clientVisibility.list.invalidate({ configId });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const saveMutation = trpc.clientVisibility.save.useMutation({
     onSuccess: () => {
       toast.success(`Client visibility saved for ${configName}`);
@@ -124,6 +136,19 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                 </Button>
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(false)}>
                   Deselect All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                  onClick={() => lockAllHiddenMutation.mutate({ configId })}
+                  disabled={lockAllHiddenMutation.isPending || hiddenCount === 0}
+                  title={hiddenCount === 0 ? "No hidden clients to lock" : `Lock all ${hiddenCount} hidden client${hiddenCount !== 1 ? "s" : ""}`}
+                >
+                  {lockAllHiddenMutation.isPending
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Lock className="h-3 w-3" />}
+                  Lock All Hidden
                 </Button>
             </div>
           </div>

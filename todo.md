@@ -332,3 +332,4 @@
 - [x] Show total unallocated order count on each warehouse card summary subtitle
 - [x] Seed client_visibility table from selected-customers TSV (master customer list with facility assignments)
 - [x] Add isLocked flag to client_visibility to prevent sync from re-showing manually hidden clients
+- [x] Add 'Lock all hidden' bulk action button to Client Visibility toolbar

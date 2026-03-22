@@ -1089,6 +1089,26 @@ export async function upsertClientVisibility(
 }
 
 /**
+ * Lock all currently hidden clients for a given configId.
+ * Sets isLocked=true for every row where isVisible=false.
+ * Returns the number of rows updated.
+ */
+export async function lockAllHiddenClients(configId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .update(clientVisibility)
+    .set({ isLocked: true })
+    .where(
+      and(
+        eq(clientVisibility.configId, configId),
+        eq(clientVisibility.isVisible, false)
+      )
+    );
+  return (result as any)[0]?.affectedRows ?? 0;
+}
+
+/**
  * Return the set of hidden clientIds for a given configId.
  * Clients not in client_visibility are treated as visible.
  */

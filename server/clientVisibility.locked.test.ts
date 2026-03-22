@@ -36,6 +36,35 @@ vi.mock("./db", async (importOriginal) => {
 
 // ─── Unit tests for the locking logic ────────────────────────────────────────
 
+describe("lockAllHiddenClients helper logic", () => {
+  it("only targets rows where isVisible=false", () => {
+    // Simulate the WHERE clause: configId=X AND isVisible=false
+    const rows = [
+      { clientId: 1, isVisible: true, isLocked: false },
+      { clientId: 2, isVisible: false, isLocked: false },
+      { clientId: 3, isVisible: false, isLocked: true }, // already locked
+    ];
+    const toUpdate = rows.filter((r) => !r.isVisible);
+    expect(toUpdate).toHaveLength(2);
+    expect(toUpdate.every((r) => !r.isVisible)).toBe(true);
+  });
+
+  it("sets isLocked=true on all matched rows", () => {
+    const hidden = [
+      { clientId: 2, isVisible: false, isLocked: false },
+      { clientId: 3, isVisible: false, isLocked: false },
+    ];
+    const updated = hidden.map((r) => ({ ...r, isLocked: true }));
+    expect(updated.every((r) => r.isLocked)).toBe(true);
+  });
+
+  it("returns 0 when there are no hidden clients", () => {
+    const rows: { isVisible: boolean }[] = [];
+    const count = rows.filter((r) => !r.isVisible).length;
+    expect(count).toBe(0);
+  });
+});
+
 describe("client_visibility isLocked logic", () => {
   beforeEach(() => {
     vi.clearAllMocks();

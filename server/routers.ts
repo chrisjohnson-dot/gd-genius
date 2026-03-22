@@ -54,6 +54,7 @@ import {
   setAlertTime,
   getClientVisibility,
   upsertClientVisibility,
+  lockAllHiddenClients,
   syncClientVisibilityFromOrders,
   getHiddenClientIds,
   dismissZeroBidWarning,
@@ -2196,6 +2197,21 @@ const clientVisibilityRouter = router({
       // Sync new clients from order_tracking into client_visibility
       await syncClientVisibilityFromOrders(input.configId);
       return getClientVisibility(input.configId);
+    }),
+
+  /** Lock all currently hidden clients for a configId (bulk action) */
+  lockAllHidden: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const count = await lockAllHiddenClients(input.configId);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "settings.clientVisibility.lockAllHidden",
+        entityType: "client_visibility",
+        entityId: null,
+        details: { configId: input.configId, lockedCount: count },
+      });
+      return { lockedCount: count };
     }),
 
   /** Save visibility toggles for a batch of clients */

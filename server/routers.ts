@@ -57,6 +57,7 @@ import {
   getClientVisibility,
   upsertClientVisibility,
   lockAllHiddenClients,
+  setClientLock,
   syncClientVisibilityFromOrders,
   getHiddenClientIds,
   dismissZeroBidWarning,
@@ -2331,6 +2332,28 @@ const clientVisibilityRouter = router({
       return { lockedCount: count };
     }),
 
+  /** Toggle the lock state for a single client row */
+  setLock: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        clientId: z.number(),
+        isLocked: z.boolean(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await setClientLock(input.configId, input.clientId, input.isLocked);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: input.isLocked
+          ? "settings.clientVisibility.lock"
+          : "settings.clientVisibility.unlock",
+        entityType: "client_visibility",
+        entityId: String(input.clientId),
+        details: { configId: input.configId, clientId: input.clientId, isLocked: input.isLocked },
+      });
+      return { success: true };
+    }),
   /** Save visibility toggles for a batch of clients */
   save: protectedProcedure
     .input(

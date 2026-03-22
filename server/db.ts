@@ -1234,7 +1234,8 @@ export async function getClientVisibility(configId: number): Promise<ClientVisib
 
 /**
  * Upsert a batch of client visibility rows.
- * Each row is identified by (configId, clientId).
+ * Saves isVisible only — does NOT touch isLocked.
+ * Locking is a separate, explicit action via setClientLock / lockAllHiddenClients.
  */
 export async function upsertClientVisibility(
   rows: Array<{ configId: number; clientId: number; clientName: string; isVisible: boolean }>
@@ -1242,13 +1243,34 @@ export async function upsertClientVisibility(
   const db = await getDb();
   if (!db) return;
   for (const row of rows) {
-    // Auto-lock when a client is manually hidden; unlock when manually shown
-    const isLocked = !row.isVisible;
     await db
       .insert(clientVisibility)
-      .values({ ...row, isLocked })
-      .onDuplicateKeyUpdate({ set: { isVisible: row.isVisible, clientName: row.clientName, isLocked } });
+      .values({ ...row, isLocked: false })
+      .onDuplicateKeyUpdate({ set: { isVisible: row.isVisible, clientName: row.clientName } });
   }
+}
+
+/**
+ * Toggle the lock state for a single client row.
+ * When locked=true the sync job will never re-enable this client.
+ * When locked=false the sync job may re-enable it if it appears in new orders.
+ */
+export async function setClientLock(
+  configId: number,
+  clientId: number,
+  isLocked: boolean
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(clientVisibility)
+    .set({ isLocked })
+    .where(
+      and(
+        eq(clientVisibility.configId, configId),
+        eq(clientVisibility.clientId, clientId)
+      )
+    );
 }
 
 /**

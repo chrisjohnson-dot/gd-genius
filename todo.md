@@ -351,3 +351,9 @@
 - [x] Per-order SLA extension: UI in Open Orders and SLA Tracker rows (extend button, days stepper, reason note, clear)
 - [x] Per-order SLA extension: Extension indicator badge in SLA Tracker table (purple +Nd badge with tooltip)
 - [x] Per-order SLA extension: 12 unit tests covering extension logic and input validation (188 tests total passing)
+- [x] Client Visibility: decouple save from auto-lock — saving visibility should NOT automatically lock/unlock rows
+- [x] Client Visibility: add per-row lock/unlock toggle button so users can explicitly lock individual clients
+- [x] Client Visibility: add tRPC mutation to toggle lock state for a single client
+- [x] Client Visibility: update Lock All Hidden to only lock, not change visibility
+- [x] Client Visibility: locked rows show a clickable lock icon to unlock; unlocked rows show an unlock icon to lock
+- [x] Client Visibility: 15 new unit tests for decoupled save/lock logic (203 tests total passing)

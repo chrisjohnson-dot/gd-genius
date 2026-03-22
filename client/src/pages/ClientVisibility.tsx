@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import {
-  Loader2, Search, Users, Eye, EyeOff, Save, RotateCcw, Warehouse, Lock,
+  Loader2, Search, Users, Eye, EyeOff, Save, RotateCcw, Warehouse, Lock, LockOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -78,6 +78,18 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
     onError: (e) => toast.error(e.message),
   });
 
+  const setLockMutation = trpc.clientVisibility.setLock.useMutation({
+    onSuccess: (_data, vars) => {
+      toast.success(
+        vars.isLocked
+          ? "Client locked — sync will not re-enable this client."
+          : "Client unlocked — sync may re-enable this client if it appears in new orders."
+      );
+      utils.clientVisibility.list.invalidate({ configId });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const saveMutation = trpc.clientVisibility.save.useMutation({
     onSuccess: () => {
       toast.success(`Client visibility saved for ${configName}`);
@@ -118,6 +130,15 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
           </span>
           <span className="text-muted-foreground/50">·</span>
           <span>{rows.length} total clients</span>
+          {lockedCount > 0 && (
+            <>
+              <span className="text-muted-foreground/50">·</span>
+              <span className="flex items-center gap-1 text-slate-500">
+                <Lock className="h-3.5 w-3.5" />
+                <strong className="text-foreground">{lockedCount}</strong> locked
+              </span>
+            </>
+          )}
         </div>
       )}
 
@@ -128,7 +149,7 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
               <Users className="h-4 w-4" />
               Clients — {configName}
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
@@ -152,41 +173,41 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                 <Lock className="h-3 w-3" />
                 Locked{lockedOnly ? ` (${filteredRows.length})` : lockedCount > 0 ? ` (${lockedCount})` : ""}
               </button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(true)}>
-                  Select All
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(false)}>
-                  Deselect All
-                </Button>
-                <TooltipProvider delayDuration={300}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span tabIndex={0}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs gap-1.5 border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
-                          onClick={() => lockAllHiddenMutation.mutate({ configId })}
-                          disabled={lockAllHiddenMutation.isPending || hiddenCount === 0}
-                        >
-                          {lockAllHiddenMutation.isPending
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : <Lock className="h-3 w-3" />}
-                          Lock All Hidden
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs text-xs">
-                      <p className="font-semibold mb-1">Lock all hidden clients</p>
-                      <p className="text-muted-foreground leading-snug">
-                        Marks every currently hidden client as <strong>sync-locked</strong>.
-                        Locked clients will <em>not</em> be re-enabled by the background sync job,
-                        even if they appear in new Extensiv data. You can still unlock individual
-                        clients at any time by toggling them back on and saving.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(true)}>
+                Select All
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(false)}>
+                Deselect All
+              </Button>
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5 border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                        onClick={() => lockAllHiddenMutation.mutate({ configId })}
+                        disabled={lockAllHiddenMutation.isPending || hiddenCount === 0}
+                      >
+                        {lockAllHiddenMutation.isPending
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : <Lock className="h-3 w-3" />}
+                        Lock All Hidden
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs text-xs">
+                    <p className="font-semibold mb-1">Lock all hidden clients</p>
+                    <p className="text-muted-foreground leading-snug">
+                      Marks every currently hidden client as <strong>sync-locked</strong>.
+                      Locked clients will <em>not</em> be re-enabled by the background sync job,
+                      even if they appear in new Extensiv data. You can still unlock individual
+                      clients at any time by clicking the lock icon on their row.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </CardHeader>
@@ -208,6 +229,9 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                 const unalloc = unallocatedByClient[row.clientId] ?? 0;
                 const isVisible = row.clientId in edits ? edits[row.clientId] : row.isVisible;
                 const isEdited = row.clientId in edits;
+                const isLockPending =
+                  setLockMutation.isPending &&
+                  (setLockMutation.variables as { clientId: number } | undefined)?.clientId === row.clientId;
 
                 return (
                   <div
@@ -243,21 +267,64 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                         </p>
                       </div>
                     </div>
+
                     <div className="flex items-center gap-2 shrink-0">
-                      {/* Lock badge — shown when client is hidden & locked (sync-protected) */}
-                      {row.isLocked && !isEdited && (
-                        <span
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 px-1.5 py-0.5 rounded"
-                          title="Sync-locked: this client will not be re-shown by the background sync"
-                        >
-                          <Lock className="h-2.5 w-2.5" /> Locked
-                        </span>
-                      )}
                       {isEdited && (
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
                           Unsaved
                         </span>
                       )}
+
+                      {/* Per-row lock/unlock toggle */}
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              disabled={isLockPending}
+                              onClick={() =>
+                                setLockMutation.mutate({
+                                  configId,
+                                  clientId: row.clientId,
+                                  isLocked: !row.isLocked,
+                                })
+                              }
+                              className={`inline-flex items-center justify-center h-7 w-7 rounded-md border transition-colors ${
+                                row.isLocked
+                                  ? "bg-slate-100 border-slate-300 text-slate-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-red-950 dark:hover:border-red-700 dark:hover:text-red-400"
+                                  : "bg-transparent border-slate-200 text-slate-300 hover:bg-slate-100 hover:border-slate-400 hover:text-slate-600 dark:border-slate-700 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-400"
+                              }`}
+                              title={row.isLocked ? "Locked — click to unlock" : "Unlocked — click to lock"}
+                            >
+                              {isLockPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : row.isLocked ? (
+                                <Lock className="h-3 w-3" />
+                              ) : (
+                                <LockOpen className="h-3 w-3" />
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="text-xs max-w-[220px]">
+                            {row.isLocked ? (
+                              <>
+                                <p className="font-semibold">Sync-locked</p>
+                                <p className="text-muted-foreground mt-0.5">
+                                  The background sync will not re-enable this client. Click to unlock.
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-semibold">Unlocked</p>
+                                <p className="text-muted-foreground mt-0.5">
+                                  The background sync may re-enable this client if it appears in new orders. Click to lock.
+                                </p>
+                              </>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+
                       <Switch
                         checked={isVisible}
                         onCheckedChange={(v) => setEdits((prev) => ({ ...prev, [row.clientId]: v }))}
@@ -337,7 +404,7 @@ export default function ClientVisibility() {
           <p className="page-breadcrumb">Configuration</p>
           <h1 className="page-title">Client Visibility</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Choose which clients appear in the Open Orders view per warehouse. Hidden clients are excluded from all order lists and counts.
+            Choose which clients appear in the Open Orders view per warehouse. Toggle visibility with the switch, then save. Use the lock icon to prevent the sync job from re-enabling a hidden client.
           </p>
         </div>
 

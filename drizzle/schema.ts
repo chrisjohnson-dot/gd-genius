@@ -496,6 +496,7 @@ export const qcScanItems = mysqlTable("qc_scan_items", {
   sku: varchar("sku", { length: 128 }).notNull(),
   upc: varchar("upc", { length: 128 }),
   description: varchar("description", { length: 512 }),
+  lotNumber: varchar("lotNumber", { length: 128 }),
   expectedQty: int("expectedQty").notNull().default(0),
   scannedQty: int("scannedQty").notNull().default(0),
   caseAmount: int("caseAmount").notNull().default(1),

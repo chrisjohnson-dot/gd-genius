@@ -2783,6 +2783,7 @@ const qcScannerRouter = router({
         sku: z.string(),
         upc: z.string().optional(),
         description: z.string().optional(),
+        lotNumber: z.string().optional(),
         expectedQty: z.number(),
         caseAmount: z.number().optional(),
       })),
@@ -2797,6 +2798,7 @@ const qcScannerRouter = router({
       for (const item of input.items) {
         await upsertQcScanItem(input.sessionId, item.sku, item.upc ?? null, {
           description: item.description,
+          lotNumber: item.lotNumber ?? null,
           expectedQty: item.expectedQty,
           caseAmount: item.caseAmount ?? 1,
           scannedQty: 0,

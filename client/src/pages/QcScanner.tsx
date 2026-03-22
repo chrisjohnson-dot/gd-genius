@@ -108,7 +108,7 @@ function ItemsTable({
       <div
         className="grid text-white text-xs font-bold uppercase tracking-wide"
         style={{
-          gridTemplateColumns: "160px 130px 1fr 100px 110px 40px",
+          gridTemplateColumns: "150px 120px 1fr 110px 100px 110px 40px",
           background: "#15527f",
           padding: "0 8px",
           height: 34,
@@ -118,6 +118,7 @@ function ItemsTable({
         <span>Location</span>
         <span>SKU</span>
         <span>Description</span>
+        <span>Lot #</span>
         <span className="text-right">Expected</span>
         <span className="text-right pr-2">Scanned</span>
         <span />
@@ -138,7 +139,7 @@ function ItemsTable({
             key={item.sku}
             className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
             style={{
-              gridTemplateColumns: "160px 130px 1fr 100px 110px 40px",
+              gridTemplateColumns: "150px 120px 1fr 110px 100px 110px 40px",
               background: rowBg,
               minHeight: 40,
               padding: "4px 8px",
@@ -168,6 +169,15 @@ function ItemsTable({
             {/* Description */}
             <div className="text-xs text-[#333333] truncate pr-2">
               {item.description ?? "—"}
+            </div>
+
+            {/* Lot # */}
+            <div className="text-xs font-mono pr-2">
+              {item.lotNumber ? (
+                <span className="text-[#333333]">{item.lotNumber}</span>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </div>
 
             {/* Expected qty — right-aligned */}
@@ -220,13 +230,13 @@ function ItemsTable({
       <div
         className="grid items-center text-sm font-bold"
         style={{
-          gridTemplateColumns: "160px 130px 1fr 100px 110px 40px",
+          gridTemplateColumns: "150px 120px 1fr 110px 100px 110px 40px",
           background: "#EDFAEB",
           borderTop: "2px solid #CDD4DC",
           padding: "6px 8px",
         }}
       >
-        <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-3">
+        <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-4">
           Total
         </span>
         <span className="text-right text-sm text-[#333333] pr-2">

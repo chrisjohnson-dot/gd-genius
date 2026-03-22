@@ -1,0 +1,1 @@
+ALTER TABLE `qc_scan_items` ADD `lotNumber` varchar(128);

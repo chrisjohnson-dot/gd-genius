@@ -409,3 +409,8 @@
 - [x] Pallet Scanner (Shipping): page — tracking scan input, door/carrier/reference fields, audio feedback, recent scans table, Mark Departed action
 - [x] Pallet Scanner (Shipping): sidebar nav entry under Shipping section
 - [x] 242 tests passing total
+
+## QC Scanner — Lot # Column
+- [x] Add Lot # column to QC Scanner item table (frontend)
+- [x] Verify lotNumber field flows from qc_scan_items DB column through tRPC to the UI
+- [x] 5 new unit tests for lotNumber field (247 tests passing total)

@@ -540,8 +540,9 @@ function DismissWarningButton({
   );
 }
 
-// ─── Per-warehouse card ─────────────────────────────────────────────────────────
-function WarehouseCard({  facility,
+// ─── Per-warehouse card ──────────────────────────────────────────────────────
+function WarehouseCard({
+  facility,
   onStatusChanged,
   fullScreen = false,
   onClose,
@@ -549,6 +550,7 @@ function WarehouseCard({  facility,
   onDrillDown,
   laneThresholds = [],
   initialClientFilter = "all",
+  overdueCount = 0,
 }: {
   facility: FacilityGroup;
   onStatusChanged: () => void;
@@ -558,6 +560,7 @@ function WarehouseCard({  facility,
   onDrillDown?: () => void;
   laneThresholds?: LaneThresholdEntry[];
   initialClientFilter?: string;
+  overdueCount?: number;
 }) {
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState(initialClientFilter);
@@ -869,6 +872,15 @@ function WarehouseCard({  facility,
                     </span>
                   ) : null;
                 })()}
+                {overdueCount > 0 && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: "#fee2e2", color: "#b91c1c", border: "1px solid #fecaca" }}
+                    title={`${overdueCount} order${overdueCount !== 1 ? "s" : ""} out of SLA`}
+                  >
+                    {overdueCount} overdue
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -1168,6 +1180,15 @@ function WarehouseCard({  facility,
                     </span>
                   ) : null;
                 })()}
+                {overdueCount > 0 && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: "#fee2e2", color: "#b91c1c", border: "1px solid #fecaca" }}
+                    title={`${overdueCount} order${overdueCount !== 1 ? "s" : ""} out of SLA`}
+                  >
+                    {overdueCount} overdue
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -1400,6 +1421,18 @@ export default function Home() {
     return Array.from(map.values()).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
   }, [orders]);
 
+  // Per-facility overdue counts from breach data
+  const { data: breachData } = trpc.sla.clientBreachSummary.useQuery();
+  const facilityOverdueCounts = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const g of breachData ?? []) {
+      if (g.facilityId != null) {
+        map.set(g.facilityId, (map.get(g.facilityId) ?? 0) + g.breachCount);
+      }
+    }
+    return map;
+  }, [breachData]);
+
   // Global KPIs
   const kpis = useMemo(() => {
     const c: Record<LifecycleStatus, number> = { unallocated: 0, allocated: 0, picking: 0, qc: 0, qc_complete: 0, ship_ready: 0 };
@@ -1526,6 +1559,7 @@ export default function Home() {
             drillDown
             laneThresholds={(data?.laneThresholds ?? []) as LaneThresholdEntry[]}
             initialClientFilter={pendingClientFilter}
+            overdueCount={facilityOverdueCounts.get(selectedFacility.facilityId) ?? 0}
           />
         )}
 
@@ -1539,6 +1573,7 @@ export default function Home() {
                 onStatusChanged={() => refetch()}
                 onDrillDown={() => setSelectedFacilityId(f.facilityId)}
                 laneThresholds={(data?.laneThresholds ?? []) as LaneThresholdEntry[]}
+                overdueCount={facilityOverdueCounts.get(f.facilityId) ?? 0}
               />
             ))}
           </div>

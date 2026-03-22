@@ -335,7 +335,7 @@
 - [x] Add 'Lock all hidden' bulk action button to Client Visibility toolbar
 - [x] Add tooltip to 'Lock all hidden' button explaining what the lock action does
 - [x] Add 'Locked only' filter chip to Client Visibility search bar
-- [ ] Replace Recent Allocation Runs section on Open Orders main page with SLA breach summary per client
+- [x] Replace Recent Allocation Runs section on Open Orders main page with SLA breach summary per client
 - [x] SLA requirements table: list all clients pre-populated at 2 days with +/- one-day stepper buttons
 - [x] SLA sub-rules: per-client named rules (e.g. Labeling, B2B) with individual SLA day counts, expandable below each client row
 - [x] Store order savedElements from Extensiv API and match to SLA sub-rules automatically
@@ -343,3 +343,4 @@
 - [x] Orders Out of SLA: make each client name a clickable link that filters the Open Orders warehouse cards for that client
 - [x] Add colour-coded Days Overdue column to Open Orders drill-down table (amber 1-2d, red 3d+)
 - [x] Orders Out of SLA: group by warehouse first, then by customer within each warehouse, sorted by worst days overdue descending
+- [x] Add red overdue count badge to each warehouse card subtitle on Open Orders main page

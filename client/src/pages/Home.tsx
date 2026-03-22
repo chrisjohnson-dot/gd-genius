@@ -689,6 +689,7 @@ function WarehouseCard({  facility,
         <th onClick={() => toggleSort("requiredShipDate")} className="cursor-pointer select-none">
           Req. Ship <SortIcon col="requiredShipDate" sortKey={sortKey} sortDir={sortDir} />
         </th>
+        <th className="text-right">Overdue</th>
         <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
           Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
         </th>
@@ -742,6 +743,19 @@ function WarehouseCard({  facility,
           ) : (
             <span className="text-muted-foreground">—</span>
           )}
+        </td>
+        <td className="text-right">
+          {(() => {
+            if (!o.requiredShipDate) return <span className="text-muted-foreground text-xs">—</span>;
+            const today = new Date(); today.setHours(0,0,0,0);
+            const target = new Date(o.requiredShipDate); target.setHours(0,0,0,0);
+            const diff = Math.round((today.getTime() - target.getTime()) / 86400000);
+            if (diff <= 0) return <span className="text-muted-foreground text-xs">—</span>;
+            const cls = diff >= 3
+              ? "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200"
+              : "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200";
+            return <span className={cls}>{diff}d</span>;
+          })()}
         </td>
         <td className="text-muted-foreground text-xs text-right">
           {age === 0 ? "Today" : `${age}d`}

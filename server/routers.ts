@@ -67,6 +67,15 @@ import {
   deleteSlaRule,
   setSlaExtension,
   clearSlaExtension,
+  createReturnsSession,
+  getReturnsSessions,
+  getReturnsSession,
+  updateReturnsSession,
+  addReturnsItem,
+  getReturnsItems,
+  updateReturnsItem,
+  deleteReturnsItem,
+  getReturnsDashboardStats,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
@@ -2381,11 +2390,147 @@ const clientVisibilityRouter = router({
     }),
 });
 
-// Extend _appRouter with laneThresholds, overdueAlert, and clientVisibility
+// ─── Returns router ──────────────────────────────────────────────────────────
+const returnsRouter = router({
+  // Get dashboard stats
+  dashboardStats: protectedProcedure.query(async () => {
+    return getReturnsDashboardStats();
+  }),
+
+  // List sessions with optional filters
+  listSessions: protectedProcedure
+    .input(z.object({
+      configId: z.number().optional(),
+      clientId: z.number().optional(),
+      status: z.enum(["open", "closed", "cancelled"]).optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      return getReturnsSessions(input ?? {});
+    }),
+
+  // Get a single session with its items
+  getSession: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const session = await getReturnsSession(input.id);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const items = await getReturnsItems(input.id);
+      return { session, items };
+    }),
+
+  // Create a new returns session
+  createSession: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      warehouseName: z.string(),
+      clientId: z.number(),
+      clientName: z.string(),
+      referenceNumber: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const id = await createReturnsSession({
+        ...input,
+        createdByName: ctx.user.name ?? ctx.user.email ?? "Unknown",
+        status: "open",
+      });
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "returns.session.create",
+        entityType: "returns_session",
+        entityId: String(id),
+        details: { configId: input.configId, clientId: input.clientId, clientName: input.clientName },
+      });
+      return { id };
+    }),
+
+  // Close a session
+  closeSession: protectedProcedure
+    .input(z.object({ id: z.number(), notes: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      await updateReturnsSession(input.id, {
+        status: "closed",
+        closedAt: new Date(),
+        ...(input.notes ? { notes: input.notes } : {}),
+      });
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "returns.session.close",
+        entityType: "returns_session",
+        entityId: String(input.id),
+        details: {},
+      });
+      return { success: true };
+    }),
+
+  // Cancel a session
+  cancelSession: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await updateReturnsSession(input.id, { status: "cancelled" });
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "returns.session.cancel",
+        entityType: "returns_session",
+        entityId: String(input.id),
+        details: {},
+      });
+      return { success: true };
+    }),
+
+  // Add an item to a session
+  addItem: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      sku: z.string().min(1),
+      description: z.string().optional(),
+      quantity: z.number().int().min(1).default(1),
+      condition: z.enum(["new", "good", "damaged", "unsellable"]).default("good"),
+      disposition: z.enum(["restock", "quarantine", "destroy", "return_to_vendor"]).default("restock"),
+      lotNumber: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const id = await addReturnsItem({
+        ...input,
+        scannedByName: ctx.user.name ?? ctx.user.email ?? "Unknown",
+      });
+      return { id };
+    }),
+
+  // Update an item
+  updateItem: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      sku: z.string().min(1).optional(),
+      description: z.string().optional(),
+      quantity: z.number().int().min(1).optional(),
+      condition: z.enum(["new", "good", "damaged", "unsellable"]).optional(),
+      disposition: z.enum(["restock", "quarantine", "destroy", "return_to_vendor"]).optional(),
+      lotNumber: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateReturnsItem(id, data);
+      return { success: true };
+    }),
+
+  // Remove an item
+  removeItem: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteReturnsItem(input.id);
+      return { success: true };
+    }),
+});
+
+// Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, and returns
 export const appRouter = router({
   ..._appRouter._def.record,
   laneThresholds: laneThresholdRouter,
   overdueAlert: overdueAlertRouter,
   clientVisibility: clientVisibilityRouter,
+  returns: returnsRouter,
 });
 export type AppRouter = typeof appRouter;

@@ -339,3 +339,53 @@ export const clientVisibility = mysqlTable("client_visibility", {
 }));
 export type ClientVisibility = typeof clientVisibility.$inferSelect;
 export type InsertClientVisibility = typeof clientVisibility.$inferInsert;
+
+// ─── Returns ──────────────────────────────────────────────────────────────────
+// A returns session is opened when a user starts processing a return for a
+// specific warehouse (configId) and customer (clientId). Items are scanned in
+// one by one, then the session is closed/confirmed.
+export const returnsSessions = mysqlTable("returns_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  // FK to extensiv_configs (warehouse)
+  configId: int("configId").notNull(),
+  warehouseName: varchar("warehouseName", { length: 256 }).notNull(),
+  // Extensiv client ID
+  clientId: int("clientId").notNull(),
+  clientName: varchar("clientName", { length: 256 }).notNull(),
+  // open | closed | cancelled
+  status: mysqlEnum("status", ["open", "closed", "cancelled"]).notNull().default("open"),
+  // Optional reference number (e.g. RMA number, tracking number)
+  referenceNumber: varchar("referenceNumber", { length: 128 }),
+  notes: text("notes"),
+  // Who created the session
+  createdByName: varchar("createdByName", { length: 256 }),
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ReturnsSession = typeof returnsSessions.$inferSelect;
+export type InsertReturnsSession = typeof returnsSessions.$inferInsert;
+
+// Each scanned item within a returns session
+export const returnsItems = mysqlTable("returns_items", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  // SKU or barcode scanned
+  sku: varchar("sku", { length: 256 }).notNull(),
+  // Human-readable description (optional — filled in manually or via lookup)
+  description: varchar("description", { length: 512 }),
+  quantity: int("quantity").notNull().default(1),
+  // Condition grade: new | good | damaged | unsellable
+  condition: mysqlEnum("condition", ["new", "good", "damaged", "unsellable"]).notNull().default("good"),
+  // Disposition: restock | quarantine | destroy | return_to_vendor
+  disposition: mysqlEnum("disposition", ["restock", "quarantine", "destroy", "return_to_vendor"]).notNull().default("restock"),
+  // Optional lot / serial number
+  lotNumber: varchar("lotNumber", { length: 128 }),
+  notes: text("notes"),
+  // Scanned by (user name)
+  scannedByName: varchar("scannedByName", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ReturnsItem = typeof returnsItems.$inferSelect;
+export type InsertReturnsItem = typeof returnsItems.$inferInsert;

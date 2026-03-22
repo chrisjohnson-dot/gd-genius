@@ -42,6 +42,12 @@ import {
   slaRules,
   SlaRule,
   InsertSlaRule,
+  returnsSessions,
+  returnsItems,
+  ReturnsSession,
+  InsertReturnsSession,
+  ReturnsItem,
+  InsertReturnsItem,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1433,4 +1439,96 @@ export async function clearSlaExtension(extensivOrderId: number): Promise<void> 
     .update(orderTracking)
     .set({ slaExtensionDays: 0, slaExtensionNote: null })
     .where(eq(orderTracking.extensivOrderId, extensivOrderId));
+}
+
+// ─── Returns helpers ──────────────────────────────────────────────────────────
+
+export async function createReturnsSession(data: Omit<InsertReturnsSession, "id" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(returnsSessions).values(data);
+  return result.insertId as number;
+}
+
+export async function getReturnsSessions(filters?: { configId?: number; clientId?: number; status?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const sessions = await db.select().from(returnsSessions);
+  return sessions
+    .filter((s: ReturnsSession) => {
+      if (filters?.configId !== undefined && s.configId !== filters.configId) return false;
+      if (filters?.clientId !== undefined && s.clientId !== filters.clientId) return false;
+      if (filters?.status && s.status !== filters.status) return false;
+      return true;
+    })
+    .sort((a: ReturnsSession, b: ReturnsSession) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+export async function getReturnsSession(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [session] = await db.select().from(returnsSessions).where(eq(returnsSessions.id, id));
+  return session ?? null;
+}
+
+export async function updateReturnsSession(
+  id: number,
+  data: Partial<Pick<InsertReturnsSession, "status" | "notes" | "referenceNumber" | "closedAt">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(returnsSessions).set(data).where(eq(returnsSessions.id, id));
+}
+
+export async function addReturnsItem(data: Omit<InsertReturnsItem, "id" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(returnsItems).values(data);
+  return result.insertId as number;
+}
+
+export async function getReturnsItems(sessionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(returnsItems).where(eq(returnsItems.sessionId, sessionId));
+}
+
+export async function updateReturnsItem(
+  id: number,
+  data: Partial<Pick<InsertReturnsItem, "sku" | "description" | "quantity" | "condition" | "disposition" | "lotNumber" | "notes">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(returnsItems).set(data).where(eq(returnsItems.id, id));
+}
+
+export async function deleteReturnsItem(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(returnsItems).where(eq(returnsItems.id, id));
+}
+
+export async function getReturnsDashboardStats() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const allSessions = await db.select().from(returnsSessions);
+  const allItems = await db.select().from(returnsItems);
+
+  const open = allSessions.filter((s: ReturnsSession) => s.status === "open").length;
+  const closed = allSessions.filter((s: ReturnsSession) => s.status === "closed").length;
+  const totalItems = allItems.length;
+  const totalQty = allItems.reduce((sum: number, i: ReturnsItem) => sum + i.quantity, 0);
+
+  const conditionBreakdown = {
+    new: allItems.filter((i: ReturnsItem) => i.condition === "new").reduce((s: number, i: ReturnsItem) => s + i.quantity, 0),
+    good: allItems.filter((i: ReturnsItem) => i.condition === "good").reduce((s: number, i: ReturnsItem) => s + i.quantity, 0),
+    damaged: allItems.filter((i: ReturnsItem) => i.condition === "damaged").reduce((s: number, i: ReturnsItem) => s + i.quantity, 0),
+    unsellable: allItems.filter((i: ReturnsItem) => i.condition === "unsellable").reduce((s: number, i: ReturnsItem) => s + i.quantity, 0),
+  };
+
+  const recent = [...allSessions]
+    .sort((a: ReturnsSession, b: ReturnsSession) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 10);
+
+  return { open, closed, totalItems, totalQty, conditionBreakdown, recent };
 }

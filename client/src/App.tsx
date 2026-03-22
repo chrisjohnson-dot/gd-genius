@@ -26,6 +26,8 @@ import ShippingCarriers from "@/pages/ShippingCarriers";
 import ShipwellSettings from "@/pages/ShipwellSettings";
 import SlaTracker from "@/pages/SlaTracker";
 import ClientVisibility from "@/pages/ClientVisibility";
+import ReturnsDashboard from "@/pages/ReturnsDashboard";
+import ProcessReturns from "@/pages/ProcessReturns";
 
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
@@ -62,6 +64,9 @@ function AppRoutes() {
         <Route path="/shipwell-settings" component={ShipwellSettings} />
         <Route path="/sla-tracker" component={SlaTracker} />
         <Route path="/client-visibility" component={ClientVisibility} />
+        <Route path="/returns" component={ReturnsDashboard} />
+        <Route path="/returns/process" component={ProcessReturns} />
+        <Route path="/returns/session/:id" component={ProcessReturns} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

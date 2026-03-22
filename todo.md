@@ -359,3 +359,12 @@
 - [x] Client Visibility: 15 new unit tests for decoupled save/lock logic (203 tests total passing)
 - [x] Sidebar nav: clicking a menu item scrolls the main content area back to the top — fix so scroll position is held while navigating between sub-menu items
 - [x] Sidebar nav still snaps to top when clicking items below the fold — fixed by lifting AppLayout to App.tsx so the sidebar DOM element is never destroyed on navigation
+
+## Returns Feature
+- [x] Returns: DB schema — returns_sessions and returns_items tables
+- [x] Returns: tRPC procedures — create session, add/update/remove item, close session, list sessions, dashboardStats
+- [x] Returns Dashboard page — summary cards (open/closed/SKUs/units), condition breakdown, recent sessions table
+- [x] Process Returns portal — Step 1: Select Warehouse, Step 2: Select Customer, Step 3: Scan-in screen
+- [x] Returns scan-in screen — barcode/SKU input, quantity, condition grade, disposition, lot/serial, notes, edit/remove items, close session with confirmation
+- [x] Sidebar nav — Returns section between Shipping and Configuration with Returns Dashboard and Process Returns links
+- [x] Returns: 17 unit tests (220 total passing)

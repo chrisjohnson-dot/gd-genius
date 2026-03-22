@@ -17,6 +17,8 @@ import {
   Moon,
   PackageCheck,
   PackageSearch,
+  RotateCcw,
+  ScanBarcode,
   ScrollText,
   Ship,
   Stethoscope,
@@ -52,6 +54,11 @@ const shippingItems = [
   { href: "/shipping/orders",  label: "Ship Orders",         icon: PackageCheck },
   { href: "/shipping/history", label: "Shipping History",    icon: ScrollText },
   { href: "/shipping/carriers",label: "Carriers",            icon: Truck },
+];
+
+const returnsItems = [
+  { href: "/returns",         label: "Returns Dashboard", icon: RotateCcw },
+  { href: "/returns/process", label: "Process Returns",   icon: ScanBarcode },
 ];
 
 const configItems = [
@@ -299,6 +306,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </p>
             <div className="space-y-0.5">
               {shippingItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
+              ))}
+            </div>
+          </div>
+
+          {/* Returns section */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
+              Returns
+            </p>
+            <div className="space-y-0.5">
+              {returnsItems.map(item => (
                 <NavItem key={item.href} {...item} active={location === item.href} />
               ))}
             </div>

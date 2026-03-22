@@ -322,3 +322,5 @@
 - [x] Add tRPC procedures: clientVisibility.list, clientVisibility.save
 - [x] Build Client Visibility settings page with searchable toggle list and unallocated counts
 - [x] Wire Open Orders (Home.tsx) to filter orders by visible clients
+- [x] Update pickSchedule.list tRPC procedure to filter out hidden clients using getHiddenClientIds
+- [x] Verify frontend KPI counts and warehouse cards automatically reflect filtered data

@@ -1780,14 +1780,30 @@ const _appRouter = router({
 
   // ─── Order Lifecycle Tracking (Pick Schedule) ────────────────────────────────
   pickSchedule: router({
-    /** Return all tracked orders, optionally filtered by facilityId */
+    /** Return all tracked orders, optionally filtered by facilityId, with hidden clients excluded */
     list: protectedProcedure
       .input(z.object({ facilityId: z.number().optional() }))
       .query(async ({ input }) => {
-        const orders = await getTrackedOrders(input.facilityId);
+        const allOrders = await getTrackedOrders(input.facilityId);
         const lastSync = await getLastSyncTime();
         const syncInfo = getLastSyncInfo();
         const thresholds = await getLaneThresholds();
+
+        // Build a map of hidden clientIds per configId from client_visibility settings
+        const configIds = Array.from(new Set(allOrders.map((o) => o.configId)));
+        const hiddenByConfig = new Map<number, Set<number>>();
+        await Promise.all(
+          configIds.map(async (cid) => {
+            hiddenByConfig.set(cid, await getHiddenClientIds(cid));
+          })
+        );
+
+        // Filter out orders whose client is hidden in their config's visibility settings
+        const orders = allOrders.filter((o) => {
+          const hidden = hiddenByConfig.get(o.configId);
+          return !hidden || !hidden.has(o.clientId);
+        });
+
         return {
           orders,
           lastSyncAt: lastSync,

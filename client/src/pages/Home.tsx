@@ -548,6 +548,7 @@ function WarehouseCard({  facility,
   drillDown = false,
   onDrillDown,
   laneThresholds = [],
+  initialClientFilter = "all",
 }: {
   facility: FacilityGroup;
   onStatusChanged: () => void;
@@ -556,9 +557,10 @@ function WarehouseCard({  facility,
   drillDown?: boolean;
   onDrillDown?: () => void;
   laneThresholds?: LaneThresholdEntry[];
+  initialClientFilter?: string;
 }) {
   const [search, setSearch]             = useState("");
-  const [clientFilter, setClientFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState(initialClientFilter);
   const [statusFilter, setStatusFilter] = useState<LifecycleStatus | "all" | "needs_attention">("all");
   const [sortKey, setSortKey]           = useState<SortKey>("lifecycleStatus");
   const [sortDir, setSortDir]           = useState<SortDir>("asc");
@@ -1395,6 +1397,13 @@ export default function Home() {
     ? facilities.find((f) => f.facilityId === selectedFacilityId) ?? null
     : null;
 
+  const [pendingClientFilter, setPendingClientFilter] = useState<string>("all");
+
+  const handleBackToGrid = () => {
+    setSelectedFacilityId(null);
+    setPendingClientFilter("all");
+  };
+
   return (
     <AppLayout>
       <div className="p-5 space-y-4 page-enter">
@@ -1403,7 +1412,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {selectedFacility && (
               <button
-                onClick={() => setSelectedFacilityId(null)}
+                onClick={handleBackToGrid}
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -1497,11 +1506,12 @@ export default function Home() {
         {/* Drill-down: single warehouse expanded */}
         {!isLoading && selectedFacility && (
           <WarehouseCard
-            key={selectedFacility.facilityId}
+            key={`${selectedFacility.facilityId}-${pendingClientFilter}`}
             facility={selectedFacility}
             onStatusChanged={() => refetch()}
             drillDown
             laneThresholds={(data?.laneThresholds ?? []) as LaneThresholdEntry[]}
+            initialClientFilter={pendingClientFilter}
           />
         )}
 
@@ -1521,14 +1531,23 @@ export default function Home() {
         )}
 
         {/* SLA Breach Summary (only on grid view) */}
-        {!isLoading && !selectedFacility && <SlaBreachSummarySection />}
+        {!isLoading && !selectedFacility && (
+          <SlaBreachSummarySection
+            onClientClick={(clientId, facilityId) => {
+              if (facilityId) setSelectedFacilityId(facilityId);
+              setPendingClientFilter(String(clientId));
+            }}
+          />
+        )}
       </div>
     </AppLayout>
   );
 }
 
 // ─── SLA Breach Summary ───────────────────────────────────────────────────────
-function SlaBreachSummarySection() {
+function SlaBreachSummarySection({ onClientClick }: {
+  onClientClick: (clientId: number, facilityId: number | null) => void;
+}) {
   const { data: breachGroups, isLoading } = trpc.sla.clientBreachSummary.useQuery();
 
   if (isLoading) {
@@ -1597,7 +1616,15 @@ function SlaBreachSummarySection() {
               const worst = group.orders[0];
               return (
                 <tr key={group.clientId}>
-                  <td className="font-semibold text-foreground">{group.clientName}</td>
+                  <td>
+                    <button
+                      onClick={() => onClientClick(group.clientId, group.facilityId ?? null)}
+                      className="font-semibold text-primary hover:underline hover:text-primary/80 transition-colors text-left cursor-pointer"
+                      title={`Filter Open Orders for ${group.clientName}`}
+                    >
+                      {group.clientName}
+                    </button>
+                  </td>
                   <td className="text-muted-foreground text-xs">{group.facilityName ?? "—"}</td>
                   <td className="text-center">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">

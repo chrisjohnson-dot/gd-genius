@@ -954,6 +954,7 @@ export async function getClientSlaBreachSummary(): Promise<
   Array<{
     clientId: number;
     clientName: string;
+    facilityId: number | null;
     facilityName: string | null;
     breachCount: number;
     worstDaysOverdue: number;
@@ -976,6 +977,7 @@ export async function getClientSlaBreachSummary(): Promise<
     {
       clientId: number;
       clientName: string;
+      facilityId: number | null;
       facilityName: string | null;
       orders: typeof breached;
     }
@@ -986,6 +988,7 @@ export async function getClientSlaBreachSummary(): Promise<
       map.set(o.clientId, {
         clientId: o.clientId,
         clientName: o.clientName,
+        facilityId: o.facilityId ?? null,
         facilityName: o.facilityName ?? null,
         orders: [],
       });
@@ -997,6 +1000,7 @@ export async function getClientSlaBreachSummary(): Promise<
     .map((g) => ({
       clientId: g.clientId,
       clientName: g.clientName,
+      facilityId: g.facilityId,
       facilityName: g.facilityName,
       breachCount: g.orders.length,
       worstDaysOverdue: Math.max(...g.orders.map((o) => Math.abs(o.daysRemaining))),

@@ -340,3 +340,4 @@
 - [x] SLA sub-rules: per-client named rules (e.g. Labeling, B2B) with individual SLA day counts, expandable below each client row
 - [x] Store order savedElements from Extensiv API and match to SLA sub-rules automatically
 - [x] Replace Recent Allocation Runs section on Open Orders main page with per-client SLA breach summary table
+- [x] Orders Out of SLA: make each client name a clickable link that filters the Open Orders warehouse cards for that client

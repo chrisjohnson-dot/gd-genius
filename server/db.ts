@@ -858,6 +858,125 @@ export async function getOrderSlaStatuses(): Promise<
   });
 }
 
+/**
+ * Returns every known client (from order_tracking) merged with their SLA requirement.
+ * Clients without an override get slaDays=2 (the system default) and isDefault=true.
+ * Sorted alphabetically by clientName.
+ */
+export async function getAllClientsWithSlaRequirements(): Promise<
+  Array<{
+    clientId: number;
+    clientName: string;
+    slaDays: number;
+    isDefault: boolean;
+    requirementId: number | null;
+    notes: string | null;
+    updatedAt: Date | null;
+  }>
+> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const DEFAULT_SLA_DAYS = 2;
+
+  const [clients, requirements] = await Promise.all([
+    db
+      .selectDistinct({ clientId: orderTracking.clientId, clientName: orderTracking.clientName })
+      .from(orderTracking)
+      .orderBy(orderTracking.clientName),
+    db.select().from(slaRequirements),
+  ]);
+
+  const reqMap = new Map<number, SlaRequirement>();
+  for (const r of requirements) reqMap.set(r.clientId, r);
+
+  return clients.map((c) => {
+    const req = reqMap.get(c.clientId);
+    return {
+      clientId: c.clientId,
+      clientName: c.clientName,
+      slaDays: req?.slaDays ?? DEFAULT_SLA_DAYS,
+      isDefault: !req,
+      requirementId: req?.id ?? null,
+      notes: req?.notes ?? null,
+      updatedAt: req ? new Date(req.updatedAt) : null,
+    };
+  });
+}
+
+/**
+ * Returns a per-client summary of orders that are currently out of SLA,
+ * sorted by worst breach first (most overdue days descending).
+ * Each entry includes:
+ *   - clientId, clientName, facilityName
+ *   - breachCount: number of out-of-SLA orders
+ *   - worstDaysOverdue: the highest overdue day count among their breached orders
+ *   - orders: the individual breached orders (for drill-down)
+ */
+export async function getClientSlaBreachSummary(): Promise<
+  Array<{
+    clientId: number;
+    clientName: string;
+    facilityName: string | null;
+    breachCount: number;
+    worstDaysOverdue: number;
+    orders: Array<{
+      extensivOrderId: number;
+      referenceNum: string | null;
+      facilityName: string | null;
+      lifecycleStatus: string;
+      requiredShipDate: string | null;
+      daysOverdue: number;
+    }>;
+  }>
+> {
+  const all = await getOrderSlaStatuses();
+  const breached = all.filter((o) => o.slaStatus === "out_of_sla");
+
+  // Group by clientId
+  const map = new Map<
+    number,
+    {
+      clientId: number;
+      clientName: string;
+      facilityName: string | null;
+      orders: typeof breached;
+    }
+  >();
+
+  for (const o of breached) {
+    if (!map.has(o.clientId)) {
+      map.set(o.clientId, {
+        clientId: o.clientId,
+        clientName: o.clientName,
+        facilityName: o.facilityName ?? null,
+        orders: [],
+      });
+    }
+    map.get(o.clientId)!.orders.push(o);
+  }
+
+  return Array.from(map.values())
+    .map((g) => ({
+      clientId: g.clientId,
+      clientName: g.clientName,
+      facilityName: g.facilityName,
+      breachCount: g.orders.length,
+      worstDaysOverdue: Math.max(...g.orders.map((o) => Math.abs(o.daysRemaining))),
+      orders: g.orders
+        .sort((a, b) => a.daysRemaining - b.daysRemaining) // most overdue first
+        .map((o) => ({
+          extensivOrderId: o.extensivOrderId,
+          referenceNum: o.referenceNum ?? null,
+          facilityName: o.facilityName ?? null,
+          lifecycleStatus: o.lifecycleStatus,
+          requiredShipDate: o.requiredShipDate ?? null,
+          daysOverdue: Math.abs(o.daysRemaining),
+        })),
+    }))
+    .sort((a, b) => b.worstDaysOverdue - a.worstDaysOverdue);
+}
+
 // ─── Lane Threshold helpers ───────────────────────────────────────────────────
 
 export async function getLaneThresholds(): Promise<LaneThreshold[]> {

@@ -335,3 +335,5 @@
 - [x] Add 'Lock all hidden' bulk action button to Client Visibility toolbar
 - [x] Add tooltip to 'Lock all hidden' button explaining what the lock action does
 - [x] Add 'Locked only' filter chip to Client Visibility search bar
+- [ ] Replace Recent Allocation Runs section on Open Orders main page with SLA breach summary per client
+- [x] SLA requirements table: list all clients pre-populated at 2 days with +/- one-day stepper buttons

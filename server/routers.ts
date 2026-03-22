@@ -44,6 +44,8 @@ import {
   upsertSlaRequirement,
   deleteSlaRequirement,
   getOrderSlaStatuses,
+  getClientSlaBreachSummary,
+  getAllClientsWithSlaRequirements,
   getLaneThresholds,
   getLaneThresholdById,
   createLaneThreshold,
@@ -2097,6 +2099,23 @@ const _appRouter = router({
     getStatus: protectedProcedure.query(async () => {
       const orders = await getOrderSlaStatuses();
       return orders;
+    }),
+
+    /**
+     * Returns a per-client summary of orders currently out of SLA,
+     * sorted by worst breach first. Used on the Open Orders dashboard.
+     */
+    clientBreachSummary: protectedProcedure.query(async () => {
+      return getClientSlaBreachSummary();
+    }),
+
+    /**
+     * Returns every known client merged with their SLA requirement.
+     * Clients without an override show slaDays=2 and isDefault=true.
+     * Used by the SLA requirements table to show all clients pre-populated.
+     */
+    allClientsWithRequirements: protectedProcedure.query(async () => {
+      return getAllClientsWithSlaRequirements();
     }),
   }),
 });

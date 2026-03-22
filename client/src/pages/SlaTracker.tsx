@@ -38,6 +38,7 @@ import {
   Users,
   ArrowLeft,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -498,109 +499,128 @@ function WarehouseSlaCard({
   );
 }
 
-// ─── SLA Requirements tab ─────────────────────────────────────────────────────
+// ─── SLA Requirements tab ───────────────────────────────────────────────────
+type ClientSlaRow = {
+  clientId: number;
+  clientName: string;
+  slaDays: number;
+  isDefault: boolean;
+  requirementId: number | null;
+  notes: string | null;
+  updatedAt: Date | null;
+};
+
 function SlaRequirementsTab() {
-  const { data: requirements = [], isLoading, refetch } = trpc.sla.listRequirements.useQuery();
+  const { data: allClients = [], isLoading } = trpc.sla.allClientsWithRequirements.useQuery();
   const utils = trpc.useUtils();
 
-  const [showDialog, setShowDialog] = useState(false);
-  const [editItem, setEditItem] = useState<SlaRequirement | null>(null);
-  const [form, setForm] = useState({ clientId: "", clientName: "", slaDays: "2", notes: "" });
+  // Local pending changes: clientId -> new slaDays value (before save)
+  const [pending, setPending] = useState<Record<number, number>>({});
+  const [saving, setSaving] = useState<Record<number, boolean>>({});
+  const [search, setSearch] = useState("");
 
   const upsert = trpc.sla.upsertRequirement.useMutation({
-    onSuccess: () => {
-      toast.success("SLA requirement saved.");
+    onSuccess: (_data: unknown, vars: { clientId: number; clientName: string; slaDays: number }) => {
+      toast.success(`SLA saved: ${vars.clientName} → ${vars.slaDays}d`);
+      utils.sla.allClientsWithRequirements.invalidate();
       utils.sla.listRequirements.invalidate();
-      setShowDialog(false);
+      setSaving((s) => { const n = { ...s }; delete n[vars.clientId]; return n; });
+      setPending((p) => { const n = { ...p }; delete n[vars.clientId]; return n; });
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: { message: string }, vars: { clientId: number }) => {
+      toast.error(err.message);
+      setSaving((s) => { const n = { ...s }; delete n[vars.clientId]; return n; });
+    },
   });
 
   const del = trpc.sla.deleteRequirement.useMutation({
     onSuccess: () => {
-      toast.success("SLA requirement removed. Client reverts to default 2-day SLA.");
+      toast.success("SLA override removed. Client reverts to 2-day default.");
+      utils.sla.allClientsWithRequirements.invalidate();
       utils.sla.listRequirements.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: { message: string }) => toast.error(err.message),
   });
 
-  function openAdd() {
-    setEditItem(null);
-    setForm({ clientId: "", clientName: "", slaDays: "2", notes: "" });
-    setShowDialog(true);
+  function effectiveDays(row: ClientSlaRow): number {
+    return pending[row.clientId] ?? row.slaDays;
   }
 
-  function openEdit(req: SlaRequirement) {
-    setEditItem(req);
-    setForm({
-      clientId: String(req.clientId),
-      clientName: req.clientName,
-      slaDays: String(req.slaDays),
-      notes: req.notes ?? "",
-    });
-    setShowDialog(true);
+  function adjust(row: ClientSlaRow, delta: number) {
+    const current = effectiveDays(row);
+    const next = Math.max(1, current + delta);
+    setPending((p) => ({ ...p, [row.clientId]: next }));
   }
 
-  function handleSave() {
-    const clientIdNum = parseInt(form.clientId);
-    const slaDaysNum = parseInt(form.slaDays);
-    if (isNaN(clientIdNum) || clientIdNum <= 0) { toast.error("Enter a valid Client ID."); return; }
-    if (!form.clientName.trim()) { toast.error("Client name is required."); return; }
-    if (isNaN(slaDaysNum) || slaDaysNum < 1) { toast.error("SLA days must be at least 1."); return; }
-    upsert.mutate({
-      clientId: clientIdNum,
-      clientName: form.clientName.trim(),
-      slaDays: slaDaysNum,
-      notes: form.notes.trim() || undefined,
-    });
+  function save(row: ClientSlaRow) {
+    const days = effectiveDays(row);
+    setSaving((s) => ({ ...s, [row.clientId]: true }));
+    upsert.mutate({ clientId: row.clientId, clientName: row.clientName, slaDays: days });
   }
+
+  function reset(row: ClientSlaRow) {
+    if (!row.requirementId) return;
+    if (confirm(`Remove SLA override for ${row.clientName}? They will revert to the default 2-day SLA.`)) {
+      del.mutate({ id: row.requirementId });
+      setPending((p) => { const n = { ...p }; delete n[row.clientId]; return n; });
+    }
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return allClients;
+    return allClients.filter((c) => c.clientName.toLowerCase().includes(q));
+  }, [allClients, search]);
+
+  const customCount = allClients.filter((c) => !c.isDefault).length;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-semibold text-foreground">SLA Requirements</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Default SLA is <strong>2 days</strong> from Create Date (day 1 = day after creation). Add overrides below for customers with different requirements.
+            All clients are listed below. Default is <strong>2 days</strong> from Create Date.
+            Use <strong>+/−</strong> to adjust by one day, then click <strong>Save</strong>.
           </p>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={openAdd}>
-          <Plus className="h-3.5 w-3.5" />
-          Add Override
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              className="pl-8 h-8 w-44 text-sm"
+              placeholder="Search clients…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {customCount > 0 && (
+            <span className="text-xs text-muted-foreground">{customCount} custom override{customCount !== 1 ? "s" : ""}</span>
+          )}
+        </div>
       </div>
 
-      {/* Default SLA info card */}
+      {/* Info card */}
       <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800">
-        <CardContent className="pt-4 pb-4">
+        <CardContent className="pt-3 pb-3">
           <div className="flex items-center gap-3">
             <Clock className="h-4 w-4 text-blue-500 shrink-0" />
             <div className="text-sm text-blue-800 dark:text-blue-300">
-              <span className="font-medium">System Default:</span> All customers without an override are tracked at <strong>2 days</strong> from Create Date.
+              <span className="font-medium">System Default: 2 days.</span>{" "}
               Day 1 begins the day after the order is created in Extensiv.
+              Clients shown in <span className="font-semibold">blue</span> have a custom override;
+              <span className="text-muted-foreground"> grey</span> rows are using the default.
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Requirements table */}
+      {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
           <RefreshCw className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Loading requirements…</span>
+          <span className="text-sm">Loading clients…</span>
         </div>
-      ) : requirements.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Timer className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-40" />
-            <p className="text-sm text-muted-foreground">No custom SLA overrides yet.</p>
-            <p className="text-xs text-muted-foreground mt-1">All customers are using the default 2-day SLA.</p>
-            <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={openAdd}>
-              <Plus className="h-3.5 w-3.5" />
-              Add First Override
-            </Button>
-          </CardContent>
-        </Card>
       ) : (
         <Card>
           <div className="overflow-x-auto">
@@ -608,142 +628,122 @@ function SlaRequirementsTab() {
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Client</th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Client ID</th>
                   <th className="px-4 py-3 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Last Updated</th>
+                  <th className="px-4 py-3 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Adjust</th>
+                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Status</th>
                   <th className="px-4 py-3 text-right font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {requirements.map((req) => (
-                  <tr key={req.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">{req.clientName}</td>
-                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{req.clientId}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
-                        <Clock className="h-3 w-3" />
-                        {req.slaDays}d
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate" title={req.notes ?? ""}>
-                      {req.notes || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
-                      {new Date(req.updatedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                          onClick={() => openEdit(req)}
-                          title="Edit"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
-                          onClick={() => {
-                            if (confirm(`Remove SLA override for ${req.clientName}? They will revert to the default 2-day SLA.`)) {
-                              del.mutate({ id: req.id });
-                            }
-                          }}
-                          title="Remove override"
-                          disabled={del.isPending}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      No clients match your search.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filtered.map((row) => {
+                    const days = effectiveDays(row);
+                    const isDirty = row.clientId in pending;
+                    const isSaving = saving[row.clientId];
+                    const isCustom = !row.isDefault || isDirty;
+
+                    return (
+                      <tr key={row.clientId} className={`hover:bg-muted/20 transition-colors ${isDirty ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
+                        <td className="px-4 py-2.5 font-medium text-foreground">{row.clientName}</td>
+
+                        {/* SLA days badge */}
+                        <td className="px-4 py-2.5 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                            isCustom
+                              ? "bg-blue-100 text-blue-700 border-blue-200"
+                              : "bg-muted/50 text-muted-foreground border-border"
+                          }`}>
+                            <Clock className="h-3 w-3" />
+                            {days}d
+                          </span>
+                        </td>
+
+                        {/* +/- stepper */}
+                        <td className="px-4 py-2.5 text-center">
+                          <div className="inline-flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => adjust(row, -1)}
+                              disabled={days <= 1 || !!isSaving}
+                              className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-colors"
+                              title="Decrease by 1 day"
+                            >
+                              −
+                            </button>
+                            <span className="w-7 text-center text-xs font-mono text-foreground">{days}</span>
+                            <button
+                              type="button"
+                              onClick={() => adjust(row, +1)}
+                              disabled={days >= 365 || !!isSaving}
+                              className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-colors"
+                              title="Increase by 1 day"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Status chip */}
+                        <td className="px-4 py-2.5">
+                          {isDirty ? (
+                            <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">Unsaved</span>
+                          ) : row.isDefault ? (
+                            <span className="text-[10px] text-muted-foreground">Default</span>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                              Override
+                              {row.updatedAt ? ` · ${new Date(row.updatedAt).toLocaleDateString()}` : ""}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-2.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {isDirty && (
+                              <Button
+                                size="sm"
+                                className="h-7 px-2.5 text-xs gap-1"
+                                onClick={() => save(row)}
+                                disabled={!!isSaving}
+                              >
+                                {isSaving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Timer className="h-3 w-3" />}
+                                Save
+                              </Button>
+                            )}
+                            {!row.isDefault && !isDirty && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
+                                onClick={() => reset(row)}
+                                title="Remove override (revert to 2-day default)"
+                                disabled={del.isPending}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </Card>
       )}
-
-      {/* Add/Edit dialog */}
-      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) setShowDialog(false); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-blue-500" />
-              {editItem ? "Edit SLA Override" : "Add SLA Override"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="sla-client-id" className="text-xs font-semibold">Client ID <span className="text-red-500">*</span></Label>
-                <Input
-                  id="sla-client-id"
-                  type="number"
-                  placeholder="e.g. 12345"
-                  value={form.clientId}
-                  onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-                  disabled={!!editItem}
-                  className="text-sm"
-                />
-                <p className="text-[10px] text-muted-foreground">Extensiv customer ID</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="sla-days" className="text-xs font-semibold">SLA Days <span className="text-red-500">*</span></Label>
-                <Input
-                  id="sla-days"
-                  type="number"
-                  min={1}
-                  max={365}
-                  placeholder="2"
-                  value={form.slaDays}
-                  onChange={(e) => setForm((f) => ({ ...f, slaDays: e.target.value }))}
-                  className="text-sm"
-                />
-                <p className="text-[10px] text-muted-foreground">Days from Create Date</p>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sla-client-name" className="text-xs font-semibold">Client Name <span className="text-red-500">*</span></Label>
-              <Input
-                id="sla-client-name"
-                placeholder="e.g. Acme Corp"
-                value={form.clientName}
-                onChange={(e) => setForm((f) => ({ ...f, clientName: e.target.value }))}
-                className="text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sla-notes" className="text-xs font-semibold">Notes (optional)</Label>
-              <Input
-                id="sla-notes"
-                placeholder="e.g. Premium account — 1-day SLA per contract"
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                className="text-sm"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button
-              size="sm"
-              disabled={upsert.isPending}
-              onClick={handleSave}
-              className="gap-1.5"
-            >
-              {upsert.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Timer className="h-3.5 w-3.5" />}
-              {editItem ? "Save Changes" : "Add Override"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
+
 
 // ─── Main SLA Tracker page ────────────────────────────────────────────────────
 export default function SlaTracker() {

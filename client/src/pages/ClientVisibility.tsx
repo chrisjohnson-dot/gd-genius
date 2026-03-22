@@ -117,12 +117,12 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(true)}>
-                Show all
-              </Button>
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(false)}>
-                Hide all
-              </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(true)}>
+                  Select All
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(false)}>
+                  Deselect All
+                </Button>
             </div>
           </div>
         </CardHeader>

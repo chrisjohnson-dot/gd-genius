@@ -326,3 +326,4 @@
 - [x] Verify frontend KPI counts and warehouse cards automatically reflect filtered data
 - [x] Rewrite ClientVisibility page with per-warehouse tabs (one tab per extensiv config)
 - [x] Each tab shows its own independent client toggle list with search and bulk actions
+- [x] Rename "Show all" / "Hide all" buttons to "Select All" / "Deselect All" in Client Visibility page

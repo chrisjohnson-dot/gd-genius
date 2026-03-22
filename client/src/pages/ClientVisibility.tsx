@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import {
   Loader2, Search, Users, Eye, EyeOff, Save, RotateCcw, Warehouse, Lock,
@@ -137,19 +138,35 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(false)}>
                   Deselect All
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs gap-1.5 border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
-                  onClick={() => lockAllHiddenMutation.mutate({ configId })}
-                  disabled={lockAllHiddenMutation.isPending || hiddenCount === 0}
-                  title={hiddenCount === 0 ? "No hidden clients to lock" : `Lock all ${hiddenCount} hidden client${hiddenCount !== 1 ? "s" : ""}`}
-                >
-                  {lockAllHiddenMutation.isPending
-                    ? <Loader2 className="h-3 w-3 animate-spin" />
-                    : <Lock className="h-3 w-3" />}
-                  Lock All Hidden
-                </Button>
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1.5 border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                          onClick={() => lockAllHiddenMutation.mutate({ configId })}
+                          disabled={lockAllHiddenMutation.isPending || hiddenCount === 0}
+                        >
+                          {lockAllHiddenMutation.isPending
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <Lock className="h-3 w-3" />}
+                          Lock All Hidden
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs text-xs">
+                      <p className="font-semibold mb-1">Lock all hidden clients</p>
+                      <p className="text-muted-foreground leading-snug">
+                        Marks every currently hidden client as <strong>sync-locked</strong>.
+                        Locked clients will <em>not</em> be re-enabled by the background sync job,
+                        even if they appear in new Extensiv data. You can still unlock individual
+                        clients at any time by toggling them back on and saving.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
             </div>
           </div>
         </CardHeader>

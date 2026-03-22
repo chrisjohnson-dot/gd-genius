@@ -333,3 +333,4 @@
 - [x] Seed client_visibility table from selected-customers TSV (master customer list with facility assignments)
 - [x] Add isLocked flag to client_visibility to prevent sync from re-showing manually hidden clients
 - [x] Add 'Lock all hidden' bulk action button to Client Visibility toolbar
+- [x] Add tooltip to 'Lock all hidden' button explaining what the lock action does

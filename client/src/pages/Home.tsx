@@ -1563,6 +1563,12 @@ function SlaBreachSummarySection({ onClientClick }: {
   onClientClick: (clientId: number, facilityId: number | null) => void;
 }) {
   const { data: breachGroups, isLoading } = trpc.sla.clientBreachSummary.useQuery();
+  const [collapsedWarehouses, setCollapsedWarehouses] = useState<Set<string>>(new Set());
+  const toggleWarehouse = (name: string) => setCollapsedWarehouses(prev => {
+    const next = new Set(prev);
+    next.has(name) ? next.delete(name) : next.add(name);
+    return next;
+  });
 
   if (isLoading) {
     return (
@@ -1609,13 +1615,6 @@ function SlaBreachSummarySection({ onClientClick }: {
   const warehouses = Array.from(warehouseMap.values())
     .sort((a, b) => b.worstDaysOverdue - a.worstDaysOverdue)
     .map(wh => ({ ...wh, clients: [...wh.clients].sort((a, b) => b.worstDaysOverdue - a.worstDaysOverdue) }));
-
-  const [collapsedWarehouses, setCollapsedWarehouses] = useState<Set<string>>(new Set());
-  const toggleWarehouse = (name: string) => setCollapsedWarehouses(prev => {
-    const next = new Set(prev);
-    next.has(name) ? next.delete(name) : next.add(name);
-    return next;
-  });
 
   return (
     <div className="bg-card border-2 border-red-200 rounded-2xl overflow-hidden" style={{ boxShadow: "0 0 0 1px rgba(239,68,68,0.1), 0 4px 16px rgba(239,68,68,0.08)" }}>

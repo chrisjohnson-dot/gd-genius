@@ -337,3 +337,4 @@
 - [x] Add 'Locked only' filter chip to Client Visibility search bar
 - [ ] Replace Recent Allocation Runs section on Open Orders main page with SLA breach summary per client
 - [x] SLA requirements table: list all clients pre-populated at 2 days with +/- one-day stepper buttons
+- [x] SLA sub-rules: per-client named rules (e.g. Labeling, B2B) with individual SLA day counts, expandable below each client row

@@ -169,6 +169,13 @@
       "when": 1774143140224,
       "tag": "0023_secret_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1774147138175,
+      "tag": "0024_slow_triton",
+      "breakpoints": true
     }
   ]
 }

@@ -60,6 +60,10 @@ import {
   syncClientVisibilityFromOrders,
   getHiddenClientIds,
   dismissZeroBidWarning,
+  getAllSlaRules,
+  getSlaRulesForClient,
+  upsertSlaRule,
+  deleteSlaRule,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
@@ -2117,6 +2121,64 @@ const _appRouter = router({
     allClientsWithRequirements: protectedProcedure.query(async () => {
       return getAllClientsWithSlaRequirements();
     }),
+
+    /** Return all named sub-rules across all clients (bulk fetch). */
+    listRules: protectedProcedure.query(async () => {
+      return getAllSlaRules();
+    }),
+
+    /** Return named sub-rules for a single client. */
+    getRulesForClient: protectedProcedure
+      .input(z.object({ clientId: z.number() }))
+      .query(async ({ input }) => {
+        return getSlaRulesForClient(input.clientId);
+      }),
+
+    /** Create or update a named SLA sub-rule for a client. */
+    upsertRule: protectedProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        requirementId: z.number(),
+        clientId: z.number(),
+        clientName: z.string().min(1).max(256),
+        ruleName: z.string().min(1).max(128),
+        slaDays: z.number().int().min(1).max(365),
+        notes: z.string().max(512).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await upsertSlaRule({
+          id: input.id,
+          requirementId: input.requirementId,
+          clientId: input.clientId,
+          clientName: input.clientName,
+          ruleName: input.ruleName,
+          slaDays: input.slaDays,
+          notes: input.notes,
+        });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.upsertRule",
+          entityType: "sla_rules",
+          entityId: String(input.clientId),
+          details: { ruleName: input.ruleName, slaDays: input.slaDays, clientName: input.clientName },
+        });
+        return { success: true };
+      }),
+
+    /** Delete a named SLA sub-rule by id. */
+    deleteRule: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await deleteSlaRule(input.id);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.deleteRule",
+          entityType: "sla_rules",
+          entityId: String(input.id),
+          details: {},
+        });
+        return { success: true };
+      }),
   }),
 });
 // ─── Lane Threshold router ───────────────────────────────────────────────────

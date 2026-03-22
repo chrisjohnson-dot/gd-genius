@@ -39,6 +39,9 @@ import {
   clientVisibility,
   ClientVisibility,
   InsertClientVisibility,
+  slaRules,
+  SlaRule,
+  InsertSlaRule,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1278,4 +1281,62 @@ export async function syncClientVisibilityFromOrders(configId: number): Promise<
         },
       });
   }
+}
+
+// ─── SLA Rules (per-client named sub-rules) ──────────────────────────────────
+
+/** Return all sub-rules for a given client (by clientId). */
+export async function getSlaRulesForClient(clientId: number): Promise<SlaRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(slaRules)
+    .where(eq(slaRules.clientId, clientId))
+    .orderBy(slaRules.ruleName);
+}
+
+/** Return all sub-rules for a list of clientIds (bulk fetch for the full table). */
+export async function getAllSlaRules(): Promise<SlaRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(slaRules).orderBy(slaRules.clientName, slaRules.ruleName);
+}
+
+/** Upsert (insert or update) a named SLA rule for a client. */
+export async function upsertSlaRule(
+  input: Omit<InsertSlaRule, "createdAt" | "updatedAt">
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  if (input.id) {
+    // Update existing
+    await db
+      .update(slaRules)
+      .set({
+        ruleName: input.ruleName,
+        slaDays: input.slaDays,
+        notes: input.notes ?? null,
+        clientName: input.clientName,
+        requirementId: input.requirementId,
+      })
+      .where(eq(slaRules.id, input.id));
+  } else {
+    // Insert new
+    await db.insert(slaRules).values({
+      requirementId: input.requirementId,
+      clientId: input.clientId,
+      clientName: input.clientName,
+      ruleName: input.ruleName,
+      slaDays: input.slaDays,
+      notes: input.notes ?? null,
+    });
+  }
+}
+
+/** Delete a named SLA rule by id. */
+export async function deleteSlaRule(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(slaRules).where(eq(slaRules.id, id));
 }

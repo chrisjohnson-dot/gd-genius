@@ -499,7 +499,7 @@ function WarehouseSlaCard({
   );
 }
 
-// ─── SLA Requirements tab ───────────────────────────────────────────────────
+// ─── SLA Requirements tab ─────────────────────────────────────────────────────
 type ClientSlaRow = {
   clientId: number;
   clientName: string;
@@ -510,14 +510,267 @@ type ClientSlaRow = {
   updatedAt: Date | null;
 };
 
+type SlaRule = {
+  id: number;
+  requirementId: number;
+  clientId: number;
+  clientName: string;
+  ruleName: string;
+  slaDays: number;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// ─── Sub-rule inline editor ───────────────────────────────────────────────────
+function SubRuleRow({
+  rule,
+  onDelete,
+  onSaved,
+}: {
+  rule: SlaRule;
+  onDelete: (id: number) => void;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(rule.ruleName);
+  const [days, setDays] = useState(rule.slaDays);
+  const utils = trpc.useUtils();
+
+  const save = trpc.sla.upsertRule.useMutation({
+    onSuccess: () => {
+      toast.success(`Rule saved: ${name} → ${days}d`);
+      utils.sla.listRules.invalidate();
+      setEditing(false);
+      onSaved();
+    },
+    onError: (err: { message: string }) => toast.error(err.message),
+  });
+
+  if (editing) {
+    return (
+      <tr className="bg-blue-50/30 dark:bg-blue-950/10">
+        <td className="pl-10 pr-2 py-2">
+          <input
+            className="h-7 w-full rounded border border-border bg-background px-2 text-xs text-foreground"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Rule name (e.g. Labeling, B2B)"
+            autoFocus
+          />
+        </td>
+        <td className="px-2 py-2 text-center">
+          <div className="inline-flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => setDays((d) => Math.max(1, d - 1))}
+              className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+            >−</button>
+            <span className="w-7 text-center text-xs font-mono text-foreground">{days}</span>
+            <button
+              type="button"
+              onClick={() => setDays((d) => Math.min(365, d + 1))}
+              className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+            >+</button>
+          </div>
+        </td>
+        <td className="px-2 py-2" colSpan={2} />
+        <td className="px-4 py-2 text-right">
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              size="sm"
+              className="h-7 px-2.5 text-xs gap-1"
+              disabled={!name.trim() || save.isPending}
+              onClick={() =>
+                save.mutate({
+                  id: rule.id,
+                  requirementId: rule.requirementId,
+                  clientId: rule.clientId,
+                  clientName: rule.clientName,
+                  ruleName: name.trim(),
+                  slaDays: days,
+                })
+              }
+            >
+              {save.isPending ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-muted-foreground"
+              onClick={() => { setName(rule.ruleName); setDays(rule.slaDays); setEditing(false); }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="bg-muted/10 hover:bg-muted/20 transition-colors">
+      <td className="pl-10 pr-4 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">↳</span>
+          <span className="text-xs font-medium text-foreground">{rule.ruleName}</span>
+        </div>
+      </td>
+      <td className="px-4 py-2 text-center">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border bg-purple-100 text-purple-700 border-purple-200">
+          <Clock className="h-3 w-3" />
+          {rule.slaDays}d
+        </span>
+      </td>
+      <td className="px-4 py-2 text-center" />
+      <td className="px-4 py-2">
+        <span className="text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-semibold">
+          Rule · {new Date(rule.updatedAt).toLocaleDateString()}
+        </span>
+      </td>
+      <td className="px-4 py-2 text-right">
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-blue-600"
+            onClick={() => setEditing(true)}
+            title="Edit rule"
+          >
+            <Edit2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
+            onClick={() => onDelete(rule.id)}
+            title="Delete rule"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ─── Add-rule inline row ──────────────────────────────────────────────────────
+function AddSubRuleRow({
+  row,
+  onDone,
+}: {
+  row: ClientSlaRow;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [days, setDays] = useState(2);
+  const utils = trpc.useUtils();
+
+  const save = trpc.sla.upsertRule.useMutation({
+    onSuccess: () => {
+      toast.success(`Rule added: ${name} → ${days}d`);
+      utils.sla.listRules.invalidate();
+      setName("");
+      setDays(2);
+      onDone();
+    },
+    onError: (err: { message: string }) => toast.error(err.message),
+  });
+
+  // If client has no requirementId yet, we need to create the base requirement first
+  const upsertReq = trpc.sla.upsertRequirement.useMutation({
+    onSuccess: () => {
+      utils.sla.allClientsWithRequirements.invalidate();
+    },
+  });
+
+  async function handleSave() {
+    let reqId = row.requirementId;
+    if (!reqId) {
+      // Auto-create the base requirement at default 2 days so we have a parent row
+      await upsertReq.mutateAsync({ clientId: row.clientId, clientName: row.clientName, slaDays: row.slaDays });
+      // Re-fetch to get the new requirementId
+      const refreshed = await utils.sla.allClientsWithRequirements.fetch();
+      const found = refreshed.find((c: ClientSlaRow) => c.clientId === row.clientId);
+      reqId = found?.requirementId ?? null;
+    }
+    if (!reqId) { toast.error("Could not create parent SLA record"); return; }
+    save.mutate({
+      requirementId: reqId,
+      clientId: row.clientId,
+      clientName: row.clientName,
+      ruleName: name.trim(),
+      slaDays: days,
+    });
+  }
+
+  return (
+    <tr className="bg-green-50/20 dark:bg-green-950/10">
+      <td className="pl-10 pr-2 py-2">
+        <input
+          className="h-7 w-full rounded border border-border bg-background px-2 text-xs text-foreground"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Rule name (e.g. Labeling, B2B, Kitting)"
+          autoFocus
+        />
+      </td>
+      <td className="px-2 py-2 text-center">
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setDays((d) => Math.max(1, d - 1))}
+            className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+          >−</button>
+          <span className="w-7 text-center text-xs font-mono text-foreground">{days}</span>
+          <button
+            type="button"
+            onClick={() => setDays((d) => Math.min(365, d + 1))}
+            className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+          >+</button>
+        </div>
+      </td>
+      <td className="px-2 py-2" colSpan={2} />
+      <td className="px-4 py-2 text-right">
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs gap-1"
+            disabled={!name.trim() || save.isPending || upsertReq.isPending}
+            onClick={handleSave}
+          >
+            {(save.isPending || upsertReq.isPending) ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+            Add
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            onClick={onDone}
+          >
+            Cancel
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ─── Main SlaRequirementsTab ──────────────────────────────────────────────────
 function SlaRequirementsTab() {
   const { data: allClients = [], isLoading } = trpc.sla.allClientsWithRequirements.useQuery();
+  const { data: allRules = [] } = trpc.sla.listRules.useQuery();
   const utils = trpc.useUtils();
 
   // Local pending changes: clientId -> new slaDays value (before save)
   const [pending, setPending] = useState<Record<number, number>>({});
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   const [search, setSearch] = useState("");
+  // Which client rows are expanded (showing sub-rules)
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // Which client is showing the "add rule" inline form
+  const [addingRule, setAddingRule] = useState<number | null>(null);
 
   const upsert = trpc.sla.upsertRequirement.useMutation({
     onSuccess: (_data: unknown, vars: { clientId: number; clientName: string; slaDays: number }) => {
@@ -538,6 +791,14 @@ function SlaRequirementsTab() {
       toast.success("SLA override removed. Client reverts to 2-day default.");
       utils.sla.allClientsWithRequirements.invalidate();
       utils.sla.listRequirements.invalidate();
+    },
+    onError: (err: { message: string }) => toast.error(err.message),
+  });
+
+  const delRule = trpc.sla.deleteRule.useMutation({
+    onSuccess: () => {
+      toast.success("Rule deleted.");
+      utils.sla.listRules.invalidate();
     },
     onError: (err: { message: string }) => toast.error(err.message),
   });
@@ -566,6 +827,29 @@ function SlaRequirementsTab() {
     }
   }
 
+  function toggleExpand(clientId: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+  }
+
+  function handleDeleteRule(id: number) {
+    if (confirm("Delete this SLA rule?")) delRule.mutate({ id });
+  }
+
+  // Build a map: clientId → rules[]
+  const rulesByClient = useMemo(() => {
+    const map = new Map<number, SlaRule[]>();
+    for (const r of allRules as SlaRule[]) {
+      if (!map.has(r.clientId)) map.set(r.clientId, []);
+      map.get(r.clientId)!.push(r);
+    }
+    return map;
+  }, [allRules]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return allClients;
@@ -573,6 +857,7 @@ function SlaRequirementsTab() {
   }, [allClients, search]);
 
   const customCount = allClients.filter((c) => !c.isDefault).length;
+  const totalRules = allRules.length;
 
   return (
     <div className="space-y-4">
@@ -582,6 +867,7 @@ function SlaRequirementsTab() {
           <p className="text-sm text-muted-foreground mt-0.5">
             All clients are listed below. Default is <strong>2 days</strong> from Create Date.
             Use <strong>+/−</strong> to adjust by one day, then click <strong>Save</strong>.
+            Click the <strong>expand arrow</strong> to add named sub-rules (e.g. Labeling, B2B).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -595,7 +881,12 @@ function SlaRequirementsTab() {
             />
           </div>
           {customCount > 0 && (
-            <span className="text-xs text-muted-foreground">{customCount} custom override{customCount !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-muted-foreground">{customCount} override{customCount !== 1 ? "s" : ""}</span>
+          )}
+          {totalRules > 0 && (
+            <span className="text-xs text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-semibold">
+              {totalRules} sub-rule{totalRules !== 1 ? "s" : ""}
+            </span>
           )}
         </div>
       </div>
@@ -608,8 +899,8 @@ function SlaRequirementsTab() {
             <div className="text-sm text-blue-800 dark:text-blue-300">
               <span className="font-medium">System Default: 2 days.</span>{" "}
               Day 1 begins the day after the order is created in Extensiv.
-              Clients shown in <span className="font-semibold">blue</span> have a custom override;
-              <span className="text-muted-foreground"> grey</span> rows are using the default.
+              Clients in <span className="font-semibold">blue</span> have a base override;{" "}
+              <span className="text-purple-700 font-semibold">purple</span> rows are named sub-rules (e.g. Labeling, B2B).
             </div>
           </div>
         </CardContent>
@@ -647,91 +938,149 @@ function SlaRequirementsTab() {
                     const isDirty = row.clientId in pending;
                     const isSaving = saving[row.clientId];
                     const isCustom = !row.isDefault || isDirty;
+                    const clientRules = rulesByClient.get(row.clientId) ?? [];
+                    const isExpanded = expanded.has(row.clientId);
+                    const isAddingRule = addingRule === row.clientId;
 
                     return (
-                      <tr key={row.clientId} className={`hover:bg-muted/20 transition-colors ${isDirty ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
-                        <td className="px-4 py-2.5 font-medium text-foreground">{row.clientName}</td>
-
-                        {/* SLA days badge */}
-                        <td className="px-4 py-2.5 text-center">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                            isCustom
-                              ? "bg-blue-100 text-blue-700 border-blue-200"
-                              : "bg-muted/50 text-muted-foreground border-border"
-                          }`}>
-                            <Clock className="h-3 w-3" />
-                            {days}d
-                          </span>
-                        </td>
-
-                        {/* +/- stepper */}
-                        <td className="px-4 py-2.5 text-center">
-                          <div className="inline-flex items-center gap-0.5">
-                            <button
-                              type="button"
-                              onClick={() => adjust(row, -1)}
-                              disabled={days <= 1 || !!isSaving}
-                              className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-colors"
-                              title="Decrease by 1 day"
-                            >
-                              −
-                            </button>
-                            <span className="w-7 text-center text-xs font-mono text-foreground">{days}</span>
-                            <button
-                              type="button"
-                              onClick={() => adjust(row, +1)}
-                              disabled={days >= 365 || !!isSaving}
-                              className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-colors"
-                              title="Increase by 1 day"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </td>
-
-                        {/* Status chip */}
-                        <td className="px-4 py-2.5">
-                          {isDirty ? (
-                            <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">Unsaved</span>
-                          ) : row.isDefault ? (
-                            <span className="text-[10px] text-muted-foreground">Default</span>
-                          ) : (
-                            <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                              Override
-                              {row.updatedAt ? ` · ${new Date(row.updatedAt).toLocaleDateString()}` : ""}
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-4 py-2.5 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {isDirty && (
-                              <Button
-                                size="sm"
-                                className="h-7 px-2.5 text-xs gap-1"
-                                onClick={() => save(row)}
-                                disabled={!!isSaving}
+                      <>
+                        {/* ── Client base row ── */}
+                        <tr
+                          key={`client-${row.clientId}`}
+                          className={`hover:bg-muted/20 transition-colors ${isDirty ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}
+                        >
+                          {/* Client name + expand toggle */}
+                          <td className="px-4 py-2.5 font-medium text-foreground">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(row.clientId)}
+                                className="h-5 w-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center transition-colors"
+                                title={isExpanded ? "Collapse sub-rules" : "Expand sub-rules"}
                               >
-                                {isSaving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Timer className="h-3 w-3" />}
-                                Save
-                              </Button>
+                                {isExpanded ? (
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                ) : (
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                              <span>{row.clientName}</span>
+                              {clientRules.length > 0 && (
+                                <span className="text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-1 py-0.5 rounded font-semibold">
+                                  {clientRules.length} rule{clientRules.length !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* SLA days badge */}
+                          <td className="px-4 py-2.5 text-center">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                              isCustom
+                                ? "bg-blue-100 text-blue-700 border-blue-200"
+                                : "bg-muted/50 text-muted-foreground border-border"
+                            }`}>
+                              <Clock className="h-3 w-3" />
+                              {days}d
+                            </span>
+                          </td>
+
+                          {/* +/- stepper */}
+                          <td className="px-4 py-2.5 text-center">
+                            <div className="inline-flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => adjust(row, -1)}
+                                disabled={days <= 1 || !!isSaving}
+                                className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-colors"
+                                title="Decrease by 1 day"
+                              >−</button>
+                              <span className="w-7 text-center text-xs font-mono text-foreground">{days}</span>
+                              <button
+                                type="button"
+                                onClick={() => adjust(row, +1)}
+                                disabled={days >= 365 || !!isSaving}
+                                className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-colors"
+                                title="Increase by 1 day"
+                              >+</button>
+                            </div>
+                          </td>
+
+                          {/* Status chip */}
+                          <td className="px-4 py-2.5">
+                            {isDirty ? (
+                              <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">Unsaved</span>
+                            ) : row.isDefault ? (
+                              <span className="text-[10px] text-muted-foreground">Default</span>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                                Override{row.updatedAt ? ` · ${new Date(row.updatedAt).toLocaleDateString()}` : ""}
+                              </span>
                             )}
-                            {!row.isDefault && !isDirty && (
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-4 py-2.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {isDirty && (
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-2.5 text-xs gap-1"
+                                  onClick={() => save(row)}
+                                  disabled={!!isSaving}
+                                >
+                                  {isSaving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Timer className="h-3 w-3" />}
+                                  Save
+                                </Button>
+                              )}
+                              {/* Add sub-rule button */}
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
-                                onClick={() => reset(row)}
-                                title="Remove override (revert to 2-day default)"
-                                disabled={del.isPending}
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-purple-600"
+                                onClick={() => {
+                                  setExpanded((prev) => new Set(Array.from(prev).concat(row.clientId)));
+                                  setAddingRule(row.clientId);
+                                }}
+                                title="Add sub-rule (e.g. Labeling, B2B)"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Plus className="h-3.5 w-3.5" />
                               </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                              {!row.isDefault && !isDirty && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
+                                  onClick={() => reset(row)}
+                                  title="Remove override (revert to 2-day default)"
+                                  disabled={del.isPending}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* ── Sub-rules (expanded) ── */}
+                        {isExpanded && clientRules.map((rule) => (
+                          <SubRuleRow
+                            key={`rule-${rule.id}`}
+                            rule={rule}
+                            onDelete={handleDeleteRule}
+                            onSaved={() => utils.sla.listRules.invalidate()}
+                          />
+                        ))}
+
+                        {/* ── Add rule inline form ── */}
+                        {isExpanded && isAddingRule && (
+                          <AddSubRuleRow
+                            key={`add-${row.clientId}`}
+                            row={row}
+                            onDone={() => setAddingRule(null)}
+                          />
+                        )}
+                      </>
                     );
                   })
                 )}

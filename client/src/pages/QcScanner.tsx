@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
-  Package, Layers, ClipboardList, RotateCcw, ChevronRight, X
+  Package, Layers, ClipboardList, ChevronRight
 } from "lucide-react";
 
 type ScanItem = {
@@ -21,6 +21,8 @@ type ScanItem = {
   expectedQty: number;
   scannedQty: number;
   caseAmount: number;
+  lotNumber?: string | null;
+  locationName?: string | null;
 };
 
 type Pallet = {
@@ -78,6 +80,179 @@ function playBeep(type: "success" | "error" | "complete") {
   }
 }
 
+// ─── Pack-sheet-style item table ──────────────────────────────────────────────
+
+function ItemsTable({
+  items,
+  phase,
+  sessionId,
+  adjustQty,
+}: {
+  items: ScanItem[];
+  phase: Phase;
+  sessionId: number;
+  adjustQty: ReturnType<typeof trpc.qcScanner.adjustQty.useMutation>;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p>No items loaded. Scan a barcode to add items, or seed from Extensiv order data.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg overflow-hidden border border-border">
+      {/* Table header — dark navy, matching pack sheet */}
+      <div
+        className="grid text-white text-xs font-bold uppercase tracking-wide"
+        style={{
+          gridTemplateColumns: "160px 130px 1fr 100px 110px 40px",
+          background: "#15527f",
+          padding: "0 8px",
+          height: 34,
+          alignItems: "center",
+        }}
+      >
+        <span>Location</span>
+        <span>SKU</span>
+        <span>Description</span>
+        <span className="text-right">Expected</span>
+        <span className="text-right pr-2">Scanned</span>
+        <span />
+      </div>
+
+      {/* Rows */}
+      {items.map((item, idx) => {
+        const done = item.scannedQty >= item.expectedQty;
+        const over = item.scannedQty > item.expectedQty;
+        const isAlt = idx % 2 === 1;
+
+        let rowBg = isAlt ? "#EEF4FB" : "#ffffff";
+        if (over)  rowBg = isAlt ? "#fef3c7" : "#fffbeb";
+        if (done && !over) rowBg = isAlt ? "#dcfce7" : "#f0fdf4";
+
+        return (
+          <div
+            key={item.sku}
+            className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
+            style={{
+              gridTemplateColumns: "160px 130px 1fr 100px 110px 40px",
+              background: rowBg,
+              minHeight: 40,
+              padding: "4px 8px",
+            }}
+          >
+            {/* Location */}
+            <div className="flex flex-col justify-center min-w-0 pr-2">
+              {item.locationName ? (
+                <span className="font-semibold text-[#15527f] text-xs truncate">
+                  {item.locationName}
+                </span>
+              ) : (
+                <span className="text-muted-foreground text-xs">—</span>
+              )}
+              {item.upc && (
+                <span className="text-[10px] text-muted-foreground font-mono truncate">
+                  UPC: {item.upc}
+                </span>
+              )}
+            </div>
+
+            {/* SKU */}
+            <div className="font-mono text-xs text-[#333333] truncate pr-2">
+              {item.sku}
+            </div>
+
+            {/* Description */}
+            <div className="text-xs text-[#333333] truncate pr-2">
+              {item.description ?? "—"}
+            </div>
+
+            {/* Expected qty — right-aligned */}
+            <div className="text-right font-semibold text-sm text-[#333333] pr-2">
+              {item.expectedQty}
+            </div>
+
+            {/* Scanned qty with +/- controls — right-aligned */}
+            <div className="flex items-center justify-end gap-1">
+              {phase === "scanning" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  disabled={item.scannedQty <= 0}
+                  onClick={() => adjustQty.mutate({ sessionId, sku: item.sku, delta: -1 })}
+                >
+                  <Minus className="w-3 h-3" />
+                </Button>
+              )}
+              <span
+                className={`font-bold text-sm w-8 text-right tabular-nums ${
+                  over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
+                }`}
+              >
+                {item.scannedQty}
+              </span>
+              {phase === "scanning" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  onClick={() => adjustQty.mutate({ sessionId, sku: item.sku, delta: 1 })}
+                >
+                  <Plus className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+
+            {/* Status icon */}
+            <div className="flex items-center justify-center">
+              {done && !over && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+              {over && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Totals footer — matching pack sheet total row */}
+      <div
+        className="grid items-center text-sm font-bold"
+        style={{
+          gridTemplateColumns: "160px 130px 1fr 100px 110px 40px",
+          background: "#EDFAEB",
+          borderTop: "2px solid #CDD4DC",
+          padding: "6px 8px",
+        }}
+      >
+        <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-3">
+          Total
+        </span>
+        <span className="text-right text-sm text-[#333333] pr-2">
+          {items.reduce((s, i) => s + i.expectedQty, 0)}
+        </span>
+        <span className="text-right text-sm pr-2">
+          <span
+            className={
+              items.every((i) => i.scannedQty >= i.expectedQty)
+                ? "text-green-600"
+                : items.some((i) => i.scannedQty > i.expectedQty)
+                ? "text-amber-600"
+                : "text-[#333333]"
+            }
+          >
+            {items.reduce((s, i) => s + i.scannedQty, 0)}
+          </span>
+        </span>
+        <span />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
 export default function QcScanner() {
   const [phase, setPhase] = useState<Phase>("start");
   const [refInput, setRefInput] = useState("");
@@ -95,8 +270,6 @@ export default function QcScanner() {
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
-
-  const utils = trpc.useUtils();
 
   const startSession = trpc.qcScanner.startSession.useMutation({
     onSuccess: (data) => {
@@ -125,7 +298,6 @@ export default function QcScanner() {
           playBeep("success");
         }
         setLastScan({ sku: data.item?.sku ?? barcodeInput, found: true });
-        // Update item in local state
         setItems((prev) =>
           prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
         );
@@ -215,7 +387,6 @@ export default function QcScanner() {
   const progress = totalExpected > 0 ? Math.min(100, Math.round((totalScanned / totalExpected) * 100)) : 0;
   const allComplete = items.length > 0 && items.every((i) => i.scannedQty >= i.expectedQty);
 
-  // Auto-focus barcode input when in scanning phase
   useEffect(() => {
     if (phase === "scanning") {
       barcodeRef.current?.focus();
@@ -251,9 +422,9 @@ export default function QcScanner() {
     );
   }
 
-  // ─── Scanning Screen ───────────────────────────────────────────────────────
+  // ─── Scanning / Complete Screen ────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-4 p-4 max-w-5xl mx-auto">
+    <div className="flex flex-col gap-4 p-4 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
@@ -278,24 +449,28 @@ export default function QcScanner() {
           >
             <Flag className="w-4 h-4 mr-1 text-amber-500" /> Flag Scan
           </Button>
-          {phase === "complete" || allComplete ? (
+          {(phase === "complete" || allComplete) ? (
             <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setCompleteDialog(true)}>
               <CheckCircle2 className="w-4 h-4 mr-1" /> Complete Order
             </Button>
-          ) : null}
-          <Button variant="ghost" size="sm" onClick={() => { setPhase("start"); setSession(null); setItems([]); setPallets([]); }}>
-            <RotateCcw className="w-4 h-4 mr-1" /> New Session
-          </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setCompleteDialog(true)}>
+              Complete Order
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Progress bar */}
       <div className="space-y-1">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">{totalScanned} / {totalExpected} units scanned</span>
-          <span className="font-medium">{progress}%</span>
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>{totalScanned} / {totalExpected} units scanned</span>
+          <span>{progress}%</span>
         </div>
-        <Progress value={progress} className="h-3" />
+        <Progress
+          value={progress}
+          className={`h-2 ${allComplete ? "[&>div]:bg-green-500" : ""}`}
+        />
       </div>
 
       {/* Barcode input */}
@@ -327,7 +502,9 @@ export default function QcScanner() {
       {/* Last scan feedback */}
       {lastScan && (
         <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-          lastScan.found ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-red-500/10 text-red-700 dark:text-red-400"
+          lastScan.found
+            ? "bg-green-500/10 text-green-700 dark:text-green-400"
+            : "bg-red-500/10 text-red-700 dark:text-red-400"
         }`}>
           {lastScan.found
             ? <CheckCircle2 className="w-4 h-4" />
@@ -349,68 +526,14 @@ export default function QcScanner() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Items tab */}
+        {/* Items tab — pack-sheet-style table */}
         <TabsContent value="items" className="mt-3">
-          {items.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>No items loaded. Scan a barcode to add items, or seed from Extensiv order data.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {items.map((item) => {
-                const done = item.scannedQty >= item.expectedQty;
-                const over = item.scannedQty > item.expectedQty;
-                return (
-                  <div
-                    key={item.sku}
-                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                      over ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" :
-                      done ? "border-green-400 bg-green-50 dark:bg-green-950/20" :
-                      "border-border bg-card"
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-mono font-semibold text-sm truncate">{item.sku}</div>
-                      {item.description && (
-                        <div className="text-xs text-muted-foreground truncate">{item.description}</div>
-                      )}
-                      {item.upc && (
-                        <div className="text-xs text-muted-foreground font-mono">UPC: {item.upc}</div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        disabled={item.scannedQty <= 0 || phase !== "scanning"}
-                        onClick={() => session && adjustQty.mutate({ sessionId: session.id, sku: item.sku, delta: -1 })}
-                      >
-                        <Minus className="w-3 h-3" />
-                      </Button>
-                      <span className={`font-bold text-lg w-16 text-center ${
-                        over ? "text-amber-600" : done ? "text-green-600" : ""
-                      }`}>
-                        {item.scannedQty} / {item.expectedQty}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        disabled={phase !== "scanning"}
-                        onClick={() => session && adjustQty.mutate({ sessionId: session.id, sku: item.sku, delta: 1 })}
-                      >
-                        <Plus className="w-3 h-3" />
-                      </Button>
-                      {done && !over && <CheckCircle2 className="w-5 h-5 text-green-500" />}
-                      {over && <AlertTriangle className="w-5 h-5 text-amber-500" />}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <ItemsTable
+            items={items}
+            phase={phase}
+            sessionId={session!.id}
+            adjustQty={adjustQty}
+          />
         </TabsContent>
 
         {/* Pallets tab */}
@@ -418,7 +541,12 @@ export default function QcScanner() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Pallets</h3>
             {phase === "scanning" && (
-              <Button size="sm" variant="outline" onClick={() => addPallet.mutate({ sessionId: session!.id })} disabled={addPallet.isPending}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => addPallet.mutate({ sessionId: session!.id })}
+                disabled={addPallet.isPending}
+              >
                 <Plus className="w-4 h-4 mr-1" /> Add Pallet
               </Button>
             )}
@@ -447,11 +575,33 @@ export default function QcScanner() {
                       {!pallet.items || pallet.items.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No items assigned to this pallet yet.</p>
                       ) : (
-                        <div className="space-y-1">
+                        /* Pallet items also use pack-sheet table style */
+                        <div className="rounded-lg overflow-hidden border border-border">
+                          <div
+                            className="grid text-white text-xs font-bold uppercase tracking-wide"
+                            style={{
+                              gridTemplateColumns: "1fr 80px",
+                              background: "#15527f",
+                              padding: "0 8px",
+                              height: 30,
+                              alignItems: "center",
+                            }}
+                          >
+                            <span>SKU</span>
+                            <span className="text-right">Qty</span>
+                          </div>
                           {pallet.items.map((item, i) => (
-                            <div key={i} className="flex justify-between text-sm py-1 border-b last:border-0">
-                              <span className="font-mono">{item.sku}</span>
-                              <span className="font-semibold">×{item.qty}</span>
+                            <div
+                              key={i}
+                              className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
+                              style={{
+                                gridTemplateColumns: "1fr 80px",
+                                background: i % 2 === 1 ? "#EEF4FB" : "#ffffff",
+                                padding: "6px 8px",
+                              }}
+                            >
+                              <span className="font-mono text-xs">{item.sku}</span>
+                              <span className="text-right font-semibold text-sm">×{item.qty}</span>
                             </div>
                           ))}
                         </div>
@@ -494,7 +644,11 @@ export default function QcScanner() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFlagDialog(false)}>Cancel</Button>
-            <Button onClick={handleFlag} disabled={flagScan.isPending} className="bg-amber-500 hover:bg-amber-600 text-white">
+            <Button
+              onClick={handleFlag}
+              disabled={flagScan.isPending}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
               <Flag className="w-4 h-4 mr-1" /> Flag Scan
             </Button>
           </DialogFooter>

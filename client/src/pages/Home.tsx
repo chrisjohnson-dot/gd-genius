@@ -565,7 +565,7 @@ function WarehouseCard({
   const [search, setSearch]             = useState("");
   const [clientFilter, setClientFilter] = useState(initialClientFilter);
   const [statusFilter, setStatusFilter] = useState<LifecycleStatus | "all" | "needs_attention">("all");
-  const [sortKey, setSortKey]           = useState<SortKey>("lifecycleStatus");
+  const [sortKey, setSortKey]           = useState<SortKey>("requiredShipDate");
   const [sortDir, setSortDir]           = useState<SortDir>("asc");
   const [expanded, setExpanded]         = useState(drillDown);
   const [groupByClient, setGroupByClient] = useState(true);
@@ -631,7 +631,17 @@ function WarehouseCard({
       if (!map.has(o.clientId)) map.set(o.clientId, { clientId: o.clientId, clientName: o.clientName, orders: [] });
       map.get(o.clientId)!.orders.push(o);
     }
-    return Array.from(map.values()).sort((a, b) => a.clientName.localeCompare(b.clientName));
+    const groups = Array.from(map.values()).sort((a, b) => a.clientName.localeCompare(b.clientName));
+    // Within each group, always sort by Required Ship Date ascending (nulls last)
+    for (const g of groups) {
+      g.orders.sort((a, b) => {
+        if (!a.requiredShipDate && !b.requiredShipDate) return 0;
+        if (!a.requiredShipDate) return 1;
+        if (!b.requiredShipDate) return -1;
+        return new Date(a.requiredShipDate).getTime() - new Date(b.requiredShipDate).getTime();
+      });
+    }
+    return groups;
   }, [filteredOrders]);
 
   function toggleSort(key: SortKey) {

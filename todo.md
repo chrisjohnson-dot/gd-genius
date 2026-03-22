@@ -345,3 +345,4 @@
 - [x] Orders Out of SLA: group by warehouse first, then by customer within each warehouse, sorted by worst days overdue descending
 - [x] Add red overdue count badge to each warehouse card subtitle on Open Orders main page
 - [x] Pre-sort order rows by Required Ship Date ascending within each customer group in the Open Orders drill-down table
+- [x] Add colour-coded Days Overdue column to SLA Tracker order table (amber 1-2d, red 3d+)

@@ -300,12 +300,13 @@ function WarehouseSlaCard({
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Stage</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Rule Applied</th>
+                <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap">Overdue</th>
                 <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground text-xs">No orders match the current filter.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-muted-foreground text-xs">No orders match the current filter.</td></tr>
               ) : (
                 filtered.map((o) => (
                   <tr key={o.extensivOrderId} style={o.slaStatus === "out_of_sla" ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" } : { borderLeft: "3px solid transparent" }}>
@@ -326,6 +327,14 @@ function WarehouseSlaCard({
                       ) : (
                         <span className="text-muted-foreground text-[10px]">Base</span>
                       )}
+                    </td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      {(() => {
+                        if (o.slaStatus !== "out_of_sla" || o.daysRemaining >= 0) return <span className="text-muted-foreground text-xs">—</span>;
+                        const d = Math.abs(o.daysRemaining);
+                        if (d >= 3) return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200">{d}d</span>;
+                        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">{d}d</span>;
+                      })()}
                     </td>
                     <td className="px-4 py-2 text-center">
                       {o.notes ? (
@@ -440,6 +449,7 @@ function WarehouseSlaCard({
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Stage</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">SLA Days</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Rule Applied</th>
+                <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap">Overdue</th>
                 <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Notes</th>
               </tr>
             </thead>
@@ -486,6 +496,14 @@ function WarehouseSlaCard({
                     </td>
                     <td className="px-4 py-2 text-muted-foreground text-center">
                       {o.slaDays}d
+                    </td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      {(() => {
+                        if (o.slaStatus !== "out_of_sla" || o.daysRemaining >= 0) return <span className="text-muted-foreground text-xs">—</span>;
+                        const d = Math.abs(o.daysRemaining);
+                        if (d >= 3) return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200">{d}d</span>;
+                        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">{d}d</span>;
+                      })()}
                     </td>
                     <td className="px-4 py-2 text-center">
                       {o.notes ? (

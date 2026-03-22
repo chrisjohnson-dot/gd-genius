@@ -27,6 +27,7 @@ import {
   Truck,
   Users,
   Zap,
+  Network,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -69,6 +70,7 @@ const configItems = [
   { href: "/diagnostics",      label: "API Diagnostics",    icon: Stethoscope },
   { href: "/shipwell-settings",  label: "Shipwell Settings",   icon: Zap },
   { href: "/client-visibility",   label: "Client Visibility",   icon: Users },
+  { href: "/cortex-settings",     label: "Cortex Integration",  icon: Network },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

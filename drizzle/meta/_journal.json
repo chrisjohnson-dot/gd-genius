@@ -197,6 +197,13 @@
       "when": 1774189401061,
       "tag": "0027_flowery_mikhail_rasputin",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1774192175671,
+      "tag": "0028_chilly_maximus",
+      "breakpoints": true
     }
   ]
 }

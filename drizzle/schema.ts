@@ -389,3 +389,69 @@ export const returnsItems = mysqlTable("returns_items", {
 });
 export type ReturnsItem = typeof returnsItems.$inferSelect;
 export type InsertReturnsItem = typeof returnsItems.$inferInsert;
+
+// ─── GD Cortex Integration ─────────────────────────────────────────────────────
+// Stores connection config for each connected Cortex platform (ClearSight, OpFi)
+export const cortexConnections = mysqlTable("cortex_connections", {
+  id: int("id").autoincrement().primaryKey(),
+  // Which platform this connection is for: clearsight | opfi
+  platform: varchar("platform", { length: 64 }).notNull().unique(),
+  displayName: varchar("displayName", { length: 256 }).notNull().default(""),
+  // Base URL of the remote platform (e.g. https://clearsight.godirectsolutions.com)
+  baseUrl: varchar("baseUrl", { length: 512 }).notNull().default(""),
+  // API key we use when calling the remote platform
+  outboundApiKey: varchar("outboundApiKey", { length: 512 }).notNull().default(""),
+  // API key the remote platform must send in X-API-Key when calling us
+  inboundApiKey: varchar("inboundApiKey", { length: 512 }).notNull().default(""),
+  // Webhook URL on the remote platform to POST events to
+  webhookUrl: varchar("webhookUrl", { length: 512 }).notNull().default(""),
+  // Polling interval in seconds (default 300 = 5 min)
+  syncIntervalSeconds: int("syncIntervalSeconds").notNull().default(300),
+  enabled: boolean("enabled").notNull().default(false),
+  // Last successful health-check timestamp
+  lastHealthCheck: timestamp("lastHealthCheck"),
+  lastHealthStatus: varchar("lastHealthStatus", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CortexConnection = typeof cortexConnections.$inferSelect;
+export type InsertCortexConnection = typeof cortexConnections.$inferInsert;
+
+// Inbound return requests pushed from ClearSight to Genius
+export const cortexReturns = mysqlTable("cortex_returns", {
+  id: int("id").autoincrement().primaryKey(),
+  // ClearSight's return identifier
+  returnNumber: varchar("returnNumber", { length: 128 }).notNull(),
+  // ClearSight's order UUID
+  orderId: varchar("orderId", { length: 256 }),
+  orderNumber: varchar("orderNumber", { length: 128 }),
+  // Extensiv customer ID (shared key across all Cortex platforms)
+  extensivCustomerId: int("extensivCustomerId"),
+  customerId: varchar("customerId", { length: 256 }),
+  customerName: varchar("customerName", { length: 256 }).notNull().default(""),
+  reason: varchar("reason", { length: 256 }),
+  // Full items array from ClearSight payload stored as JSON
+  items: json("items"),
+  shippingAddress: json("shippingAddress"),
+  notes: text("notes"),
+  // Status lifecycle: Received | Inspecting | Processed | Refunded | Rejected | Restocked
+  status: varchar("status", { length: 64 }).notNull().default("Received"),
+  // Inspection result filled in when session is closed
+  inspectionResult: text("inspectionResult"),
+  // Disposition: Restock | Quarantine | Destroy | Donate | ReturnToVendor
+  disposition: varchar("disposition", { length: 64 }),
+  refundAmount: decimal("refundAmount", { precision: 10, scale: 2 }),
+  refundApproved: boolean("refundApproved"),
+  processedBy: varchar("processedBy", { length: 256 }),
+  processedAt: timestamp("processedAt"),
+  // Link to the returns_sessions row created for this return (if any)
+  returnsSessionId: int("returnsSessionId"),
+  // Whether the outbound webhook has been fired for the latest status
+  webhookSent: boolean("webhookSent").notNull().default(false),
+  // ISO timestamp from ClearSight
+  clearsightCreatedAt: timestamp("clearsightCreatedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CortexReturn = typeof cortexReturns.$inferSelect;
+export type InsertCortexReturn = typeof cortexReturns.$inferInsert;

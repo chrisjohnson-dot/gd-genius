@@ -368,3 +368,15 @@
 - [x] Returns scan-in screen — barcode/SKU input, quantity, condition grade, disposition, lot/serial, notes, edit/remove items, close session with confirmation
 - [x] Sidebar nav — Returns section between Shipping and Configuration with Returns Dashboard and Process Returns links
 - [x] Returns: 17 unit tests (220 total passing)
+
+## GD Cortex Integration (GD Genius connector)
+- [x] Cortex DB: cortex_connections table (platform, baseUrl, apiKey, webhookUrl, syncInterval, enabled)
+- [x] Cortex DB: cortex_returns table (inbound return requests from ClearSight with full payload + status)
+- [x] Cortex API: GET /api/health — health check endpoint (no auth required)
+- [x] Cortex API: POST /api/returns — receive return request from ClearSight (X-API-Key auth)
+- [x] Cortex API: GET /api/returns/processed — return processed returns to ClearSight (X-API-Key auth, ?since= ?limit=)
+- [x] Cortex: outbound webhook — POST to ClearSight webhook URL when return status changes
+- [x] Cortex: link inbound ClearSight returns to existing returns_sessions/returns_items workflow
+- [x] Cortex Settings UI page — configure ClearSight base URL, API key, webhook URL, sync interval, test connection button
+- [x] Cortex Settings: sidebar nav entry under Configuration
+- [x] Cortex: 22 unit tests for API key validation, return receipt, processed returns query, status lifecycle (242 total passing)

@@ -76,7 +76,15 @@ import {
   updateReturnsItem,
   deleteReturnsItem,
   getReturnsDashboardStats,
+  getAllCortexConnections,
+  getCortexConnection,
+  upsertCortexConnection,
+  updateCortexHealthStatus,
+  getProcessedCortexReturns,
+  getCortexReturn,
+  updateCortexReturn,
 } from "./db";
+import { fireCortexWebhook } from "./cortex/webhook";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
@@ -2525,12 +2533,126 @@ const returnsRouter = router({
     }),
 });
 
-// Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, and returns
+// ─── Cortex Integration Router ────────────────────────────────────────────────
+const cortexRouter = router({
+  // List all configured connections
+  listConnections: protectedProcedure.query(async () => {
+    return getAllCortexConnections();
+  }),
+  // Get a single connection
+  getConnection: protectedProcedure
+    .input(z.object({ platform: z.string() }))
+    .query(async ({ input }) => {
+      return getCortexConnection(input.platform);
+    }),
+  // Save / update a connection config
+  saveConnection: protectedProcedure
+    .input(z.object({
+      platform: z.string(),
+      displayName: z.string().optional(),
+      baseUrl: z.string().optional(),
+      outboundApiKey: z.string().optional(),
+      inboundApiKey: z.string().optional(),
+      webhookUrl: z.string().optional(),
+      syncIntervalSeconds: z.number().int().min(60).optional(),
+      enabled: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { platform, ...data } = input;
+      await upsertCortexConnection(platform, data);
+      return { success: true };
+    }),
+  // Test connection — hit the remote health endpoint
+  testConnection: protectedProcedure
+    .input(z.object({ platform: z.string() }))
+    .mutation(async ({ input }) => {
+      const conn = await getCortexConnection(input.platform);
+      if (!conn || !conn.baseUrl) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Connection not configured" });
+      }
+      try {
+        const url = conn.baseUrl.replace(/\/$/, "") + "/api/health";
+        const res = await fetch(url, {
+          headers: { "X-API-Key": conn.outboundApiKey },
+          signal: AbortSignal.timeout(8_000),
+        });
+        const status = res.ok ? "ok" : `error_${res.status}`;
+        await updateCortexHealthStatus(input.platform, status);
+        if (!res.ok) throw new TRPCError({ code: "BAD_REQUEST", message: `Health check returned HTTP ${res.status}` });
+        const body = await res.json() as Record<string, unknown>;
+        return { success: true, status, body };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await updateCortexHealthStatus(input.platform, "error");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+      }
+    }),
+  // List inbound returns from ClearSight
+  listInboundReturns: protectedProcedure
+    .input(z.object({
+      since: z.string().optional(),
+      limit: z.number().int().min(1).max(500).optional(),
+    }))
+    .query(async ({ input }) => {
+      const since = input.since ? new Date(input.since) : undefined;
+      const rows = await getProcessedCortexReturns(since, input.limit ?? 100);
+      return rows;
+    }),
+  // Get a single inbound return
+  getInboundReturn: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      return getCortexReturn(input.id);
+    }),
+  // Update return status (from Process Returns UI)
+  updateReturnStatus: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      status: z.enum(["Received", "Inspecting", "Processed", "Refunded", "Rejected", "Restocked"]),
+      inspectionResult: z.string().optional(),
+      disposition: z.string().optional(),
+      refundAmount: z.number().optional(),
+      refundApproved: z.boolean().optional(),
+      processedBy: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const { id, status, ...rest } = input;
+      await updateCortexReturn(id, {
+        status,
+        ...rest,
+        refundAmount: rest.refundAmount != null ? String(rest.refundAmount) : undefined,
+        processedBy: rest.processedBy ?? ctx.user.name ?? ctx.user.email,
+        processedAt: new Date(),
+        webhookSent: false,
+      });
+      // Fire webhook
+      const eventMap: Record<string, string> = {
+        Processed: "return.processed",
+        Refunded: "return.refunded",
+        Rejected: "return.rejected",
+        Restocked: "return.processed",
+        Inspecting: "return.inspecting",
+      };
+      await fireCortexWebhook("clearsight", eventMap[status] ?? "return.processed", {
+        geniusReturnId: `genius-${id}`,
+        status,
+        disposition: rest.disposition ?? null,
+        refundAmount: rest.refundAmount ?? null,
+        refundApproved: rest.refundApproved ?? null,
+        processedAt: new Date().toISOString(),
+      });
+      await updateCortexReturn(id, { webhookSent: true });
+      return { success: true };
+    }),
+});
+
+// Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, and cortex
 export const appRouter = router({
   ..._appRouter._def.record,
   laneThresholds: laneThresholdRouter,
   overdueAlert: overdueAlertRouter,
   clientVisibility: clientVisibilityRouter,
   returns: returnsRouter,
+  cortex: cortexRouter,
 });
 export type AppRouter = typeof appRouter;

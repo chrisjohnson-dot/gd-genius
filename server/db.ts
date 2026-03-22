@@ -48,6 +48,12 @@ import {
   InsertReturnsSession,
   ReturnsItem,
   InsertReturnsItem,
+  cortexConnections,
+  cortexReturns,
+  CortexConnection,
+  InsertCortexConnection,
+  CortexReturn,
+  InsertCortexReturn,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1531,4 +1537,107 @@ export async function getReturnsDashboardStats() {
     .slice(0, 10);
 
   return { open, closed, totalItems, totalQty, conditionBreakdown, recent };
+}
+
+// ─── GD Cortex DB Helpers ──────────────────────────────────────────────────────
+
+export async function getCortexConnection(platform: string): Promise<CortexConnection | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(cortexConnections).where(eq(cortexConnections.platform, platform));
+  return rows[0] ?? null;
+}
+
+export async function getAllCortexConnections(): Promise<CortexConnection[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(cortexConnections).orderBy(cortexConnections.platform);
+}
+
+export async function upsertCortexConnection(
+  platform: string,
+  data: Partial<Omit<InsertCortexConnection, "id" | "createdAt" | "updatedAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await getCortexConnection(platform);
+  if (existing) {
+    await db.update(cortexConnections).set(data).where(eq(cortexConnections.platform, platform));
+  } else {
+    await db.insert(cortexConnections).values({ platform, ...data } as InsertCortexConnection);
+  }
+}
+
+export async function updateCortexHealthStatus(
+  platform: string,
+  status: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(cortexConnections)
+    .set({ lastHealthCheck: new Date(), lastHealthStatus: status })
+    .where(eq(cortexConnections.platform, platform));
+}
+
+// ─── Cortex Returns ───────────────────────────────────────────────────────────
+
+export async function createCortexReturn(
+  data: Omit<InsertCortexReturn, "id" | "createdAt" | "updatedAt">
+): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.insert(cortexReturns).values(data as InsertCortexReturn);
+  return (result as { insertId: number }).insertId;
+}
+
+export async function getCortexReturnByReturnNumber(returnNumber: string): Promise<CortexReturn | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(cortexReturns).where(eq(cortexReturns.returnNumber, returnNumber));
+  return rows[0] ?? null;
+}
+
+export async function getCortexReturn(id: number): Promise<CortexReturn | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(cortexReturns).where(eq(cortexReturns.id, id));
+  return rows[0] ?? null;
+}
+
+export async function updateCortexReturn(
+  id: number,
+  data: Partial<Omit<InsertCortexReturn, "id" | "createdAt" | "updatedAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(cortexReturns).set(data).where(eq(cortexReturns.id, id));
+}
+
+export async function getProcessedCortexReturns(since?: Date, limit = 100): Promise<CortexReturn[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const processedStatuses = ["Processed", "Refunded", "Rejected", "Restocked"];
+  // Build query: status in processed list AND (since ? updatedAt >= since : all)
+  const rows = await db
+    .select()
+    .from(cortexReturns)
+    .orderBy(desc(cortexReturns.updatedAt))
+    .limit(limit);
+  // Filter in JS for status and since (avoids complex SQL IN clause)
+  return rows.filter((r: CortexReturn) => {
+    if (!processedStatuses.includes(r.status)) return false;
+    if (since && r.updatedAt < since) return false;
+    return true;
+  });
+}
+
+export async function getPendingWebhookCortexReturns(): Promise<CortexReturn[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(cortexReturns)
+    .where(eq(cortexReturns.webhookSent, false))
+    .orderBy(cortexReturns.updatedAt);
 }

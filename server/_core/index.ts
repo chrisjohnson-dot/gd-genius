@@ -12,6 +12,8 @@ import { initScheduler } from "../scheduler/autoRun";
 import { startOrderSyncScheduler } from "../scheduler/orderSync";
 import { startShipwellSyncScheduler } from "../scheduler/shipwellSync";
 import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
+import { registerCortexRoutes } from "../cortex/routes";
+import { flushPendingWebhooks } from "../cortex/webhook";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -42,6 +44,8 @@ async function startServer() {
   registerOAuthRoutes(app);
   // PDF export routes
   registerPdfRoutes(app);
+  // GD Cortex integration REST endpoints
+  registerCortexRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -74,6 +78,8 @@ async function startServer() {
     startShipwellSyncScheduler();
     // Initialize daily overdue order alert (time read from DB)
     startOverdueAlertScheduler().catch((err) => console.error("[OverdueAlert] Init failed:", err));
+    // Flush any pending Cortex webhooks every 5 minutes
+    setInterval(() => flushPendingWebhooks(), 5 * 60 * 1000);
   });
 }
 

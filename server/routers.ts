@@ -2531,8 +2531,48 @@ const returnsRouter = router({
       await deleteReturnsItem(input.id);
       return { success: true };
     }),
-});
 
+  // ── Push a closed returns_session to ClearSight via outbound webhook ──────
+  pushSessionToClearSight: protectedProcedure
+    .input(z.object({ sessionId: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const session = await getReturnsSession(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.status !== "closed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only closed sessions can be pushed to ClearSight" });
+      }
+      const items = await getReturnsItems(input.sessionId);
+      const payload = {
+        geniusSessionId: `genius-session-${session.id}`,
+        referenceNumber: session.referenceNumber ?? null,
+        warehouseName: session.warehouseName,
+        clientName: session.clientName,
+        closedAt: session.closedAt ? session.closedAt.toISOString() : null,
+        closedBy: session.createdByName ?? null,
+        notes: session.notes ?? null,
+        items: items.map((item) => ({
+          sku: item.sku,
+          description: item.description ?? null,
+          quantity: item.quantity,
+          condition: item.condition,
+          disposition: item.disposition,
+          lotNumber: item.lotNumber ?? null,
+          notes: item.notes ?? null,
+        })),
+        totalUnits: items.reduce((sum, i) => sum + i.quantity, 0),
+        totalSkus: items.length,
+      };
+      const sent = await fireCortexWebhook("clearsight", "return.session.closed", payload);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "returns.pushToClearSight",
+        entityType: "returns_session",
+        entityId: String(session.id),
+        details: { sessionId: session.id, sent, itemCount: items.length },
+      });
+      return { success: true, sent, itemCount: items.length };
+    }),
+});
 // ─── Cortex Integration Router ────────────────────────────────────────────────
 const cortexRouter = router({
   // List all configured connections
@@ -2641,11 +2681,11 @@ const cortexRouter = router({
         refundApproved: rest.refundApproved ?? null,
         processedAt: new Date().toISOString(),
       });
-      await updateCortexReturn(id, { webhookSent: true });
+       await updateCortexReturn(id, { webhookSent: true });
       return { success: true };
     }),
-});
 
+});
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, and cortex
 export const appRouter = router({
   ..._appRouter._def.record,

@@ -36,6 +36,7 @@ import {
   RotateCcw,
   X,
   Pencil,
+  Send,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -330,6 +331,17 @@ function StepScanItems({
       onClose();
     },
     onError: (err) => toast.error(err.message),
+  });
+
+  const pushToClearSight = trpc.returns.pushSessionToClearSight.useMutation({
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast.success(`Pushed to ClearSight — ${data.itemCount} item${data.itemCount !== 1 ? "s" : ""} sent.`);
+      } else {
+        toast.error("ClearSight webhook not configured or unreachable. Check Cortex Integration settings.");
+      }
+    },
+    onError: (err) => toast.error(`Push failed: ${err.message}`),
   });
 
   // Auto-focus SKU input on mount
@@ -631,7 +643,7 @@ function StepScanItems({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+              <AlertDialogAction
               className="bg-emerald-600 hover:bg-emerald-700"
               onClick={() => {
                 setConfirmClose(false);
@@ -643,6 +655,31 @@ function StepScanItems({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Post-close: Push to ClearSight */}
+      {session.status === "closed" && (
+        <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-800 flex items-center gap-3">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Session Closed</p>
+            <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+              Push this session to ClearSight to notify them of the processed return.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+            onClick={() => pushToClearSight.mutate({ sessionId: session.id })}
+            disabled={pushToClearSight.isPending}
+          >
+            {pushToClearSight.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+            Push to ClearSight
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

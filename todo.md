@@ -380,3 +380,9 @@
 - [x] Cortex Settings UI page — configure ClearSight base URL, API key, webhook URL, sync interval, test connection button
 - [x] Cortex Settings: sidebar nav entry under Configuration
 - [x] Cortex: 22 unit tests for API key validation, return receipt, processed returns query, status lifecycle (242 total passing)
+
+## Push to ClearSight (Post-Session Webhook)
+- [x] tRPC mutation: returns.pushSessionToClearSight — collects all items from a closed returns_session and fires the Cortex outbound webhook
+- [x] Push to ClearSight button on ProcessReturns closed-session view (appears after session is closed)
+- [x] Audit log entry on each push (action: returns.pushToClearSight)
+- [x] 242 tests passing total

@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1191,7 +1190,7 @@ export default function SlaTracker() {
   const totalOutOfSla = (slaOrders as SlaOrder[]).filter((o) => o.slaStatus === "out_of_sla").length;
 
   return (
-    <AppLayout>
+
       <div className="p-6 space-y-6">
         {/* Page header */}
         <div className="flex items-start justify-between">
@@ -1309,6 +1308,6 @@ export default function SlaTracker() {
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+
   );
 }

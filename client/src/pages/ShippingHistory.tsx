@@ -1,9 +1,8 @@
-import AppLayout from "@/components/AppLayout";
 import { ScrollText } from "lucide-react";
 
 export default function ShippingHistory() {
   return (
-    <AppLayout>
+
       <div className="p-7 page-enter">
         <p className="page-breadcrumb">Shipping</p>
         <h1 className="page-title">Shipping History</h1>
@@ -13,6 +12,6 @@ export default function ShippingHistory() {
           <p className="text-xs mt-1 opacity-70">Past shipments and tracking records will appear here.</p>
         </div>
       </div>
-    </AppLayout>
+
   );
 }

@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -405,7 +404,8 @@ export default function LocationConfig() {
   }, {});
 
   return (
-    <AppLayout>
+    <>
+
       <div className="p-7 space-y-6 max-w-4xl page-enter">
         <div className="flex items-center justify-between">
           <div>
@@ -640,6 +640,7 @@ export default function LocationConfig() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+
+    </>
   );
 }

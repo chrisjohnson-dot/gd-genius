@@ -1,5 +1,4 @@
 import { useState } from "react";
-import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
 import { ClipboardList, Loader2, Filter, X, User } from "lucide-react";
@@ -89,7 +88,7 @@ export default function AuditLog() {
   }
 
   return (
-    <AppLayout>
+
       <div className="p-6 space-y-6 max-w-5xl">
         {/* Page header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -254,6 +253,6 @@ export default function AuditLog() {
           </CardContent>
         </Card>
       </div>
-    </AppLayout>
+
   );
 }

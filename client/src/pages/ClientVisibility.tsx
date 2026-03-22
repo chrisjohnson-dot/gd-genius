@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -397,7 +396,7 @@ export default function ClientVisibility() {
   }, [scheduleData]);
 
   return (
-    <AppLayout>
+
       <div className="p-6 space-y-5 max-w-3xl page-enter">
         {/* Page header */}
         <div>
@@ -453,6 +452,6 @@ export default function ClientVisibility() {
           </>
         )}
       </div>
-    </AppLayout>
+
   );
 }

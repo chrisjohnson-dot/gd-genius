@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -526,7 +525,7 @@ function NotificationsTab() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ShipwellSettings() {
   return (
-    <AppLayout>
+
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         {/* Page Header */}
         <div className="flex items-center gap-3">
@@ -550,6 +549,6 @@ export default function ShipwellSettings() {
           <TabsContent value="notifications"><NotificationsTab /></TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+
   );
 }

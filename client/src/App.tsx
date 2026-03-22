@@ -1,10 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useRoute } from "wouter";
 import AllocationRules from "@/pages/AllocationRules";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import AppLayout from "./components/AppLayout";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import LocationConfig from "./pages/LocationConfig";
@@ -26,34 +27,51 @@ import ShipwellSettings from "@/pages/ShipwellSettings";
 import SlaTracker from "@/pages/SlaTracker";
 import ClientVisibility from "@/pages/ClientVisibility";
 
-function Router() {
+// Pages that should NOT have the sidebar (full-screen / print views)
+function PrintRoutes() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/locations" component={LocationConfig} />
-      <Route path="/rules" component={AllocationRules} />
-      <Route path="/allocate" component={OrderSelection} />
-      <Route path="/review/:runId" component={AllocationReview} />
-      <Route path="/history" component={RunHistory} />
-      <Route path="/history/:runId" component={RunDetail} />
-      <Route path="/audit" component={AuditLog} />
-      <Route path="/schedule" component={ScheduleSettings} />
-      <Route path="/diagnostics" component={Diagnostics} />
       <Route path="/print" component={PrintPage} />
-      <Route path="/qc" component={QCDashboard} />
-      <Route path="/qc/reports" component={QCReports} />
-      <Route path="/shipping" component={ShippingDashboard} />
-      <Route path="/shipping/orders" component={ShipOrders} />
-      <Route path="/shipping/history" component={ShippingHistory} />
-      <Route path="/shipping/carriers" component={ShippingCarriers} />
-      <Route path="/shipwell-settings" component={ShipwellSettings} />
-      <Route path="/sla-tracker" component={SlaTracker} />
-      <Route path="/client-visibility" component={ClientVisibility} />
-      <Route path="/404" component={NotFound} />
-      <Route component={NotFound} />
     </Switch>
   );
+}
+
+// All normal app routes share ONE AppLayout instance so the sidebar
+// DOM element is never destroyed on navigation — scroll position is preserved.
+function AppRoutes() {
+  return (
+    <AppLayout>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/locations" component={LocationConfig} />
+        <Route path="/rules" component={AllocationRules} />
+        <Route path="/allocate" component={OrderSelection} />
+        <Route path="/review/:runId" component={AllocationReview} />
+        <Route path="/history" component={RunHistory} />
+        <Route path="/history/:runId" component={RunDetail} />
+        <Route path="/audit" component={AuditLog} />
+        <Route path="/schedule" component={ScheduleSettings} />
+        <Route path="/diagnostics" component={Diagnostics} />
+        <Route path="/qc" component={QCDashboard} />
+        <Route path="/qc/reports" component={QCReports} />
+        <Route path="/shipping" component={ShippingDashboard} />
+        <Route path="/shipping/orders" component={ShipOrders} />
+        <Route path="/shipping/history" component={ShippingHistory} />
+        <Route path="/shipping/carriers" component={ShippingCarriers} />
+        <Route path="/shipwell-settings" component={ShipwellSettings} />
+        <Route path="/sla-tracker" component={SlaTracker} />
+        <Route path="/client-visibility" component={ClientVisibility} />
+        <Route path="/404" component={NotFound} />
+        <Route component={NotFound} />
+      </Switch>
+    </AppLayout>
+  );
+}
+
+function Router() {
+  const [isPrint] = useRoute("/print");
+  return isPrint ? <PrintRoutes /> : <AppRoutes />;
 }
 
 function App() {
@@ -68,5 +86,4 @@ function App() {
     </ErrorBoundary>
   );
 }
-
 export default App;

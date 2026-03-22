@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -199,23 +198,23 @@ export default function AllocationReview() {
   // ── Early returns (after all hooks) ─────────────────────────────────────
   if (isLoading) {
     return (
-      <AppLayout>
+
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </AppLayout>
+
     );
   }
 
   if (error || !data) {
     return (
-      <AppLayout>
+
         <div className="p-6 text-center text-muted-foreground">
           <AlertCircle className="h-8 w-8 mx-auto mb-2" />
           <p>Run not found or error loading data.</p>
           <Button variant="outline" className="mt-3" onClick={() => navigate("/allocate")}>Back</Button>
         </div>
-      </AppLayout>
+
     );
   }
 
@@ -229,7 +228,7 @@ export default function AllocationReview() {
   const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
 
   return (
-    <AppLayout>
+
       <div className="p-6 space-y-6 max-w-6xl">
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -642,6 +641,6 @@ export default function AllocationReview() {
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+
   );
 }

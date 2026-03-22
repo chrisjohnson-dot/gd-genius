@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
@@ -140,17 +139,17 @@ export default function RunDetail() {
 
   if (isLoading) {
     return (
-      <AppLayout>
+
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </AppLayout>
+
     );
   }
 
   if (error || !data) {
     return (
-      <AppLayout>
+
         <div className="p-7 text-center text-muted-foreground">
           <AlertCircle className="h-8 w-8 mx-auto mb-2" />
           <p>Run not found or error loading data.</p>
@@ -158,7 +157,7 @@ export default function RunDetail() {
             <Link href="/history">Back to History</Link>
           </Button>
         </div>
-      </AppLayout>
+
     );
   }
 
@@ -214,7 +213,7 @@ export default function RunDetail() {
   const hasSourceQty = consolidatedRows.some((r) => r.sourceQty != null);
 
   return (
-    <AppLayout>
+
       <div className="p-7 space-y-6 page-enter">
         {/* Page header */}
         <div className="flex items-start justify-between">
@@ -620,6 +619,6 @@ export default function RunDetail() {
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+
   );
 }

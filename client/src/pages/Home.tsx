@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -1592,7 +1591,7 @@ export default function Home() {
   };
 
   return (
-    <AppLayout>
+
       <div className="p-5 space-y-4 page-enter">
         {/* Page header */}
         <div className="flex items-center justify-between">
@@ -1729,7 +1728,7 @@ export default function Home() {
           />
         )}
       </div>
-    </AppLayout>
+
   );
 }
 

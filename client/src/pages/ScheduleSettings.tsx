@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import AppLayout from "@/components/AppLayout";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -141,7 +140,7 @@ export default function ScheduleSettings() {
   const autoRunCount = customerRulesList.filter((r) => r.autoRun).length;
 
   return (
-    <AppLayout>
+
       <div className="p-7 space-y-6 page-enter max-w-4xl">
         {/* Page header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -393,6 +392,6 @@ export default function ScheduleSettings() {
           </ul>
         </div>
       </div>
-    </AppLayout>
+
   );
 }

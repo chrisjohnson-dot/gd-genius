@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,7 +99,7 @@ export default function Diagnostics() {
     : null;
 
   return (
-    <AppLayout>
+
       <div className="p-6 space-y-6 max-w-4xl">
         <div>
           <h1 className="text-2xl font-bold">API Diagnostics</h1>
@@ -550,6 +549,6 @@ export default function Diagnostics() {
           </div>
         )}
       </div>
-    </AppLayout>
+
   );
 }

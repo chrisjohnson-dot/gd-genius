@@ -1,5 +1,4 @@
 import { useState } from "react";
-import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "lucide-react";
@@ -124,7 +123,8 @@ export default function RunHistory() {
   }
 
   return (
-    <AppLayout>
+    <>
+
       <div className="p-7 space-y-6 page-enter">
         {/* Page header */}
         <div className="flex items-center justify-between">
@@ -391,6 +391,7 @@ export default function RunHistory() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppLayout>
+
+    </>
   );
 }

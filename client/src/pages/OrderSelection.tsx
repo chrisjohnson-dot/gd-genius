@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -652,17 +651,17 @@ export default function OrderSelection() {
 
   if (configsLoading) {
     return (
-      <AppLayout>
+
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      </AppLayout>
+
     );
   }
 
   if (!configId) {
     return (
-      <AppLayout>
+
         <div className="p-6 max-w-2xl">
           <div className="text-center py-16 text-muted-foreground">
             <AlertCircle className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -671,7 +670,7 @@ export default function OrderSelection() {
             <Button className="mt-4" onClick={() => navigate("/settings")}>Go to Settings</Button>
           </div>
         </div>
-      </AppLayout>
+
     );
   }
 
@@ -679,7 +678,7 @@ export default function OrderSelection() {
   const someClientsSelected = selectedClientIds.size > 0 && !allClientsSelected;
 
   return (
-    <AppLayout>
+
       <div className="p-6 space-y-6 max-w-4xl">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -946,6 +945,6 @@ export default function OrderSelection() {
           </div>
         )}
       </div>
-    </AppLayout>
+
   );
 }

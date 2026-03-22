@@ -1,9 +1,8 @@
-import AppLayout from "@/components/AppLayout";
 import { PackageCheck } from "lucide-react";
 
 export default function ShipOrders() {
   return (
-    <AppLayout>
+
       <div className="p-7 page-enter">
         <p className="page-breadcrumb">Shipping</p>
         <h1 className="page-title">Ship Orders</h1>
@@ -13,6 +12,6 @@ export default function ShipOrders() {
           <p className="text-xs mt-1 opacity-70">Ready-to-ship orders and label generation will appear here.</p>
         </div>
       </div>
-    </AppLayout>
+
   );
 }

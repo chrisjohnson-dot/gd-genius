@@ -1,9 +1,8 @@
-import AppLayout from "@/components/AppLayout";
 import { FolderOpen } from "lucide-react";
 
 export default function OpenOrders() {
   return (
-    <AppLayout>
+
       <div className="p-7 page-enter">
         <p className="page-breadcrumb">Allocation</p>
         <h1 className="page-title">Open Orders Dashboard</h1>
@@ -13,6 +12,6 @@ export default function OpenOrders() {
           <p className="text-xs mt-1 opacity-70">Open and unallocated orders will appear here.</p>
         </div>
       </div>
-    </AppLayout>
+
   );
 }

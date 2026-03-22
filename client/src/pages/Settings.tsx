@@ -1,4 +1,3 @@
-import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -80,7 +79,8 @@ export default function Settings() {
   };
 
   return (
-    <AppLayout>
+    <>
+
       <div className="p-7 space-y-6 page-enter max-w-3xl">
         {/* Page header */}
         <div className="flex items-start justify-between">
@@ -218,6 +218,7 @@ export default function Settings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+
+    </>
   );
 }

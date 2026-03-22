@@ -9,7 +9,6 @@
  *     that the engine uses to sort candidate locations before FEFO.
  *   - Notes — free-form instructions visible to the allocator.
  */
-import AppLayout from "@/components/AppLayout";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -308,7 +307,7 @@ export default function AllocationRules() {
   const hiddenCount = clients.length - visibleClients.length;
 
   return (
-    <AppLayout>
+
     <div className="p-7 max-w-4xl space-y-6 page-enter">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
@@ -708,6 +707,6 @@ export default function AllocationRules() {
         ))
       }
     </div>
-    </AppLayout>
+
   );
 }

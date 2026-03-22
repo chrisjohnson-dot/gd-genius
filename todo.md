@@ -328,3 +328,4 @@
 - [x] Each tab shows its own independent client toggle list with search and bulk actions
 - [x] Rename "Show all" / "Hide all" buttons to "Select All" / "Deselect All" in Client Visibility page
 - [x] Fix duplicate client entries in Client Visibility tab
+- [x] Show unallocated order count beside each customer name in the Open Orders detail table

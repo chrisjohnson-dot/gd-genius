@@ -1032,9 +1032,32 @@ function WarehouseCard({  facility,
               <tbody>
                 {groupedByClient.map((group) => {
                   const groupPieces = group.orders.reduce((s, o) => s + (o.totalPieces ?? 0), 0);
+                  const unallocCount = group.orders.filter((o) => o.lifecycleStatus === "unallocated").length;
                   return [
                     <tr key={`hdr-${group.clientId}`} style={{ background: "#111827", borderLeft: "3px solid #374151" }}>
-                      <td colSpan={2} className="py-2 px-3"><span className="text-[11px] font-bold text-white uppercase tracking-wider">{group.clientName}</span></td>
+                      <td colSpan={2} className="py-2 px-3">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-white uppercase tracking-wider">{group.clientName}</span>
+                          {unallocCount > 0 && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                              style={{ background: "#1d4ed8", color: "#fff" }}
+                              title={`${unallocCount} unallocated order${unallocCount !== 1 ? "s" : ""}`}
+                            >
+                              {unallocCount} unalloc.
+                            </span>
+                          )}
+                          {unallocCount === 0 && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+                              style={{ background: "#374151", color: "#9ca3af" }}
+                              title="No unallocated orders"
+                            >
+                              0 unalloc.
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">PO #</td>
                       <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">Ship To</td>
                       <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">City</td>

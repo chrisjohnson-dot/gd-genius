@@ -837,8 +837,20 @@ function WarehouseCard({  facility,
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 {facility.orders.length} order{facility.orders.length !== 1 ? "s" : ""} · {clientOptions.length} client{clientOptions.length !== 1 ? "s" : ""}
+                {(() => {
+                  const unalloc = facility.orders.filter((o) => o.lifecycleStatus === "unallocated").length;
+                  return unalloc > 0 ? (
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                      style={{ background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe" }}
+                      title={`${unalloc} unallocated order${unalloc !== 1 ? "s" : ""}`}
+                    >
+                      {unalloc} unalloc.
+                    </span>
+                  ) : null;
+                })()}
               </p>
             </div>
           </div>
@@ -1124,8 +1136,20 @@ function WarehouseCard({  facility,
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 {facility.orders.length} order{facility.orders.length !== 1 ? "s" : ""} · {clientOptions.length} client{clientOptions.length !== 1 ? "s" : ""}
+                {(() => {
+                  const unalloc = facility.orders.filter((o) => o.lifecycleStatus === "unallocated").length;
+                  return unalloc > 0 ? (
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                      style={{ background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe" }}
+                      title={`${unalloc} unallocated order${unalloc !== 1 ? "s" : ""}`}
+                    >
+                      {unalloc} unalloc.
+                    </span>
+                  ) : null;
+                })()}
               </p>
             </div>
           </div>

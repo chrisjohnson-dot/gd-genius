@@ -36,6 +36,50 @@ vi.mock("./db", async (importOriginal) => {
 
 // ─── Unit tests for the locking logic ────────────────────────────────────────
 
+describe("lockedOnly filter chip logic", () => {
+  const rows = [
+    { clientId: 1, clientName: "Alpha", isVisible: true, isLocked: false },
+    { clientId: 2, clientName: "Beta", isVisible: false, isLocked: true },
+    { clientId: 3, clientName: "Gamma", isVisible: false, isLocked: true },
+    { clientId: 4, clientName: "Delta", isVisible: true, isLocked: false },
+  ];
+
+  function applyFilter(lockedOnly: boolean, search: string) {
+    const q = search.toLowerCase().trim();
+    return rows.filter((r) => {
+      if (lockedOnly && !r.isLocked) return false;
+      if (q && !r.clientName.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  it("shows all rows when lockedOnly=false and no search", () => {
+    expect(applyFilter(false, "")).toHaveLength(4);
+  });
+
+  it("shows only locked rows when lockedOnly=true", () => {
+    const result = applyFilter(true, "");
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.isLocked)).toBe(true);
+  });
+
+  it("combines lockedOnly with search text", () => {
+    const result = applyFilter(true, "beta");
+    expect(result).toHaveLength(1);
+    expect(result[0].clientName).toBe("Beta");
+  });
+
+  it("returns empty when lockedOnly=true and search matches no locked client", () => {
+    const result = applyFilter(true, "alpha"); // Alpha is not locked
+    expect(result).toHaveLength(0);
+  });
+
+  it("lockedCount is computed from all rows regardless of filter", () => {
+    const lockedCount = rows.filter((r) => r.isLocked).length;
+    expect(lockedCount).toBe(2);
+  });
+});
+
 describe("lockAllHiddenClients helper logic", () => {
   it("only targets rows where isVisible=false", () => {
     // Simulate the WHERE clause: configId=X AND isVisible=false

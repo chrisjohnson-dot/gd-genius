@@ -38,6 +38,7 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
   // Isolated edits for this warehouse only
   const [edits, setEdits] = useState<Record<number, boolean>>({});
   const [search, setSearch] = useState("");
+  const [lockedOnly, setLockedOnly] = useState(false);
 
   const rows: ClientRow[] = useMemo(() => {
     if (!clients) return [];
@@ -50,11 +51,16 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   }, [clients, edits]);
 
+  const lockedCount = rows.filter((r) => r.isLocked).length;
+
   const filteredRows = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return rows;
-    return rows.filter((r) => r.clientName.toLowerCase().includes(q));
-  }, [rows, search]);
+    return rows.filter((r) => {
+      if (lockedOnly && !r.isLocked) return false;
+      if (q && !r.clientName.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [rows, search, lockedOnly]);
 
   const hasEdits = Object.keys(edits).length > 0;
   const visibleCount = rows.filter((r) => (r.clientId in edits ? edits[r.clientId] : r.isVisible)).length;
@@ -132,6 +138,20 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+              {/* Locked-only filter chip */}
+              <button
+                type="button"
+                onClick={() => setLockedOnly((v) => !v)}
+                className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs font-medium transition-colors ${
+                  lockedOnly
+                    ? "bg-slate-800 border-slate-700 text-slate-100 dark:bg-slate-200 dark:border-slate-300 dark:text-slate-800"
+                    : "bg-transparent border-slate-300 text-slate-500 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                }`}
+                title={lockedOnly ? "Showing locked clients only — click to clear" : `Show locked clients only (${lockedCount})`}
+              >
+                <Lock className="h-3 w-3" />
+                Locked{lockedOnly ? ` (${filteredRows.length})` : lockedCount > 0 ? ` (${lockedCount})` : ""}
+              </button>
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toggleAll(true)}>
                   Select All
                 </Button>

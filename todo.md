@@ -424,3 +424,6 @@
 
 ## QC Scanner — Auto-Load from Extensiv on Session Start
 - [x] Auto-trigger fetchFromExtensiv after new session creation (not on resume)
+
+## QC Scanner — Loading Skeleton for Extensiv Fetch
+- [x] Show skeleton placeholder rows in item table while fetchFromExtensiv is in progress

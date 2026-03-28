@@ -82,17 +82,77 @@ function playBeep(type: "success" | "error" | "complete") {
 
 // ─── Pack-sheet-style item table ──────────────────────────────────────────────
 
+function ItemsTableSkeleton() {
+  const cols = "150px 120px 1fr 110px 100px 110px 40px";
+  return (
+    <div className="rounded-lg overflow-hidden border border-border">
+      {/* Header */}
+      <div
+        className="grid text-white text-xs font-bold uppercase tracking-wide"
+        style={{ gridTemplateColumns: cols, background: "#15527f", padding: "0 8px", height: 34, alignItems: "center" }}
+      >
+        <span>Location</span>
+        <span>SKU</span>
+        <span>Description</span>
+        <span>Lot #</span>
+        <span className="text-right">Expected</span>
+        <span className="text-right pr-2">Scanned</span>
+        <span />
+      </div>
+      {/* Skeleton rows */}
+      {Array.from({ length: 5 }).map((_, idx) => (
+        <div
+          key={idx}
+          className="grid items-center border-b border-[#CDD4DC] last:border-0"
+          style={{
+            gridTemplateColumns: cols,
+            background: idx % 2 === 1 ? "#EEF4FB" : "#ffffff",
+            minHeight: 40,
+            padding: "6px 8px",
+          }}
+        >
+          {["w-20", "w-16", "w-32", "w-14", "w-8", "w-8"].map((w, ci) => (
+            <div key={ci} className={`h-3 rounded bg-gray-200 animate-pulse ${w} ${ci >= 4 ? "ml-auto" : ""}`} />
+          ))}
+          <div />
+        </div>
+      ))}
+      {/* Skeleton footer */}
+      <div
+        className="grid items-center"
+        style={{
+          gridTemplateColumns: cols,
+          background: "#EDFAEB",
+          borderTop: "2px solid #CDD4DC",
+          padding: "6px 8px",
+        }}
+      >
+        <div className="h-3 w-10 rounded bg-gray-200 animate-pulse col-span-4" />
+        <div className="h-3 w-8 rounded bg-gray-200 animate-pulse ml-auto" />
+        <div className="h-3 w-8 rounded bg-gray-200 animate-pulse ml-auto" />
+        <div />
+      </div>
+    </div>
+  );
+}
+
 function ItemsTable({
   items,
   phase,
   sessionId,
   adjustQty,
+  isLoading,
 }: {
   items: ScanItem[];
   phase: Phase;
   sessionId: number;
   adjustQty: ReturnType<typeof trpc.qcScanner.adjustQty.useMutation>;
+  isLoading?: boolean;
 }) {
+  if (isLoading) {
+    return <ItemsTableSkeleton />;
+  }
+
   if (items.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
@@ -581,6 +641,7 @@ export default function QcScanner() {
             phase={phase}
             sessionId={session!.id}
             adjustQty={adjustQty}
+            isLoading={fetchFromExtensiv.isPending}
           />
         </TabsContent>
 

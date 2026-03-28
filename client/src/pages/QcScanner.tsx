@@ -338,6 +338,7 @@ export default function QcScanner() {
   const [completeDialog, setCompleteDialog] = useState(false);
   const [activePalletTab, setActivePalletTab] = useState("0");
   const [extensivLoadError, setExtensivLoadError] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
@@ -496,10 +497,15 @@ export default function QcScanner() {
     { limit: sessionLimit },
     { enabled: phase === "start" }
   );
+  const sessionSummaryQuery = trpc.qcScanner.sessionSummary.useQuery(
+    { sessionId: selectedSessionId ?? 0 },
+    { enabled: selectedSessionId !== null }
+  );
 
   if (phase === "start") {
     const recent = recentSessionsQuery.data?.sessions ?? [];
     return (
+      <>
       <div className="flex flex-col items-center min-h-[60vh] gap-8 p-8">
         <div className="text-center">
           <div className="flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mx-auto mb-4">
@@ -573,8 +579,8 @@ export default function QcScanner() {
                       padding: "6px 12px",
                       alignItems: "center",
                     }}
-                    onClick={() => setRefInput(s.referenceNumber)}
-                    title="Click to pre-fill reference number"
+                    onClick={() => setSelectedSessionId(s.id)}
+                    title="Click to view session summary"
                   >
                     <div className="flex flex-col min-w-0 pr-2">
                       <span className="font-semibold text-[#15527f] truncate">{s.referenceNumber}</span>
@@ -618,6 +624,131 @@ export default function QcScanner() {
           )}
         </div>
       </div>
+
+      {/* Session Summary Modal */}
+      <Dialog open={selectedSessionId !== null} onOpenChange={(open) => { if (!open) setSelectedSessionId(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-primary" />
+              Session Summary
+              {sessionSummaryQuery.data?.session && (
+                <span className="text-base font-normal text-muted-foreground ml-1">
+                  — {sessionSummaryQuery.data.session.referenceNumber}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {sessionSummaryQuery.isLoading ? (
+            <div className="space-y-2 py-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-10 rounded bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : sessionSummaryQuery.data ? (
+            <div className="flex flex-col gap-4 overflow-y-auto">
+              {/* Session header info */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm border rounded-lg p-3 bg-muted/30">
+                {sessionSummaryQuery.data.session.customerName && (
+                  <><span className="text-muted-foreground">Customer</span><span className="font-medium">{sessionSummaryQuery.data.session.customerName}</span></>
+                )}
+                {sessionSummaryQuery.data.session.poNumber && (
+                  <><span className="text-muted-foreground">PO #</span><span className="font-medium">{sessionSummaryQuery.data.session.poNumber}</span></>
+                )}
+                {sessionSummaryQuery.data.session.warehouseName && (
+                  <><span className="text-muted-foreground">Warehouse</span><span className="font-medium">{sessionSummaryQuery.data.session.warehouseName}</span></>
+                )}
+                {sessionSummaryQuery.data.session.completedAt && (
+                  <><span className="text-muted-foreground">Completed</span><span className="font-medium">{new Date(sessionSummaryQuery.data.session.completedAt).toLocaleString()}</span></>
+                )}
+                <span className="text-muted-foreground">Status</span>
+                <span>
+                  <Badge className={sessionSummaryQuery.data.session.status === "complete" ? "bg-green-500 text-white" : "bg-amber-500 text-white"}>
+                    {sessionSummaryQuery.data.session.status}
+                  </Badge>
+                </span>
+              </div>
+
+              {/* Items table */}
+              {sessionSummaryQuery.data.items.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  No items recorded for this session
+                </div>
+              ) : (
+                <div className="rounded-lg overflow-hidden border border-border">
+                  {/* Header */}
+                  <div
+                    className="grid text-white text-xs font-bold uppercase tracking-wide"
+                    style={{ gridTemplateColumns: "120px 1fr 110px 90px 90px", background: "#15527f", padding: "0 10px", height: 32, alignItems: "center" }}
+                  >
+                    <span>SKU</span>
+                    <span>Description</span>
+                    <span>Lot #</span>
+                    <span className="text-right">Expected</span>
+                    <span className="text-right">Scanned</span>
+                  </div>
+                  {sessionSummaryQuery.data.items.map((item, idx) => {
+                    const done = item.scannedQty >= item.expectedQty && item.expectedQty > 0;
+                    const over = item.scannedQty > item.expectedQty;
+                    return (
+                      <div
+                        key={item.id}
+                        className="grid text-sm border-b border-[#CDD4DC] last:border-0"
+                        style={{
+                          gridTemplateColumns: "120px 1fr 110px 90px 90px",
+                          background: over ? "#FFF8E7" : done ? "#F0FDF4" : idx % 2 === 1 ? "#EEF4FB" : "#ffffff",
+                          minHeight: 38,
+                          padding: "5px 10px",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span className="font-mono text-xs text-[#15527f] truncate">{item.sku}</span>
+                        <span className="text-xs text-[#333333] truncate pr-2">{item.description ?? "—"}</span>
+                        <span className="font-mono text-xs text-[#555]">{item.lotNumber ?? "—"}</span>
+                        <span className="text-right text-xs font-mono text-[#333333]">{item.expectedQty}</span>
+                        <span className={`text-right text-xs font-semibold font-mono ${
+                          over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
+                        }`}>{item.scannedQty}</span>
+                      </div>
+                    );
+                  })}
+                  {/* Totals footer */}
+                  <div
+                    className="grid text-sm font-bold"
+                    style={{ gridTemplateColumns: "120px 1fr 110px 90px 90px", background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "5px 10px", alignItems: "center" }}
+                  >
+                    <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-3">Total</span>
+                    <span className="text-right text-xs font-mono text-[#333333]">
+                      {sessionSummaryQuery.data.items.reduce((s, i) => s + i.expectedQty, 0)}
+                    </span>
+                    <span className="text-right text-xs font-semibold font-mono text-green-600">
+                      {sessionSummaryQuery.data.items.reduce((s, i) => s + i.scannedQty, 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => setSelectedSessionId(null)}>Close</Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                if (sessionSummaryQuery.data?.session) {
+                  setRefInput(sessionSummaryQuery.data.session.referenceNumber);
+                  setSelectedSessionId(null);
+                }
+              }}
+            >
+              Open Session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      </>
     );
   }
 

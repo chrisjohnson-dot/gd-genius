@@ -441,3 +441,9 @@
 
 ## QC Scanner — Recent Sessions Show More
 - [x] Add sessionLimit state (5 → 10) and Show more / Show less toggle link below the panel
+
+## QC Scanner — Session Summary Modal
+- [x] Add sessionSummary tRPC query (session header + full item list by session ID)
+- [x] Build read-only summary modal in QcScanner start screen (item table with lot, expected, scanned)
+- [x] Clicking a recent session row opens the modal; footer has Close + Open Session buttons
+- [x] 5 unit tests for sessionSummary (265 tests passing total)

@@ -3010,6 +3010,16 @@ const qcScannerRouter = router({
       const sessions = await getRecentCompletedQcSessions(input.limit);
       return { sessions };
     }),
+
+  // Read-only summary of a single session (header + full item list)
+  sessionSummary: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const items = await getQcScanItems(input.sessionId);
+      return { session, items };
+    }),
 });
 
 // Pallet Scanner router (Shipping section)

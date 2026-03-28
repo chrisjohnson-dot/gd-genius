@@ -491,8 +491,9 @@ export default function QcScanner() {
   }, [phase]);
 
   // ─── Start Screen ──────────────────────────────────────────────────────────
+  const [sessionLimit, setSessionLimit] = useState(5);
   const recentSessionsQuery = trpc.qcScanner.recentSessions.useQuery(
-    { limit: 5 },
+    { limit: sessionLimit },
     { enabled: phase === "start" }
   );
 
@@ -593,6 +594,26 @@ export default function QcScanner() {
                   </button>
                 );
               })}
+            </div>
+          )}
+          {/* Show more / Show less toggle */}
+          {!recentSessionsQuery.isLoading && recent.length > 0 && (
+            <div className="mt-2 text-center">
+              {sessionLimit === 5 ? (
+                <button
+                  className="text-xs text-[#15527f] hover:underline font-medium"
+                  onClick={() => setSessionLimit(10)}
+                >
+                  Show more
+                </button>
+              ) : (
+                <button
+                  className="text-xs text-[#15527f] hover:underline font-medium"
+                  onClick={() => setSessionLimit(5)}
+                >
+                  Show less
+                </button>
+              )}
             </div>
           )}
         </div>

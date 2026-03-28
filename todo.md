@@ -438,3 +438,6 @@
 - [x] Add qcScanner.recentSessions tRPC procedure
 - [x] Add Recent Sessions panel to QC Scanner start screen (pack-sheet table style, click row to pre-fill ref)
 - [x] 6 unit tests for recentSessions (260 tests passing total)
+
+## QC Scanner — Recent Sessions Show More
+- [x] Add sessionLimit state (5 → 10) and Show more / Show less toggle link below the panel

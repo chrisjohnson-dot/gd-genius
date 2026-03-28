@@ -491,9 +491,15 @@ export default function QcScanner() {
   }, [phase]);
 
   // ─── Start Screen ──────────────────────────────────────────────────────────
+  const recentSessionsQuery = trpc.qcScanner.recentSessions.useQuery(
+    { limit: 5 },
+    { enabled: phase === "start" }
+  );
+
   if (phase === "start") {
+    const recent = recentSessionsQuery.data?.sessions ?? [];
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8 p-8">
+      <div className="flex flex-col items-center min-h-[60vh] gap-8 p-8">
         <div className="text-center">
           <div className="flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mx-auto mb-4">
             <ScanBarcode className="w-10 h-10 text-primary" />
@@ -515,6 +521,81 @@ export default function QcScanner() {
             <ChevronRight className="ml-1 w-4 h-4" />
           </Button>
         </form>
+
+        {/* Recent Sessions panel */}
+        <div className="w-full max-w-2xl">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Recent Completed Sessions
+          </h2>
+          {recentSessionsQuery.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : recent.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg">
+              <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              No completed sessions yet
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border overflow-hidden">
+              {/* Table header */}
+              <div
+                className="grid text-white text-xs font-bold uppercase tracking-wide"
+                style={{
+                  gridTemplateColumns: "1fr 160px 90px 90px 90px",
+                  background: "#15527f",
+                  padding: "0 12px",
+                  height: 32,
+                  alignItems: "center",
+                }}
+              >
+                <span>Reference</span>
+                <span>Customer</span>
+                <span className="text-right">Items</span>
+                <span className="text-right">Expected</span>
+                <span className="text-right">Scanned</span>
+              </div>
+              {recent.map((s, idx) => {
+                const isAlt = idx % 2 === 1;
+                const allScanned = s.totalScanned >= s.totalExpected && s.totalExpected > 0;
+                return (
+                  <button
+                    key={s.id}
+                    className="grid w-full text-left text-sm border-b border-[#CDD4DC] last:border-0 hover:brightness-95 transition-all"
+                    style={{
+                      gridTemplateColumns: "1fr 160px 90px 90px 90px",
+                      background: isAlt ? "#EEF4FB" : "#ffffff",
+                      minHeight: 44,
+                      padding: "6px 12px",
+                      alignItems: "center",
+                    }}
+                    onClick={() => setRefInput(s.referenceNumber)}
+                    title="Click to pre-fill reference number"
+                  >
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="font-semibold text-[#15527f] truncate">{s.referenceNumber}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {s.completedAt ? new Date(s.completedAt).toLocaleString() : "—"}
+                        {s.poNumber ? ` · PO: ${s.poNumber}` : ""}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate pr-2">
+                      {s.customerName ?? "—"}
+                    </div>
+                    <div className="text-right text-xs font-mono text-[#333333]">{s.itemCount}</div>
+                    <div className="text-right text-xs font-mono text-[#333333]">{s.totalExpected}</div>
+                    <div className={`text-right text-xs font-semibold font-mono ${
+                      allScanned ? "text-green-600" : "text-amber-600"
+                    }`}>{s.totalScanned}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     );
   }

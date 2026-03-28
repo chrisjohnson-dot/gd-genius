@@ -432,3 +432,9 @@
 - [x] Track extensivLoadError state for auto-load failures
 - [x] Show amber warning banner with error message and Retry button instead of generic toast
 - [x] Dismiss banner on successful retry or manual dismiss
+
+## QC Scanner — Recent Sessions Panel
+- [x] Add getRecentCompletedQcSessions DB helper (last 5 completed sessions with item count)
+- [x] Add qcScanner.recentSessions tRPC procedure
+- [x] Add Recent Sessions panel to QC Scanner start screen (pack-sheet table style, click row to pre-fill ref)
+- [x] 6 unit tests for recentSessions (260 tests passing total)

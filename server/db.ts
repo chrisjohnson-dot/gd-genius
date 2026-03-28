@@ -1834,3 +1834,57 @@ export async function updatePalletScanStatus(id: number, status: string): Promis
   if (!db) return;
   await db.update(palletScans).set({ status }).where(eq(palletScans.id, id));
 }
+
+// ─── QC Scanner — Recent Sessions ─────────────────────────────────────────────
+
+export type RecentQcSession = {
+  id: number;
+  referenceNumber: string;
+  customerName: string | null;
+  poNumber: string | null;
+  warehouseName: string | null;
+  completedAt: Date | null;
+  itemCount: number;
+  totalExpected: number;
+  totalScanned: number;
+};
+
+export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const sessions = await db
+    .select()
+    .from(qcScanSessions)
+    .where(eq(qcScanSessions.status, "complete"))
+    .orderBy(desc(qcScanSessions.completedAt))
+    .limit(limit);
+
+  if (sessions.length === 0) return [];
+
+  // Fetch item counts for each session in parallel
+  const results = await Promise.all(
+    sessions.map(async (s) => {
+      const items = await db
+        .select({
+          itemCount: sql<number>`count(*)`,
+          totalExpected: sql<number>`coalesce(sum(${qcScanItems.expectedQty}), 0)`,
+          totalScanned: sql<number>`coalesce(sum(${qcScanItems.scannedQty}), 0)`,
+        })
+        .from(qcScanItems)
+        .where(eq(qcScanItems.sessionId, s.id));
+      const agg = items[0] ?? { itemCount: 0, totalExpected: 0, totalScanned: 0 };
+      return {
+        id: s.id,
+        referenceNumber: s.referenceNumber,
+        customerName: s.customerName ?? null,
+        poNumber: s.poNumber ?? null,
+        warehouseName: s.warehouseName ?? null,
+        completedAt: s.completedAt ?? null,
+        itemCount: Number(agg.itemCount),
+        totalExpected: Number(agg.totalExpected),
+        totalScanned: Number(agg.totalScanned),
+      };
+    })
+  );
+  return results;
+}

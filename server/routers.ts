@@ -98,6 +98,7 @@ import {
   createQcFlaggedScan,
   listQcFlaggedScans,
   resolveQcFlaggedScan,
+  getRecentCompletedQcSessions,
   createPalletScan,
   listPalletScans,
   updatePalletScanStatus,
@@ -3000,6 +3001,14 @@ const qcScannerRouter = router({
     .mutation(async ({ input, ctx }) => {
       await resolveQcFlaggedScan(input.id, ctx.user.name ?? "unknown");
       return { success: true };
+    }),
+
+  // Last N completed sessions for the start-screen panel
+  recentSessions: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(20).default(5) }))
+    .query(async ({ input }) => {
+      const sessions = await getRecentCompletedQcSessions(input.limit);
+      return { sessions };
     }),
 });
 

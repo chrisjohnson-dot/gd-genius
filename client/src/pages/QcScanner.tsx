@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
-  Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download
+  Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X
 } from "lucide-react";
 
 type ScanItem = {
@@ -337,12 +337,14 @@ export default function QcScanner() {
   const [flagDesc, setFlagDesc] = useState("");
   const [completeDialog, setCompleteDialog] = useState(false);
   const [activePalletTab, setActivePalletTab] = useState("0");
+  const [extensivLoadError, setExtensivLoadError] = useState<string | null>(null);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
 
   const fetchFromExtensiv = trpc.qcScanner.fetchFromExtensiv.useMutation({
     onSuccess: (data) => {
+      setExtensivLoadError(null);
       setItems(data.items as ScanItem[]);
       if (data.customerName && session) setSession((s) => s ? { ...s, customerName: data.customerName } : s);
       if (data.poNumber && session) setSession((s) => s ? { ...s, poNumber: data.poNumber } : s);
@@ -351,7 +353,9 @@ export default function QcScanner() {
       });
       setTimeout(() => barcodeRef.current?.focus(), 100);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => {
+      setExtensivLoadError(e.message);
+    },
   });
 
   const startSession = trpc.qcScanner.startSession.useMutation({
@@ -636,6 +640,37 @@ export default function QcScanner() {
 
         {/* Items tab — pack-sheet-style table */}
         <TabsContent value="items" className="mt-3">
+          {/* Extensiv load failure banner */}
+          {extensivLoadError && !fetchFromExtensiv.isPending && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 mb-3 text-amber-800">
+              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-amber-500" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm">Could not load items from Extensiv</p>
+                <p className="text-xs mt-0.5 break-words">{extensivLoadError}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
+                  onClick={() => {
+                    if (session) {
+                      fetchFromExtensiv.mutate({ sessionId: session.id, referenceNumber: session.referenceNumber });
+                    }
+                  }}
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" /> Retry
+                </Button>
+                <button
+                  className="text-amber-500 hover:text-amber-700"
+                  onClick={() => setExtensivLoadError(null)}
+                  aria-label="Dismiss"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
           <ItemsTable
             items={items}
             phase={phase}

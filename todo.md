@@ -427,3 +427,8 @@
 
 ## QC Scanner — Loading Skeleton for Extensiv Fetch
 - [x] Show skeleton placeholder rows in item table while fetchFromExtensiv is in progress
+
+## QC Scanner — Extensiv Load Failure Banner
+- [x] Track extensivLoadError state for auto-load failures
+- [x] Show amber warning banner with error message and Retry button instead of generic toast
+- [x] Dismiss banner on successful retry or manual dismiss

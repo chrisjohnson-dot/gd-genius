@@ -112,6 +112,9 @@ export const allocationRuns = mysqlTable("allocation_runs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   confirmedAt: timestamp("confirmedAt"),
   documentsPrintedAt: timestamp("documentsPrintedAt"),
+  verificationStatus: mysqlEnum("verificationStatus", ["pending", "verified", "partial", "mismatch", "failed"]),
+  verificationDetail: json("verificationDetail"), // per-order verification results
+  verifiedAt: timestamp("verifiedAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
@@ -129,6 +132,8 @@ export const allocationRunOrders = mysqlTable("allocation_run_orders", {
   status: mysqlEnum("status", ["allocated", "skipped", "failed", "unallocated"]).notNull(),
   skipReason: text("skipReason"),
   allocationDetail: json("allocationDetail"), // full proposed allocation JSON
+  verificationStatus: mysqlEnum("verificationStatus", ["pending", "verified", "partial", "mismatch", "failed"]),
+  verificationDetail: json("verificationDetail"), // per-SKU verification results from Extensiv
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

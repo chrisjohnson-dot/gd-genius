@@ -246,6 +246,13 @@
       "when": 1774745618619,
       "tag": "0034_clammy_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1774747944780,
+      "tag": "0035_cuddly_lilandra",
+      "breakpoints": true
     }
   ]
 }

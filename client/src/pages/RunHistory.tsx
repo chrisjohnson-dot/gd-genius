@@ -17,6 +17,33 @@ import { History, Loader2, Printer, Search, Trash2, X } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 
+function VerificationBadge({ status }: { status: string | null | undefined }) {
+  if (!status || status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />
+        Pending
+      </span>
+    );
+  }
+  const map: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+    verified: { bg: "#d1fae5", text: "#059669", dot: "#059669", label: "Verified" },
+    partial:  { bg: "#fef9c3", text: "#b45309", dot: "#d97706", label: "Partial" },
+    mismatch: { bg: "#fee2e2", text: "#ef4444", dot: "#ef4444", label: "Mismatch" },
+    failed:   { bg: "#fee2e2", text: "#ef4444", dot: "#ef4444", label: "Failed" },
+  };
+  const s = map[status] ?? { bg: "#f3f4f6", text: "#6b7280", dot: "#9ca3af", label: status };
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold"
+      style={{ background: s.bg, color: s.text }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.dot }} />
+      {s.label}
+    </span>
+  );
+}
+
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; text: string; dot: string }> = {
     confirmed:   { bg: "#d1fae5", text: "#059669", dot: "#059669" },
@@ -237,6 +264,7 @@ export default function RunHistory() {
                     <th className="text-right">Allocated</th>
                     <th className="text-right">Skipped</th>
                     <th>Status</th>
+                    <th>Verification</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -286,6 +314,13 @@ export default function RunHistory() {
                         <td className="text-right" style={{ color: "#d97706" }}>{run.skippedCount}</td>
                         <td>
                           <StatusPill status={run.status} />
+                        </td>
+                        <td>
+                          {run.status === "confirmed" ? (
+                            <VerificationBadge status={(run as typeof run & { verificationStatus?: string }).verificationStatus} />
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
                         </td>
                         <td>
                           <div className="flex items-center gap-1 justify-end">

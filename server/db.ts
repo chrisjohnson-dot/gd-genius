@@ -2001,3 +2001,48 @@ export async function getLatestSlaDailySnapshots(): Promise<SlaDailySnapshot[]> 
     return true;
   });
 }
+
+// ─── Allocation Verification Helpers ─────────────────────────────────────────
+
+export type VerificationStatus = "pending" | "verified" | "partial" | "mismatch" | "failed";
+
+export interface OrderVerificationResult {
+  orderId: number;
+  referenceNum: string;
+  status: VerificationStatus;
+  fullyAllocated: boolean | null;
+  skuResults: Array<{
+    sku: string;
+    approvedQty: number;
+    extensivQty: number;
+    match: boolean;
+  }>;
+  error?: string;
+}
+
+/** Update the run-level verification status and detail after verifying Extensiv. */
+export async function updateRunVerification(
+  runId: number,
+  status: VerificationStatus,
+  detail: OrderVerificationResult[],
+  verifiedAt: Date
+): Promise<void> {
+  const db = await getDb();
+  await db!
+    .update(allocationRuns)
+    .set({ verificationStatus: status, verificationDetail: detail as unknown as null, verifiedAt })
+    .where(eq(allocationRuns.id, runId));
+}
+
+/** Update a single run order's verification status and detail. */
+export async function updateRunOrderVerification(
+  runOrderId: number,
+  status: VerificationStatus,
+  detail: OrderVerificationResult["skuResults"]
+): Promise<void> {
+  const db = await getDb();
+  await db!
+    .update(allocationRunOrders)
+    .set({ verificationStatus: status, verificationDetail: detail as unknown as null })
+    .where(eq(allocationRunOrders.id, runOrderId));
+}

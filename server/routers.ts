@@ -107,6 +107,10 @@ import {
   upsertSlaFacilityThreshold,
   getSlaDailyHistory,
   upsertSlaDailySnapshot,
+  updateRunVerification,
+  updateRunOrderVerification,
+  type VerificationStatus,
+  type OrderVerificationResult,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
@@ -1178,6 +1182,8 @@ const _appRouter = router({
           status: finalStatus,
           confirmedAt: new Date(),
           notes: errors.length > 0 ? errors.join("; ") : undefined,
+          // Mark as pending verification so the UI shows the badge immediately
+          verificationStatus: finalStatus === "confirmed" ? "pending" : undefined,
         });
 
         await createAuditLog({
@@ -1187,6 +1193,71 @@ const _appRouter = router({
           entityId: String(input.runId),
           details: { successCount, errors },
         });
+
+        // Auto-trigger verification after a short delay to allow Extensiv to process
+        if (finalStatus === "confirmed") {
+          setTimeout(async () => {
+            try {
+              console.log(`[confirm] Auto-triggering verification for run ${input.runId}`);
+              const verifyConfig = await getExtensivConfigById(run.configId);
+              if (!verifyConfig) return;
+              const verifyOrders = await getAllocationRunOrders(input.runId);
+              const verifyAllocated = verifyOrders.filter((o) => o.status === "allocated" || o.status === "unallocated");
+              const verifyResults: OrderVerificationResult[] = [];
+              for (const runOrder of verifyAllocated) {
+                const approvedDetail = runOrder.allocationDetail as {
+                  lineItems: Array<{ sku: string; allocations: Array<{ qty: number }> }>;
+                } | null;
+                try {
+                  const { order } = await fetchOrderWithDetail(verifyConfig, runOrder.orderId);
+                  const fullyAllocated = order.readOnly.fullyAllocated ?? false;
+                  const approvedQtyBySku = new Map<string, number>();
+                  if (approvedDetail?.lineItems) {
+                    for (const li of approvedDetail.lineItems) {
+                      const total = li.allocations.reduce((s, a) => s + a.qty, 0);
+                      approvedQtyBySku.set(li.sku, (approvedQtyBySku.get(li.sku) ?? 0) + total);
+                    }
+                  }
+                  const extensivQtyBySku = new Map<string, number>();
+                  if (order.orderItems) {
+                    for (const item of order.orderItems) {
+                      const sku = item.itemIdentifier.sku;
+                      const allocQty = (item.proposedAllocations ?? []).reduce((s, a) => s + a.qty, 0);
+                      extensivQtyBySku.set(sku, (extensivQtyBySku.get(sku) ?? 0) + allocQty);
+                    }
+                  }
+                  const skuResults: OrderVerificationResult["skuResults"] = [];
+                  for (const [sku, approvedQty] of Array.from(approvedQtyBySku.entries())) {
+                    const extensivQty = extensivQtyBySku.get(sku) ?? 0;
+                    skuResults.push({ sku, approvedQty, extensivQty, match: extensivQty >= approvedQty });
+                  }
+                  const allMatch = skuResults.every((r) => r.match);
+                  let orderStatus: VerificationStatus;
+                  if (fullyAllocated && allMatch) orderStatus = "verified";
+                  else if (fullyAllocated && !allMatch) orderStatus = "mismatch";
+                  else if (!fullyAllocated && skuResults.some((r) => r.extensivQty > 0)) orderStatus = "partial";
+                  else orderStatus = "mismatch";
+                  verifyResults.push({ orderId: runOrder.orderId, referenceNum: runOrder.referenceNum ?? String(runOrder.orderId), status: orderStatus, fullyAllocated, skuResults });
+                  await updateRunOrderVerification(runOrder.id, orderStatus, skuResults);
+                } catch (err: unknown) {
+                  const message = err instanceof Error ? err.message : String(err);
+                  verifyResults.push({ orderId: runOrder.orderId, referenceNum: runOrder.referenceNum ?? String(runOrder.orderId), status: "failed", fullyAllocated: null, skuResults: [], error: message });
+                  await updateRunOrderVerification(runOrder.id, "failed", []);
+                }
+              }
+              const statusPriority: Record<VerificationStatus, number> = { verified: 0, partial: 1, mismatch: 2, failed: 3, pending: 4 };
+              const worstStatus = verifyResults.reduce<VerificationStatus>(
+                (worst, r) => statusPriority[r.status] > statusPriority[worst] ? r.status : worst,
+                "verified"
+              );
+              const runVerifStatus: VerificationStatus = verifyResults.length === 0 ? "pending" : worstStatus;
+              await updateRunVerification(input.runId, runVerifStatus, verifyResults, new Date());
+              console.log(`[confirm] Auto-verification complete for run ${input.runId}: ${runVerifStatus}`);
+            } catch (err) {
+              console.error(`[confirm] Auto-verification failed for run ${input.runId}:`, err);
+            }
+          }, 5000); // 5 second delay for Extensiv to process
+        }
 
         return { success: errors.length === 0, successCount, errors };
       }),
@@ -1205,6 +1276,114 @@ const _appRouter = router({
           details: {},
         });
         return { success: true };
+      }),
+
+    verifyRun: protectedProcedure
+      .input(z.object({ runId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const run = await getAllocationRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.status !== "confirmed") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Only confirmed runs can be verified" });
+        }
+        const config = await getExtensivConfigById(run.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+        const runOrders = await getAllocationRunOrders(input.runId);
+        const allocatedOrders = runOrders.filter((o) => o.status === "allocated" || o.status === "unallocated");
+
+        const results: OrderVerificationResult[] = [];
+
+        for (const runOrder of allocatedOrders) {
+          const approvedDetail = runOrder.allocationDetail as {
+            lineItems: Array<{ sku: string; allocations: Array<{ qty: number }> }>;
+          } | null;
+
+          try {
+            const { order } = await fetchOrderWithDetail(config, runOrder.orderId);
+            const fullyAllocated = order.readOnly.fullyAllocated ?? false;
+
+            // Build approved qty map from stored allocation detail
+            const approvedQtyBySku = new Map<string, number>();
+            if (approvedDetail?.lineItems) {
+              for (const li of approvedDetail.lineItems) {
+                const total = li.allocations.reduce((s, a) => s + a.qty, 0);
+                approvedQtyBySku.set(li.sku, (approvedQtyBySku.get(li.sku) ?? 0) + total);
+              }
+            }
+
+            // Build Extensiv allocated qty map from proposedAllocations on order items
+            const extensivQtyBySku = new Map<string, number>();
+            if (order.orderItems) {
+              for (const item of order.orderItems) {
+                const sku = item.itemIdentifier.sku;
+                const allocQty = (item.proposedAllocations ?? []).reduce((s, a) => s + a.qty, 0);
+                extensivQtyBySku.set(sku, (extensivQtyBySku.get(sku) ?? 0) + allocQty);
+              }
+            }
+
+            // Compare per SKU
+            const skuResults: OrderVerificationResult["skuResults"] = [];
+            for (const [sku, approvedQty] of Array.from(approvedQtyBySku.entries())) {
+              const extensivQty = extensivQtyBySku.get(sku) ?? 0;
+              skuResults.push({ sku, approvedQty, extensivQty, match: extensivQty >= approvedQty });
+            }
+
+            const allMatch = skuResults.every((r) => r.match);
+            let orderStatus: VerificationStatus;
+            if (fullyAllocated && allMatch) {
+              orderStatus = "verified";
+            } else if (fullyAllocated && !allMatch) {
+              orderStatus = "mismatch";
+            } else if (!fullyAllocated && skuResults.some((r) => r.extensivQty > 0)) {
+              orderStatus = "partial";
+            } else {
+              orderStatus = "mismatch";
+            }
+
+            results.push({
+              orderId: runOrder.orderId,
+              referenceNum: runOrder.referenceNum ?? String(runOrder.orderId),
+              status: orderStatus,
+              fullyAllocated,
+              skuResults,
+            });
+
+            await updateRunOrderVerification(runOrder.id, orderStatus, skuResults);
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            results.push({
+              orderId: runOrder.orderId,
+              referenceNum: runOrder.referenceNum ?? String(runOrder.orderId),
+              status: "failed",
+              fullyAllocated: null,
+              skuResults: [],
+              error: message,
+            });
+            await updateRunOrderVerification(runOrder.id, "failed", []);
+          }
+        }
+
+        // Roll up to run-level status: worst status wins
+        const statusPriority: Record<VerificationStatus, number> = {
+          verified: 0, partial: 1, mismatch: 2, failed: 3, pending: 4,
+        };
+        const worstStatus = results.reduce<VerificationStatus>(
+          (worst, r) => statusPriority[r.status] > statusPriority[worst] ? r.status : worst,
+          "verified"
+        );
+        const runStatus: VerificationStatus = results.length === 0 ? "pending" : worstStatus;
+
+        await updateRunVerification(input.runId, runStatus, results, new Date());
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "allocation.verify",
+          entityType: "allocation_run",
+          entityId: String(input.runId),
+          details: { runStatus, orderCount: results.length },
+        });
+
+        return { runStatus, results };
       }),
 
     unallocateOrder: protectedProcedure

@@ -11,6 +11,9 @@ import {
   PackageCheck,
   PackageX,
   RefreshCw,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
   Truck,
   Undo2,
   XCircle,
@@ -96,6 +99,33 @@ const locTypeBadge: Record<string, { bg: string; text: string }> = {
   pick_face: { bg: "#dbeafe", text: "#1d4ed8" },
   warehouse: { bg: "#ffedd5", text: "#c2410c" },
 };
+
+function ReVerifyButton({ runId }: { runId: number }) {
+  const utils = trpc.useUtils();
+  const [loading, setLoading] = useState(false);
+  const verifyMutation = trpc.allocation.verifyRun.useMutation({
+    onSuccess: () => {
+      toast.success("Re-verification complete.");
+      utils.allocation.runDetail.invalidate({ runId });
+      utils.allocation.history.invalidate();
+    },
+    onError: (e) => toast.error(`Verification failed: ${e.message}`),
+    onSettled: () => setLoading(false),
+  });
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="gap-1.5 ml-2"
+      style={{ borderColor: "#fca5a5", color: "#b91c1c" }}
+      disabled={loading}
+      onClick={() => { setLoading(true); verifyMutation.mutate({ runId }); }}
+    >
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+      Re-verify
+    </Button>
+  );
+}
 
 export default function RunDetail() {
   const params = useParams<{ runId: string }>();
@@ -301,6 +331,65 @@ export default function RunDetail() {
             <strong>Notes:</strong> {run.notes}
           </div>
         )}
+
+        {/* Verification banner */}
+        {run.status === "confirmed" && (() => {
+          const verif = (run as typeof run & { verificationStatus?: string; verificationDetail?: unknown; verifiedAt?: string | null }).verificationStatus;
+          const detail = (run as typeof run & { verificationDetail?: Array<{ orderId: number; referenceNum: string; status: string; fullyAllocated: boolean | null; skuResults: Array<{ sku: string; approvedQty: number; extensivQty: number; match: boolean }>; error?: string }> }).verificationDetail ?? [];
+          const verifiedAt = (run as typeof run & { verifiedAt?: string | null }).verifiedAt;
+          if (!verif || verif === "pending") {
+            return (
+              <div className="flex items-center gap-3 bg-muted/60 border rounded-2xl px-5 py-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span>Verification pending — Extensiv is being checked automatically…</span>
+              </div>
+            );
+          }
+          if (verif === "verified") {
+            return (
+              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3 text-sm text-emerald-800">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span className="font-semibold">Extensiv Verified</span>
+                <span className="text-emerald-700">— all {detail.length} order{detail.length !== 1 ? "s" : ""} fully allocated and quantities match.</span>
+                {verifiedAt && <span className="ml-auto text-xs text-emerald-600">{new Date(verifiedAt).toLocaleString()}</span>}
+              </div>
+            );
+          }
+          if (verif === "partial" || verif === "mismatch" || verif === "failed") {
+            const problemOrders = detail.filter((d) => d.status !== "verified");
+            return (
+              <div className="bg-red-50 border border-red-200 rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-3 px-5 py-3 border-b border-red-200">
+                  {verif === "partial" ? <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0" /> : <ShieldX className="h-4 w-4 text-red-600 shrink-0" />}
+                  <span className="text-sm font-semibold text-red-800">
+                    Extensiv Verification {verif === "partial" ? "Partial" : verif === "mismatch" ? "Mismatch" : "Failed"}
+                  </span>
+                  {verifiedAt && <span className="ml-auto text-xs text-red-500">{new Date(verifiedAt).toLocaleString()}</span>}
+                  <ReVerifyButton runId={run.id} />
+                </div>
+                <div className="divide-y divide-red-100 max-h-60 overflow-y-auto">
+                  {problemOrders.map((o) => (
+                    <div key={o.orderId} className="px-5 py-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-red-900">{o.referenceNum}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded font-semibold"
+                          style={o.status === "partial" ? { background: "#fef9c3", color: "#b45309" } : { background: "#fee2e2", color: "#ef4444" }}
+                        >{o.status}</span>
+                      </div>
+                      {o.error && <p className="text-xs text-red-600 mt-0.5">{o.error}</p>}
+                      {o.skuResults?.filter((r) => !r.match).map((r) => (
+                        <p key={r.sku} className="text-xs text-red-700 mt-0.5 font-mono">
+                          {r.sku}: approved {r.approvedQty} · Extensiv {r.extensivQty}
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {/* Skipped orders banner */}
         {skippedOrders.length > 0 && (

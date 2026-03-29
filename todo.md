@@ -490,3 +490,13 @@
 ## SLA Tracker — Persist Sparkline Window
 - [x] Added useLocalStorage hook; sparkDays persisted per facility with key sla-spark-days-{facilityId}
 - [x] Selection survives page refresh and is independent per warehouse card
+
+## Allocation — Post-Confirmation Extensiv Verification
+- [x] Add verificationStatus and verificationDetail columns to allocation_runs table
+- [x] Add verificationStatus column to allocation_run_orders table
+- [x] Add DB helpers: updateRunVerification, updateRunOrderVerification
+- [x] Add verifyRun tRPC procedure: re-fetch each order from Extensiv, compare fullyAllocated + per-SKU qty
+- [x] Auto-trigger verifyRun after confirmRun succeeds (with delay for Extensiv processing time)
+- [x] Show verification badge on Run History rows (verified/partial/failed/pending)
+- [x] Show per-order verification detail in Run Detail page
+- [x] Add manual Re-verify button in Run Detail for on-demand re-checks

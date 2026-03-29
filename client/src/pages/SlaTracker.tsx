@@ -41,11 +41,29 @@ import {
   CalendarPlus,
   CalendarX,
 } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FileDown, FileText } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+// ─── useLocalStorage hook ────────────────────────────────────────────────────
+function useLocalStorage<T>(key: string, defaultValue: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored !== null) return JSON.parse(stored) as T;
+    } catch {}
+    return defaultValue;
+  });
+
+  const set = useCallback((v: T) => {
+    setValue(v);
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
+  }, [key]);
+
+  return [value, set];
+}
 
 // ─── SLA Sparkline ───────────────────────────────────────────────────────────
 type SparkPoint = { snapshotDate: string; slaRate: number };
@@ -240,8 +258,9 @@ function WarehouseSlaCard({
   const [filterStatus, setFilterStatus] = useState<"all" | "in_sla" | "out_of_sla">("all");
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  // Sparkline window toggle
-  const [sparkDays, setSparkDays] = useState<7 | 14 | 30>(7);
+  // Sparkline window toggle — persisted per facility in localStorage
+  const storageKey = `sla-spark-days-${facilityId ?? "default"}`;
+  const [sparkDays, setSparkDays] = useLocalStorage<7 | 14 | 30>(storageKey, 7);
   const historyQuery = trpc.sla.facilityHistory.useQuery(
     { facilityId: facilityId ?? 0, days: sparkDays },
     { enabled: !!facilityId, staleTime: 5 * 60 * 1000 }

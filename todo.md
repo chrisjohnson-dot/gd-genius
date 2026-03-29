@@ -486,3 +486,7 @@
 ## SLA Tracker — Sparkline Window Toggle
 - [x] Add 7d / 14d / 30d toggle buttons on each warehouse card; active day highlighted with primary colour
 - [x] historyQuery re-fetches with new days value on toggle; stale cache kept per window
+
+## SLA Tracker — Persist Sparkline Window
+- [x] Added useLocalStorage hook; sparkDays persisted per facility with key sla-spark-days-{facilityId}
+- [x] Selection survives page refresh and is independent per warehouse card

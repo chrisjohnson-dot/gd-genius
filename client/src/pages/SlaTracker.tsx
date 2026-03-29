@@ -41,7 +41,7 @@ import {
   CalendarPlus,
   CalendarX,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FileDown, FileText } from "lucide-react";
 import jsPDF from "jspdf";
@@ -55,6 +55,8 @@ function SlaSparkline({ points, greenThreshold = 98, yellowThreshold = 95 }: {
   greenThreshold?: number;
   yellowThreshold?: number;
 }) {
+  const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
+
   if (!points || points.length < 2) {
     return (
       <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -72,8 +74,6 @@ function SlaSparkline({ points, greenThreshold = 98, yellowThreshold = 95 }: {
   const xs = points.map((_, i) => PAD + (i / (points.length - 1)) * (W - PAD * 2));
   const ys = rates.map((r) => PAD + (1 - (r - min) / range) * (H - PAD * 2));
 
-  const pathD = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
-
   const lastRate = rates[rates.length - 1];
   const firstRate = rates[0];
   const delta = lastRate - firstRate;
@@ -81,25 +81,76 @@ function SlaSparkline({ points, greenThreshold = 98, yellowThreshold = 95 }: {
   const TrendArrow = delta > 0.5 ? "↑" : delta < -0.5 ? "↓" : "→";
   const arrowColor = delta > 0.5 ? "#16a34a" : delta < -0.5 ? "#ef4444" : "#6b7280";
 
+  // Format snapshotDate (YYYY-MM-DD) as a short human-readable label e.g. "Mar 22"
+  function fmtDate(d: string): string {
+    const [y, m, day] = d.split("-").map(Number);
+    return new Date(y, m - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+
+  // Tooltip: pin to left or right depending on dot position to avoid overflow
+  function tooltipStyle(i: number): React.CSSProperties {
+    const isRight = xs[i] > W / 2;
+    return {
+      position: "absolute",
+      top: `${ys[i] - 28}px`,
+      ...(isRight
+        ? { right: `${W - xs[i] + 6}px` }
+        : { left: `${xs[i] + 6}px` }),
+      background: "#1e293b",
+      color: "#f1f5f9",
+      fontSize: "10px",
+      fontWeight: 600,
+      padding: "3px 6px",
+      borderRadius: "4px",
+      whiteSpace: "nowrap",
+      pointerEvents: "none",
+      zIndex: 50,
+      boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+    };
+  }
+
   return (
     <div className="flex items-center gap-1.5">
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
-        <polyline
-          points={xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ")}
-          fill="none"
-          stroke={trendColor}
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity="0.7"
-        />
-        {/* dots */}
-        {xs.map((x, i) => (
-          <circle key={i} cx={x} cy={ys[i]} r="1.5" fill={trendColor} opacity="0.9" />
-        ))}
-        {/* last point highlight */}
-        <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r="2.5" fill={trendColor} />
-      </svg>
+      <div style={{ position: "relative", width: W, height: H }}>
+        <svg
+          width={W}
+          height={H}
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ overflow: "visible", display: "block" }}
+        >
+          <polyline
+            points={xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ")}
+            fill="none"
+            stroke={trendColor}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.7"
+          />
+          {/* Regular dots */}
+          {xs.map((x, i) => (
+            <circle
+              key={i}
+              cx={x}
+              cy={ys[i]}
+              r={hoveredIdx === i ? 4 : i === xs.length - 1 ? 2.5 : 1.5}
+              fill={trendColor}
+              opacity={hoveredIdx === i ? 1 : 0.9}
+              style={{ cursor: "pointer", transition: "r 0.1s" }}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+            />
+          ))}
+        </svg>
+
+        {/* Tooltip overlay */}
+        {hoveredIdx !== null && (
+          <div style={tooltipStyle(hoveredIdx)}>
+            {fmtDate(points[hoveredIdx].snapshotDate)} · {points[hoveredIdx].slaRate}%
+          </div>
+        )}
+      </div>
+
       <span className="text-[10px] font-bold" style={{ color: arrowColor }}>
         {TrendArrow} {lastRate}%
       </span>

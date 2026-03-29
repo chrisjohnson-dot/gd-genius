@@ -478,3 +478,7 @@
 - [x] Register startSlaNightlySnapshot() at server startup (midnight UTC via node-cron)
 - [x] Add sla.runNightlySnapshot tRPC mutation for manual on-demand trigger
 - [x] 8 unit tests for slaNightlySnapshot (290 tests passing total)
+
+## SLA Tracker — Sparkline Dot Tooltips
+- [x] Add hover state to SlaSparkline dots showing exact date and SLA % in a dark tooltip
+- [x] Dot enlarges on hover; tooltip pins left/right to avoid overflow

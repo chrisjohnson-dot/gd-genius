@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,19 @@ function getOrCreateSessionId() {
 
 export default function PutAwayAssistant() {
   const [sessionId] = useState(() => getOrCreateSessionId());
+  const [location] = useLocation();
+
+  // Parse URL query params for pre-fill from Receiving Dashboard
+  const urlParams = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search);
+  }, [location]);
+
+  const prefilledConfigId = urlParams?.get("configId") ? Number(urlParams.get("configId")) : null;
+  const prefilledFacilityId = urlParams?.get("facilityId") ? Number(urlParams.get("facilityId")) : null;
+  const prefilledCustomerId = urlParams?.get("customerId") ? Number(urlParams.get("customerId")) : null;
+  const prefilledTransactionId = urlParams?.get("transactionId") ?? null;
+  const prefilledReferenceNum = urlParams?.get("referenceNum") ?? null;
 
   // Warehouse / customer selection
   const configQuery = trpc.config.list.useQuery();
@@ -175,6 +189,29 @@ export default function PutAwayAssistant() {
 
   const utils = trpc.useUtils();
 
+  // Auto-populate session from URL params (pre-fill from Receiving Dashboard)
+  const didAutoFill = useRef(false);
+  useEffect(() => {
+    if (didAutoFill.current) return;
+    if (!prefilledConfigId || !prefilledFacilityId || !prefilledCustomerId) return;
+    // Wait until configs are loaded to confirm the configId is valid
+    if (configs.length === 0) return;
+    const configExists = configs.some((c) => c.id === prefilledConfigId);
+    if (!configExists) return;
+    didAutoFill.current = true;
+    setConfigId(prefilledConfigId);
+    setFacilityId(prefilledFacilityId);
+    setCustomerId(prefilledCustomerId);
+    // customerName will be resolved once customers load — handled in the customers effect below
+  }, [configs, prefilledConfigId, prefilledFacilityId, prefilledCustomerId]);
+
+  // Resolve customerName once customers list loads after auto-fill
+  useEffect(() => {
+    if (!customerId || customers.length === 0 || customerName) return;
+    const match = customers.find((c) => c.id === customerId);
+    if (match) setCustomerName(match.name);
+  }, [customers, customerId, customerName]);
+
   // Auto-focus scan input when setup is complete
   useEffect(() => {
     if (configId && facilityId && customerId) {
@@ -238,6 +275,24 @@ export default function PutAwayAssistant() {
           Scan a SKU to get FEFO-based put-away location suggestions.
         </p>
       </div>
+
+      {/* Receipt context banner — shown when launched from Receiving Dashboard */}
+      {(prefilledTransactionId || prefilledReferenceNum) && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-primary/30 bg-primary/5 text-sm">
+          <ArrowRight className="h-4 w-4 text-primary shrink-0" />
+          <span className="text-foreground">
+            Receiving context:{" "}
+            <span className="font-semibold text-primary">
+              {prefilledReferenceNum
+                ? `Receipt ${prefilledReferenceNum}`
+                : `Transaction #${prefilledTransactionId}`}
+            </span>
+            {isSetupComplete
+              ? " — session pre-filled. Ready to scan."
+              : " — loading session setup…"}
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* ── Left column: Setup + Scan ── */}

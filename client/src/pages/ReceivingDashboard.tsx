@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import {
   Warehouse,
   PlayCircle,
   Loader2,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -111,6 +113,7 @@ function ReceiverDetailSheet({
   onStarted?: () => void;
 }) {
   const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
 
   const { data, isLoading } = trpc.receiving.detail.useQuery(
     { configId, transactionId: receiver?.readOnly.transactionId ?? 0 },
@@ -150,6 +153,20 @@ function ReceiverDetailSheet({
 
   const canStart = detail?.readOnly.status === 0; // Expected → can start
   const isInProgress = detail?.readOnly.status === 1;
+  const canPutAway = detail?.readOnly.status === 0 || detail?.readOnly.status === 1;
+
+  function handlePutAway() {
+    if (!receiver || !detail) return;
+    const params = new URLSearchParams({
+      configId: String(configId),
+      facilityId: String(detail.readOnly.facilityIdentifier.id),
+      customerId: String(detail.readOnly.customerIdentifier.id),
+      transactionId: String(detail.readOnly.transactionId),
+      referenceNum: detail.referenceNum ?? "",
+    });
+    onClose();
+    navigate(`/receiving/put-away?${params.toString()}`);
+  }
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -265,9 +282,9 @@ function ReceiverDetailSheet({
           )}
         </div>
 
-        {/* Footer — Start Receipt button */}
-        {detail && (canStart || isInProgress) && (
-          <div className="px-6 py-4 border-t border-border bg-card">
+        {/* Footer — action buttons */}
+        {detail && (canStart || isInProgress || canPutAway) && (
+          <div className="px-6 py-4 border-t border-border bg-card space-y-2">
             {canStart && (
               <Button
                 className="w-full gap-2 h-10 text-sm font-semibold"
@@ -283,10 +300,20 @@ function ReceiverDetailSheet({
               </Button>
             )}
             {isInProgress && (
-              <div className="flex items-center gap-2 text-sm text-amber-400 justify-center">
+              <div className="flex items-center gap-2 text-sm text-amber-400 justify-center py-1">
                 <PackageOpen className="h-4 w-4" />
                 This receipt is already in progress in Extensiv.
               </div>
+            )}
+            {canPutAway && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 h-10 text-sm font-semibold bg-primary/5 border-primary/30 text-primary hover:bg-primary/10"
+                onClick={handlePutAway}
+              >
+                <ArrowRight className="h-4 w-4" />
+                Put Away Items
+              </Button>
             )}
           </div>
         )}

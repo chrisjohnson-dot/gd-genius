@@ -548,3 +548,8 @@
 - [x] Add receiving.startReceipt tRPC mutation in routers.ts
 - [x] Wire Start Receipt button to tRPC mutation in ReceivingDashboard.tsx
 - [x] Invalidate receiving.list query on success to refresh the dashboard
+
+## Put Away Items — Receiving to Put Away Handoff
+- [x] Add "Put Away Items" button to receipt detail slide-over (visible when status is In Progress or Expected)
+- [x] Navigate to /receiving/put-away with configId, facilityId, customerId, transactionId as URL query params
+- [x] Update PutAwayAssistant to read URL params and auto-populate session setup (skip setup step)

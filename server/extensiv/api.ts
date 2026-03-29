@@ -949,3 +949,56 @@ export async function fetchReceiverDetail(
     return null;
   }
 }
+
+/**
+ * Start a receiver in Extensiv — updates its status to 1 (In Progress).
+ *
+ * Extensiv uses optimistic concurrency: we must first GET the receiver to
+ * obtain the current ETag, then PUT the updated resource back with
+ * If-Match set to that ETag.  A 200 or 204 response indicates success.
+ */
+export async function startReceipt(
+  config: ExtensivClientConfig,
+  transactionId: number
+): Promise<{ success: boolean; error?: string }> {
+  const client = createExtensivClient(config);
+
+  // Step 1: GET the receiver with headers to capture the ETag
+  const { data: rawData, headers } = await client.getWithHeaders(
+    `/inventory/receivers/${transactionId}`,
+    { detail: "ReceiveItems" }
+  );
+
+  const etag = (headers["etag"] ?? headers["ETag"] ?? "").replace(/"/g, "");
+
+  // Step 2: Build the updated body — keep all existing fields, set status=1
+  const body = rawData as Record<string, unknown>;
+  if (body.readOnly && typeof body.readOnly === "object") {
+    (body.readOnly as Record<string, unknown>).status = 1;
+  }
+
+  // Step 3: PUT back with ETag
+  const result = await client.put(
+    `/inventory/receivers/${transactionId}`,
+    body,
+    etag || undefined
+  );
+
+  if (result.status === 200 || result.status === 204) {
+    return { success: true };
+  }
+
+  // Some Extensiv environments return 400 if the receiver is already in
+  // progress — treat that as a soft success so the UI can refresh.
+  if (result.status === 400) {
+    const msg = JSON.stringify(result.data).toLowerCase();
+    if (msg.includes("already") || msg.includes("progress")) {
+      return { success: true };
+    }
+  }
+
+  return {
+    success: false,
+    error: `HTTP ${result.status}: ${JSON.stringify(result.data)}`,
+  };
+}

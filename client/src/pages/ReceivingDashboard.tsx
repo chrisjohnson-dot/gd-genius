@@ -103,34 +103,50 @@ function ReceiverDetailSheet({
   configId,
   receiver,
   onClose,
+  onStarted,
 }: {
   configId: number;
   receiver: Receiver | null;
   onClose: () => void;
+  onStarted?: () => void;
 }) {
-  const [starting, setStarting] = useState(false);
+  const utils = trpc.useUtils();
 
   const { data, isLoading } = trpc.receiving.detail.useQuery(
     { configId, transactionId: receiver?.readOnly.transactionId ?? 0 },
     { enabled: receiver !== null }
   );
 
-  const detail = data ?? receiver;
-  const isOpen = receiver !== null;
-
-  function handleStartReceipt() {
-    setStarting(true);
-    // Simulate a brief action — in production this would call an Extensiv API
-    // to mark the receiver as "In Progress" (status 1).
-    setTimeout(() => {
-      setStarting(false);
+  const startReceiptMutation = trpc.receiving.startReceipt.useMutation({
+    onSuccess: () => {
       toast.success(
         `Receipt ${receiver?.referenceNum ?? receiver?.readOnly.transactionId} started`,
         { description: "Status updated to In Progress in Extensiv." }
       );
+      // Invalidate the receiving list and detail so the dashboard refreshes
+      void utils.receiving.list.invalidate();
+      void utils.receiving.detail.invalidate();
+      void utils.receiving.kpis.invalidate();
+      onStarted?.();
       onClose();
-    }, 1200);
+    },
+    onError: (err) => {
+      toast.error("Failed to start receipt", { description: err.message });
+    },
+  });
+
+  const detail = data ?? receiver;
+  const isOpen = receiver !== null;
+
+  function handleStartReceipt() {
+    if (!receiver) return;
+    startReceiptMutation.mutate({
+      configId,
+      transactionId: receiver.readOnly.transactionId,
+    });
   }
+
+  const starting = startReceiptMutation.isPending;
 
   const canStart = detail?.readOnly.status === 0; // Expected → can start
   const isInProgress = detail?.readOnly.status === 1;
@@ -634,6 +650,7 @@ export default function ReceivingDashboard() {
           configId={activeConfigId}
           receiver={selectedReceiver}
           onClose={() => setSelectedReceiver(null)}
+          onStarted={() => void refetch()}
         />
       )}
     </div>

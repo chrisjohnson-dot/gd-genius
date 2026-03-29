@@ -541,3 +541,10 @@
 - [x] Click receipt row → detail slide-over with full line items
 - [x] Add "Start Receipt" button in the detail slide-over
 - [x] Remove old KPI-first layout; warehouse cards become the primary UI
+
+## Start Receipt — Extensiv API Integration
+- [x] Research Extensiv API endpoint for updating receiver status to In Progress
+- [x] Add startReceipt() Extensiv API helper in server/extensiv/api.ts
+- [x] Add receiving.startReceipt tRPC mutation in routers.ts
+- [x] Wire Start Receipt button to tRPC mutation in ReceivingDashboard.tsx
+- [x] Invalidate receiving.list query on success to refresh the dashboard

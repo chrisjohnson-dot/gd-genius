@@ -516,3 +516,14 @@
 - [x] Create PutAwayAssistant stub page
 - [x] Add RECEIVING section above ALLOCATION in sidebar nav (AppLayout.tsx)
 - [x] Register /receiving and /put-away routes in App.tsx
+
+## Receiving Dashboard — Full Build
+- [x] Add getReceivers() Extensiv API helper in server/extensiv/api.ts
+- [x] Add getReceiverItems() Extensiv API helper for line items
+- [x] Add receiving.list tRPC procedure (paginated, filterable by warehouse/status/date)
+- [x] Add receiving.detail tRPC procedure (single receiver with line items)
+- [x] Add receiving.kpis tRPC procedure (today expected, in-progress, completed, discrepancies)
+- [x] Build ReceivingDashboard page: KPI cards, shipment table with status badges
+- [x] Build ReceiverDetail slide-over/modal: line items with expected vs. received qty
+- [x] Add warehouse filter, status filter, and date range filter to dashboard
+- [ ] Write vitest tests for receiving tRPC procedures (deferred — no mock data available)

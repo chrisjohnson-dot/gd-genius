@@ -757,3 +757,195 @@ export async function fetchOrdersByReferenceNum(
   console.log(`[Extensiv] fetchOrdersByReferenceNum: referenceNum="${referenceNum}" found ${normalized.length} orders, items: ${normalized.map(o => o.orderItems?.length ?? 0).join(",")}`);
   return normalized;
 }
+
+// ─── Receiving / Inbound Shipments ───────────────────────────────────────────
+
+export interface ExtensivReceiverItem {
+  receiverItemId: number;
+  itemIdentifier: { sku: string; id: number };
+  description?: string;
+  /** Expected quantity (from ASN/PO) */
+  expectedQty: number;
+  /** Quantity actually received */
+  receivedQty: number;
+  lotNumber?: string;
+  expirationDate?: string;
+  notes?: string;
+}
+
+export interface ExtensivReceiver {
+  readOnly: {
+    transactionId: number;
+    status: number; // 0=Created/Expected, 1=In Progress, 2=Closed/Complete
+    customerIdentifier: { id: number; name: string };
+    facilityIdentifier: { id: number; name: string };
+    creationDate: string;
+    closedDate?: string;
+  };
+  referenceNum?: string;
+  poNum?: string;
+  expectedDate?: string;
+  notes?: string;
+  trackingNumber?: string;
+  /** Line items — populated when detail includes ReceiveItems */
+  receiveItems?: ExtensivReceiverItem[];
+}
+
+interface RawReceiverItem {
+  receiverItemId?: number;
+  id?: number;
+  itemIdentifier?: { sku?: string; id?: number };
+  description?: string;
+  expectedQty?: number;
+  qty?: number;
+  receivedQty?: number;
+  qtyReceived?: number;
+  lotNumber?: string;
+  expirationDate?: string;
+  notes?: string;
+}
+
+interface RawReceiver {
+  readOnly?: {
+    transactionId?: number;
+    status?: number;
+    customerIdentifier?: { id?: number; name?: string };
+    facilityIdentifier?: { id?: number; name?: string };
+    creationDate?: string;
+    closedDate?: string;
+  };
+  referenceNum?: string;
+  poNum?: string;
+  expectedDate?: string;
+  notes?: string;
+  trackingNumber?: string;
+  _embedded?: Record<string, unknown>;
+}
+
+function mapRawReceiverItem(r: RawReceiverItem): ExtensivReceiverItem {
+  return {
+    receiverItemId: r.receiverItemId ?? r.id ?? 0,
+    itemIdentifier: { sku: r.itemIdentifier?.sku ?? "", id: r.itemIdentifier?.id ?? 0 },
+    description: r.description,
+    expectedQty: r.expectedQty ?? r.qty ?? 0,
+    receivedQty: r.receivedQty ?? r.qtyReceived ?? 0,
+    lotNumber: r.lotNumber,
+    expirationDate: r.expirationDate,
+    notes: r.notes,
+  };
+}
+
+function mapRawReceiver(r: RawReceiver): ExtensivReceiver {
+  const embedded = r._embedded ?? {};
+  // Extensiv uses HAL rel keys for embedded items
+  const itemsRaw: RawReceiverItem[] = (() => {
+    for (const key of Object.keys(embedded)) {
+      if (key.toLowerCase().includes("receiveitem") || key.toLowerCase().includes("receiveritem")) {
+        const val = (embedded as Record<string, unknown>)[key];
+        if (Array.isArray(val)) return val as RawReceiverItem[];
+      }
+    }
+    return [];
+  })();
+
+  return {
+    readOnly: {
+      transactionId: r.readOnly?.transactionId ?? 0,
+      status: r.readOnly?.status ?? 0,
+      customerIdentifier: {
+        id: r.readOnly?.customerIdentifier?.id ?? 0,
+        name: r.readOnly?.customerIdentifier?.name ?? "",
+      },
+      facilityIdentifier: {
+        id: r.readOnly?.facilityIdentifier?.id ?? 0,
+        name: r.readOnly?.facilityIdentifier?.name ?? "",
+      },
+      creationDate: r.readOnly?.creationDate ?? "",
+      closedDate: r.readOnly?.closedDate,
+    },
+    referenceNum: r.referenceNum,
+    poNum: r.poNum,
+    expectedDate: r.expectedDate,
+    notes: r.notes,
+    trackingNumber: r.trackingNumber,
+    receiveItems: itemsRaw.map(mapRawReceiverItem),
+  };
+}
+
+const REL_RECEIVER = "http://api.3plCentral.com/rels/inventory/receiver";
+
+export interface FetchReceiversOptions {
+  facilityId?: number;
+  customerId?: number;
+  /** ISO date string — only receivers created on or after this date */
+  createdAfter?: string;
+  /** Max results per page (default 100) */
+  pgsiz?: number;
+  pgnum?: number;
+  /** Include line items in response */
+  includeItems?: boolean;
+}
+
+/**
+ * Fetch inbound receivers (ASN/PO receipts) from Extensiv.
+ * Returns up to pgsiz records; caller can paginate with pgnum.
+ */
+export async function fetchReceivers(
+  config: ExtensivClientConfig,
+  opts: FetchReceiversOptions = {}
+): Promise<{ receivers: ExtensivReceiver[]; totalResults: number }> {
+  const client = createExtensivClient(config);
+
+  const rqlParts: string[] = [];
+  if (opts.facilityId) rqlParts.push(`ReadOnly.FacilityIdentifier.id==${opts.facilityId}`);
+  if (opts.customerId) rqlParts.push(`ReadOnly.CustomerIdentifier.id==${opts.customerId}`);
+  if (opts.createdAfter) rqlParts.push(`ReadOnly.CreationDate=ge=${opts.createdAfter}`);
+
+  const params: Record<string, unknown> = {
+    pgsiz: opts.pgsiz ?? 100,
+    pgnum: opts.pgnum ?? 1,
+    detail: opts.includeItems ? "ReceiveItems" : "None",
+  };
+  if (rqlParts.length > 0) params.rql = rqlParts.join(";");
+
+  const data = (await client.get("/inventory/receivers", params)) as {
+    totalResults?: number;
+    _embedded?: Record<string, unknown>;
+  };
+
+  const totalResults = data.totalResults ?? 0;
+  const embedded = data._embedded ?? {};
+  const raw: RawReceiver[] = (() => {
+    for (const key of Object.keys(embedded)) {
+      if (key.toLowerCase().includes("receiver")) {
+        const val = embedded[key];
+        if (Array.isArray(val)) return val as RawReceiver[];
+      }
+    }
+    // Fallback: check for the known HAL rel key
+    const val = embedded[REL_RECEIVER];
+    if (Array.isArray(val)) return val as RawReceiver[];
+    return [];
+  })();
+
+  return { receivers: raw.map(mapRawReceiver), totalResults };
+}
+
+/**
+ * Fetch a single receiver with full line item detail.
+ */
+export async function fetchReceiverDetail(
+  config: ExtensivClientConfig,
+  transactionId: number
+): Promise<ExtensivReceiver | null> {
+  const client = createExtensivClient(config);
+  try {
+    const data = (await client.get(`/inventory/receivers/${transactionId}`, {
+      detail: "ReceiveItems",
+      itemdetail: "All",
+    })) as RawReceiver;
+    return mapRawReceiver(data);
+  } catch {
+    return null;
+  }
+}

@@ -118,7 +118,7 @@ import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoR
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum } from "./extensiv/api";
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -3327,6 +3327,93 @@ const palletScannerRouter = router({
     }),
 });
 
+// ─── Receiving Router ───────────────────────────────────────────────────────
+const receivingRouter = router({
+  /**
+   * List inbound receivers (ASN/PO receipts) from Extensiv.
+   * Supports filtering by warehouse, customer, status, and date range.
+   */
+  list: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        facilityId: z.number().optional(),
+        customerId: z.number().optional(),
+        createdAfter: z.string().optional(), // ISO date string
+        pgsiz: z.number().min(1).max(500).default(100),
+        pgnum: z.number().min(1).default(1),
+        includeItems: z.boolean().default(false),
+      })
+    )
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+      const result = await fetchReceivers(config, {
+        facilityId: input.facilityId,
+        customerId: input.customerId,
+        createdAfter: input.createdAfter,
+        pgsiz: input.pgsiz,
+        pgnum: input.pgnum,
+        includeItems: input.includeItems,
+      });
+      return result;
+    }),
+
+  /**
+   * Get a single receiver with full line item detail.
+   */
+  detail: protectedProcedure
+    .input(z.object({ configId: z.number(), transactionId: z.number() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+      const receiver = await fetchReceiverDetail(config, input.transactionId);
+      if (!receiver) throw new TRPCError({ code: "NOT_FOUND", message: "Receiver not found" });
+      return receiver;
+    }),
+
+  /**
+   * KPI summary: counts by status across all recent receivers.
+   * Returns: expected (status=0), inProgress (status=1), completed (status=2), discrepancies.
+   */
+  kpis: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        facilityId: z.number().optional(),
+        createdAfter: z.string().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+      // Fetch up to 500 receivers with item detail for discrepancy calculation
+      const { receivers } = await fetchReceivers(config, {
+        facilityId: input.facilityId,
+        createdAfter: input.createdAfter,
+        pgsiz: 500,
+        includeItems: true,
+      });
+      let expected = 0;
+      let inProgress = 0;
+      let completed = 0;
+      let discrepancies = 0;
+      for (const r of receivers) {
+        const status = r.readOnly.status;
+        if (status === 0) expected++;
+        else if (status === 1) inProgress++;
+        else if (status === 2) completed++;
+        // Discrepancy: any item where receivedQty !== expectedQty
+        const items = r.receiveItems ?? [];
+        const hasDiscrepancy = items.some(
+          (item) => item.expectedQty > 0 && item.receivedQty !== item.expectedQty
+        );
+        if (hasDiscrepancy) discrepancies++;
+      }
+      return { expected, inProgress, completed, discrepancies, total: receivers.length };
+    }),
+});
+
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
 export const appRouter = router({
   ..._appRouter._def.record,
@@ -3337,5 +3424,6 @@ export const appRouter = router({
   cortex: cortexRouter,
   qcScanner: qcScannerRouter,
   palletScanner: palletScannerRouter,
+  receiving: receivingRouter,
 });
 export type AppRouter = typeof appRouter;

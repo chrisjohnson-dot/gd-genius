@@ -1174,10 +1174,11 @@ export async function getOverdueUnallocatedOrders(): Promise<OrderTracking[]> {
 export async function getAttentionCount(): Promise<{
   overdueCount: number;
   zeroBidCount: number;
+  verificationIssues: number;
   total: number;
 }> {
   const db = await getDb();
-  if (!db) return { overdueCount: 0, zeroBidCount: 0, total: 0 };
+  if (!db) return { overdueCount: 0, zeroBidCount: 0, verificationIssues: 0, total: 0 };
 
   // ── Overdue unallocated orders ────────────────────────────────────────────
   const overdueRows = await getOverdueUnallocatedOrders();
@@ -1208,7 +1209,10 @@ export async function getAttentionCount(): Promise<{
     return now - new Date(startedAt).getTime() >= defaultThresholdMs;
   }).length;
 
-  return { overdueCount, zeroBidCount, total: overdueCount + zeroBidCount };
+  // ── Unresolved verification issues ──────────────────────────────────────────
+  const verificationIssues = await getUnresolvedVerificationCount();
+
+  return { overdueCount, zeroBidCount, verificationIssues, total: overdueCount + zeroBidCount + verificationIssues };
 }
 
 /**

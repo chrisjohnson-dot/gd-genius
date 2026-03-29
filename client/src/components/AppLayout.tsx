@@ -85,10 +85,12 @@ function AttentionBadge({
   count,
   overdueCount,
   zeroBidCount,
+  verificationIssues,
 }: {
   count: number;
   overdueCount: number;
   zeroBidCount: number;
+  verificationIssues: number;
 }) {
   const [hovered, setHovered] = useState(false);
   if (count <= 0) return null;
@@ -130,6 +132,15 @@ function AttentionBadge({
                 {zeroBidCount}
               </span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] text-[#cbd5e1]">Verif. issues</span>
+              <span className={cn(
+                "text-[12px] font-bold tabular-nums",
+                verificationIssues > 0 ? "text-red-400" : "text-[#64748b]"
+              )}>
+                {verificationIssues}
+              </span>
+            </div>
           </div>
           {/* Footer */}
           <div className="px-3 py-1.5 border-t border-white/10">
@@ -154,7 +165,7 @@ function NavItem({
   label: string;
   icon: React.ElementType;
   active: boolean;
-  badgeData?: { total: number; overdueCount: number; zeroBidCount: number };
+  badgeData?: { total: number; overdueCount: number; zeroBidCount: number; verificationIssues: number };
 }) {
   return (
     <Link
@@ -174,6 +185,7 @@ function NavItem({
           count={badgeData.total}
           overdueCount={badgeData.overdueCount}
           zeroBidCount={badgeData.zeroBidCount}
+          verificationIssues={badgeData.verificationIssues}
         />
       )}
     </Link>
@@ -209,7 +221,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     staleTime: 30_000,
   });
   const attentionBadge = attentionData
-    ? { total: attentionData.total, overdueCount: attentionData.overdueCount, zeroBidCount: attentionData.zeroBidCount }
+    ? { total: attentionData.total, overdueCount: attentionData.overdueCount, zeroBidCount: attentionData.zeroBidCount, verificationIssues: attentionData.verificationIssues ?? 0 }
     : undefined;
 
   if (loading) {

@@ -505,3 +505,8 @@
 - [x] Add getUnresolvedVerificationCount DB helper (confirmed runs with verificationStatus in partial/mismatch/failed)
 - [x] Add allocation.unresolvedVerificationCount tRPC query
 - [x] Add Verification Issues KPI card to Open Orders dashboard (count badge + link to Run History)
+
+## Open Orders Sidebar Badge — Verification Issues
+- [x] Extend attentionCount tRPC procedure to return verificationIssues count alongside overdue/zeroBid
+- [x] Update sidebar badge total to include verificationIssues
+- [x] Update hover popover to show verification issues row in breakdown

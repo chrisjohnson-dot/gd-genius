@@ -565,3 +565,9 @@
 - [x] Add receiving.completeReceipt tRPC mutation in routers.ts
 - [x] Add Complete Receipt button to detail slide-over (visible when status is In Progress)
 - [x] Invalidate receiving.list and receiving.detail queries on success
+
+## Put Away Assistant — Warehouse-Grouped Completed Receipts
+- [x] Show only completed receipts (status = 2) grouped by warehouse on the Put Away Assistant landing view
+- [x] Remove the manual config/facility/customer setup step from the initial view
+- [x] Click a completed receipt row to launch the scan session pre-filled with that receipt's context
+- [x] Retain URL param pre-fill from Receiving Dashboard handoff

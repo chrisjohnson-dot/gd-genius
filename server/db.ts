@@ -76,8 +76,11 @@ import {
   SlaDailySnapshot,
   InsertSlaDailySnapshot,
   putAwayScans,
+  muLabels,
+  receiptItemConfirmations,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
+import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -2107,3 +2110,107 @@ export async function clearPutAwaySession(sessionId: string): Promise<void> {
 }
 
 export type { PutAwayScan, InsertPutAwayScan };
+
+// ─── MU Labels ───────────────────────────────────────────────────────────────
+
+export async function createMuLabels(
+  data: InsertMuLabel[]
+): Promise<void> {
+  const db = await getDb();
+  await db!.insert(muLabels).values(data);
+}
+
+export async function getMuLabelsForTransaction(
+  configId: number,
+  transactionId: number
+): Promise<MuLabel[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(muLabels)
+    .where(
+      and(
+        eq(muLabels.configId, configId),
+        eq(muLabels.transactionId, transactionId)
+      )
+    )
+    .orderBy(muLabels.id);
+}
+
+export async function markMuLabelSynced(id: number): Promise<void> {
+  const db = await getDb();
+  await db!
+    .update(muLabels)
+    .set({ syncedToExtensiv: true })
+    .where(eq(muLabels.id, id));
+}
+
+export async function deleteMuLabelsForTransaction(
+  configId: number,
+  transactionId: number
+): Promise<void> {
+  const db = await getDb();
+  await db!
+    .delete(muLabels)
+    .where(
+      and(
+        eq(muLabels.configId, configId),
+        eq(muLabels.transactionId, transactionId)
+      )
+    );
+}
+
+export type { MuLabel, InsertMuLabel };
+
+// ─── Receipt Item Confirmations ───────────────────────────────────────────────
+
+export async function upsertReceiptItemConfirmation(
+  data: InsertReceiptItemConfirmation
+): Promise<void> {
+  const db = await getDb();
+  // Delete existing confirmation for this item (upsert by transactionId + receiverItemId)
+  await db!
+    .delete(receiptItemConfirmations)
+    .where(
+      and(
+        eq(receiptItemConfirmations.configId, data.configId),
+        eq(receiptItemConfirmations.transactionId, data.transactionId),
+        eq(receiptItemConfirmations.receiverItemId, data.receiverItemId)
+      )
+    );
+  await db!.insert(receiptItemConfirmations).values(data);
+}
+
+export async function getReceiptItemConfirmations(
+  configId: number,
+  transactionId: number
+): Promise<ReceiptItemConfirmation[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(receiptItemConfirmations)
+    .where(
+      and(
+        eq(receiptItemConfirmations.configId, configId),
+        eq(receiptItemConfirmations.transactionId, transactionId)
+      )
+    )
+    .orderBy(receiptItemConfirmations.id);
+}
+
+export async function deleteReceiptItemConfirmations(
+  configId: number,
+  transactionId: number
+): Promise<void> {
+  const db = await getDb();
+  await db!
+    .delete(receiptItemConfirmations)
+    .where(
+      and(
+        eq(receiptItemConfirmations.configId, configId),
+        eq(receiptItemConfirmations.transactionId, transactionId)
+      )
+    );
+}
+
+export type { ReceiptItemConfirmation, InsertReceiptItemConfirmation };

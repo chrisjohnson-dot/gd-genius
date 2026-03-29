@@ -41,6 +41,7 @@ import {
   PlayCircle,
   Loader2,
   ArrowRight,
+  ClipboardCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -181,6 +182,20 @@ function ReceiverDetailSheet({
   const isInProgress = detail?.readOnly.status === 1; // In Progress → can complete
   const canComplete = isInProgress;
   const canPutAway = detail?.readOnly.status === 0 || detail?.readOnly.status === 1;
+  const canConfirmItems = isInProgress; // Confirm items only when In Progress
+
+  function handleConfirmItems() {
+    if (!receiver || !detail) return;
+    const p = new URLSearchParams({
+      configId: String(configId),
+      transactionId: String(detail.readOnly.transactionId),
+      referenceNum: detail.referenceNum ?? "",
+      facilityName: detail.readOnly.facilityIdentifier.name ?? "",
+      facilityCode: String(detail.readOnly.facilityIdentifier.id),
+    });
+    onClose();
+    navigate(`/receiving/confirm?${p.toString()}`);
+  }
 
   function handlePutAway() {
     if (!receiver || !detail) return;
@@ -331,7 +346,7 @@ function ReceiverDetailSheet({
         </div>
 
         {/* Footer — action buttons */}
-        {detail && (canStart || canComplete || canPutAway) && (
+        {detail && (canStart || canComplete || canPutAway || canConfirmItems) && (
           <div className="px-6 py-4 border-t border-border bg-card space-y-2">
             {canStart && (
               <Button
@@ -345,6 +360,15 @@ function ReceiverDetailSheet({
                   <PlayCircle className="h-4 w-4" />
                 )}
                 {starting ? "Starting Receipt…" : "Start Receipt"}
+              </Button>
+            )}
+            {canConfirmItems && (
+              <Button
+                className="w-full gap-2 h-10 text-sm font-semibold"
+                onClick={handleConfirmItems}
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Confirm Items &amp; Generate MUs
               </Button>
             )}
             {canComplete && (

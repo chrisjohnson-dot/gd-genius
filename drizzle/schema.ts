@@ -1,5 +1,6 @@
 import {
   int,
+  bigint,
   mysqlEnum,
   mysqlTable,
   text,
@@ -629,3 +630,37 @@ export const putAwayScans = mysqlTable("put_away_scans", {
 
 export type PutAwayScan = typeof putAwayScans.$inferSelect;
 export type InsertPutAwayScan = typeof putAwayScans.$inferInsert;
+
+// ─── MU Labels ───────────────────────────────────────────────────────────────
+export const muLabels = mysqlTable("mu_labels", {
+  id: int("id").primaryKey().autoincrement(),
+  configId: int("config_id").notNull(),
+  transactionId: int("transaction_id").notNull(), // Extensiv receiver transactionId
+  receiverItemId: int("receiver_item_id").notNull(), // Extensiv receiverItemId
+  sku: varchar("sku", { length: 100 }).notNull(),
+  muLabel: varchar("mu_label", { length: 100 }).notNull(), // e.g. MU-WH1-20260329-001
+  muType: varchar("mu_type", { length: 50 }).notNull().default("Pallet"),
+  qty: int("qty").notNull().default(1),
+  syncedToExtensiv: boolean("synced_to_extensiv").notNull().default(false),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type MuLabel = typeof muLabels.$inferSelect;
+export type InsertMuLabel = typeof muLabels.$inferInsert;
+
+// ─── Receipt Item Confirmations ───────────────────────────────────────────────
+export const receiptItemConfirmations = mysqlTable("receipt_item_confirmations", {
+  id: int("id").primaryKey().autoincrement(),
+  configId: int("config_id").notNull(),
+  transactionId: int("transaction_id").notNull(),
+  receiverItemId: int("receiver_item_id").notNull(),
+  sku: varchar("sku", { length: 100 }).notNull(),
+  expectedQty: int("expected_qty").notNull(),
+  confirmedQty: int("confirmed_qty").notNull(),
+  /** "confirmed" | "adjusted" | "flagged" */
+  status: varchar("status", { length: 20 }).notNull().default("confirmed"),
+  note: text("note"),
+  confirmedBy: varchar("confirmed_by", { length: 255 }),
+  confirmedAt: bigint("confirmed_at", { mode: "number" }).notNull(),
+});
+export type ReceiptItemConfirmation = typeof receiptItemConfirmations.$inferSelect;
+export type InsertReceiptItemConfirmation = typeof receiptItemConfirmations.$inferInsert;

@@ -114,6 +114,12 @@ import {
   listPutAwayScans,
   listPutAwayScansByConfig,
   clearPutAwaySession,
+  upsertReceiptItemConfirmation,
+  getReceiptItemConfirmations,
+  deleteReceiptItemConfirmations,
+  createMuLabels,
+  getMuLabelsForTransaction,
+  deleteMuLabelsForTransaction,
   type VerificationStatus,
   type OrderVerificationResult,
 } from "./db";
@@ -122,8 +128,8 @@ import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoR
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail,startReceipt,
-  completeReceipt, } from "./extensiv/api";
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
+  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -3449,6 +3455,152 @@ const receivingRouter = router({
         });
       }
       return { success: true };
+    }),
+
+  /**
+   * Confirm or adjust a single line item's received quantity.
+   * Saves the confirmation locally and updates Extensiv via PUT.
+   */
+  confirmItem: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        transactionId: z.number(),
+        receiverItemId: z.number(),
+        sku: z.string(),
+        expectedQty: z.number(),
+        confirmedQty: z.number(),
+        /** "confirmed" | "adjusted" | "flagged" */
+        status: z.enum(["confirmed", "adjusted", "flagged"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+      // Save locally
+      await upsertReceiptItemConfirmation({
+        configId: input.configId,
+        transactionId: input.transactionId,
+        receiverItemId: input.receiverItemId,
+        sku: input.sku,
+        expectedQty: input.expectedQty,
+        confirmedQty: input.confirmedQty,
+        status: input.status,
+        note: input.note ?? null,
+        confirmedBy: ctx.user?.name ?? null,
+        confirmedAt: Date.now(),
+      });
+      // Push adjusted qty to Extensiv (skip if qty unchanged)
+      if (input.confirmedQty !== input.expectedQty) {
+        const result = await updateReceiverItemQty(
+          config,
+          input.transactionId,
+          input.receiverItemId,
+          input.confirmedQty
+        );
+        if (!result.success) {
+          // Non-fatal: log but don't throw — local record is saved
+          console.warn(`[receiving.confirmItem] Extensiv update failed: ${result.error}`);
+        }
+      }
+      return { success: true };
+    }),
+
+  /** Get all local confirmations for a receipt. */
+  getConfirmations: protectedProcedure
+    .input(z.object({ configId: z.number(), transactionId: z.number() }))
+    .query(async ({ input }) => {
+      return getReceiptItemConfirmations(input.configId, input.transactionId);
+    }),
+
+  /** Reset all confirmations for a receipt (e.g., start over). */
+  resetConfirmations: protectedProcedure
+    .input(z.object({ configId: z.number(), transactionId: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteReceiptItemConfirmations(input.configId, input.transactionId);
+      return { success: true };
+    }),
+
+  /**
+   * Generate MU labels for each confirmed line item on a receipt.
+   * Creates one MU label per line item (one pallet per SKU).
+   * Embeds the labels in the Extensiv receiver via PUT.
+   */
+  generateMUs: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        transactionId: z.number(),
+        facilityCode: z.string().optional(),
+        /** Override MU type (default: Pallet) */
+        muType: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+      // Get confirmed items
+      const confirmations = await getReceiptItemConfirmations(
+        input.configId,
+        input.transactionId
+      );
+      if (confirmations.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No confirmed items found. Confirm all line items before generating MUs.",
+        });
+      }
+      // Delete any existing MU labels for this receipt
+      await deleteMuLabelsForTransaction(input.configId, input.transactionId);
+      // Generate a label per confirmed item
+      const facilityCode = (input.facilityCode ?? "WH").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+      const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const muType = input.muType ?? "Pallet";
+      const newLabels = confirmations.map((c, idx) => ({
+        configId: input.configId,
+        transactionId: input.transactionId,
+        receiverItemId: c.receiverItemId,
+        sku: c.sku,
+        muLabel: `MU-${facilityCode}-${datePart}-${String(input.transactionId).slice(-4)}-${String(idx + 1).padStart(3, "0")}`,
+        muType,
+        qty: c.confirmedQty,
+        syncedToExtensiv: false,
+        createdAt: Date.now(),
+      }));
+      await createMuLabels(newLabels);
+      // Embed labels in Extensiv receiver
+      const assignments = newLabels.map((l) => ({
+        receiverItemId: l.receiverItemId,
+        muLabel: l.muLabel,
+        muType: l.muType,
+      }));
+      const syncResult = await assignMULabelsToReceiver(
+        config,
+        input.transactionId,
+        assignments
+      );
+      if (syncResult.success) {
+        // Mark all as synced
+        const saved = await getMuLabelsForTransaction(input.configId, input.transactionId);
+        for (const label of saved) {
+          await import("./db").then((m) => m.markMuLabelSynced(label.id));
+        }
+      } else {
+        console.warn(`[receiving.generateMUs] Extensiv sync failed: ${syncResult.error}`);
+      }
+      return {
+        success: true,
+        labels: newLabels.map((l) => ({ sku: l.sku, muLabel: l.muLabel, qty: l.qty })),
+        syncedToExtensiv: syncResult.success,
+      };
+    }),
+
+  /** Get generated MU labels for a receipt. */
+  getMuLabels: protectedProcedure
+    .input(z.object({ configId: z.number(), transactionId: z.number() }))
+    .query(async ({ input }) => {
+      return getMuLabelsForTransaction(input.configId, input.transactionId);
     }),
 });
 

@@ -1045,3 +1045,114 @@ export async function completeReceipt(
     error: `HTTP ${result.status}: ${JSON.stringify(result.data)}`,
   };
 }
+
+/**
+ * Update the received quantity for a specific line item on a receiver.
+ * Extensiv has no dedicated item-level PUT, so we:
+ *   1. GET the full receiver with ReceiveItems detail to capture ETag
+ *   2. Modify the target item's receivedQty in the embedded array
+ *   3. PUT the full receiver body back with If-Match: {etag}
+ */
+export async function updateReceiverItemQty(
+  config: ExtensivClientConfig,
+  transactionId: number,
+  receiverItemId: number,
+  newReceivedQty: number
+): Promise<{ success: boolean; error?: string }> {
+  const client = createExtensivClient(config);
+  const { data: rawData, headers } = await client.getWithHeaders(
+    `/inventory/receivers/${transactionId}`,
+    { detail: "ReceiveItems" }
+  );
+  const etag = (headers["etag"] ?? headers["ETag"] ?? "").replace(/"/g, "");
+  const body = rawData as Record<string, unknown>;
+  const embedded = (body._embedded ?? {}) as Record<string, unknown>;
+  let updated = false;
+  for (const key of Object.keys(embedded)) {
+    if (
+      key.toLowerCase().includes("receiveitem") ||
+      key.toLowerCase().includes("receiveritem")
+    ) {
+      const items = embedded[key];
+      if (Array.isArray(items)) {
+        for (const item of items as Record<string, unknown>[]) {
+          const itemId =
+            (item.receiverItemId as number | undefined) ??
+            (item.id as number | undefined);
+          if (itemId === receiverItemId) {
+            if ("receivedQty" in item) item.receivedQty = newReceivedQty;
+            else if ("qtyReceived" in item) item.qtyReceived = newReceivedQty;
+            else item.qty = newReceivedQty;
+            updated = true;
+          }
+        }
+      }
+    }
+  }
+  if (!updated) {
+    return {
+      success: false,
+      error: `Item ${receiverItemId} not found on receiver ${transactionId}`,
+    };
+  }
+  const result = await client.put(
+    `/inventory/receivers/${transactionId}`,
+    body,
+    etag || undefined
+  );
+  if (result.status === 200 || result.status === 204) return { success: true };
+  return {
+    success: false,
+    error: `HTTP ${result.status}: ${JSON.stringify(result.data)}`,
+  };
+}
+
+/**
+ * Embed MU label assignments into a receiver's line items and PUT back to Extensiv.
+ * muAssignments: array of { receiverItemId, muLabel, muType? }
+ * MU types: "Pallet" | "Carton" | "Each" | "Tote" | "Gaylord" | "Drum"
+ */
+export async function assignMULabelsToReceiver(
+  config: ExtensivClientConfig,
+  transactionId: number,
+  muAssignments: Array<{ receiverItemId: number; muLabel: string; muType?: string }>
+): Promise<{ success: boolean; error?: string }> {
+  const client = createExtensivClient(config);
+  const { data: rawData, headers } = await client.getWithHeaders(
+    `/inventory/receivers/${transactionId}`,
+    { detail: "ReceiveItems" }
+  );
+  const etag = (headers["etag"] ?? headers["ETag"] ?? "").replace(/"/g, "");
+  const body = rawData as Record<string, unknown>;
+  const embedded = (body._embedded ?? {}) as Record<string, unknown>;
+  for (const key of Object.keys(embedded)) {
+    if (
+      key.toLowerCase().includes("receiveitem") ||
+      key.toLowerCase().includes("receiveritem")
+    ) {
+      const items = embedded[key];
+      if (Array.isArray(items)) {
+        for (const item of items as Record<string, unknown>[]) {
+          const itemId =
+            (item.receiverItemId as number | undefined) ??
+            (item.id as number | undefined);
+          const assignment = muAssignments.find((a) => a.receiverItemId === itemId);
+          if (assignment) {
+            item.muLabel = assignment.muLabel;
+            item.muType = assignment.muType ?? "Pallet";
+          }
+        }
+      }
+    }
+  }
+  const result = await client.put(
+    `/inventory/receivers/${transactionId}`,
+    body,
+    etag || undefined
+  );
+  if (result.status === 200 || result.status === 204) return { success: true };
+  return {
+    success: false,
+    error: `HTTP ${result.status}: ${JSON.stringify(result.data)}`,
+  };
+}

@@ -34,6 +34,7 @@ import FlaggedScans from "@/pages/FlaggedScans";
 import PalletScanner from "@/pages/PalletScanner";
 import ReceivingDashboard from "@/pages/ReceivingDashboard";
 import PutAwayAssistant from "@/pages/PutAwayAssistant";
+import ReceiptConfirmation from "@/pages/ReceiptConfirmation";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -77,6 +78,7 @@ function AppRoutes() {
         <Route path="/qc/flagged" component={FlaggedScans} />
         <Route path="/shipping/pallet-scan" component={PalletScanner} />
         <Route path="/receiving" component={ReceivingDashboard} />
+        <Route path="/receiving/confirm" component={ReceiptConfirmation} />
         <Route path="/receiving/put-away" component={PutAwayAssistant} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

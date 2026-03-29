@@ -586,3 +586,25 @@
 - [ ] Build MU generation panel: list pallets from receipt line items, confirm count, call createMU in Extensiv
 - [ ] Build Pallet Put-Away panel: show each MU with suggested location (from priority config), allow override, confirm all
 - [ ] Wire Complete Receipt button to new multi-step flow (Generate MUs → Put Away → Complete)
+
+## Receiving — SKU-by-SKU Line-Item Confirmation Screen
+- [ ] Research Extensiv receiveItem update/confirm endpoint (PUT /inventory/receivers/{id}/items/{itemId})
+- [ ] Add updateReceiverItem() Extensiv API helper to record confirmed received qty
+- [ ] Add receiving.confirmItem tRPC mutation (confirm qty or flag for adjustment)
+- [ ] Build full-page receipt confirmation view (replaces slide-over for in-progress receipts)
+- [ ] SKU list: show expected qty, editable received qty, Confirm / Adjust buttons per row
+- [ ] Confirmed rows turn green with checkmark; flagged rows show amber with note field
+- [ ] Summary bar: X of Y items confirmed, Z flagged
+- [ ] Complete Receipt button enabled only when all items are confirmed or flagged
+
+## Receiving — SKU Confirmation & MU Generation
+- [x] Add updateReceiverItemQty() Extensiv API helper (GET ETag → modify item qty → PUT full body)
+- [x] Add receiving.confirmItem tRPC mutation (confirm qty or flag with adjustment note)
+- [x] Add receiving.generateMUs tRPC mutation (generate internal MU labels, embed in receiver PUT)
+- [x] Add mu_labels DB table to track generated MU labels per receipt line item
+- [x] Build full-page ReceiptConfirmation view: SKU list, expected qty, editable received qty, Confirm/Adjust per row
+- [x] Confirmed rows turn green with checkmark; flagged rows show amber with note field
+- [x] Summary bar: X of Y items confirmed, Z flagged
+- [x] Generate MUs button: creates one MU label per line item, shows labels for printing
+- [x] Complete Receipt button enabled only when all items are confirmed or flagged
+- [x] Wire from Receiving Dashboard: clicking In Progress receipt opens ReceiptConfirmation page via Confirm Items & Generate MUs button

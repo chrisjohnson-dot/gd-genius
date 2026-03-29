@@ -44,11 +44,11 @@ const dashboardItems = [
 
 const receivingItems = [
   { href: "/receiving",          label: "Receiving Dashboard", icon: Inbox },
-  { href: "/receiving/put-away", label: "Put Away Assistant",   icon: ConciergeBell },
+  { href: "/receiving/put-away", label: "Run Put Away Wizard",   icon: ConciergeBell },
 ];
 
 const allocationItems = [
-  { href: "/allocate",  label: "Run Allocation Tool",   icon: PackageSearch },
+  { href: "/allocate",  label: "Run Allocation Wizard",   icon: PackageSearch },
   { href: "/history",   label: "Run History",           icon: History },
   { href: "/audit",     label: "Audit Log",             icon: ClipboardList },
 ];

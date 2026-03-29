@@ -571,3 +571,18 @@
 - [x] Remove the manual config/facility/customer setup step from the initial view
 - [x] Click a completed receipt row to launch the scan session pre-filled with that receipt's context
 - [x] Retain URL param pre-fill from Receiving Dashboard handoff
+
+## MU Put-Away Workflow
+- [ ] Research Extensiv MU API (create MU, list MUs, assign MU to location)
+- [ ] Research Extensiv open location query endpoint
+- [ ] Add put_away_location_priority DB table (configId, facilityId, customerId, aisle, level, priority order)
+- [ ] Add putAway.locationPriority tRPC procedures: get, upsert, delete
+- [ ] Add fetchOpenLocations() Extensiv API helper (empty locations by facility)
+- [ ] Add createMU() Extensiv API helper (one MU per pallet on a receiver)
+- [ ] Add putAway.suggestPallets tRPC procedure: fetch open locations, apply aisle/level priority, return ranked location per MU
+- [ ] Build Location Priority Config screen: per-warehouse collapsible, per-customer aisle/level click-to-prioritize grid
+- [ ] Add Location Priority Config to sidebar nav (under Receiving or Settings)
+- [ ] Update Complete Receipt slide-over: add Generate MUs step before finalizing
+- [ ] Build MU generation panel: list pallets from receipt line items, confirm count, call createMU in Extensiv
+- [ ] Build Pallet Put-Away panel: show each MU with suggested location (from priority config), allow override, confirm all
+- [ ] Wire Complete Receipt button to new multi-step flow (Generate MUs → Put Away → Complete)

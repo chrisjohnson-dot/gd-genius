@@ -9,7 +9,7 @@ import {
   MapPin, Scan, CheckCircle2, Warehouse, Star, Package,
   History, Trash2, AlertCircle, Loader2,
   ArrowRight, RefreshCw, ChevronDown, ChevronRight,
-  PackageCheck, ArrowLeft, CalendarDays, Flame,
+  PackageCheck, ArrowLeft, CalendarDays, Flame, ListOrdered,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -201,6 +201,7 @@ function ScanSession({
   const [activeSku, setActiveSku] = useState<string | null>(null);
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -208,6 +209,12 @@ function ScanSession({
     { configId, facilityId, customerId, sku: activeSku ?? "", qty },
     { enabled: !!activeSku, retry: false }
   );
+
+  const priorityQuery = trpc.putAway.getPriority.useQuery(
+    { configId, facilityId, customerId },
+    { staleTime: 60_000 }
+  );
+  const priorityRows = priorityQuery.data ?? [];
 
   const sessionScansQuery = trpc.putAway.sessionScans.useQuery(
     { sessionId },
@@ -464,6 +471,57 @@ function ScanSession({
               <p className="text-xs text-muted-foreground mt-1">
                 Scan or type a SKU in the panel on the left to get location suggestions.
               </p>
+            </div>
+          )}
+
+          {/* ── Priority Legend ── */}
+          {priorityRows.length > 0 && (
+            <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-orange-500/10 transition-colors"
+                onClick={() => setLegendOpen((v) => !v)}
+              >
+                <div className="flex items-center gap-2">
+                  <Flame className="h-4 w-4 text-orange-400" />
+                  <span className="text-sm font-semibold text-orange-300">Aisle Priority Map</span>
+                  <Badge className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-xs">
+                    {priorityRows.length} aisle{priorityRows.length !== 1 ? "s" : ""}
+                  </Badge>
+                </div>
+                {legendOpen
+                  ? <ChevronDown className="h-4 w-4 text-orange-400" />
+                  : <ChevronRight className="h-4 w-4 text-orange-400" />}
+              </button>
+
+              {legendOpen && (
+                <div className="border-t border-orange-500/20 px-4 pb-4 pt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Suggestions in these aisles are ranked first within each tier. Lower number = higher priority.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {priorityRows
+                      .slice()
+                      .sort((a: { priorityOrder: number }, b: { priorityOrder: number }) => a.priorityOrder - b.priorityOrder)
+                      .map((row: { id: number; aisle: string; level: string; priorityOrder: number }) => (
+                        <div
+                          key={row.id}
+                          className="flex items-center gap-3 rounded-lg border border-orange-500/15 bg-orange-500/8 px-3 py-2"
+                        >
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-500/20 text-orange-300 text-xs font-bold flex items-center justify-center">
+                            {row.priorityOrder}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-mono text-sm font-semibold text-foreground">Aisle {row.aisle}</span>
+                            {row.level && row.level !== "*" && (
+                              <span className="text-xs text-muted-foreground ml-1.5">Level {row.level}</span>
+                            )}
+                          </div>
+                          <ListOrdered className="h-3.5 w-3.5 text-orange-400/60 shrink-0" />
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -624,3 +624,8 @@
 ## Put Away Wizard — Priority Aisle Badge on Suggestion Cards
 - [x] Update putAway.suggest return type to include aislePriorityOrder (number | null) and isPriorityAisle (boolean) on each suggestion
 - [x] Update PutAwayAssistant suggestion card UI to show a "Priority Aisle #N" badge when isPriorityAisle is true
+
+## Put Away Wizard — Collapsible Priority Legend Panel
+- [x] Fetch priority config (putAway.getPriority) in PutAwayAssistant when warehouse+customer are selected
+- [x] Render a collapsible legend panel below the suggestion list showing all configured aisles in priority order
+- [x] Legend collapses by default; user can expand to see the full priority map

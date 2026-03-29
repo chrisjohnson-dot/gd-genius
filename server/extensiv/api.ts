@@ -1002,3 +1002,46 @@ export async function startReceipt(
     error: `HTTP ${result.status}: ${JSON.stringify(result.data)}`,
   };
 }
+
+/**
+ * Complete a receiver in Extensiv — updates its status to 2 (Closed/Complete).
+ *
+ * Uses the same ETag-based optimistic concurrency pattern as startReceipt.
+ */
+export async function completeReceipt(
+  config: ExtensivClientConfig,
+  transactionId: number
+): Promise<{ success: boolean; error?: string }> {
+  const client = createExtensivClient(config);
+  // Step 1: GET the receiver to capture the current ETag
+  const { data: rawData, headers } = await client.getWithHeaders(
+    `/inventory/receivers/${transactionId}`,
+    { detail: "ReceiveItems" }
+  );
+  const etag = (headers["etag"] ?? headers["ETag"] ?? "").replace(/"/g, "");
+  // Step 2: Keep all existing fields, set status=2 (Closed/Complete)
+  const body = rawData as Record<string, unknown>;
+  if (body.readOnly && typeof body.readOnly === "object") {
+    (body.readOnly as Record<string, unknown>).status = 2;
+  }
+  // Step 3: PUT back with ETag
+  const result = await client.put(
+    `/inventory/receivers/${transactionId}`,
+    body,
+    etag || undefined
+  );
+  if (result.status === 200 || result.status === 204) {
+    return { success: true };
+  }
+  // Treat 400 "already closed/complete" as a soft success
+  if (result.status === 400) {
+    const msg = JSON.stringify(result.data).toLowerCase();
+    if (msg.includes("already") || msg.includes("closed") || msg.includes("complete")) {
+      return { success: true };
+    }
+  }
+  return {
+    success: false,
+    error: `HTTP ${result.status}: ${JSON.stringify(result.data)}`,
+  };
+}

@@ -559,3 +559,9 @@
 - [x] Show discrepancy count in the badge (e.g. "2 discrepancies")
 - [x] Highlight discrepant line items in the detail slide-over with red variance styling
 - [x] Add discrepancy summary banner at top of detail slide-over listing affected SKUs
+
+## Complete Receipt — Extensiv API Integration
+- [x] Add completeReceipt() Extensiv API helper (GET ETag, PUT status=2)
+- [x] Add receiving.completeReceipt tRPC mutation in routers.ts
+- [x] Add Complete Receipt button to detail slide-over (visible when status is In Progress)
+- [x] Invalidate receiving.list and receiving.detail queries on success

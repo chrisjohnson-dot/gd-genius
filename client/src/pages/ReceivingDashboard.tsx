@@ -149,10 +149,37 @@ function ReceiverDetailSheet({
     });
   }
 
+  const completeReceiptMutation = trpc.receiving.completeReceipt.useMutation({
+    onSuccess: () => {
+      toast.success(
+        `Receipt ${receiver?.referenceNum ?? receiver?.readOnly.transactionId} completed`,
+        { description: "Status updated to Closed/Complete in Extensiv." }
+      );
+      void utils.receiving.list.invalidate();
+      void utils.receiving.detail.invalidate();
+      void utils.receiving.kpis.invalidate();
+      onStarted?.();
+      onClose();
+    },
+    onError: (err) => {
+      toast.error("Failed to complete receipt", { description: err.message });
+    },
+  });
+
   const starting = startReceiptMutation.isPending;
+  const completing = completeReceiptMutation.isPending;
+
+  function handleCompleteReceipt() {
+    if (!receiver) return;
+    completeReceiptMutation.mutate({
+      configId,
+      transactionId: receiver.readOnly.transactionId,
+    });
+  }
 
   const canStart = detail?.readOnly.status === 0; // Expected → can start
-  const isInProgress = detail?.readOnly.status === 1;
+  const isInProgress = detail?.readOnly.status === 1; // In Progress → can complete
+  const canComplete = isInProgress;
   const canPutAway = detail?.readOnly.status === 0 || detail?.readOnly.status === 1;
 
   function handlePutAway() {
@@ -304,7 +331,7 @@ function ReceiverDetailSheet({
         </div>
 
         {/* Footer — action buttons */}
-        {detail && (canStart || isInProgress || canPutAway) && (
+        {detail && (canStart || canComplete || canPutAway) && (
           <div className="px-6 py-4 border-t border-border bg-card space-y-2">
             {canStart && (
               <Button
@@ -320,11 +347,19 @@ function ReceiverDetailSheet({
                 {starting ? "Starting Receipt…" : "Start Receipt"}
               </Button>
             )}
-            {isInProgress && (
-              <div className="flex items-center gap-2 text-sm text-amber-400 justify-center py-1">
-                <PackageOpen className="h-4 w-4" />
-                This receipt is already in progress in Extensiv.
-              </div>
+            {canComplete && (
+              <Button
+                className="w-full gap-2 h-10 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleCompleteReceipt}
+                disabled={completing}
+              >
+                {completing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {completing ? "Completing Receipt…" : "Complete Receipt"}
+              </Button>
             )}
             {canPutAway && (
               <Button

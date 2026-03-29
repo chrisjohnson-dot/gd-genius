@@ -122,7 +122,8 @@ import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoR
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt } from "./extensiv/api";
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail,startReceipt,
+  completeReceipt, } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -3430,6 +3431,21 @@ const receivingRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: result.error ?? "Failed to start receipt in Extensiv",
+        });
+      }
+      return { success: true };
+    }),
+
+  completeReceipt: protectedProcedure
+    .input(z.object({ configId: z.number(), transactionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+      const result = await completeReceipt(config, input.transactionId);
+      if (!result.success) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: result.error ?? "Failed to complete receipt in Extensiv",
         });
       }
       return { success: true };

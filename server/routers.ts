@@ -102,6 +102,9 @@ import {
   createPalletScan,
   listPalletScans,
   updatePalletScanStatus,
+  getSlaFacilityThresholds,
+  getSlaFacilityThreshold,
+  upsertSlaFacilityThreshold,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
@@ -2251,6 +2254,45 @@ const _appRouter = router({
           details: {},
         });
         return { success: true };
+      }),
+
+    // ── Per-warehouse health thresholds ──────────────────────────────────────
+    listFacilityThresholds: protectedProcedure.query(async () => {
+      return getSlaFacilityThresholds();
+    }),
+
+    getFacilityThreshold: protectedProcedure
+      .input(z.object({ facilityId: z.number().int() }))
+      .query(async ({ input }) => {
+        return getSlaFacilityThreshold(input.facilityId);
+      }),
+
+    upsertFacilityThreshold: protectedProcedure
+      .input(
+        z.object({
+          facilityId: z.number().int(),
+          facilityName: z.string().min(1).max(256),
+          greenThreshold: z.number().int().min(0).max(100).default(98),
+          yellowThreshold: z.number().int().min(0).max(100).default(95),
+          notes: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const row = await upsertSlaFacilityThreshold({
+          facilityId: input.facilityId,
+          facilityName: input.facilityName,
+          greenThreshold: input.greenThreshold,
+          yellowThreshold: input.yellowThreshold,
+          notes: input.notes ?? null,
+        });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.upsertFacilityThreshold",
+          entityType: "sla_facility_thresholds",
+          entityId: String(input.facilityId),
+          details: { greenThreshold: input.greenThreshold, yellowThreshold: input.yellowThreshold },
+        });
+        return row;
       }),
   }),
 });

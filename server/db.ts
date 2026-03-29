@@ -69,6 +69,9 @@ import {
   palletScans,
   PalletScan,
   InsertPalletScan,
+  slaFacilityThresholds,
+  SlaFacilityThreshold,
+  InsertSlaFacilityThreshold,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1887,4 +1890,54 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
     })
   );
   return results;
+}
+
+// ─── SLA Facility Thresholds ─────────────────────────────────────────────────
+
+export async function getSlaFacilityThresholds() {
+  const db = await getDb();
+  return db!.select().from(slaFacilityThresholds).orderBy(slaFacilityThresholds.facilityName);
+}
+
+export async function getSlaFacilityThreshold(facilityId: number) {
+  const db = await getDb();
+  const rows = await db!
+    .select()
+    .from(slaFacilityThresholds)
+    .where(eq(slaFacilityThresholds.facilityId, facilityId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertSlaFacilityThreshold(data: {
+  facilityId: number;
+  facilityName: string;
+  greenThreshold: number;
+  yellowThreshold: number;
+  notes?: string | null;
+}) {
+  const db = await getDb();
+  await db!
+    .insert(slaFacilityThresholds)
+    .values({
+      facilityId: data.facilityId,
+      facilityName: data.facilityName,
+      greenThreshold: data.greenThreshold,
+      yellowThreshold: data.yellowThreshold,
+      notes: data.notes ?? null,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        facilityName: data.facilityName,
+        greenThreshold: data.greenThreshold,
+        yellowThreshold: data.yellowThreshold,
+        notes: data.notes ?? null,
+      },
+    });
+  const rows = await db!
+    .select()
+    .from(slaFacilityThresholds)
+    .where(eq(slaFacilityThresholds.facilityId, data.facilityId))
+    .limit(1);
+  return rows[0];
 }

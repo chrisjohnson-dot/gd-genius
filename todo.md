@@ -457,3 +457,10 @@
 - [x] Green if ≥98% of orders within SLA, yellow if ≥95%, red if <95%
 - [x] SLA % badge shown on each warehouse card and fullscreen header
 - [x] Card border/shadow colour matches the three-tier health status
+
+## SLA Tracker — Configurable Per-Warehouse Health Thresholds
+- [x] Add sla_facility_thresholds DB table (facilityId, facilityName, greenThreshold, yellowThreshold)
+- [x] Add getSlaFacilityThresholds, getSlaFacilityThreshold, upsertSlaFacilityThreshold DB helpers
+- [x] Add listFacilityThresholds, getFacilityThreshold, upsertFacilityThreshold tRPC procedures
+- [x] Use per-warehouse thresholds in WarehouseSlaCard colour logic (fall back to 98/95 defaults)
+- [x] Add FacilityThresholdsSection editor to SLA Requirements tab (+/- stepper, Save button, validation)

@@ -560,3 +560,21 @@ export const palletScans = mysqlTable("pallet_scans", {
 });
 export type PalletScan = typeof palletScans.$inferSelect;
 export type InsertPalletScan = typeof palletScans.$inferInsert;
+
+// ─── SLA Facility Thresholds ──────────────────────────────────────────────────
+// Per-warehouse configurable health thresholds for the SLA Tracker colour system.
+// One row per facilityId. If no row exists, the global defaults (98/95) apply.
+export const slaFacilityThresholds = mysqlTable("sla_facility_thresholds", {
+  id: int("id").autoincrement().primaryKey(),
+  facilityId: int("facilityId").notNull().unique(),
+  facilityName: varchar("facilityName", { length: 256 }).notNull(),
+  // Minimum % of orders in SLA to show green (0–100, default 98)
+  greenThreshold: int("greenThreshold").notNull().default(98),
+  // Minimum % of orders in SLA to show yellow (0–100, default 95); below this is red
+  yellowThreshold: int("yellowThreshold").notNull().default(95),
+  notes: text("notes"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SlaFacilityThreshold = typeof slaFacilityThresholds.$inferSelect;
+export type InsertSlaFacilityThreshold = typeof slaFacilityThresholds.$inferInsert;

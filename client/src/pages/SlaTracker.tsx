@@ -107,15 +107,21 @@ type SortKey = "clientName" | "referenceNum" | "ageCalendarDays" | "slaStatus" |
 type SortDir = "asc" | "desc";
 
 function WarehouseSlaCard({
+  facilityId,
   facilityName,
   orders,
   drillDown = false,
   onDrillDown,
+  greenThreshold = 98,
+  yellowThreshold = 95,
 }: {
+  facilityId?: number;
   facilityName: string;
   orders: SlaOrder[];
   drillDown?: boolean;
   onDrillDown?: () => void;
+  greenThreshold?: number;
+  yellowThreshold?: number;
 }) {
   const [expanded, setExpanded] = useState(drillDown ? true : true);
   const [sortKey, setSortKey] = useState<SortKey>("slaStatus");
@@ -126,10 +132,11 @@ function WarehouseSlaCard({
   const inSlaCount = orders.filter((o) => o.slaStatus === "in_sla").length;
   const outOfSlaCount = orders.filter((o) => o.slaStatus === "out_of_sla").length;
 
-  // Three-tier SLA health: green ≥98%, yellow ≥95%, red <95%
+  // Three-tier SLA health using per-warehouse configurable thresholds
   const slaRate = orders.length > 0 ? inSlaCount / orders.length : 1;
+  const slaRatePct = slaRate * 100;
   const slaHealth: "green" | "yellow" | "red" =
-    slaRate >= 0.98 ? "green" : slaRate >= 0.95 ? "yellow" : "red";
+    slaRatePct >= greenThreshold ? "green" : slaRatePct >= yellowThreshold ? "yellow" : "red";
   const slaHealthStyles = {
     green:  { border: "2px solid #16a34a", shadow: "0 0 0 1px rgba(22,163,74,0.15), 0 4px 16px rgba(22,163,74,0.10)",  leftBar: "#16a34a" },
     yellow: { border: "2px solid #ca8a04", shadow: "0 0 0 1px rgba(202,138,4,0.15), 0 4px 16px rgba(202,138,4,0.10)",   leftBar: "#ca8a04" },
@@ -961,6 +968,7 @@ function SlaRequirementsTab() {
 
   return (
     <div className="space-y-4">
+      <FacilityThresholdsSection />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-semibold text-foreground">SLA Requirements</h2>
@@ -1194,11 +1202,188 @@ function SlaRequirementsTab() {
 }
 
 
+// ─── Facility Health Thresholds section ─────────────────────────────────────
+type FacilityThresholdRow = {
+  id?: number;
+  facilityId: number;
+  facilityName: string;
+  greenThreshold: number;
+  yellowThreshold: number;
+  notes?: string | null;
+};
+
+function FacilityThresholdsSection() {
+  const utils = trpc.useUtils();
+  const { data: thresholds = [], isLoading } = trpc.sla.listFacilityThresholds.useQuery();
+  // Fetch all facilities from the SLA orders to know which facilityIds exist
+  const { data: slaOrders = [] } = trpc.sla.getStatus.useQuery();
+
+  // Build a list of known facilities from SLA orders
+  const knownFacilities = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const o of slaOrders as SlaOrder[]) {
+      if (!map.has(o.facilityId)) map.set(o.facilityId, o.facilityName ?? `Facility ${o.facilityId}`);
+    }
+    return Array.from(map.entries()).map(([facilityId, facilityName]) => ({ facilityId, facilityName })).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
+  }, [slaOrders]);
+
+  // Local pending edits: facilityId -> {green, yellow}
+  const [pending, setPending] = useState<Record<number, { green: number; yellow: number }>>({});
+  const [saving, setSaving] = useState<Record<number, boolean>>({});
+
+  const upsert = trpc.sla.upsertFacilityThreshold.useMutation({
+    onSuccess: (_data: unknown, vars: { facilityId: number }) => {
+      toast.success("Thresholds saved");
+      utils.sla.listFacilityThresholds.invalidate();
+      setSaving((s) => { const n = { ...s }; delete n[vars.facilityId]; return n; });
+      setPending((p) => { const n = { ...p }; delete n[vars.facilityId]; return n; });
+    },
+    onError: (err: { message: string }, vars: { facilityId: number }) => {
+      toast.error(err.message);
+      setSaving((s) => { const n = { ...s }; delete n[vars.facilityId]; return n; });
+    },
+  });
+
+  function getRow(facilityId: number, facilityName: string): FacilityThresholdRow {
+    const saved = thresholds.find((t) => t.facilityId === facilityId);
+    const p = pending[facilityId];
+    return {
+      id: saved?.id,
+      facilityId,
+      facilityName,
+      greenThreshold: p?.green ?? saved?.greenThreshold ?? 98,
+      yellowThreshold: p?.yellow ?? saved?.yellowThreshold ?? 95,
+      notes: saved?.notes,
+    };
+  }
+
+  function isDirty(facilityId: number) {
+    return !!pending[facilityId];
+  }
+
+  function handleChange(facilityId: number, field: "green" | "yellow", value: number) {
+    setPending((p) => ({
+      ...p,
+      [facilityId]: {
+        green: p[facilityId]?.green ?? (thresholds.find((t) => t.facilityId === facilityId)?.greenThreshold ?? 98),
+        yellow: p[facilityId]?.yellow ?? (thresholds.find((t) => t.facilityId === facilityId)?.yellowThreshold ?? 95),
+        [field]: value,
+      },
+    }));
+  }
+
+  function handleSave(facilityId: number, facilityName: string) {
+    const row = getRow(facilityId, facilityName);
+    if (row.greenThreshold <= row.yellowThreshold) {
+      toast.error("Green threshold must be higher than yellow threshold.");
+      return;
+    }
+    setSaving((s) => ({ ...s, [facilityId]: true }));
+    upsert.mutate({
+      facilityId,
+      facilityName,
+      greenThreshold: row.greenThreshold,
+      yellowThreshold: row.yellowThreshold,
+    });
+  }
+
+  if (isLoading || knownFacilities.length === 0) return null;
+
+  return (
+    <Card className="mb-4">
+      <CardHeader className="pb-2 pt-4 px-4">
+        <div>
+          <CardTitle className="text-sm font-semibold">Warehouse Health Thresholds</CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Set the minimum % of orders within SLA to display green or yellow on each warehouse card.
+            Below the yellow threshold is shown as red.
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr style={{ background: "#15527f" }}>
+                <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-white">Warehouse</th>
+                <th className="px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wide text-white">Green ≥ (%)</th>
+                <th className="px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wide text-white">Yellow ≥ (%)</th>
+                <th className="px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wide text-white">Red &lt; (%)</th>
+                <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wide text-white">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {knownFacilities.map((fac, idx) => {
+                const row = getRow(fac.facilityId, fac.facilityName);
+                const dirty = isDirty(fac.facilityId);
+                const isSaving = saving[fac.facilityId];
+                const rowBg = idx % 2 === 0 ? "#ffffff" : "#eaf4fb";
+                return (
+                  <tr key={fac.facilityId} style={{ background: rowBg }}>
+                    <td className="px-4 py-2.5 font-medium text-foreground">{fac.facilityName}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleChange(fac.facilityId, "green", Math.max(0, row.greenThreshold - 1))}
+                          className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+                        >−</button>
+                        <span className="w-10 text-center font-mono text-sm font-semibold text-green-700">{row.greenThreshold}%</span>
+                        <button
+                          onClick={() => handleChange(fac.facilityId, "green", Math.min(100, row.greenThreshold + 1))}
+                          className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+                        >+</button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleChange(fac.facilityId, "yellow", Math.max(0, row.yellowThreshold - 1))}
+                          className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+                        >−</button>
+                        <span className="w-10 text-center font-mono text-sm font-semibold text-yellow-700">{row.yellowThreshold}%</span>
+                        <button
+                          onClick={() => handleChange(fac.facilityId, "yellow", Math.min(100, row.yellowThreshold + 1))}
+                          className="h-6 w-6 rounded border border-border bg-background text-muted-foreground hover:bg-muted flex items-center justify-center text-xs font-bold"
+                        >+</button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-center font-mono text-sm font-semibold text-red-600">
+                      &lt;{row.yellowThreshold}%
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {dirty ? (
+                        <Button
+                          size="sm"
+                          className="h-7 px-2.5 text-xs gap-1"
+                          onClick={() => handleSave(fac.facilityId, fac.facilityName)}
+                          disabled={!!isSaving}
+                        >
+                          {isSaving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Timer className="h-3 w-3" />}
+                          Save
+                        </Button>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">
+                          {thresholds.find((t) => t.facilityId === fac.facilityId) ? "Saved" : "Default"}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main SLA Tracker page ────────────────────────────────────────────────────
 export default function SlaTracker() {
   const { data: slaOrders = [], isLoading, refetch, isFetching } = trpc.sla.getStatus.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000, // refresh every 5 minutes
   });
+  const { data: facilityThresholds = [] } = trpc.sla.listFacilityThresholds.useQuery();
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
 
   // Group orders by facility
@@ -1316,18 +1501,24 @@ export default function SlaTracker() {
             ) : selectedGroup ? (
               <WarehouseSlaCard
                 key={selectedGroup.facilityId}
+                facilityId={selectedGroup.facilityId}
                 facilityName={selectedGroup.facilityName}
                 orders={selectedGroup.orders}
                 drillDown
+                greenThreshold={facilityThresholds.find((t) => t.facilityId === selectedGroup.facilityId)?.greenThreshold ?? 98}
+                yellowThreshold={facilityThresholds.find((t) => t.facilityId === selectedGroup.facilityId)?.yellowThreshold ?? 95}
               />
             ) : (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {facilityGroups.map((group) => (
                   <WarehouseSlaCard
                     key={group.facilityId}
+                    facilityId={group.facilityId}
                     facilityName={group.facilityName}
                     orders={group.orders}
                     onDrillDown={() => setSelectedFacilityId(group.facilityId)}
+                    greenThreshold={facilityThresholds.find((t) => t.facilityId === group.facilityId)?.greenThreshold ?? 98}
+                    yellowThreshold={facilityThresholds.find((t) => t.facilityId === group.facilityId)?.yellowThreshold ?? 95}
                   />
                 ))}
               </div>

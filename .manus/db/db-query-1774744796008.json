@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `sla_facility_thresholds` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `facilityId` int NOT NULL,\n  `facilityName` varchar(256) NOT NULL,\n  `greenThreshold` int NOT NULL DEFAULT 98,\n  `yellowThreshold` int NOT NULL DEFAULT 95,\n  `notes` text,\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  CONSTRAINT `sla_facility_thresholds_id` PRIMARY KEY(`id`),\n  CONSTRAINT `sla_facility_thresholds_facilityId_unique` UNIQUE(`facilityId`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `sla_facility_thresholds` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `facilityId` int NOT NULL,\n  `facilityName` varchar(256) NOT NULL,\n  `greenThreshold` int NOT NULL DEFAULT 98,\n  `yellowThreshold` int NOT NULL DEFAULT 95,\n  `notes` text,\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  CONSTRAINT `sla_facility_thresholds_id` PRIMARY KEY(`id`),\n  CONSTRAINT `sla_facility_thresholds_facilityId_unique` UNIQUE(`facilityId`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 154
+}

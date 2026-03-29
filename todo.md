@@ -452,3 +452,8 @@
 - [x] Add customer filter input above Recent Sessions panel (client-side filter on loaded sessions)
 - [x] Show filtered empty state when no sessions match the filter
 - [x] Clear (x) button to reset filter; Show more/less hidden when filter yields no results
+
+## SLA Tracker — Warehouse Conditional Formatting
+- [x] Green if ≥98% of orders within SLA, yellow if ≥95%, red if <95%
+- [x] SLA % badge shown on each warehouse card and fullscreen header
+- [x] Card border/shadow colour matches the three-tier health status

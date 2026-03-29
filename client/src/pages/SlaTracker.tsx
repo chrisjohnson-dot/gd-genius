@@ -126,6 +126,17 @@ function WarehouseSlaCard({
   const inSlaCount = orders.filter((o) => o.slaStatus === "in_sla").length;
   const outOfSlaCount = orders.filter((o) => o.slaStatus === "out_of_sla").length;
 
+  // Three-tier SLA health: green ≥98%, yellow ≥95%, red <95%
+  const slaRate = orders.length > 0 ? inSlaCount / orders.length : 1;
+  const slaHealth: "green" | "yellow" | "red" =
+    slaRate >= 0.98 ? "green" : slaRate >= 0.95 ? "yellow" : "red";
+  const slaHealthStyles = {
+    green:  { border: "2px solid #16a34a", shadow: "0 0 0 1px rgba(22,163,74,0.15), 0 4px 16px rgba(22,163,74,0.10)",  leftBar: "#16a34a" },
+    yellow: { border: "2px solid #ca8a04", shadow: "0 0 0 1px rgba(202,138,4,0.15), 0 4px 16px rgba(202,138,4,0.10)",   leftBar: "#ca8a04" },
+    red:    { border: "2px solid #ef4444", shadow: "0 0 0 1px rgba(239,68,68,0.15), 0 4px 16px rgba(239,68,68,0.10)",   leftBar: "#ef4444" },
+  }[slaHealth];
+  const hasBreaches = outOfSlaCount > 0;
+
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("asc"); }
@@ -154,8 +165,6 @@ function WarehouseSlaCard({
       : <ChevronDown className="h-3 w-3 ml-1 text-blue-500 inline" />;
   }
 
-  const hasBreaches = outOfSlaCount > 0;
-
   // ── Full-screen overlay ──
   if (isFullScreen) {
     return (
@@ -163,7 +172,7 @@ function WarehouseSlaCard({
         {/* Full-screen header */}
         <div
           className="flex items-center justify-between px-6 py-4 border-b border-border bg-card shrink-0"
-          style={{ borderLeft: hasBreaches ? "4px solid #ef4444" : "4px solid transparent" }}
+          style={{ borderLeft: `4px solid ${slaHealthStyles.leftBar}` }}
         >
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center">
@@ -172,10 +181,21 @@ function WarehouseSlaCard({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-foreground">{facilityName}</h2>
-                {hasBreaches && (
+                {slaHealth === "green" && (
+                  <Badge className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold">
+                    {Math.round(slaRate * 100)}% In SLA
+                  </Badge>
+                )}
+                {slaHealth === "yellow" && (
+                  <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-200 text-[10px] font-bold">
+                    <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                    {Math.round(slaRate * 100)}% In SLA
+                  </Badge>
+                )}
+                {slaHealth === "red" && (
                   <Badge className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold">
                     <AlertTriangle className="h-2.5 w-2.5 mr-1" />
-                    {outOfSlaCount} Breached
+                    {Math.round(slaRate * 100)}% In SLA
                   </Badge>
                 )}
               </div>
@@ -371,8 +391,8 @@ function WarehouseSlaCard({
     <div
       className="bg-card rounded-2xl overflow-hidden"
       style={{
-        border: hasBreaches ? "2px solid #ef4444" : "1px solid hsl(var(--border))",
-        boxShadow: hasBreaches ? "0 0 0 1px rgba(239,68,68,0.15), 0 4px 16px rgba(239,68,68,0.10)" : undefined,
+        border: slaHealthStyles.border,
+        boxShadow: slaHealthStyles.shadow,
       }}
     >
       {/* Card header */}
@@ -397,10 +417,22 @@ function WarehouseSlaCard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {hasBreaches && (
+            {/* SLA % health badge */}
+            {slaHealth === "green" && (
+              <Badge className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold">
+                {Math.round(slaRate * 100)}% In SLA
+              </Badge>
+            )}
+            {slaHealth === "yellow" && (
+              <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-200 text-[10px] font-bold">
+                <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                {Math.round(slaRate * 100)}% In SLA
+              </Badge>
+            )}
+            {slaHealth === "red" && (
               <Badge className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold">
                 <AlertTriangle className="h-2.5 w-2.5 mr-1" />
-                {outOfSlaCount} Breached
+                {Math.round(slaRate * 100)}% In SLA
               </Badge>
             )}
             {!drillDown && !onDrillDown && (

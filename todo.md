@@ -500,3 +500,8 @@
 - [x] Show verification badge on Run History rows (verified/partial/failed/pending)
 - [x] Show per-order verification detail in Run Detail page
 - [x] Add manual Re-verify button in Run Detail for on-demand re-checks
+
+## Open Orders — Verification Issues KPI Card
+- [x] Add getUnresolvedVerificationCount DB helper (confirmed runs with verificationStatus in partial/mismatch/failed)
+- [x] Add allocation.unresolvedVerificationCount tRPC query
+- [x] Add Verification Issues KPI card to Open Orders dashboard (count badge + link to Run History)

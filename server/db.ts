@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, isNotNull, isNull, sql } from "drizzle-orm";
+import { eq, desc, and, gte, isNotNull, isNull, sql, inArray, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -299,6 +299,21 @@ export async function deleteAllocationRun(id: number): Promise<void> {
   // Delete child run orders first (no cascade in MySQL by default)
   await db.delete(allocationRunOrders).where(eq(allocationRunOrders.runId, id));
   await db.delete(allocationRuns).where(eq(allocationRuns.id, id));
+}
+
+export async function getUnresolvedVerificationCount(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(allocationRuns)
+    .where(
+      and(
+        eq(allocationRuns.status, "confirmed"),
+        inArray(allocationRuns.verificationStatus, ["partial", "mismatch", "failed"])
+      )
+    );
+  return Number(result[0]?.count ?? 0);
 }
 
 // ─── Audit Logs ──────────────────────────────────────────────────────────────

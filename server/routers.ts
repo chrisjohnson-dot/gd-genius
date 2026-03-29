@@ -23,6 +23,7 @@ import {
   updateAllocationRunOrder,
   getAllocationRunOrderById,
   deleteAllocationRun,
+  getUnresolvedVerificationCount,
   createAuditLog,
   getAuditLogs,
   getDistinctAuditActions,
@@ -1565,6 +1566,12 @@ const _appRouter = router({
           })
         );
         return runsWithOrders;
+      }),
+
+    unresolvedVerificationCount: protectedProcedure
+      .query(async () => {
+        const count = await getUnresolvedVerificationCount();
+        return { count };
       }),
 
     runDetail: protectedProcedure

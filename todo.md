@@ -472,3 +472,9 @@
 - [x] Build SlaSparkline SVG component (polyline + dots + trend arrow + last % label)
 - [x] Wire sparkline below KPI tiles in each WarehouseSlaCard (respects per-warehouse thresholds)
 - [x] 7 unit tests for slaDailySnapshots (282 tests passing total)
+
+## SLA Tracker — Nightly Snapshot Cron Job
+- [x] Create server/scheduler/slaNightlySnapshot.ts (groups orders by facility, computes SLA %, upserts snapshots)
+- [x] Register startSlaNightlySnapshot() at server startup (midnight UTC via node-cron)
+- [x] Add sla.runNightlySnapshot tRPC mutation for manual on-demand trigger
+- [x] 8 unit tests for slaNightlySnapshot (290 tests passing total)

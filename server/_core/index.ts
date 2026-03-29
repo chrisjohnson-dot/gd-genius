@@ -15,6 +15,7 @@ import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 import { registerCortexRoutes } from "../cortex/routes";
 import { flushPendingWebhooks } from "../cortex/webhook";
 import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
+import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -83,6 +84,8 @@ async function startServer() {
     setInterval(() => flushPendingWebhooks(), 5 * 60 * 1000);
     // Retry failed ClearSight webhook pushes with exponential backoff (1min, 5min, 15min)
     startWebhookRetryScheduler();
+    // Record nightly SLA rate snapshots for all facilities at midnight UTC
+    startSlaNightlySnapshot();
   });
 }
 

@@ -112,6 +112,7 @@ import { fireCortexWebhook } from "./cortex/webhook";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
+import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -2319,6 +2320,13 @@ const _appRouter = router({
         await upsertSlaDailySnapshot(input);
         return { ok: true };
       }),
+
+    // Manual trigger — runs the same logic as the nightly cron job immediately.
+    // Useful for testing or backfilling snapshots after initial setup.
+    runNightlySnapshot: protectedProcedure.mutation(async () => {
+      const results = await recordSlaNightlySnapshot();
+      return { recorded: results.length, facilities: results };
+    }),
   }),
 });
 // ─── Lane Threshold router ───────────────────────────────────────────────────

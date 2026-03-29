@@ -578,3 +578,21 @@ export const slaFacilityThresholds = mysqlTable("sla_facility_thresholds", {
 });
 export type SlaFacilityThreshold = typeof slaFacilityThresholds.$inferSelect;
 export type InsertSlaFacilityThreshold = typeof slaFacilityThresholds.$inferInsert;
+
+// ─── SLA Daily Snapshots ──────────────────────────────────────────────────────
+// One row per facility per calendar day. Captured by a nightly scheduler so the
+// SLA Tracker can display a 7-day sparkline trend on each warehouse card.
+export const slaDailySnapshots = mysqlTable("sla_daily_snapshots", {
+  id: int("id").autoincrement().primaryKey(),
+  facilityId: int("facilityId").notNull(),
+  facilityName: varchar("facilityName", { length: 256 }).notNull(),
+  // ISO date string YYYY-MM-DD (UTC) for the snapshot day
+  snapshotDate: varchar("snapshotDate", { length: 10 }).notNull(),
+  inSlaCount: int("inSlaCount").notNull().default(0),
+  totalCount: int("totalCount").notNull().default(0),
+  // Stored as integer percentage 0–100 (rounded)
+  slaRate: int("slaRate").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SlaDailySnapshot = typeof slaDailySnapshots.$inferSelect;
+export type InsertSlaDailySnapshot = typeof slaDailySnapshots.$inferInsert;

@@ -72,6 +72,9 @@ import {
   slaFacilityThresholds,
   SlaFacilityThreshold,
   InsertSlaFacilityThreshold,
+  slaDailySnapshots,
+  SlaDailySnapshot,
+  InsertSlaDailySnapshot,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1940,4 +1943,61 @@ export async function upsertSlaFacilityThreshold(data: {
     .where(eq(slaFacilityThresholds.facilityId, data.facilityId))
     .limit(1);
   return rows[0];
+}
+
+// ─── SLA Daily Snapshots ──────────────────────────────────────────────────────
+
+/** Upsert a daily SLA snapshot for one facility (insert or replace for that date). */
+export async function upsertSlaDailySnapshot(data: {
+  facilityId: number;
+  facilityName: string;
+  snapshotDate: string; // YYYY-MM-DD
+  inSlaCount: number;
+  totalCount: number;
+  slaRate: number;
+}) {
+  const db = await getDb();
+  // Delete any existing snapshot for this facility+date then insert fresh
+  await db!
+    .delete(slaDailySnapshots)
+    .where(
+      and(
+        eq(slaDailySnapshots.facilityId, data.facilityId),
+        eq(slaDailySnapshots.snapshotDate, data.snapshotDate)
+      )
+    );
+  await db!.insert(slaDailySnapshots).values(data);
+}
+
+/** Return the last N days of snapshots for a facility, ordered oldest-first. */
+export async function getSlaDailyHistory(
+  facilityId: number,
+  days = 7
+): Promise<SlaDailySnapshot[]> {
+  const db = await getDb();
+  const rows = await db!
+    .select()
+    .from(slaDailySnapshots)
+    .where(eq(slaDailySnapshots.facilityId, facilityId))
+    .orderBy(desc(slaDailySnapshots.snapshotDate))
+    .limit(days);
+  // Return oldest-first so sparklines render left-to-right chronologically
+  return rows.reverse();
+}
+
+/** Return the latest snapshot for every facility (one row per facility). */
+export async function getLatestSlaDailySnapshots(): Promise<SlaDailySnapshot[]> {
+  const db = await getDb();
+  // Subquery: max snapshotDate per facilityId
+  const rows = await db!
+    .select()
+    .from(slaDailySnapshots)
+    .orderBy(desc(slaDailySnapshots.snapshotDate));
+  // Deduplicate: keep only the most recent row per facilityId
+  const seen = new Set<number>();
+  return rows.filter((r) => {
+    if (seen.has(r.facilityId)) return false;
+    seen.add(r.facilityId);
+    return true;
+  });
 }

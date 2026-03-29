@@ -47,6 +47,66 @@ import { FileDown, FileText } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+// ─── SLA Sparkline ───────────────────────────────────────────────────────────
+type SparkPoint = { snapshotDate: string; slaRate: number };
+
+function SlaSparkline({ points, greenThreshold = 98, yellowThreshold = 95 }: {
+  points: SparkPoint[];
+  greenThreshold?: number;
+  yellowThreshold?: number;
+}) {
+  if (!points || points.length < 2) {
+    return (
+      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <span className="opacity-50">No trend data yet</span>
+      </div>
+    );
+  }
+
+  const W = 80, H = 28, PAD = 2;
+  const rates = points.map((p) => p.slaRate);
+  const min = Math.max(0, Math.min(...rates) - 5);
+  const max = Math.min(100, Math.max(...rates) + 5);
+  const range = max - min || 1;
+
+  const xs = points.map((_, i) => PAD + (i / (points.length - 1)) * (W - PAD * 2));
+  const ys = rates.map((r) => PAD + (1 - (r - min) / range) * (H - PAD * 2));
+
+  const pathD = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
+
+  const lastRate = rates[rates.length - 1];
+  const firstRate = rates[0];
+  const delta = lastRate - firstRate;
+  const trendColor = lastRate >= greenThreshold ? "#16a34a" : lastRate >= yellowThreshold ? "#ca8a04" : "#ef4444";
+  const TrendArrow = delta > 0.5 ? "↑" : delta < -0.5 ? "↓" : "→";
+  const arrowColor = delta > 0.5 ? "#16a34a" : delta < -0.5 ? "#ef4444" : "#6b7280";
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
+        <polyline
+          points={xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ")}
+          fill="none"
+          stroke={trendColor}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.7"
+        />
+        {/* dots */}
+        {xs.map((x, i) => (
+          <circle key={i} cx={x} cy={ys[i]} r="1.5" fill={trendColor} opacity="0.9" />
+        ))}
+        {/* last point highlight */}
+        <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r="2.5" fill={trendColor} />
+      </svg>
+      <span className="text-[10px] font-bold" style={{ color: arrowColor }}>
+        {TrendArrow} {lastRate}%
+      </span>
+    </div>
+  );
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SlaOrder = {
   id: number;
@@ -128,6 +188,13 @@ function WarehouseSlaCard({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterStatus, setFilterStatus] = useState<"all" | "in_sla" | "out_of_sla">("all");
   const [isFullScreen, setIsFullScreen] = useState(false);
+
+  // 7-day sparkline history
+  const historyQuery = trpc.sla.facilityHistory.useQuery(
+    { facilityId: facilityId ?? 0, days: 7 },
+    { enabled: !!facilityId, staleTime: 5 * 60 * 1000 }
+  );
+  const sparkPoints = historyQuery.data ?? [];
 
   const inSlaCount = orders.filter((o) => o.slaStatus === "in_sla").length;
   const outOfSlaCount = orders.filter((o) => o.slaStatus === "out_of_sla").length;
@@ -476,6 +543,18 @@ function WarehouseSlaCard({
             <p className="text-[10px] font-semibold uppercase tracking-wider text-red-600 mt-0.5">Out of SLA</p>
           </button>
         </div>
+
+        {/* 7-day sparkline */}
+        {facilityId && (
+          <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide shrink-0">7-day trend</span>
+            <SlaSparkline
+              points={sparkPoints}
+              greenThreshold={greenThreshold}
+              yellowThreshold={yellowThreshold}
+            />
+          </div>
+        )}
       </div>
 
       {/* Order table */}

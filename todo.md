@@ -464,3 +464,11 @@
 - [x] Add listFacilityThresholds, getFacilityThreshold, upsertFacilityThreshold tRPC procedures
 - [x] Use per-warehouse thresholds in WarehouseSlaCard colour logic (fall back to 98/95 defaults)
 - [x] Add FacilityThresholdsSection editor to SLA Requirements tab (+/- stepper, Save button, validation)
+
+## SLA Tracker — 7-Day Trend Sparkline
+- [x] Add sla_daily_snapshots DB table (facilityId, facilityName, snapshotDate, inSlaCount, totalCount, slaRate)
+- [x] Add upsertSlaDailySnapshot, getSlaDailyHistory, getLatestSlaDailySnapshots DB helpers
+- [x] Add sla.facilityHistory query and sla.recordSnapshot mutation tRPC procedures
+- [x] Build SlaSparkline SVG component (polyline + dots + trend arrow + last % label)
+- [x] Wire sparkline below KPI tiles in each WarehouseSlaCard (respects per-warehouse thresholds)
+- [x] 7 unit tests for slaDailySnapshots (282 tests passing total)

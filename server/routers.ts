@@ -105,6 +105,8 @@ import {
   getSlaFacilityThresholds,
   getSlaFacilityThreshold,
   upsertSlaFacilityThreshold,
+  getSlaDailyHistory,
+  upsertSlaDailySnapshot,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
@@ -2293,6 +2295,29 @@ const _appRouter = router({
           details: { greenThreshold: input.greenThreshold, yellowThreshold: input.yellowThreshold },
         });
         return row;
+      }),
+
+    // ── 7-day sparkline history ──────────────────────────────────────────────
+    facilityHistory: protectedProcedure
+      .input(z.object({ facilityId: z.number(), days: z.number().int().min(1).max(90).default(7) }))
+      .query(async ({ input }) => {
+        return getSlaDailyHistory(input.facilityId, input.days);
+      }),
+
+    recordSnapshot: protectedProcedure
+      .input(
+        z.object({
+          facilityId: z.number(),
+          facilityName: z.string(),
+          snapshotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          inSlaCount: z.number().int().min(0),
+          totalCount: z.number().int().min(0),
+          slaRate: z.number().int().min(0).max(100),
+        })
+      )
+      .mutation(async ({ input }) => {
+        await upsertSlaDailySnapshot(input);
+        return { ok: true };
       }),
   }),
 });

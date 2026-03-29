@@ -534,3 +534,10 @@
 - [x] Add putAway.session tRPC procedures: start, list scans, add scan, clear
 - [x] Build PutAwayAssistant page: scan input bar, suggestion card with location type badge, session scan history table
 - [ ] Write vitest tests for put-away suggestion logic (deferred — requires live Extensiv mock data)
+
+## Receiving Dashboard — Warehouse-Grouped Redesign
+- [x] Group open receipts by warehouse (facility) on the dashboard
+- [x] Show all open receipts per warehouse in a list (no status filter by default)
+- [x] Click receipt row → detail slide-over with full line items
+- [x] Add "Start Receipt" button in the detail slide-over
+- [x] Remove old KPI-first layout; warehouse cards become the primary UI

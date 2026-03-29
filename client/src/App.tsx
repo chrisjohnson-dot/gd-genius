@@ -35,6 +35,7 @@ import PalletScanner from "@/pages/PalletScanner";
 import ReceivingDashboard from "@/pages/ReceivingDashboard";
 import PutAwayAssistant from "@/pages/PutAwayAssistant";
 import ReceiptConfirmation from "@/pages/ReceiptConfirmation";
+import PutAwayPriorityConfig from "@/pages/PutAwayPriorityConfig";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -80,6 +81,7 @@ function AppRoutes() {
         <Route path="/receiving" component={ReceivingDashboard} />
         <Route path="/receiving/confirm" component={ReceiptConfirmation} />
         <Route path="/receiving/put-away" component={PutAwayAssistant} />
+        <Route path="/receiving/put-away/priority" component={PutAwayPriorityConfig} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

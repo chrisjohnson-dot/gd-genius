@@ -120,6 +120,9 @@ import {
   createMuLabels,
   getMuLabelsForTransaction,
   deleteMuLabelsForTransaction,
+  getPutAwayPriorities,
+  savePutAwayPriorities,
+  deletePutAwayPriorities,
   type VerificationStatus,
   type OrderVerificationResult,
 } from "./db";
@@ -516,6 +519,18 @@ const _appRouter = router({
         const config = await getExtensivConfigById(input.configId);
         if (!config) throw new TRPCError({ code: "NOT_FOUND" });
         return fetchCustomersForFacility(config, input.facilityId);
+      }),
+
+    /**
+     * Returns all locations for a facility from Extensiv.
+     * Used by the Put Away Priority Config screen.
+     */
+    locations: protectedProcedure
+      .input(z.object({ configId: z.number(), facilityId: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        return fetchExtensivLocations(config, input.facilityId);
       }),
 
     customers: protectedProcedure
@@ -3638,12 +3653,30 @@ const putAwayRouter = router({
       const config = await getExtensivConfigById(input.configId);
       if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
 
-      // Fetch inventory and location configs in parallel
-      const [inventory, locationCfgs, extensivLocations] = await Promise.all([
+      // Fetch inventory, location configs, Extensiv locations, and priority config in parallel
+      const [inventory, locationCfgs, extensivLocations, priorityConfig] = await Promise.all([
         fetchInventory(config, input.customerId, input.facilityId),
         getLocationConfigsByCustomer(input.configId, input.customerId),
         fetchExtensivLocations(config, input.facilityId),
+        getPutAwayPriorities(input.configId, input.facilityId, input.customerId),
       ]);
+
+      // Build aisle priority map: aisle (uppercase) -> priorityOrder (1 = highest priority)
+      // Priority config entries with level="*" apply to all locations in that aisle.
+      const aislePriorityMap = new Map<string, number>();
+      for (const p of priorityConfig) {
+        aislePriorityMap.set(p.aisle.toUpperCase(), p.priorityOrder);
+      }
+
+      /**
+       * Returns the configured aisle priority for a location name.
+       * Location names follow the pattern "AISLE-ROW-LEVEL" (e.g. "D-017-C").
+       * If no priority is configured for the aisle, returns null.
+       */
+      function getAislePriority(locationName: string): number | null {
+        const aisle = locationName.split("-")[0]?.toUpperCase() ?? "";
+        return aislePriorityMap.has(aisle) ? aislePriorityMap.get(aisle)! : null;
+      }
 
       // Build location type map: locationId -> locationType
       const locationTypeMap = new Map<number, "pick_face" | "warehouse" | "staging">();
@@ -3693,6 +3726,19 @@ const putAwayRouter = router({
 
       const suggestions: Suggestion[] = [];
 
+      // Priority tiers (lower number = better):
+      //   1  - consolidate in a prioritised aisle (pick_face)
+      //   2  - consolidate in a prioritised aisle (warehouse)
+      //   3  - consolidate in any aisle (pick_face)
+      //   4  - consolidate in any aisle (warehouse)
+      //   5  - empty pick_face in a prioritised aisle
+      //   6  - empty warehouse in a prioritised aisle
+      //   7  - empty pick_face (no priority config)
+      //   8  - empty warehouse (no priority config)
+      // Within the same tier, sort by aislePriority (ascending) then alphabetically.
+
+      const hasPriorityConfig = aislePriorityMap.size > 0;
+
       // 1. Consolidation candidates (locations already holding this SKU)
       for (const [locName, recs] of Array.from(skuLocationMap.entries())) {
         const locType = locationNameTypeMap.get(locName) ?? "warehouse";
@@ -3706,6 +3752,16 @@ const putAwayRouter = router({
           return a.receiveItemId - b.receiveItemId;
         });
         const totalQty = recs.reduce((s: number, r: { available: number }) => s + r.available, 0);
+        const aislePri = getAislePriority(locName);
+        const isPrioritised = aislePri !== null;
+        let priority: number;
+        if (hasPriorityConfig) {
+          priority = locType === "pick_face"
+            ? (isPrioritised ? 1 : 3)
+            : (isPrioritised ? 2 : 4);
+        } else {
+          priority = locType === "pick_face" ? 1 : 2;
+        }
         suggestions.push({
           locationName: locName,
           locationType: locType,
@@ -3713,7 +3769,7 @@ const putAwayRouter = router({
           currentQty: totalQty,
           expirationDate: sorted[0]?.expirationDate,
           lotNumber: sorted[0]?.lotNumber,
-          priority: locType === "pick_face" ? 1 : 2,
+          priority,
         });
       }
 
@@ -3722,12 +3778,14 @@ const putAwayRouter = router({
         if (locationStockMap.has(loc.name)) continue; // has stock
         const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
         if (locType !== "pick_face") continue;
+        const aislePri = getAislePriority(loc.name);
+        const isPrioritised = aislePri !== null;
         suggestions.push({
           locationName: loc.name,
           locationType: "pick_face",
           reason: "empty_pick_face",
           currentQty: 0,
-          priority: 3,
+          priority: hasPriorityConfig ? (isPrioritised ? 5 : 7) : 3,
         });
       }
 
@@ -3736,17 +3794,26 @@ const putAwayRouter = router({
         if (locationStockMap.has(loc.name)) continue;
         const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
         if (locType !== "warehouse") continue;
+        const aislePri = getAislePriority(loc.name);
+        const isPrioritised = aislePri !== null;
         suggestions.push({
           locationName: loc.name,
           locationType: "warehouse",
           reason: "empty_warehouse",
           currentQty: 0,
-          priority: 4,
+          priority: hasPriorityConfig ? (isPrioritised ? 6 : 8) : 4,
         });
       }
 
-      // Sort by priority, then alphabetically within same priority
-      suggestions.sort((a, b) => a.priority - b.priority || a.locationName.localeCompare(b.locationName));
+      // Sort: primary by priority tier, secondary by aisle priority order (if configured),
+      // tertiary alphabetically by location name.
+      suggestions.sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        const aPri = getAislePriority(a.locationName) ?? 9999;
+        const bPri = getAislePriority(b.locationName) ?? 9999;
+        if (aPri !== bPri) return aPri - bPri;
+        return a.locationName.localeCompare(b.locationName);
+      });
 
       return {
         sku: input.sku,
@@ -3810,6 +3877,57 @@ const putAwayRouter = router({
     .input(z.object({ sessionId: z.string().min(1) }))
     .mutation(async ({ input }) => {
       await clearPutAwaySession(input.sessionId);
+      return { success: true };
+    }),
+
+  /**
+   * Get put-away aisle/level priorities for a warehouse+customer.
+   */
+  getPriority: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      facilityId: z.number(),
+      customerId: z.number(),
+    }))
+    .query(async ({ input }) => {
+      return getPutAwayPriorities(input.configId, input.facilityId, input.customerId);
+    }),
+
+  /**
+   * Save (replace) put-away aisle/level priorities for a warehouse+customer.
+   */
+  savePriority: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      facilityId: z.number(),
+      customerId: z.number(),
+      entries: z.array(z.object({
+        aisle: z.string().min(1),
+        level: z.string().min(1).default("*"),
+        priorityOrder: z.number().int().min(1),
+      })),
+    }))
+    .mutation(async ({ input }) => {
+      await savePutAwayPriorities(
+        input.configId,
+        input.facilityId,
+        input.customerId,
+        input.entries
+      );
+      return { success: true };
+    }),
+
+  /**
+   * Clear all put-away priorities for a warehouse+customer.
+   */
+  clearPriority: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      facilityId: z.number(),
+      customerId: z.number(),
+    }))
+    .mutation(async ({ input }) => {
+      await deletePutAwayPriorities(input.configId, input.facilityId, input.customerId);
       return { success: true };
     }),
 });

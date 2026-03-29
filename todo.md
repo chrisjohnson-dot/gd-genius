@@ -608,3 +608,15 @@
 - [x] Generate MUs button: creates one MU label per line item, shows labels for printing
 - [x] Complete Receipt button enabled only when all items are confirmed or flagged
 - [x] Wire from Receiving Dashboard: clicking In Progress receipt opens ReceiptConfirmation page via Confirm Items & Generate MUs button
+
+## Put Away Wizard — Location Priority Config Screen
+- [x] Add put_away_priority DB table (configId, facilityId, customerId, aisle, level, priorityOrder)
+- [x] Add DB helpers: getPutAwayPriorities, savePutAwayPriorities, deletePutAwayPriorities
+- [x] Add putAway.getPriority, putAway.savePriority, putAway.clearPriority tRPC procedures
+- [x] Add extensiv.locations tRPC procedure (fetch all locations for a facility)
+- [x] Build PutAwayPriorityConfig page: warehouse select → customer select → aisle chip grid
+- [x] Aisle chips: pull distinct aisles from Extensiv locations for the selected facility
+- [x] Click aisle chip to toggle priority; arrow buttons to reorder; numbered badges show order
+- [x] Add "Put Away Priority Config" nav item under Receiving in the sidebar
+- [x] Register /receiving/put-away/priority route in App.tsx
+- [x] Update putAway.suggest engine to fetch priority config and rank prioritised aisles first

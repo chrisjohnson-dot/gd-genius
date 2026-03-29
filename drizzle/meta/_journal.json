@@ -267,6 +267,13 @@
       "when": 1774807800085,
       "tag": "0037_zippy_darwin",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1774808874921,
+      "tag": "0038_purple_jane_foster",
+      "breakpoints": true
     }
   ]
 }

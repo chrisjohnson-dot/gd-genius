@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `put_away_priority` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `config_id` int NOT NULL,\n  `facility_id` int NOT NULL,\n  `customer_id` int NOT NULL,\n  `aisle` varchar(50) NOT NULL,\n  `level` varchar(50) NOT NULL DEFAULT '*',\n  `priority_order` int NOT NULL,\n  `updated_at` bigint NOT NULL,\n  CONSTRAINT `put_away_priority_id` PRIMARY KEY(`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `put_away_priority` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `config_id` int NOT NULL,\n  `facility_id` int NOT NULL,\n  `customer_id` int NOT NULL,\n  `aisle` varchar(50) NOT NULL,\n  `level` varchar(50) NOT NULL DEFAULT '*',\n  `priority_order` int NOT NULL,\n  `updated_at` bigint NOT NULL,\n  CONSTRAINT `put_away_priority_id` PRIMARY KEY(`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 332
+}

@@ -43,8 +43,9 @@ const dashboardItems = [
 ];
 
 const receivingItems = [
-  { href: "/receiving",          label: "Receiving Dashboard", icon: Inbox },
-  { href: "/receiving/put-away", label: "Run Put Away Wizard",   icon: ConciergeBell },
+  { href: "/receiving",                    label: "Receiving Dashboard",     icon: Inbox },
+  { href: "/receiving/put-away",           label: "Run Put Away Wizard",     icon: ConciergeBell },
+  { href: "/receiving/put-away/priority",  label: "Put Away Priority Config", icon: MapPin },
 ];
 
 const allocationItems = [

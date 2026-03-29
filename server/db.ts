@@ -78,9 +78,11 @@ import {
   putAwayScans,
   muLabels,
   receiptItemConfirmations,
+  putAwayPriority,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
+import type { PutAwayPriority, InsertPutAwayPriority } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -2214,3 +2216,75 @@ export async function deleteReceiptItemConfirmations(
 }
 
 export type { ReceiptItemConfirmation, InsertReceiptItemConfirmation };
+
+// ─── Put Away Priority Config ─────────────────────────────────────────────────
+
+export async function getPutAwayPriorities(
+  configId: number,
+  facilityId: number,
+  customerId: number
+): Promise<PutAwayPriority[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(putAwayPriority)
+    .where(
+      and(
+        eq(putAwayPriority.configId, configId),
+        eq(putAwayPriority.facilityId, facilityId),
+        eq(putAwayPriority.customerId, customerId)
+      )
+    )
+    .orderBy(putAwayPriority.priorityOrder);
+}
+
+export async function savePutAwayPriorities(
+  configId: number,
+  facilityId: number,
+  customerId: number,
+  entries: Array<{ aisle: string; level: string; priorityOrder: number }>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Delete existing priorities for this config/facility/customer
+  await db
+    .delete(putAwayPriority)
+    .where(
+      and(
+        eq(putAwayPriority.configId, configId),
+        eq(putAwayPriority.facilityId, facilityId),
+        eq(putAwayPriority.customerId, customerId)
+      )
+    );
+  if (entries.length === 0) return;
+  const now = Date.now();
+  const rows: InsertPutAwayPriority[] = entries.map((e) => ({
+    configId,
+    facilityId,
+    customerId,
+    aisle: e.aisle,
+    level: e.level,
+    priorityOrder: e.priorityOrder,
+    updatedAt: now,
+  }));
+  await db.insert(putAwayPriority).values(rows);
+}
+
+export async function deletePutAwayPriorities(
+  configId: number,
+  facilityId: number,
+  customerId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(putAwayPriority)
+    .where(
+      and(
+        eq(putAwayPriority.configId, configId),
+        eq(putAwayPriority.facilityId, facilityId),
+        eq(putAwayPriority.customerId, customerId)
+      )
+    );
+}

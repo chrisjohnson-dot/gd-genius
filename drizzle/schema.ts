@@ -664,3 +664,20 @@ export const receiptItemConfirmations = mysqlTable("receipt_item_confirmations",
 });
 export type ReceiptItemConfirmation = typeof receiptItemConfirmations.$inferSelect;
 export type InsertReceiptItemConfirmation = typeof receiptItemConfirmations.$inferInsert;
+
+// ─── Put Away Priority Config ─────────────────────────────────────────────────
+export const putAwayPriority = mysqlTable("put_away_priority", {
+  id: int("id").primaryKey().autoincrement(),
+  configId: int("config_id").notNull(),
+  facilityId: int("facility_id").notNull(),
+  customerId: int("customer_id").notNull(),
+  /** Aisle label extracted from location name, e.g. "A", "B", "HR" */
+  aisle: varchar("aisle", { length: 50 }).notNull(),
+  /** Level label extracted from location name, e.g. "1", "2", "A", or "*" for all */
+  level: varchar("level", { length: 50 }).notNull().default("*"),
+  /** Lower number = higher priority (1 = first pick) */
+  priorityOrder: int("priority_order").notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type PutAwayPriority = typeof putAwayPriority.$inferSelect;
+export type InsertPutAwayPriority = typeof putAwayPriority.$inferInsert;

@@ -527,3 +527,10 @@
 - [x] Build ReceiverDetail slide-over/modal: line items with expected vs. received qty
 - [x] Add warehouse filter, status filter, and date range filter to dashboard
 - [ ] Write vitest tests for receiving tRPC procedures (deferred — no mock data available)
+
+## Put Away Assistant
+- [x] Add putAway.suggest tRPC procedure: lookup SKU inventory, classify locations, apply FEFO + pick-face rules, return ranked suggestions
+- [x] Add putAway.logScan DB table (put_away_scans) to track session history
+- [x] Add putAway.session tRPC procedures: start, list scans, add scan, clear
+- [x] Build PutAwayAssistant page: scan input bar, suggestion card with location type badge, session scan history table
+- [ ] Write vitest tests for put-away suggestion logic (deferred — requires live Extensiv mock data)

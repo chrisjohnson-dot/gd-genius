@@ -75,7 +75,9 @@ import {
   slaDailySnapshots,
   SlaDailySnapshot,
   InsertSlaDailySnapshot,
+  putAwayScans,
 } from "../drizzle/schema";
+import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -2065,3 +2067,43 @@ export async function updateRunOrderVerification(
     .set({ verificationStatus: status, verificationDetail: detail as unknown as null })
     .where(eq(allocationRunOrders.id, runOrderId));
 }
+
+// ─── Put Away Scans ────────────────────────────────────────────────────────
+
+export async function createPutAwayScan(data: InsertPutAwayScan): Promise<void> {
+  const db = await getDb();
+  await db!.insert(putAwayScans).values(data);
+}
+
+export async function listPutAwayScans(
+  sessionId: string,
+  limit = 100
+): Promise<PutAwayScan[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(putAwayScans)
+    .where(eq(putAwayScans.sessionId, sessionId))
+    .orderBy(desc(putAwayScans.scannedAt))
+    .limit(limit);
+}
+
+export async function listPutAwayScansByConfig(
+  configId: number,
+  limit = 200
+): Promise<PutAwayScan[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(putAwayScans)
+    .where(eq(putAwayScans.configId, configId))
+    .orderBy(desc(putAwayScans.scannedAt))
+    .limit(limit);
+}
+
+export async function clearPutAwaySession(sessionId: string): Promise<void> {
+  const db = await getDb();
+  await db!.delete(putAwayScans).where(eq(putAwayScans.sessionId, sessionId));
+}
+
+export type { PutAwayScan, InsertPutAwayScan };

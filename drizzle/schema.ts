@@ -601,3 +601,31 @@ export const slaDailySnapshots = mysqlTable("sla_daily_snapshots", {
 });
 export type SlaDailySnapshot = typeof slaDailySnapshots.$inferSelect;
 export type InsertSlaDailySnapshot = typeof slaDailySnapshots.$inferInsert;
+
+// ─── Put Away Assistant ────────────────────────────────────────────────────
+// Tracks each scan performed during a put-away session so operators can
+// review what was put away and where during a receiving shift.
+export const putAwayScans = mysqlTable("put_away_scans", {
+  id: int("id").autoincrement().primaryKey(),
+  configId: int("configId").notNull(),       // FK to extensiv_configs
+  facilityId: int("facilityId").notNull(),
+  customerId: int("customerId").notNull(),
+  customerName: varchar("customerName", { length: 256 }),
+  sku: varchar("sku", { length: 256 }).notNull(),
+  description: varchar("description", { length: 512 }),
+  lotNumber: varchar("lotNumber", { length: 128 }),
+  expirationDate: varchar("expirationDate", { length: 32 }),
+  /** The location name the operator confirmed putting the item away to */
+  confirmedLocation: varchar("confirmedLocation", { length: 256 }),
+  /** The location type: pick_face | warehouse */
+  confirmedLocationType: mysqlEnum("confirmedLocationType", ["pick_face", "warehouse", "staging"]),
+  /** The top suggestion returned by the engine */
+  suggestedLocation: varchar("suggestedLocation", { length: 256 }),
+  suggestedLocationType: mysqlEnum("suggestedLocationType", ["pick_face", "warehouse", "staging"]),
+  qty: int("qty").default(1).notNull(),
+  sessionId: varchar("sessionId", { length: 64 }).notNull(), // client-generated UUID
+  scannedAt: timestamp("scannedAt").defaultNow().notNull(),
+});
+
+export type PutAwayScan = typeof putAwayScans.$inferSelect;
+export type InsertPutAwayScan = typeof putAwayScans.$inferInsert;

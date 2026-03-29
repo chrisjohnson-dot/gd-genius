@@ -110,6 +110,10 @@ import {
   upsertSlaDailySnapshot,
   updateRunVerification,
   updateRunOrderVerification,
+  createPutAwayScan,
+  listPutAwayScans,
+  listPutAwayScansByConfig,
+  clearPutAwaySession,
   type VerificationStatus,
   type OrderVerificationResult,
 } from "./db";
@@ -3414,6 +3418,216 @@ const receivingRouter = router({
     }),
 });
 
+// ─── Put Away Assistant ───────────────────────────────────────────────────────
+const putAwayRouter = router({
+  /**
+   * Suggest optimal put-away location(s) for a scanned SKU.
+   *
+   * Logic:
+   *  1. Fetch all inventory records for the customer/facility.
+   *  2. Find existing stock for this SKU grouped by location.
+   *  3. Classify each location using the location_configs table:
+   *     - "pick_face" if locationType === 'pick_face'
+   *     - "warehouse" otherwise
+   *  4. Rank suggestions:
+   *     a. CONSOLIDATE: pick_face locations that already hold this SKU
+   *        (sorted by FEFO: earliest expiry / lowest receiveItemId first).
+   *     b. CONSOLIDATE: warehouse locations that already hold this SKU.
+   *     c. EMPTY pick_face: locations with no stock for this SKU.
+   *     d. EMPTY warehouse: locations with no stock for this SKU.
+   */
+  suggest: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        facilityId: z.number(),
+        customerId: z.number(),
+        sku: z.string().min(1),
+        lotNumber: z.string().optional(),
+        expirationDate: z.string().optional(),
+        qty: z.number().min(1).default(1),
+      })
+    )
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+      // Fetch inventory and location configs in parallel
+      const [inventory, locationCfgs, extensivLocations] = await Promise.all([
+        fetchInventory(config, input.customerId, input.facilityId),
+        getLocationConfigsByCustomer(input.configId, input.customerId),
+        fetchExtensivLocations(config, input.facilityId),
+      ]);
+
+      // Build location type map: locationId -> locationType
+      const locationTypeMap = new Map<number, "pick_face" | "warehouse" | "staging">();
+      for (const lc of locationCfgs) {
+        locationTypeMap.set(lc.locationId, lc.locationType);
+      }
+
+      // Build a map of locationName -> locationType from Extensiv locations
+      // Locations named 'Pick face' are pick_face; all others are warehouse
+      const locationNameTypeMap = new Map<string, "pick_face" | "warehouse">();
+      for (const loc of extensivLocations) {
+        const isPickFace = loc.name.toLowerCase().includes("pick face") ||
+          locationTypeMap.get(loc.locationId) === "pick_face";
+        locationNameTypeMap.set(loc.name, isPickFace ? "pick_face" : "warehouse");
+      }
+
+      // Group inventory by location for this SKU
+      const skuInventory = inventory.filter(
+        (rec) => rec.itemIdentifier.sku.toLowerCase() === input.sku.toLowerCase()
+      );
+
+      // Group all inventory by location name to know which locations have stock
+      const locationStockMap = new Map<string, typeof inventory>();
+      for (const rec of inventory) {
+        const locName = rec.locationIdentifier?.nameKey?.name ?? "Unknown";
+        if (!locationStockMap.has(locName)) locationStockMap.set(locName, []);
+        locationStockMap.get(locName)!.push(rec);
+      }
+
+      // Locations that already have this SKU (consolidation candidates)
+      const skuLocationMap = new Map<string, typeof skuInventory>();
+      for (const rec of skuInventory) {
+        const locName = rec.locationIdentifier?.nameKey?.name ?? "Unknown";
+        if (!skuLocationMap.has(locName)) skuLocationMap.set(locName, []);
+        skuLocationMap.get(locName)!.push(rec);
+      }
+
+      type Suggestion = {
+        locationName: string;
+        locationType: "pick_face" | "warehouse";
+        reason: "consolidate" | "empty_pick_face" | "empty_warehouse";
+        currentQty: number;
+        expirationDate?: string;
+        lotNumber?: string;
+        priority: number; // lower = better
+      };
+
+      const suggestions: Suggestion[] = [];
+
+      // 1. Consolidation candidates (locations already holding this SKU)
+      for (const [locName, recs] of Array.from(skuLocationMap.entries())) {
+        const locType = locationNameTypeMap.get(locName) ?? "warehouse";
+        // FEFO: sort by expiry date then receiveItemId
+        const sorted = [...recs].sort((a, b) => {
+          if (a.expirationDate && b.expirationDate) {
+            return new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime();
+          }
+          if (a.expirationDate) return -1;
+          if (b.expirationDate) return 1;
+          return a.receiveItemId - b.receiveItemId;
+        });
+        const totalQty = recs.reduce((s: number, r: { available: number }) => s + r.available, 0);
+        suggestions.push({
+          locationName: locName,
+          locationType: locType,
+          reason: "consolidate",
+          currentQty: totalQty,
+          expirationDate: sorted[0]?.expirationDate,
+          lotNumber: sorted[0]?.lotNumber,
+          priority: locType === "pick_face" ? 1 : 2,
+        });
+      }
+
+      // 2. Empty pick_face locations (no stock at all)
+      for (const loc of extensivLocations) {
+        if (locationStockMap.has(loc.name)) continue; // has stock
+        const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
+        if (locType !== "pick_face") continue;
+        suggestions.push({
+          locationName: loc.name,
+          locationType: "pick_face",
+          reason: "empty_pick_face",
+          currentQty: 0,
+          priority: 3,
+        });
+      }
+
+      // 3. Empty warehouse locations (no stock at all)
+      for (const loc of extensivLocations) {
+        if (locationStockMap.has(loc.name)) continue;
+        const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
+        if (locType !== "warehouse") continue;
+        suggestions.push({
+          locationName: loc.name,
+          locationType: "warehouse",
+          reason: "empty_warehouse",
+          currentQty: 0,
+          priority: 4,
+        });
+      }
+
+      // Sort by priority, then alphabetically within same priority
+      suggestions.sort((a, b) => a.priority - b.priority || a.locationName.localeCompare(b.locationName));
+
+      return {
+        sku: input.sku,
+        facilityId: input.facilityId,
+        customerId: input.customerId,
+        suggestions: suggestions.slice(0, 20), // top 20 suggestions
+        totalInventoryLocations: locationStockMap.size,
+        skuLocations: skuLocationMap.size,
+      };
+    }),
+
+  /**
+   * Log a completed put-away scan to the session history.
+   */
+  logScan: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        facilityId: z.number(),
+        customerId: z.number(),
+        customerName: z.string().optional(),
+        sku: z.string().min(1),
+        description: z.string().optional(),
+        lotNumber: z.string().optional(),
+        expirationDate: z.string().optional(),
+        confirmedLocation: z.string().optional(),
+        confirmedLocationType: z.enum(["pick_face", "warehouse", "staging"]).optional(),
+        suggestedLocation: z.string().optional(),
+        suggestedLocationType: z.enum(["pick_face", "warehouse", "staging"]).optional(),
+        qty: z.number().min(1).default(1),
+        sessionId: z.string().min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await createPutAwayScan(input);
+      return { success: true };
+    }),
+
+  /**
+   * List all scans for a session.
+   */
+  sessionScans: protectedProcedure
+    .input(z.object({ sessionId: z.string().min(1) }))
+    .query(async ({ input }) => {
+      return listPutAwayScans(input.sessionId);
+    }),
+
+  /**
+   * List recent scans for a config (across all sessions).
+   */
+  recentScans: protectedProcedure
+    .input(z.object({ configId: z.number(), limit: z.number().min(1).max(500).default(200) }))
+    .query(async ({ input }) => {
+      return listPutAwayScansByConfig(input.configId, input.limit);
+    }),
+
+  /**
+   * Clear all scans for a session.
+   */
+  clearSession: protectedProcedure
+    .input(z.object({ sessionId: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      await clearPutAwaySession(input.sessionId);
+      return { success: true };
+    }),
+});
+
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
 export const appRouter = router({
   ..._appRouter._def.record,
@@ -3425,5 +3639,6 @@ export const appRouter = router({
   qcScanner: qcScannerRouter,
   palletScanner: palletScannerRouter,
   receiving: receivingRouter,
+  putAway: putAwayRouter,
 });
 export type AppRouter = typeof appRouter;

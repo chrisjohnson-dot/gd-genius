@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `put_away_scans` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`configId` int NOT NULL,\n\t`facilityId` int NOT NULL,\n\t`customerId` int NOT NULL,\n\t`customerName` varchar(256),\n\t`sku` varchar(256) NOT NULL,\n\t`description` varchar(512),\n\t`lotNumber` varchar(128),\n\t`expirationDate` varchar(32),\n\t`confirmedLocation` varchar(256),\n\t`confirmedLocationType` enum('pick_face','warehouse','staging'),\n\t`suggestedLocation` varchar(256),\n\t`suggestedLocationType` enum('pick_face','warehouse','staging'),\n\t`qty` int NOT NULL DEFAULT 1,\n\t`sessionId` varchar(64) NOT NULL,\n\t`scannedAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `put_away_scans_id` PRIMARY KEY(`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE `put_away_scans` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`configId` int NOT NULL,\n\t`facilityId` int NOT NULL,\n\t`customerId` int NOT NULL,\n\t`customerName` varchar(256),\n\t`sku` varchar(256) NOT NULL,\n\t`description` varchar(512),\n\t`lotNumber` varchar(128),\n\t`expirationDate` varchar(32),\n\t`confirmedLocation` varchar(256),\n\t`confirmedLocationType` enum('pick_face','warehouse','staging'),\n\t`suggestedLocation` varchar(256),\n\t`suggestedLocationType` enum('pick_face','warehouse','staging'),\n\t`qty` int NOT NULL DEFAULT 1,\n\t`sessionId` varchar(64) NOT NULL,\n\t`scannedAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `put_away_scans_id` PRIMARY KEY(`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 329
+}

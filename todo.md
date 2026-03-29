@@ -482,3 +482,7 @@
 ## SLA Tracker — Sparkline Dot Tooltips
 - [x] Add hover state to SlaSparkline dots showing exact date and SLA % in a dark tooltip
 - [x] Dot enlarges on hover; tooltip pins left/right to avoid overflow
+
+## SLA Tracker — Sparkline Window Toggle
+- [x] Add 7d / 14d / 30d toggle buttons on each warehouse card; active day highlighted with primary colour
+- [x] historyQuery re-fetches with new days value on toggle; stale cache kept per window

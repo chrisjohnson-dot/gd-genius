@@ -240,9 +240,10 @@ function WarehouseSlaCard({
   const [filterStatus, setFilterStatus] = useState<"all" | "in_sla" | "out_of_sla">("all");
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  // 7-day sparkline history
+  // Sparkline window toggle
+  const [sparkDays, setSparkDays] = useState<7 | 14 | 30>(7);
   const historyQuery = trpc.sla.facilityHistory.useQuery(
-    { facilityId: facilityId ?? 0, days: 7 },
+    { facilityId: facilityId ?? 0, days: sparkDays },
     { enabled: !!facilityId, staleTime: 5 * 60 * 1000 }
   );
   const sparkPoints = historyQuery.data ?? [];
@@ -595,10 +596,26 @@ function WarehouseSlaCard({
           </button>
         </div>
 
-        {/* 7-day sparkline */}
+        {/* Sparkline with window toggle */}
         {facilityId && (
           <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide shrink-0">7-day trend</span>
+            {/* Day toggle buttons */}
+            <div className="flex items-center gap-0.5 shrink-0">
+              {([7, 14, 30] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={(e) => { e.stopPropagation(); setSparkDays(d); }}
+                  className={[
+                    "px-1.5 py-0.5 rounded text-[9px] font-semibold leading-none transition-colors",
+                    sparkDays === d
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  ].join(" ")}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
             <SlaSparkline
               points={sparkPoints}
               greenThreshold={greenThreshold}

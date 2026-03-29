@@ -9,7 +9,7 @@ import {
   MapPin, Scan, CheckCircle2, Warehouse, Star, Package,
   History, Trash2, AlertCircle, Loader2,
   ArrowRight, RefreshCw, ChevronDown, ChevronRight,
-  PackageCheck, ArrowLeft, CalendarDays,
+  PackageCheck, ArrowLeft, CalendarDays, Flame,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,6 +23,8 @@ type Suggestion = {
   expirationDate?: string;
   lotNumber?: string;
   priority: number;
+  isPriorityAisle: boolean;
+  aislePriorityOrder: number | null;
 };
 
 type ScanRecord = {
@@ -416,6 +418,15 @@ function ScanSession({
                               <span className="font-mono font-semibold text-sm text-foreground">{s.locationName}</span>
                               {locationTypeBadge(s.locationType)}
                               {reasonBadge(s.reason)}
+                              {s.isPriorityAisle && (
+                                <Badge
+                                  className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-xs gap-1"
+                                  title={s.aislePriorityOrder !== null ? `Priority #${s.aislePriorityOrder}` : "Priority aisle"}
+                                >
+                                  <Flame className="h-3 w-3" />
+                                  Priority Aisle{s.aislePriorityOrder !== null ? ` #${s.aislePriorityOrder}` : ""}
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                               {s.currentQty > 0 && <span>{s.currentQty.toLocaleString()} units on hand</span>}

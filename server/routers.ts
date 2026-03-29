@@ -3722,6 +3722,8 @@ const putAwayRouter = router({
         expirationDate?: string;
         lotNumber?: string;
         priority: number; // lower = better
+        isPriorityAisle: boolean; // true when this location is in a user-configured priority aisle
+        aislePriorityOrder: number | null; // the configured priority order (1 = highest), null if not configured
       };
 
       const suggestions: Suggestion[] = [];
@@ -3770,6 +3772,8 @@ const putAwayRouter = router({
           expirationDate: sorted[0]?.expirationDate,
           lotNumber: sorted[0]?.lotNumber,
           priority,
+          isPriorityAisle: isPrioritised,
+          aislePriorityOrder: aislePri,
         });
       }
 
@@ -3786,6 +3790,8 @@ const putAwayRouter = router({
           reason: "empty_pick_face",
           currentQty: 0,
           priority: hasPriorityConfig ? (isPrioritised ? 5 : 7) : 3,
+          isPriorityAisle: isPrioritised,
+          aislePriorityOrder: aislePri,
         });
       }
 
@@ -3802,6 +3808,8 @@ const putAwayRouter = router({
           reason: "empty_warehouse",
           currentQty: 0,
           priority: hasPriorityConfig ? (isPrioritised ? 6 : 8) : 4,
+          isPriorityAisle: isPrioritised,
+          aislePriorityOrder: aislePri,
         });
       }
 

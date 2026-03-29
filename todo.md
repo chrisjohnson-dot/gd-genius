@@ -620,3 +620,7 @@
 - [x] Add "Put Away Priority Config" nav item under Receiving in the sidebar
 - [x] Register /receiving/put-away/priority route in App.tsx
 - [x] Update putAway.suggest engine to fetch priority config and rank prioritised aisles first
+
+## Put Away Wizard — Priority Aisle Badge on Suggestion Cards
+- [x] Update putAway.suggest return type to include aislePriorityOrder (number | null) and isPriorityAisle (boolean) on each suggestion
+- [x] Update PutAwayAssistant suggestion card UI to show a "Priority Aisle #N" badge when isPriorityAisle is true

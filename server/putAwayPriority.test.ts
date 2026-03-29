@@ -190,3 +190,72 @@ describe("Put Away suggestion engine — aisle priority ranking", () => {
     expect(suggestions[1].locationName).toBe("D-001-A");
   });
 });
+
+// ─── isPriorityAisle / aislePriorityOrder badge metadata ─────────────────────
+
+describe("Put Away suggestion engine — isPriorityAisle and aislePriorityOrder metadata", () => {
+  function buildAislePriorityMap(
+    priorities: Array<{ aisle: string; priorityOrder: number }>
+  ): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const p of priorities) map.set(p.aisle.toUpperCase(), p.priorityOrder);
+    return map;
+  }
+
+  function getAislePriority(
+    locationName: string,
+    aislePriorityMap: Map<string, number>
+  ): number | null {
+    const aisle = locationName.split("-")[0]?.toUpperCase() ?? "";
+    return aislePriorityMap.has(aisle) ? aislePriorityMap.get(aisle)! : null;
+  }
+
+  it("isPriorityAisle is true for locations in a configured aisle", () => {
+    const map = buildAislePriorityMap([{ aisle: "D", priorityOrder: 1 }]);
+    const pri = getAislePriority("D-017-C", map);
+    expect(pri).not.toBeNull();
+    expect(pri !== null).toBe(true); // isPriorityAisle
+  });
+
+  it("isPriorityAisle is false for locations not in any configured aisle", () => {
+    const map = buildAislePriorityMap([{ aisle: "A", priorityOrder: 1 }]);
+    const pri = getAislePriority("D-017-C", map);
+    expect(pri).toBeNull();
+    expect(pri !== null).toBe(false); // isPriorityAisle
+  });
+
+  it("aislePriorityOrder returns the correct numeric order", () => {
+    const map = buildAislePriorityMap([
+      { aisle: "G", priorityOrder: 1 },
+      { aisle: "A", priorityOrder: 2 },
+    ]);
+    expect(getAislePriority("G-001-A", map)).toBe(1);
+    expect(getAislePriority("A-010-B", map)).toBe(2);
+  });
+
+  it("aislePriorityOrder is null when no priority config exists", () => {
+    const map = buildAislePriorityMap([]);
+    expect(getAislePriority("D-017-C", map)).toBeNull();
+  });
+
+  it("badge shows correct order number for multiple configured aisles", () => {
+    const map = buildAislePriorityMap([
+      { aisle: "D", priorityOrder: 3 },
+      { aisle: "A", priorityOrder: 1 },
+      { aisle: "G", priorityOrder: 2 },
+    ]);
+    // Simulate what the badge would display
+    const locations = ["D-017-C", "A-001-A", "G-005-B", "Z-999-X"];
+    const badgeLabels = locations.map((loc) => {
+      const order = getAislePriority(loc, map);
+      if (order === null) return null;
+      return `Priority Aisle #${order}`;
+    });
+    expect(badgeLabels).toEqual([
+      "Priority Aisle #3",
+      "Priority Aisle #1",
+      "Priority Aisle #2",
+      null, // Z aisle not configured
+    ]);
+  });
+});

@@ -502,8 +502,15 @@ export default function QcScanner() {
     { enabled: selectedSessionId !== null }
   );
 
+  const [customerFilter, setCustomerFilter] = useState("");
+
   if (phase === "start") {
     const recent = recentSessionsQuery.data?.sessions ?? [];
+    const filteredRecent = customerFilter.trim()
+      ? recent.filter((s) =>
+          s.customerName?.toLowerCase().includes(customerFilter.trim().toLowerCase())
+        )
+      : recent;
     return (
       <>
       <div className="flex flex-col items-center min-h-[60vh] gap-8 p-8">
@@ -531,10 +538,30 @@ export default function QcScanner() {
 
         {/* Recent Sessions panel */}
         <div className="w-full max-w-2xl">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-            <ClipboardList className="w-4 h-4" />
-            Recent Completed Sessions
-          </h2>
+          <div className="flex items-center justify-between mb-3 gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2 shrink-0">
+              <ClipboardList className="w-4 h-4" />
+              Recent Completed Sessions
+            </h2>
+            <div className="relative flex-1 max-w-xs">
+              <input
+                type="text"
+                value={customerFilter}
+                onChange={(e) => setCustomerFilter(e.target.value)}
+                placeholder="Filter by customer…"
+                className="w-full h-8 pl-3 pr-7 text-xs rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {customerFilter && (
+                <button
+                  onClick={() => setCustomerFilter("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
           {recentSessionsQuery.isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -545,6 +572,11 @@ export default function QcScanner() {
             <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg">
               <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
               No completed sessions yet
+            </div>
+          ) : filteredRecent.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg">
+              <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              No sessions match &ldquo;{customerFilter}&rdquo;
             </div>
           ) : (
             <div className="rounded-lg border border-border overflow-hidden">
@@ -565,7 +597,7 @@ export default function QcScanner() {
                 <span className="text-right">Expected</span>
                 <span className="text-right">Scanned</span>
               </div>
-              {recent.map((s, idx) => {
+              {filteredRecent.map((s, idx) => {
                 const isAlt = idx % 2 === 1;
                 const allScanned = s.totalScanned >= s.totalExpected && s.totalExpected > 0;
                 return (
@@ -603,7 +635,7 @@ export default function QcScanner() {
             </div>
           )}
           {/* Show more / Show less toggle */}
-          {!recentSessionsQuery.isLoading && recent.length > 0 && (
+          {!recentSessionsQuery.isLoading && recent.length > 0 && filteredRecent.length > 0 && (
             <div className="mt-2 text-center">
               {sessionLimit === 5 ? (
                 <button

@@ -447,3 +447,8 @@
 - [x] Build read-only summary modal in QcScanner start screen (item table with lot, expected, scanned)
 - [x] Clicking a recent session row opens the modal; footer has Close + Open Session buttons
 - [x] 5 unit tests for sessionSummary (265 tests passing total)
+
+## QC Scanner — Customer Filter on Recent Sessions
+- [x] Add customer filter input above Recent Sessions panel (client-side filter on loaded sessions)
+- [x] Show filtered empty state when no sessions match the filter
+- [x] Clear (x) button to reset filter; Show more/less hidden when filter yields no results

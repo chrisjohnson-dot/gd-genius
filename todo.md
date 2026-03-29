@@ -510,3 +510,9 @@
 - [x] Extend attentionCount tRPC procedure to return verificationIssues count alongside overdue/zeroBid
 - [x] Update sidebar badge total to include verificationIssues
 - [x] Update hover popover to show verification issues row in breakdown
+
+## Receiving Section
+- [x] Create ReceivingDashboard stub page
+- [x] Create PutAwayAssistant stub page
+- [x] Add RECEIVING section above ALLOCATION in sidebar nav (AppLayout.tsx)
+- [x] Register /receiving and /put-away routes in App.tsx

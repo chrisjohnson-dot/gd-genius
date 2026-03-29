@@ -29,6 +29,8 @@ import {
   Zap,
   Network,
   Flag,
+  Inbox,
+  ConciergeBell,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -38,6 +40,11 @@ import { Skeleton } from "./ui/skeleton";
 const dashboardItems = [
   { href: "/",            label: "Open Orders",  icon: FolderOpen, badge: true },
   { href: "/sla-tracker", label: "SLA Tracker",  icon: Timer },
+];
+
+const receivingItems = [
+  { href: "/receiving",          label: "Receiving Dashboard", icon: Inbox },
+  { href: "/receiving/put-away", label: "Put Away Assistant",   icon: ConciergeBell },
 ];
 
 const allocationItems = [
@@ -289,6 +296,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   active={location === item.href}
                   badgeData={item.badge ? attentionBadge : undefined}
                 />
+              ))}
+            </div>
+          </div>
+
+          {/* Receiving section */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
+              Receiving
+            </p>
+            <div className="space-y-0.5">
+              {receivingItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
               ))}
             </div>
           </div>

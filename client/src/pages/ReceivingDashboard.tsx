@@ -201,6 +201,26 @@ function ReceiverDetailSheet({
 
           {detail && (
             <>
+              {/* Discrepancy summary banner */}
+              {(() => {
+                const discrepantItems = (detail.receiveItems ?? []).filter(
+                  (i) => i.expectedQty > 0 && i.receivedQty !== i.expectedQty
+                );
+                return discrepantItems.length > 0 ? (
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10">
+                    <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-semibold text-red-400">
+                        {discrepantItems.length} quantity discrepanc{discrepantItems.length === 1 ? "y" : "ies"} detected
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {discrepantItems.map((i) => i.itemIdentifier.sku).join(", ")}
+                      </p>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
               {/* Meta grid */}
               <div className="grid grid-cols-2 gap-2.5 text-sm">
                 {[
@@ -254,8 +274,9 @@ function ReceiverDetailSheet({
                       <TableBody>
                         {(detail.receiveItems ?? []).map((item) => {
                           const variance = item.receivedQty - item.expectedQty;
+                          const isDiscrepant = item.expectedQty > 0 && item.receivedQty !== item.expectedQty;
                           return (
-                            <TableRow key={item.receiverItemId}>
+                            <TableRow key={item.receiverItemId} className={isDiscrepant ? "bg-red-500/5 border-l-2 border-l-red-500/50" : ""}>
                               <TableCell className="font-mono text-xs">{item.itemIdentifier.sku}</TableCell>
                               <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">
                                 {item.description || "—"}
@@ -420,9 +441,10 @@ function WarehouseCard({
             <div className="divide-y divide-border/60">
               {filtered.map((r) => {
                 const skuCount = (r.receiveItems ?? []).length;
-                const hasDiscrepancy = (r.receiveItems ?? []).some(
+                const discrepancyCount = (r.receiveItems ?? []).filter(
                   (i) => i.expectedQty > 0 && i.receivedQty !== i.expectedQty
-                );
+                ).length;
+                const hasDiscrepancy = discrepancyCount > 0;
                 return (
                   <button
                     key={r.readOnly.transactionId}
@@ -446,8 +468,9 @@ function WarehouseCard({
                           <span className="text-xs text-muted-foreground">PO: {r.poNum}</span>
                         )}
                         {hasDiscrepancy && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-400">
-                            <AlertTriangle className="h-3 w-3" /> Discrepancy
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/30">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            {discrepancyCount} discrepanc{discrepancyCount === 1 ? "y" : "ies"}
                           </span>
                         )}
                       </div>

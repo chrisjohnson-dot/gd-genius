@@ -553,3 +553,9 @@
 - [x] Add "Put Away Items" button to receipt detail slide-over (visible when status is In Progress or Expected)
 - [x] Navigate to /receiving/put-away with configId, facilityId, customerId, transactionId as URL query params
 - [x] Update PutAwayAssistant to read URL params and auto-populate session setup (skip setup step)
+
+## Receiving Dashboard — Discrepancy Warning Badge
+- [x] Add red discrepancy badge to receipt rows where any line item has expected qty ≠ received qty
+- [x] Show discrepancy count in the badge (e.g. "2 discrepancies")
+- [x] Highlight discrepant line items in the detail slide-over with red variance styling
+- [x] Add discrepancy summary banner at top of detail slide-over listing affected SKUs

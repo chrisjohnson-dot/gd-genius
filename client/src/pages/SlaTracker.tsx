@@ -252,7 +252,17 @@ function WarehouseSlaCard({
   greenThreshold?: number;
   yellowThreshold?: number;
 }) {
-  const [expanded, setExpanded] = useState(drillDown ? true : false);
+  // Persist expanded state per facility in localStorage (drillDown always starts open)
+  const expandStorageKey = `sla-warehouse-expanded-${facilityId ?? facilityName}`;
+  const [expandedStored, setExpandedStored] = useLocalStorage<boolean>(expandStorageKey, false);
+  const [expanded, setExpandedLocal] = useState<boolean>(drillDown ? true : expandedStored);
+  function setExpanded(v: boolean | ((prev: boolean) => boolean)) {
+    setExpandedLocal((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      if (!drillDown) setExpandedStored(next);
+      return next;
+    });
+  }
   const [sortKey, setSortKey] = useState<SortKey>("slaStatus");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterStatus, setFilterStatus] = useState<"all" | "in_sla" | "out_of_sla">("all");

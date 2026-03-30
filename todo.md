@@ -669,3 +669,4 @@
 - [x] Receiving dashboard: warehouses start collapsed by default
 - [x] Put Away Priority Config: remove Extensiv config selector (auto-detect config)
 - [x] SLA Tracker: warehouse tabs start collapsed by default
+- [x] Receiving Dashboard + SLA Tracker: persist warehouse card expanded/collapsed state in localStorage per facility

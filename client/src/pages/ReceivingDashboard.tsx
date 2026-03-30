@@ -415,7 +415,21 @@ function WarehouseCard({
   receivers: Receiver[];
   onSelect: (r: Receiver) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Persist expanded state per facility in localStorage
+  const storageKey = `receiving-warehouse-expanded-${facilityId}`;
+  const [expanded, setExpandedRaw] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored !== null ? JSON.parse(stored) : false;
+    } catch { return false; }
+  });
+  function setExpanded(v: boolean | ((prev: boolean) => boolean)) {
+    setExpandedRaw((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
   const [search, setSearch] = useState("");
 
   const openCount = receivers.filter((r) => r.readOnly.status !== 2).length;

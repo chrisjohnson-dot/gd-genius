@@ -14,7 +14,7 @@ import { generateAuditShippingDocumentsPDF } from "./auditShippingGenerator";
 import type { AuditShippingDocument } from "./auditShippingGenerator";
 import { generateExtensivPickTicketsPDF } from "./extensivPickTicketGenerator";
 import type { ExtensivStyleTicket } from "./extensivPickTicketGenerator";
-import { fetchOrderWithDetail } from "../extensiv/api";
+import { fetchOrderWithDetail, fetchItemDescriptions } from "../extensiv/api";
 import type { ExtensivOrder, ExtensivOrderItem } from "../extensiv/api";
 import { sdk } from "../_core/sdk";
 
@@ -507,6 +507,52 @@ export function registerPdfRoutes(app: Express) {
         errors,
       });
       return;
+    }
+
+    // ── Secondary lookup: fetch item descriptions per unique customer ──────────
+    // Collect unique customer IDs from all successful tickets
+    const customerIdMap = new Map<number, string>(); // customerId → customerName
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === "fulfilled") {
+        const raw = result.value.order as unknown as ExtensivOrder;
+        const cid = raw.readOnly?.customerIdentifier?.id;
+        if (cid != null) {
+          customerIdMap.set(cid, raw.readOnly?.customerIdentifier?.name ?? "");
+        }
+      }
+    }
+
+    // Fetch descriptions for all unique customers in parallel (best-effort)
+    const descByCustomer = new Map<number, Map<string, string>>();
+    await Promise.allSettled(
+      Array.from(customerIdMap.keys()).map(async (cid) => {
+        try {
+          const descMap = await fetchItemDescriptions(config, cid);
+          descByCustomer.set(cid, descMap);
+        } catch {
+          // Description lookup failure is non-fatal — leave descriptions blank
+        }
+      })
+    );
+
+    // Stamp descriptions onto ticket items
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status !== "fulfilled") continue;
+      const raw = result.value.order as unknown as ExtensivOrder;
+      const cid = raw.readOnly?.customerIdentifier?.id;
+      const descMap = cid != null ? descByCustomer.get(cid) : undefined;
+      if (descMap && tickets[i - errors.filter((_, ei) => ei < i).length]) {
+        // Find the corresponding ticket (errors shift the index)
+        const ticket = tickets.find((t) => t.transactionId === (transactionIds as number[])[i]);
+        if (ticket) {
+          ticket.items = ticket.items.map((item) => ({
+            ...item,
+            description: descMap.get(item.sku) ?? item.description,
+          }));
+        }
+      }
     }
 
     if (errors.length > 0) {

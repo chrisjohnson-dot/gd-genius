@@ -658,3 +658,9 @@
 - [x] Update Production Documents page UI: 3-step flow with document type selector (Extensiv Pick Tickets / Genius Pick Tickets)
 - [x] Wire "Extensiv Pick Tickets" option to /api/pdf/extensiv-pick-tickets
 - [x] Wire "Genius Pick Tickets" option to /api/pdf/audit-pick-tickets
+
+## AUDIT — Extensiv Pick Tickets: Item Description Lookup
+- [x] Identify Extensiv item master endpoint: GET /customers/{id}/items (already implemented as fetchItemDescriptions)
+- [x] Reuse existing fetchItemDescriptions() helper in server/extensiv/api.ts
+- [x] Update /api/pdf/extensiv-pick-tickets route: collect unique customer IDs from fulfilled orders, fetch descriptions per customer in parallel (best-effort), stamp descriptions onto ticket items
+- [x] Description lookup is non-fatal — blank description shown if lookup fails for a customer

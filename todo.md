@@ -670,3 +670,15 @@
 - [x] Put Away Priority Config: remove Extensiv config selector (auto-detect config)
 - [x] SLA Tracker: warehouse tabs start collapsed by default
 - [x] Receiving Dashboard + SLA Tracker: persist warehouse card expanded/collapsed state in localStorage per facility
+
+## QC Scanner Enhancements
+- [x] Batch Order mode: checkbox on start screen, isBatch + batchIdentifiers stored on session, BatchIdentifiers panel shown during scanning
+- [x] MU scan detection: when scanned barcode matches no SKU/UPC, checkMU tRPC procedure called, modal shown with SKU+qty confirm, adjustQty called on confirm
+- [x] Rollback last scan: "Undo Last Scan" button per item row (scanning phase only), undoLastScan tRPC procedure + undoQcScanItem DB helper
+
+## Pallet Scanner — Two-Step Order+Pallet Workflow
+- [x] Step 1: scan/enter reference number to load order and list all pallets (UPC + ship-scan status)
+- [x] Step 2: scan each pallet UPC to stamp shippedAt; running counter X/Y turns green when complete
+- [x] Order complete detection: green success banner + Start New Order button when all pallets scanned
+- [x] Browser camera capture: Take Photo button using getUserMedia, uploads via palletScanner.uploadPhoto, photoUrl stored on pallet
+- [x] DB migrations applied: isBatch on qc_scan_sessions, photoUrl on qc_pallets

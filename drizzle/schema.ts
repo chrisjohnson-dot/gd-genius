@@ -472,6 +472,8 @@ export type InsertCortexReturn = typeof cortexReturns.$inferInsert;
 export const qcScanSessions = mysqlTable("qc_scan_sessions", {
   id: int("id").autoincrement().primaryKey(),
   referenceNumber: varchar("referenceNumber", { length: 128 }).notNull(),
+  // Whether this session was started as a batch order
+  isBatch: boolean("isBatch").notNull().default(false),
   // Optional batch — comma-separated reference numbers
   batchIdentifiers: text("batchIdentifiers"),
   warehouseId: int("warehouseId"),
@@ -525,6 +527,8 @@ export const qcPallets = mysqlTable("qc_pallets", {
   builtAt: timestamp("builtAt").defaultNow(),
   shippedAt: timestamp("shippedAt"),
   deletedAt: timestamp("deletedAt"),
+  // Optional dock photo captured during pallet shipping scan
+  photoUrl: varchar("photoUrl", { length: 512 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type QcPallet = typeof qcPallets.$inferSelect;

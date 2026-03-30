@@ -650,3 +650,11 @@
 ## AUDIT — Production Documents: Remove Warehouse Selector
 - [x] Remove the "Select Warehouse" step card from AuditProductionDocuments page
 - [x] Auto-detect the Extensiv config on the server side (use the first active config)
+
+## AUDIT — Production Documents: Extensiv vs Genius Pick Ticket Selector
+- [x] Research Extensiv API for native pick ticket PDF download endpoint (no native PDF endpoint; faithful reproduction built instead)
+- [x] Build Extensiv-style pick ticket PDF generator (faithful reproduction of Extensiv layout: title, customer header, transaction #, barcode, ship-to, metadata, items table with detail sub-rows, signature block, AUDIT watermark)
+- [x] Add POST /api/pdf/extensiv-pick-tickets Express route (auto-detects config)
+- [x] Update Production Documents page UI: 3-step flow with document type selector (Extensiv Pick Tickets / Genius Pick Tickets)
+- [x] Wire "Extensiv Pick Tickets" option to /api/pdf/extensiv-pick-tickets
+- [x] Wire "Genius Pick Tickets" option to /api/pdf/audit-pick-tickets

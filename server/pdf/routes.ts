@@ -12,7 +12,10 @@ import { generateAuditPickTicketsPDF } from "./auditGenerator";
 import type { AuditPickTicket } from "./auditGenerator";
 import { generateAuditShippingDocumentsPDF } from "./auditShippingGenerator";
 import type { AuditShippingDocument } from "./auditShippingGenerator";
+import { generateExtensivPickTicketsPDF } from "./extensivPickTicketGenerator";
+import type { ExtensivStyleTicket } from "./extensivPickTicketGenerator";
 import { fetchOrderWithDetail } from "../extensiv/api";
+import type { ExtensivOrder, ExtensivOrderItem } from "../extensiv/api";
 import { sdk } from "../_core/sdk";
 
 /** Collect a generator's output into a Buffer by piping through a PassThrough */
@@ -413,5 +416,103 @@ export function registerPdfRoutes(app: Express) {
     }
 
     await generateAuditShippingDocumentsPDF(res, shippingDocs);
+  });
+
+  // ── Extensiv-Style Pick Tickets PDF (faithful reproduction) ───────────────
+  // POST /api/pdf/extensiv-pick-tickets
+  // Body: { transactionIds: number[] }  (configId optional — auto-detected)
+  app.post("/api/pdf/extensiv-pick-tickets", async (req: Request, res: Response) => {
+    if (!(await requireAuth(req, res))) return;
+
+    const { configId, transactionIds } = req.body as { configId?: unknown; transactionIds?: unknown };
+
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      res.status(400).json({ error: "transactionIds (number[]) is required" });
+      return;
+    }
+    if (transactionIds.length > 50) {
+      res.status(400).json({ error: "Maximum 50 transaction IDs per request" });
+      return;
+    }
+
+    // Resolve config
+    let config;
+    if (typeof configId === "number") {
+      config = await getExtensivConfigById(configId);
+      if (!config) { res.status(404).json({ error: "Extensiv config not found" }); return; }
+    } else {
+      const allConfigs = await getExtensivConfigs();
+      if (allConfigs.length === 0) {
+        res.status(422).json({ error: "No Extensiv connections configured. Please add one in Settings." });
+        return;
+      }
+      config = allConfigs[0];
+    }
+
+    const results = await Promise.allSettled(
+      (transactionIds as number[]).map((txId) => fetchOrderWithDetail(config, txId))
+    );
+
+    const tickets: ExtensivStyleTicket[] = [];
+    const errors: Array<{ transactionId: number; error: string }> = [];
+
+    for (let i = 0; i < results.length; i++) {
+      const txId = (transactionIds as number[])[i];
+      const result = results[i];
+      if (result.status === "fulfilled") {
+        const { order } = result.value;
+        const raw = order as unknown as ExtensivOrder;
+        tickets.push({
+          transactionId: txId,
+          referenceNum:      raw.referenceNum ?? "",
+          poNum:             raw.poNum ?? "",
+          vendorNum:         "",
+          customerName:      raw.readOnly?.customerIdentifier?.name ?? "",
+          facilityName:      raw.readOnly?.facilityIdentifier?.name ?? "",
+          creationDate:      raw.readOnly?.creationDate ?? "",
+          earliestShipDate:  raw.earliestShipDate ?? "",
+          cancelDate:        "",
+          carrier:           raw.readOnly?.carrierName ?? raw.readOnly?.carrierCode ?? "",
+          service:           raw.readOnly?.shipVia ?? "",
+          billing:           "",
+          accountNum:        "",
+          notes:             raw.notes ?? "",
+          shipTo: {
+            companyName: raw.shipTo?.companyName ?? "",
+            name:        raw.shipTo?.name ?? "",
+            address1:    raw.shipTo?.address1 ?? "",
+            city:        raw.shipTo?.city ?? "",
+            state:       raw.shipTo?.state ?? "",
+            zip:         raw.shipTo?.zip ?? "",
+          },
+          items: (raw.orderItems ?? []).map((item: ExtensivOrderItem) => ({
+            sku:            item.itemIdentifier?.sku ?? "",
+            description:    "",
+            qty:            item.qty ?? 0,
+            unitOfMeasure:  "Each",
+            lotNumber:      item.lotNumber ?? "",
+            expirationDate: item.expirationDate ?? "",
+            location:       "",
+          })),
+        });
+      } else {
+        const err = result.reason as Error;
+        errors.push({ transactionId: txId, error: err?.message ?? "Unknown error" });
+      }
+    }
+
+    if (tickets.length === 0) {
+      res.status(422).json({
+        error: "No valid orders found for the provided transaction IDs",
+        errors,
+      });
+      return;
+    }
+
+    if (errors.length > 0) {
+      res.setHeader("X-Audit-Errors", JSON.stringify(errors));
+    }
+
+    await generateExtensivPickTicketsPDF(res, tickets);
   });
 }

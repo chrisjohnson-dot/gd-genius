@@ -415,7 +415,7 @@ function WarehouseCard({
   receivers: Receiver[];
   onSelect: (r: Receiver) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState("");
 
   const openCount = receivers.filter((r) => r.readOnly.status !== 2).length;

@@ -167,7 +167,6 @@ function PriorityList({
 // ─── Main Component ────────────────────────────────────────────────────────
 
 export default function PutAwayPriorityConfig() {
-  const [selectedConfigId, setSelectedConfigId] = useState<number | null>(null);
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [priorityEntries, setPriorityEntries] = useState<PriorityEntry[]>([]);
@@ -178,7 +177,8 @@ export default function PutAwayPriorityConfig() {
   // ── Data queries ──
 
   const configQuery = trpc.config.list.useQuery();
-  const configs = configQuery.data ?? [];
+  // Auto-detect: always use the first available config
+  const selectedConfigId = (configQuery.data ?? [])[0]?.id ?? null;
 
   const facilitiesQuery = trpc.extensiv.facilities.useQuery(
     { configId: selectedConfigId! },
@@ -206,13 +206,6 @@ export default function PutAwayPriorityConfig() {
     },
     { enabled: !!selectedConfigId && !!selectedFacilityId && !!selectedCustomerId }
   );
-
-  // ── Auto-select first config ──
-  useEffect(() => {
-    if (configs.length > 0 && !selectedConfigId) {
-      setSelectedConfigId(configs[0].id);
-    }
-  }, [configs, selectedConfigId]);
 
   // ── Load saved priorities when selection changes ──
   useEffect(() => {
@@ -319,7 +312,7 @@ export default function PutAwayPriorityConfig() {
   }
 
   function handleSave() {
-    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return;
+    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return; // selectedConfigId auto-detected
     saveMutation.mutate({
       configId: selectedConfigId,
       facilityId: selectedFacilityId,
@@ -329,7 +322,7 @@ export default function PutAwayPriorityConfig() {
   }
 
   function handleClear() {
-    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return;
+    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return; // selectedConfigId auto-detected
     clearMutation.mutate({
       configId: selectedConfigId,
       facilityId: selectedFacilityId,
@@ -350,7 +343,7 @@ export default function PutAwayPriorityConfig() {
     setIsDirty(false);
   }
 
-  const canInteract = !!selectedConfigId && !!selectedFacilityId && !!selectedCustomerId;
+  const canInteract = !!selectedConfigId && !!selectedFacilityId && !!selectedCustomerId; // selectedConfigId auto-detected
   const canSave = canInteract && isDirty && !saveMutation.isPending;
   const isLoadingLocations = locationsQuery.isLoading || priorityQuery.isLoading;
 
@@ -374,32 +367,7 @@ export default function PutAwayPriorityConfig() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Config */}
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Extensiv Config</Label>
-              <Select
-                value={selectedConfigId?.toString() ?? ""}
-                onValueChange={(v) => {
-                  setSelectedConfigId(Number(v));
-                  setSelectedFacilityId(null);
-                  setSelectedCustomerId(null);
-                  setPriorityEntries([]);
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select config…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {configs.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.name ?? `Config #${c.id}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Facility */}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Warehouse</Label>
@@ -458,7 +426,7 @@ export default function PutAwayPriorityConfig() {
       </Card>
 
       {/* No config state */}
-      {!selectedConfigId && (
+      {!selectedConfigId && !configQuery.isLoading && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card py-16 text-center">
           <AlertCircle className="h-8 w-8 text-muted-foreground/30 mb-3" />
           <p className="text-sm font-medium text-foreground">No Extensiv config found</p>

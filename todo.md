@@ -664,3 +664,7 @@
 - [x] Reuse existing fetchItemDescriptions() helper in server/extensiv/api.ts
 - [x] Update /api/pdf/extensiv-pick-tickets route: collect unique customer IDs from fulfilled orders, fetch descriptions per customer in parallel (best-effort), stamp descriptions onto ticket items
 - [x] Description lookup is non-fatal — blank description shown if lookup fails for a customer
+
+## UI Tweaks — Mar 30 2026
+- [x] Receiving dashboard: warehouses start collapsed by default
+- [x] Put Away Priority Config: remove Extensiv config selector (auto-detect config)

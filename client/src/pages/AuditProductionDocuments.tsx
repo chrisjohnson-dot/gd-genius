@@ -1,16 +1,8 @@
 import { useState, useRef } from "react";
-import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   AlertCircle,
   CheckCircle2,
@@ -37,7 +29,6 @@ function parseTransactionIds(raw: string): number[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AuditProductionDocuments() {
-  const [configId, setConfigId] = useState<number | null>(null);
   const [rawInput, setRawInput] = useState("");
   const [parsedIds, setParsedIds] = useState<number[]>([]);
   const [generating, setGenerating] = useState(false);
@@ -45,8 +36,6 @@ export default function AuditProductionDocuments() {
   const [genWarnings, setGenWarnings] = useState<Array<{ transactionId: number; error: string }>>([]);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
-
-  const { data: configs, isLoading: configsLoading } = trpc.config.list.useQuery();
 
   // Parse IDs whenever the textarea changes
   function handleInputChange(value: string) {
@@ -65,19 +54,18 @@ export default function AuditProductionDocuments() {
   }
 
   async function handleGenerate() {
-    if (!configId || parsedIds.length === 0) return;
+    if (parsedIds.length === 0) return;
     setGenerating(true);
     setGenError(null);
     setGenWarnings([]);
     setDownloadUrl(null);
 
     try {
-      // Fetch the session cookie so the request is authenticated
       const resp = await fetch("/api/pdf/audit-pick-tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ configId, transactionIds: parsedIds }),
+        body: JSON.stringify({ transactionIds: parsedIds.slice(0, 50) }),
       });
 
       if (!resp.ok) {
@@ -116,7 +104,7 @@ export default function AuditProductionDocuments() {
     }
   }
 
-  const canGenerate = configId !== null && parsedIds.length > 0 && !generating;
+  const canGenerate = parsedIds.length > 0 && !generating;
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -135,43 +123,11 @@ export default function AuditProductionDocuments() {
 
       <Separator />
 
-      {/* Step 1 — Select warehouse config */}
+      {/* Step 1 — Enter Transaction IDs */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">1</span>
-            Select Warehouse
-          </CardTitle>
-          <CardDescription>Choose the Extensiv connection to pull orders from</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {configsLoading ? (
-            <div className="h-10 bg-muted animate-pulse rounded-md" />
-          ) : (
-            <Select
-              value={configId !== null ? String(configId) : ""}
-              onValueChange={(v) => { setConfigId(Number(v)); setDownloadUrl(null); }}
-            >
-              <SelectTrigger className="w-full max-w-sm">
-                <SelectValue placeholder="Select a warehouse connection…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(configs ?? []).map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Step 2 — Enter Transaction IDs */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">2</span>
             Enter Transaction IDs
           </CardTitle>
           <CardDescription>
@@ -233,11 +189,11 @@ export default function AuditProductionDocuments() {
         </CardContent>
       </Card>
 
-      {/* Step 3 — Generate */}
+      {/* Step 2 — Generate */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">3</span>
+            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">2</span>
             Generate Audit PDF
           </CardTitle>
           <CardDescription>

@@ -33,6 +33,22 @@ export interface ExtensivOrder {
     customerIdentifier: { id: number; name: string };
     facilityIdentifier: { id: number; name: string };
     creationDate: string;
+    /** Date the order was actually shipped */
+    shipDate?: string;
+    /** Tracking / PRO number assigned by the carrier */
+    trackingNumber?: string;
+    /** Bill of Lading number */
+    bolNumber?: string;
+    /** Carrier SCAC code */
+    carrierCode?: string;
+    /** Human-readable carrier name */
+    carrierName?: string;
+    /** Service level / ship-via description */
+    shipVia?: string;
+    /** Total shipment weight (lbs) */
+    totalWeight?: number;
+    /** Number of cartons / pallets */
+    totalCartons?: number;
   };
   referenceNum: string;
   poNum?: string;
@@ -48,6 +64,17 @@ export interface ExtensivOrder {
     state?: string;
     zip?: string;
     country?: string;
+    phone?: string;
+  };
+  /** Ship-from / origin address (warehouse) */
+  shipFrom?: {
+    companyName?: string;
+    address1?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+    phone?: string;
   };
   orderItems?: ExtensivOrderItem[];
   _links?: Record<string, unknown>;

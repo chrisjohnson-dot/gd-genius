@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { PassThrough } from "stream";
 import { PDFDocument } from "pdf-lib";
-import { getAllocationRunById, getAllocationRunOrders, getExtensivConfigById } from "../db";
+import { getAllocationRunById, getAllocationRunOrders, getExtensivConfigById, getExtensivConfigs } from "../db";
 import {
   generatePickFacePullSheetPDF,
   generateWarehousePullSheetPDF,
@@ -10,6 +10,8 @@ import {
 import type { PullListItem, PackListItem, OrderPackData } from "./generator";
 import { generateAuditPickTicketsPDF } from "./auditGenerator";
 import type { AuditPickTicket } from "./auditGenerator";
+import { generateAuditShippingDocumentsPDF } from "./auditShippingGenerator";
+import type { AuditShippingDocument } from "./auditShippingGenerator";
 import { fetchOrderWithDetail } from "../extensiv/api";
 import { sdk } from "../_core/sdk";
 
@@ -219,14 +221,14 @@ export function registerPdfRoutes(app: Express) {
 
   // ── Audit Pick Tickets PDF ────────────────────────────────────────────────
   // POST /api/pdf/audit-pick-tickets
-  // Body: { configId: number, transactionIds: number[] }
+  // Body: { transactionIds: number[] }  (configId is now optional — auto-detected)
   app.post("/api/pdf/audit-pick-tickets", async (req: Request, res: Response) => {
     if (!(await requireAuth(req, res))) return;
 
     const { configId, transactionIds } = req.body as { configId?: unknown; transactionIds?: unknown };
 
-    if (typeof configId !== "number" || !Array.isArray(transactionIds) || transactionIds.length === 0) {
-      res.status(400).json({ error: "configId (number) and transactionIds (number[]) are required" });
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      res.status(400).json({ error: "transactionIds (number[]) is required" });
       return;
     }
     if (transactionIds.length > 50) {
@@ -234,8 +236,19 @@ export function registerPdfRoutes(app: Express) {
       return;
     }
 
-    const config = await getExtensivConfigById(configId as number);
-    if (!config) { res.status(404).json({ error: "Extensiv config not found" }); return; }
+    // Resolve config: use provided configId if given, otherwise use the first available config
+    let config;
+    if (typeof configId === "number") {
+      config = await getExtensivConfigById(configId);
+      if (!config) { res.status(404).json({ error: "Extensiv config not found" }); return; }
+    } else {
+      const allConfigs = await getExtensivConfigs();
+      if (allConfigs.length === 0) {
+        res.status(422).json({ error: "No Extensiv connections configured. Please add one in Settings." });
+        return;
+      }
+      config = allConfigs[0];
+    }
 
     // Fetch all orders in parallel, collect successes + errors
     const results = await Promise.allSettled(
@@ -293,5 +306,112 @@ export function registerPdfRoutes(app: Express) {
     }
 
     await generateAuditPickTicketsPDF(res, tickets);
+  });
+
+  // ── Audit Shipping Documents PDF ────────────────────────────────────────
+  // POST /api/pdf/audit-shipping-documents
+  // Body: { transactionIds: number[] }  (configId optional — auto-detected)
+  app.post("/api/pdf/audit-shipping-documents", async (req: Request, res: Response) => {
+    if (!(await requireAuth(req, res))) return;
+
+    const { configId, transactionIds } = req.body as { configId?: unknown; transactionIds?: unknown };
+
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      res.status(400).json({ error: "transactionIds (number[]) is required" });
+      return;
+    }
+    if (transactionIds.length > 50) {
+      res.status(400).json({ error: "Maximum 50 transaction IDs per request" });
+      return;
+    }
+
+    // Resolve config
+    let config;
+    if (typeof configId === "number") {
+      config = await getExtensivConfigById(configId);
+      if (!config) { res.status(404).json({ error: "Extensiv config not found" }); return; }
+    } else {
+      const allConfigs = await getExtensivConfigs();
+      if (allConfigs.length === 0) {
+        res.status(422).json({ error: "No Extensiv connections configured. Please add one in Settings." });
+        return;
+      }
+      config = allConfigs[0];
+    }
+
+    // Fetch all orders in parallel
+    const results = await Promise.allSettled(
+      (transactionIds as number[]).map((txId) => fetchOrderWithDetail(config, txId))
+    );
+
+    const shippingDocs: AuditShippingDocument[] = [];
+    const errors: Array<{ transactionId: number; error: string }> = [];
+
+    for (let i = 0; i < results.length; i++) {
+      const txId = (transactionIds as number[])[i];
+      const result = results[i];
+      if (result.status === "fulfilled") {
+        const { order } = result.value;
+        const ro = order.readOnly;
+        shippingDocs.push({
+          transactionId: txId,
+          referenceNum:  order.referenceNum ?? "",
+          poNum:         order.poNum ?? "",
+          customerName:  ro?.customerIdentifier?.name ?? "",
+          facilityName:  ro?.facilityIdentifier?.name ?? "",
+          creationDate:  ro?.creationDate ?? "",
+          shipDate:      ro?.shipDate ?? "",
+          trackingNumber: ro?.trackingNumber ?? "",
+          bolNumber:     ro?.bolNumber ?? "",
+          carrierName:   ro?.carrierName ?? "",
+          carrierCode:   ro?.carrierCode ?? "",
+          shipVia:       ro?.shipVia ?? "",
+          totalWeight:   ro?.totalWeight ?? null,
+          totalCartons:  ro?.totalCartons ?? null,
+          shipTo: {
+            companyName: order.shipTo?.companyName ?? "",
+            address1:    order.shipTo?.address1 ?? "",
+            city:        order.shipTo?.city ?? "",
+            state:       order.shipTo?.state ?? "",
+            zip:         order.shipTo?.zip ?? "",
+            country:     order.shipTo?.country ?? "",
+            phone:       order.shipTo?.phone ?? "",
+          },
+          shipFrom: {
+            companyName: order.shipFrom?.companyName ?? ro?.facilityIdentifier?.name ?? "",
+            address1:    order.shipFrom?.address1 ?? "",
+            city:        order.shipFrom?.city ?? "",
+            state:       order.shipFrom?.state ?? "",
+            zip:         order.shipFrom?.zip ?? "",
+            country:     order.shipFrom?.country ?? "",
+            phone:       order.shipFrom?.phone ?? "",
+          },
+          items: (order.orderItems ?? []).map((item) => ({
+            sku:            item.itemIdentifier?.sku ?? "",
+            description:    "",
+            qty:            item.qty ?? 0,
+            lotNumber:      item.lotNumber ?? "",
+            expirationDate: item.expirationDate ?? "",
+          })),
+        });
+      } else {
+        const err = result.reason as Error;
+        errors.push({ transactionId: txId, error: err?.message ?? "Unknown error" });
+      }
+    }
+
+    if (shippingDocs.length === 0) {
+      res.status(422).json({
+        error: "No valid orders found for the provided transaction IDs",
+        errors,
+      });
+      return;
+    }
+
+    if (errors.length > 0) {
+      res.setHeader("X-Audit-Errors", JSON.stringify(errors));
+    }
+
+    await generateAuditShippingDocumentsPDF(res, shippingDocs);
   });
 }

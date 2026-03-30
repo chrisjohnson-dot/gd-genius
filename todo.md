@@ -639,3 +639,14 @@
 - [x] Build Production Documents page: multi-line Transaction ID input, config selector, Generate PDF button, download link
 - [x] Images page stub (placeholder)
 - [x] Shipping Documents page stub (placeholder)
+
+## AUDIT — Shipping Documents Page
+- [x] Audit Extensiv API fields available for shipping documents (carrier, tracking, BOL, ship-to, items)
+- [x] Extend ExtensivOrder type with shipping fields (shipDate, trackingNumber, bolNumber, carrierName, carrierCode, shipVia, totalWeight, totalCartons, shipFrom)
+- [x] Build audit shipping PDF generator: BOL-style layout with carrier, tracking, ship-from/to, line items, signature block, AUDIT watermark
+- [x] Add POST /api/pdf/audit-shipping-documents Express route (auto-detects config)
+- [x] Build Shipping Documents page UI: TX ID input, Generate PDF button, download (no warehouse selector)
+
+## AUDIT — Production Documents: Remove Warehouse Selector
+- [x] Remove the "Select Warehouse" step card from AuditProductionDocuments page
+- [x] Auto-detect the Extensiv config on the server side (use the first active config)

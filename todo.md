@@ -668,3 +668,4 @@
 ## UI Tweaks — Mar 30 2026
 - [x] Receiving dashboard: warehouses start collapsed by default
 - [x] Put Away Priority Config: remove Extensiv config selector (auto-detect config)
+- [x] SLA Tracker: warehouse tabs start collapsed by default

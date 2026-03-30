@@ -252,7 +252,7 @@ function WarehouseSlaCard({
   greenThreshold?: number;
   yellowThreshold?: number;
 }) {
-  const [expanded, setExpanded] = useState(drillDown ? true : true);
+  const [expanded, setExpanded] = useState(drillDown ? true : false);
   const [sortKey, setSortKey] = useState<SortKey>("slaStatus");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterStatus, setFilterStatus] = useState<"all" | "in_sla" | "out_of_sla">("all");

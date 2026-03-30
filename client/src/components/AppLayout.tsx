@@ -9,8 +9,10 @@ import {
   ClipboardList,
   Cog,
   FileBarChart2,
+  FileSearch,
   FolderOpen,
   History,
+  Image,
   ListChecks,
   LogOut,
   MapPin,
@@ -21,10 +23,12 @@ import {
   ScanBarcode,
   ScrollText,
   Ship,
+  ShieldCheck,
   Stethoscope,
   Sun,
   Timer,
   Truck,
+  Truck as TruckIcon,
   Users,
   Zap,
   Network,
@@ -72,6 +76,12 @@ const shippingItems = [
 const returnsItems = [
   { href: "/returns",         label: "Returns Dashboard", icon: RotateCcw },
   { href: "/returns/process", label: "Process Returns",   icon: ScanBarcode },
+];
+
+const auditItems = [
+  { href: "/audit/production-documents", label: "Production Documents", icon: FileSearch },
+  { href: "/audit/images",               label: "Images",               icon: Image },
+  { href: "/audit/shipping-documents",   label: "Shipping Documents",   icon: Truck },
 ];
 
 const configItems = [
@@ -356,6 +366,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </p>
             <div className="space-y-0.5">
               {returnsItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
+              ))}
+            </div>
+          </div>
+
+          {/* Audit section */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
+              Audit
+            </p>
+            <div className="space-y-0.5">
+              {auditItems.map(item => (
                 <NavItem key={item.href} {...item} active={location === item.href} />
               ))}
             </div>

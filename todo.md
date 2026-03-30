@@ -629,3 +629,13 @@
 - [x] Fetch priority config (putAway.getPriority) in PutAwayAssistant when warehouse+customer are selected
 - [x] Render a collapsible legend panel below the suggestion list showing all configured aisles in priority order
 - [x] Legend collapses by default; user can expand to see the full priority map
+
+## AUDIT Section
+- [x] Add AUDIT nav section to sidebar below Returns with sub-items: Production Documents, Images, Shipping Documents
+- [x] Register routes: /audit/production-documents, /audit/images, /audit/shipping-documents
+- [x] Reuse fetchOrderWithDetail from Extensiv API layer to pull pick ticket data by transaction ID
+- [x] Add auditDocuments.fetchPickTickets tRPC procedure: accepts array of transaction IDs, fetches order detail from Extensiv
+- [x] Add POST /api/pdf/audit-pick-tickets Express endpoint: generates multi-page PDF with AUDIT watermark
+- [x] Build Production Documents page: multi-line Transaction ID input, config selector, Generate PDF button, download link
+- [x] Images page stub (placeholder)
+- [x] Shipping Documents page stub (placeholder)

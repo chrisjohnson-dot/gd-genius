@@ -3940,6 +3940,92 @@ const putAwayRouter = router({
     }),
 });
 
+// ─── Audit Documents Router ──────────────────────────────────────────────────
+const auditDocumentsRouter = router({
+  /**
+   * Fetch order detail for one or more transaction IDs from Extensiv.
+   * Returns structured pick ticket data for each order.
+   */
+  fetchPickTickets: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      transactionIds: z.array(z.number().int().positive()).min(1).max(50),
+    }))
+    .mutation(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+      const results = await Promise.allSettled(
+        input.transactionIds.map((txId) => fetchOrderWithDetail(config, txId))
+      );
+
+      const tickets: Array<{
+        transactionId: number;
+        referenceNum: string;
+        poNum: string;
+        customerName: string;
+        facilityName: string;
+        status: number;
+        creationDate: string;
+        shipTo: {
+          companyName: string;
+          address1: string;
+          city: string;
+          state: string;
+          zip: string;
+        };
+        items: Array<{
+          sku: string;
+          description: string;
+          qty: number;
+          lotNumber: string;
+          expirationDate: string;
+        }>;
+      }> = [];
+
+      const errors: Array<{ transactionId: number; error: string }> = [];
+
+      for (let i = 0; i < results.length; i++) {
+        const txId = input.transactionIds[i];
+        const result = results[i];
+        if (result.status === "fulfilled") {
+          const { order } = result.value;
+          tickets.push({
+            transactionId: txId,
+            referenceNum: order.referenceNum ?? "",
+            poNum: order.poNum ?? "",
+            customerName: order.readOnly?.customerIdentifier?.name ?? "",
+            facilityName: order.readOnly?.facilityIdentifier?.name ?? "",
+            status: order.readOnly?.status ?? 0,
+            creationDate: order.readOnly?.creationDate ?? "",
+            shipTo: {
+              companyName: order.shipTo?.companyName ?? "",
+              address1: order.shipTo?.address1 ?? "",
+              city: order.shipTo?.city ?? "",
+              state: order.shipTo?.state ?? "",
+              zip: order.shipTo?.zip ?? "",
+            },
+            items: (order.orderItems ?? []).map((item) => ({
+              sku: item.itemIdentifier?.sku ?? "",
+              description: "",
+              qty: item.qty ?? 0,
+              lotNumber: item.lotNumber ?? "",
+              expirationDate: item.expirationDate ?? "",
+            })),
+          });
+        } else {
+          const err = result.reason as Error & { status?: number };
+          errors.push({
+            transactionId: txId,
+            error: err?.message ?? "Unknown error",
+          });
+        }
+      }
+
+      return { tickets, errors };
+    }),
+});
+
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
 export const appRouter = router({
   ..._appRouter._def.record,
@@ -3952,5 +4038,6 @@ export const appRouter = router({
   palletScanner: palletScannerRouter,
   receiving: receivingRouter,
   putAway: putAwayRouter,
+  auditDocuments: auditDocumentsRouter,
 });
 export type AppRouter = typeof appRouter;

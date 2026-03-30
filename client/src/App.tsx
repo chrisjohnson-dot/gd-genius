@@ -36,6 +36,9 @@ import ReceivingDashboard from "@/pages/ReceivingDashboard";
 import PutAwayAssistant from "@/pages/PutAwayAssistant";
 import ReceiptConfirmation from "@/pages/ReceiptConfirmation";
 import PutAwayPriorityConfig from "@/pages/PutAwayPriorityConfig";
+import AuditProductionDocuments from "@/pages/AuditProductionDocuments";
+import AuditImages from "@/pages/AuditImages";
+import AuditShippingDocuments from "@/pages/AuditShippingDocuments";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -82,6 +85,9 @@ function AppRoutes() {
         <Route path="/receiving/confirm" component={ReceiptConfirmation} />
         <Route path="/receiving/put-away" component={PutAwayAssistant} />
         <Route path="/receiving/put-away/priority" component={PutAwayPriorityConfig} />
+        <Route path="/audit/production-documents" component={AuditProductionDocuments} />
+        <Route path="/audit/images" component={AuditImages} />
+        <Route path="/audit/shipping-documents" component={AuditShippingDocuments} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

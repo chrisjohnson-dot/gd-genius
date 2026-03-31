@@ -3342,6 +3342,21 @@ const qcScannerRouter = router({
       await updateQcPallet(input.palletId, { palletUpc: upc });
       return { success: true, palletId: input.palletId, upc };
     }),
+
+  // Bulk-assign UPCs to all pallets in a session that don't already have one
+  bulkGeneratePalletUpcs: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const pallets = await getQcPallets(input.sessionId);
+      const unassigned = pallets.filter((p) => !p.palletUpc?.trim());
+      const results: Array<{ palletId: number; palletNumber: number; upc: string }> = [];
+      for (const pallet of unassigned) {
+        const upc = `GD-${input.sessionId}-P${pallet.palletNumber}`;
+        await updateQcPallet(pallet.id, { palletUpc: upc });
+        results.push({ palletId: pallet.id, palletNumber: pallet.palletNumber, upc });
+      }
+      return { assigned: results, skipped: pallets.length - unassigned.length };
+    }),
 });
 
 // Pallet Scanner router (Shipping section)

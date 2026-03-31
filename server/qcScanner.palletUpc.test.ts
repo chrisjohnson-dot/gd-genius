@@ -144,3 +144,83 @@ describe("qcScanner.generatePalletUpc", () => {
     expect(r2.upc).toBe("GD-20-P1");
   });
 });
+
+// ─── bulkGeneratePalletUpcs logic ─────────────────────────────────────────────
+
+async function bulkGeneratePalletUpcsLogic(
+  sessionId: number
+): Promise<{ assigned: Array<{ palletId: number; palletNumber: number; upc: string }>; skipped: number }> {
+  const pallets = await getQcPallets(sessionId);
+  const unassigned = pallets.filter((p) => !(p.palletUpc ?? "").trim());
+  const results: Array<{ palletId: number; palletNumber: number; upc: string }> = [];
+  for (const pallet of unassigned) {
+    const upc = `GD-${sessionId}-P${pallet.palletNumber}`;
+    await updateQcPallet(pallet.id, { palletUpc: upc });
+    results.push({ palletId: pallet.id, palletNumber: pallet.palletNumber, upc });
+  }
+  return { assigned: results, skipped: pallets.length - unassigned.length };
+}
+
+describe("qcScanner.bulkGeneratePalletUpcs", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpdatePallet.mockResolvedValue(undefined);
+  });
+
+  it("assigns UPCs to all pallets that have none", async () => {
+    mockGetPallets.mockResolvedValue([
+      makePallet({ id: 1, palletNumber: 1, palletUpc: null }),
+      makePallet({ id: 2, palletNumber: 2, palletUpc: null }),
+      makePallet({ id: 3, palletNumber: 3, palletUpc: null }),
+    ]);
+    const result = await bulkGeneratePalletUpcsLogic(10);
+    expect(result.assigned).toHaveLength(3);
+    expect(result.skipped).toBe(0);
+    expect(result.assigned[0].upc).toBe("GD-10-P1");
+    expect(result.assigned[1].upc).toBe("GD-10-P2");
+    expect(result.assigned[2].upc).toBe("GD-10-P3");
+    expect(mockUpdatePallet).toHaveBeenCalledTimes(3);
+  });
+
+  it("skips pallets that already have a UPC", async () => {
+    mockGetPallets.mockResolvedValue([
+      makePallet({ id: 1, palletNumber: 1, palletUpc: "EXISTING-UPC" }),
+      makePallet({ id: 2, palletNumber: 2, palletUpc: null }),
+    ]);
+    const result = await bulkGeneratePalletUpcsLogic(10);
+    expect(result.assigned).toHaveLength(1);
+    expect(result.skipped).toBe(1);
+    expect(result.assigned[0].palletId).toBe(2);
+    expect(result.assigned[0].upc).toBe("GD-10-P2");
+    expect(mockUpdatePallet).toHaveBeenCalledTimes(1);
+    expect(mockUpdatePallet).toHaveBeenCalledWith(2, { palletUpc: "GD-10-P2" });
+  });
+
+  it("returns assigned=[] and skipped=N when all pallets already have UPCs", async () => {
+    mockGetPallets.mockResolvedValue([
+      makePallet({ id: 1, palletNumber: 1, palletUpc: "UPC-1" }),
+      makePallet({ id: 2, palletNumber: 2, palletUpc: "UPC-2" }),
+    ]);
+    const result = await bulkGeneratePalletUpcsLogic(10);
+    expect(result.assigned).toHaveLength(0);
+    expect(result.skipped).toBe(2);
+    expect(mockUpdatePallet).not.toHaveBeenCalled();
+  });
+
+  it("treats whitespace-only UPC as unassigned", async () => {
+    mockGetPallets.mockResolvedValue([
+      makePallet({ id: 1, palletNumber: 1, palletUpc: "   " }),
+    ]);
+    const result = await bulkGeneratePalletUpcsLogic(10);
+    expect(result.assigned).toHaveLength(1);
+    expect(result.skipped).toBe(0);
+  });
+
+  it("returns empty assigned list when session has no pallets", async () => {
+    mockGetPallets.mockResolvedValue([]);
+    const result = await bulkGeneratePalletUpcsLogic(10);
+    expect(result.assigned).toHaveLength(0);
+    expect(result.skipped).toBe(0);
+    expect(mockUpdatePallet).not.toHaveBeenCalled();
+  });
+});

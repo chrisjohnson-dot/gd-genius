@@ -460,6 +460,28 @@ export default function QcScanner() {
     onError: (e) => toast.error(e.message),
   });
 
+  const bulkGeneratePalletUpcs = trpc.qcScanner.bulkGeneratePalletUpcs.useMutation({
+    onSuccess: (data) => {
+      // Merge newly assigned UPCs into local pallet state
+      const assignedMap = new Map(data.assigned.map((a) => [a.palletId, a.upc]));
+      setPallets((prev) =>
+        prev.map((p) => assignedMap.has(p.id) ? { ...p, palletUpc: assignedMap.get(p.id) } : p)
+      );
+      if (data.assigned.length === 0) {
+        toast.info("All pallets already have UPCs assigned.");
+      } else {
+        toast.success(
+          `Assigned UPCs to ${data.assigned.length} pallet${data.assigned.length !== 1 ? "s" : ""}` +
+          (data.skipped > 0 ? ` (${data.skipped} already had one)` : "")
+        );
+      }
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // Derived: how many pallets are still missing a UPC
+  const unassignedCount = pallets.filter((p) => !p.palletUpc?.trim()).length;
+
   const flagScan = trpc.qcScanner.flagScan.useMutation({
     onSuccess: () => {
       toast.success("Scan flagged for review");
@@ -978,14 +1000,32 @@ export default function QcScanner() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Pallets</h3>
             {phase === "scanning" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => addPallet.mutate({ sessionId: session!.id })}
-                disabled={addPallet.isPending}
-              >
-                <Plus className="w-4 h-4 mr-1" /> Add Pallet
-              </Button>
+              <div className="flex items-center gap-2">
+                {pallets.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant={unassignedCount > 0 ? "default" : "outline"}
+                    onClick={() => bulkGeneratePalletUpcs.mutate({ sessionId: session!.id })}
+                    disabled={bulkGeneratePalletUpcs.isPending || unassignedCount === 0}
+                    title={unassignedCount === 0 ? "All pallets already have UPCs" : `Auto-assign UPCs to ${unassignedCount} unassigned pallet${unassignedCount !== 1 ? "s" : ""}`}
+                  >
+                    <Wand2 className="w-4 h-4 mr-1" />
+                    {bulkGeneratePalletUpcs.isPending
+                      ? "Assigning…"
+                      : unassignedCount > 0
+                        ? `Auto-Assign All (${unassignedCount})`
+                        : "All UPCs Assigned"}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => addPallet.mutate({ sessionId: session!.id })}
+                  disabled={addPallet.isPending}
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add Pallet
+                </Button>
+              </div>
             )}
           </div>
           {pallets.length === 0 ? (

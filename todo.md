@@ -689,3 +689,9 @@
 - [x] Add palletScanner.uploadPhoto tRPC procedure (base64 dataUrl → S3, store photoUrl on pallet)
 - [x] Rebuild PalletScanner.tsx: Step 1 load order by reference, Step 2 scan each pallet UPC, running counter, success banner
 - [x] Keep existing Tracking Log as second tab
+
+## QC Scanner — Pallet UPC Assignment
+- [ ] Add assignPalletUpc tRPC procedure (set palletUpc on a qc_pallet row)
+- [ ] Add UPC assignment UI in QC Scanner pallet management: scan/type UPC per pallet, show assigned UPC with edit option
+- [ ] Auto-generate a UPC if none is scanned (GD-{sessionId}-{palletIndex} format) so every pallet always has a scannable identifier
+- [ ] Show assigned UPCs in the pallet list with a barcode icon and copy-to-clipboard

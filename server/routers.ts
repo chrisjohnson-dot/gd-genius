@@ -3308,6 +3308,40 @@ const qcScannerRouter = router({
       const items = await getQcScanItems(input.sessionId);
       return { session, items };
     }),
+  // Assign or update a UPC barcode on a pallet
+  assignPalletUpc: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      sessionId: z.number(),
+      upc: z.string().min(1).max(128),
+    }))
+    .mutation(async ({ input }) => {
+      // Check for duplicate UPC across all pallets in this session
+      const pallets = await getQcPallets(input.sessionId);
+      const duplicate = pallets.find(
+        (p) => p.id !== input.palletId && p.palletUpc?.trim().toLowerCase() === input.upc.trim().toLowerCase()
+      );
+      if (duplicate) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `UPC "${input.upc}" is already assigned to Pallet ${duplicate.palletNumber} in this session.`,
+        });
+      }
+      await updateQcPallet(input.palletId, { palletUpc: input.upc.trim() });
+      return { success: true, palletId: input.palletId, upc: input.upc.trim() };
+    }),
+  // Auto-generate a UPC for a pallet (GD-{sessionId}-P{palletNumber})
+  generatePalletUpc: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      sessionId: z.number(),
+      palletNumber: z.number(),
+    }))
+    .mutation(async ({ input }) => {
+      const upc = `GD-${input.sessionId}-P${input.palletNumber}`;
+      await updateQcPallet(input.palletId, { palletUpc: upc });
+      return { success: true, palletId: input.palletId, upc };
+    }),
 });
 
 // Pallet Scanner router (Shipping section)

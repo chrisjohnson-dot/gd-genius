@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
-  Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X
+  Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
+  Barcode, Wand2, Pencil, Copy
 } from "lucide-react";
 
 type ScanItem = {
@@ -28,6 +29,7 @@ type ScanItem = {
 type Pallet = {
   id: number;
   palletNumber: number;
+  palletUpc?: string | null;
   items: Array<{ sku: string; upc?: string; qty: number }> | null;
 };
 
@@ -364,7 +366,7 @@ export default function QcScanner() {
       const sess = data.session as Session;
       setSession(sess);
       setItems((data.items as ScanItem[]) ?? []);
-      setPallets((data.pallets as Pallet[]) ?? []);
+      setPallets((data.pallets as unknown as Pallet[]) ?? []);
       setPhase("scanning");
       if (data.resumed) {
         toast.info(`Resumed session for ${sess?.referenceNumber}`);
@@ -426,10 +428,36 @@ export default function QcScanner() {
 
   const addPallet = trpc.qcScanner.addPallet.useMutation({
     onSuccess: (data) => {
-      setPallets((prev) => [...prev, { id: data.id, palletNumber: data.palletNumber, items: [] }]);
+      setPallets((prev) => [...prev, { id: data.id, palletNumber: data.palletNumber, palletUpc: null, items: [] }]);
       setActivePalletTab(String(pallets.length));
       toast.success(`Pallet ${data.palletNumber} added`);
     },
+  });
+
+  // UPC assignment state
+  const [upcInputs, setUpcInputs] = useState<Record<number, string>>({});
+  const [editingUpc, setEditingUpc] = useState<number | null>(null);
+
+  const assignPalletUpc = trpc.qcScanner.assignPalletUpc.useMutation({
+    onSuccess: (data) => {
+      setPallets((prev) =>
+        prev.map((p) => p.id === data.palletId ? { ...p, palletUpc: data.upc } : p)
+      );
+      setEditingUpc(null);
+      setUpcInputs((prev) => ({ ...prev, [data.palletId]: "" }));
+      toast.success(`UPC assigned: ${data.upc}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const generatePalletUpc = trpc.qcScanner.generatePalletUpc.useMutation({
+    onSuccess: (data) => {
+      setPallets((prev) =>
+        prev.map((p) => p.id === data.palletId ? { ...p, palletUpc: data.upc } : p)
+      );
+      toast.success(`Auto-generated UPC: ${data.upc}`);
+    },
+    onError: (e) => toast.error(e.message),
   });
 
   const flagScan = trpc.qcScanner.flagScan.useMutation({
@@ -978,7 +1006,81 @@ export default function QcScanner() {
                 <TabsContent key={pallet.id} value={String(idx)} className="mt-3">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
+                        {/* UPC assignment section */}
+                        <div className="flex flex-col items-end gap-1 min-w-0">
+                          {pallet.palletUpc && editingUpc !== pallet.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <Barcode className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span className="font-mono text-xs text-emerald-700 font-semibold truncate max-w-[140px]">{pallet.palletUpc}</span>
+                              <button
+                                className="text-muted-foreground hover:text-foreground"
+                                title="Copy UPC"
+                                onClick={() => { navigator.clipboard.writeText(pallet.palletUpc!); toast.success("UPC copied"); }}
+                              ><Copy className="w-3 h-3" /></button>
+                              {phase === "scanning" && (
+                                <button
+                                  className="text-muted-foreground hover:text-foreground"
+                                  title="Edit UPC"
+                                  onClick={() => { setEditingUpc(pallet.id); setUpcInputs((p) => ({ ...p, [pallet.id]: pallet.palletUpc ?? "" })); }}
+                                ><Pencil className="w-3 h-3" /></button>
+                              )}
+                            </div>
+                          ) : phase === "scanning" ? (
+                            editingUpc === pallet.id ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  className="h-7 text-xs w-36 font-mono"
+                                  placeholder="Scan or type UPC"
+                                  value={upcInputs[pallet.id] ?? ""}
+                                  autoFocus
+                                  onChange={(e) => setUpcInputs((p) => ({ ...p, [pallet.id]: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && upcInputs[pallet.id]?.trim()) {
+                                      assignPalletUpc.mutate({ palletId: pallet.id, sessionId: session!.id, upc: upcInputs[pallet.id].trim() });
+                                    } else if (e.key === "Escape") {
+                                      setEditingUpc(null);
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  disabled={!upcInputs[pallet.id]?.trim() || assignPalletUpc.isPending}
+                                  onClick={() => assignPalletUpc.mutate({ palletId: pallet.id, sessionId: session!.id, upc: upcInputs[pallet.id].trim() })}
+                                >Save</Button>
+                                <Button size="sm" variant="ghost" className="h-7 px-1" onClick={() => setEditingUpc(null)}>
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={() => { setEditingUpc(pallet.id); setUpcInputs((p) => ({ ...p, [pallet.id]: "" })); }}
+                                >
+                                  <Barcode className="w-3 h-3 mr-1" /> Assign UPC
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs text-muted-foreground"
+                                  title="Auto-generate a UPC"
+                                  disabled={generatePalletUpc.isPending}
+                                  onClick={() => generatePalletUpc.mutate({ palletId: pallet.id, sessionId: session!.id, palletNumber: pallet.palletNumber })}
+                                >
+                                  <Wand2 className="w-3 h-3 mr-1" /> Auto
+                                </Button>
+                              </div>
+                            )
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">No UPC assigned</span>
+                          )}
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       {!pallet.items || pallet.items.length === 0 ? (

@@ -219,6 +219,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navRef = useRef<HTMLElement>(null);
   const savedNavScroll = useRef(0);
 
+  // Configuration section collapsed state — starts closed, auto-opens when on a config route
+  const isOnConfigRoute = configItems.some((item) => location === item.href);
+  const [configOpen, setConfigOpen] = useState(isOnConfigRoute);
+
+  // Auto-expand when navigating to a config route
+  useEffect(() => {
+    if (isOnConfigRoute) setConfigOpen(true);
+  }, [isOnConfigRoute]);
+
   // Save nav scroll position before navigation, restore after
   useEffect(() => {
     const nav = navRef.current;
@@ -383,16 +392,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Configuration section */}
+          {/* Configuration section — collapsible */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Configuration
-            </p>
-            <div className="space-y-0.5">
-              {configItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button
+              onClick={() => setConfigOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-2 mb-1 group"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">
+                Configuration
+              </p>
+              <svg
+                className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${
+                  configOpen ? "rotate-180" : "rotate-0"
+                }`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {configOpen && (
+              <div className="space-y-0.5">
+                {configItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
         </nav>
 

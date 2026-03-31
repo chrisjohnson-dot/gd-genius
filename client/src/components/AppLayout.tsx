@@ -228,6 +228,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (isOnConfigRoute) setConfigOpen(true);
   }, [isOnConfigRoute]);
 
+  const isOnAuditRoute = auditItems.some((item) => location === item.href);
+  const [auditOpen, setAuditOpen] = useState(isOnAuditRoute);
+
+  // Auto-expand when navigating to an audit route
+  useEffect(() => {
+    if (isOnAuditRoute) setAuditOpen(true);
+  }, [isOnAuditRoute]);
+
   // Save nav scroll position before navigation, restore after
   useEffect(() => {
     const nav = navRef.current;
@@ -380,16 +388,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Audit section */}
+          {/* Audit section — collapsible */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Audit
-            </p>
-            <div className="space-y-0.5">
-              {auditItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button
+              onClick={() => setAuditOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-2 mb-1 group"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">
+                Audit
+              </p>
+              <svg
+                className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${
+                  auditOpen ? "rotate-180" : "rotate-0"
+                }`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {auditOpen && (
+              <div className="space-y-0.5">
+                {auditItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Configuration section — collapsible */}

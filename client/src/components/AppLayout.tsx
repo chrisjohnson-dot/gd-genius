@@ -219,9 +219,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navRef = useRef<HTMLElement>(null);
   const savedNavScroll = useRef(0);
 
-  // Configuration section collapsed state — starts closed, auto-opens when on a config route
+  // ── Collapsible sidebar sections with localStorage persistence ──────────────
+  // Helper: read a boolean from localStorage, falling back to `fallback` when
+  // the key is absent (first visit) or the stored value is not a valid boolean.
+  function readStoredBool(key: string, fallback: boolean): boolean {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return fallback;
+      return raw === "true";
+    } catch {
+      return fallback;
+    }
+  }
+
   const isOnConfigRoute = configItems.some((item) => location === item.href);
-  const [configOpen, setConfigOpen] = useState(isOnConfigRoute);
+  // Default: open when on a config route, otherwise use stored preference (default closed)
+  const [configOpen, setConfigOpen] = useState(() =>
+    readStoredBool("sidebar:configOpen", isOnConfigRoute)
+  );
+
+  // Persist config section state whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("sidebar:configOpen", String(configOpen)); } catch { /* ignore */ }
+  }, [configOpen]);
 
   // Auto-expand when navigating to a config route
   useEffect(() => {
@@ -229,7 +249,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [isOnConfigRoute]);
 
   const isOnAuditRoute = auditItems.some((item) => location === item.href);
-  const [auditOpen, setAuditOpen] = useState(isOnAuditRoute);
+  // Default: open when on an audit route, otherwise use stored preference (default closed)
+  const [auditOpen, setAuditOpen] = useState(() =>
+    readStoredBool("sidebar:auditOpen", isOnAuditRoute)
+  );
+
+  // Persist audit section state whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("sidebar:auditOpen", String(auditOpen)); } catch { /* ignore */ }
+  }, [auditOpen]);
 
   // Auto-expand when navigating to an audit route
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
+import { storagePut } from "./storage";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -3350,6 +3351,102 @@ const palletScannerRouter = router({
     .mutation(async ({ input }) => {
       await updatePalletScanStatus(input.id, input.status);
       return { success: true };
+    }),
+
+  // ── Two-step pallet shipping workflow ──────────────────────────────────────
+
+  /**
+   * Step 1: load a QC session by reference number and return its pallets.
+   * Used by the pallet scanner to pull up an order before scanning pallet UPCs.
+   */
+  loadOrder: protectedProcedure
+    .input(z.object({ referenceNumber: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const session = await getQcSessionByRef(input.referenceNumber.trim());
+      if (!session) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `No QC session found for reference number "${input.referenceNumber}".`,
+        });
+      }
+      const pallets = await getQcPallets(session.id);
+      return {
+        session: {
+          id: session.id,
+          referenceNumber: session.referenceNumber,
+          customerName: session.customerName,
+          warehouseName: session.warehouseName,
+          status: session.status,
+        },
+        pallets: pallets.map((p) => ({
+          id: p.id,
+          palletNumber: p.palletNumber,
+          palletUpc: p.palletUpc,
+          shippedAt: p.shippedAt,
+          photoUrl: p.photoUrl,
+        })),
+      };
+    }),
+
+  /**
+   * Step 2: scan a pallet UPC to stamp it as shipped.
+   * Returns the full updated pallet list for the session.
+   */
+  scanPallet: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      palletUpc: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const pallets = await getQcPallets(input.sessionId);
+      const pallet = pallets.find(
+        (p) => p.palletUpc?.trim().toLowerCase() === input.palletUpc.trim().toLowerCase()
+      );
+      if (!pallet) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Pallet UPC "${input.palletUpc}" not found on this order.`,
+        });
+      }
+      if (!pallet.shippedAt) {
+        await updateQcPallet(pallet.id, { shippedAt: new Date() });
+      }
+      const updated = await getQcPallets(input.sessionId);
+      return updated.map((p) => ({
+        id: p.id,
+        palletNumber: p.palletNumber,
+        palletUpc: p.palletUpc,
+        shippedAt: p.shippedAt,
+        photoUrl: p.photoUrl,
+      }));
+    }),
+
+  /**
+   * Upload a dock photo for a pallet (base64 data URL → S3).
+   * Stores the resulting URL on the pallet record.
+   */
+  uploadPhoto: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      palletUpc: z.string(),
+      dataUrl: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      // Strip the data URL prefix to get raw base64
+      const base64 = input.dataUrl.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64, "base64");
+      const suffix = Date.now();
+      const key = `pallet-photos/${input.sessionId}/${input.palletUpc.replace(/[^a-zA-Z0-9]/g, "-")}-${suffix}.jpg`;
+      const { url } = await storagePut(key, buffer, "image/jpeg");
+      // Find the pallet and store the photo URL
+      const pallets = await getQcPallets(input.sessionId);
+      const pallet = pallets.find(
+        (p) => p.palletUpc?.trim().toLowerCase() === input.palletUpc.trim().toLowerCase()
+      );
+      if (pallet) {
+        await updateQcPallet(pallet.id, { photoUrl: url });
+      }
+      return { url };
     }),
 });
 

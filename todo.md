@@ -682,3 +682,10 @@
 - [x] Order complete detection: green success banner + Start New Order button when all pallets scanned
 - [x] Browser camera capture: Take Photo button using getUserMedia, uploads via palletScanner.uploadPhoto, photoUrl stored on pallet
 - [x] DB migrations applied: isBatch on qc_scan_sessions, photoUrl on qc_pallets
+
+## Pallet Scanner — Two-Step Workflow (Real Build)
+- [x] Add palletScanner.loadOrder tRPC procedure (lookup QC session by reference number, return session + pallets)
+- [x] Add palletScanner.scanPallet tRPC procedure (match palletUpc, stamp shippedAt, return updated pallet list)
+- [x] Add palletScanner.uploadPhoto tRPC procedure (base64 dataUrl → S3, store photoUrl on pallet)
+- [x] Rebuild PalletScanner.tsx: Step 1 load order by reference, Step 2 scan each pallet UPC, running counter, success banner
+- [x] Keep existing Tracking Log as second tab

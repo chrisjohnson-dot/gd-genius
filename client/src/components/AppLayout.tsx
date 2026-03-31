@@ -47,9 +47,8 @@ const dashboardItems = [
 ];
 
 const receivingItems = [
-  { href: "/receiving",                    label: "Receiving Dashboard",     icon: Inbox },
-  { href: "/receiving/put-away",           label: "Run Put Away Wizard",     icon: ConciergeBell },
-  { href: "/receiving/put-away/priority",  label: "Put Away Priority Config", icon: MapPin },
+  { href: "/receiving",          label: "Receiving Dashboard", icon: Inbox },
+  { href: "/receiving/put-away", label: "Run Put Away Wizard", icon: ConciergeBell },
 ];
 
 const allocationItems = [
@@ -85,14 +84,15 @@ const auditItems = [
 ];
 
 const configItems = [
-  { href: "/settings",         label: "API Settings",       icon: Cog },
-  { href: "/locations",        label: "Location Config",    icon: MapPin },
-  { href: "/rules",            label: "Allocation Rules",   icon: ListChecks },
-  { href: "/schedule",         label: "Auto-Run Schedule",  icon: CalendarClock },
-  { href: "/diagnostics",      label: "API Diagnostics",    icon: Stethoscope },
-  { href: "/shipwell-settings",  label: "Shipwell Settings",   icon: Zap },
-  { href: "/client-visibility",   label: "Client Visibility",   icon: Users },
-  { href: "/cortex-settings",     label: "Cortex Integration",  icon: Network },
+  { href: "/settings",                   label: "API Settings",       icon: Cog },
+  { href: "/locations",                  label: "Location Config",    icon: MapPin },
+  { href: "/rules",                      label: "Allocation Rules",   icon: ListChecks },
+  { href: "/schedule",                   label: "Auto-Run Schedule",  icon: CalendarClock },
+  { href: "/diagnostics",                label: "API Diagnostics",    icon: Stethoscope },
+  { href: "/shipwell-settings",          label: "Shipwell Settings",  icon: Zap },
+  { href: "/client-visibility",          label: "Client Visibility",  icon: Users },
+  { href: "/cortex-settings",            label: "Cortex Integration", icon: Network },
+  { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

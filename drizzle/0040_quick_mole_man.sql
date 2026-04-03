@@ -1,0 +1,1 @@
+ALTER TABLE `label_scan_sessions` ADD `extensivTransactionId` varchar(128);

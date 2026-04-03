@@ -13,6 +13,7 @@ import { startOrderSyncScheduler } from "../scheduler/orderSync";
 import { startShipwellSyncScheduler } from "../scheduler/shipwellSync";
 import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 import { registerCortexRoutes } from "../cortex/routes";
+import { registerScanEndpoint } from "../scanEndpoint";
 import { flushPendingWebhooks } from "../cortex/webhook";
 import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
 import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
@@ -48,6 +49,8 @@ async function startServer() {
   registerPdfRoutes(app);
   // GD Cortex integration REST endpoints
   registerCortexRoutes(app);
+  // Vision system scan endpoint — /api/scan
+  registerScanEndpoint(app);
   // tRPC API
   app.use(
     "/api/trpc",

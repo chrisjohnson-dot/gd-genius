@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,13 @@ import {
   RefreshCw,
   Package,
   Tag,
-  ClipboardList,
   XCircle,
   ShieldCheck,
-  ChevronRight,
   AlertCircle,
+  FileText,
+  Building2,
+  Hash,
+  Boxes,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -43,19 +45,135 @@ type ScanResult = {
   timestamp: Date;
 };
 
-type Phase = "setup" | "scanning" | "stopped" | "complete";
+type OrderInfo = {
+  transactionId: string;
+  orderRef: string;
+  clientName: string;
+  expectedCartons?: number;
+  poNum?: string;
+  shipToName?: string;
+};
 
-// ─── Setup Screen ──────────────────────────────────────────────────────────
+type Phase = "packsheet" | "confirm" | "scanning" | "stopped" | "complete";
 
-function SetupScreen({
-  onStart,
+// ─── Pack Sheet Scan Screen ─────────────────────────────────────────────────
+
+function PackSheetScanScreen({
+  onOrderFound,
 }: {
-  onStart: (opts: { orderRef: string; clientName: string; expectedCartons: number | undefined; printerIp: string; printerPort: number }) => void;
+  onOrderFound: (info: OrderInfo) => void;
 }) {
   const { data: settings } = trpc.labelScan.getSettings.useQuery();
-  const [orderRef, setOrderRef] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [expectedCartons, setExpectedCartons] = useState("");
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const lookupMutation = trpc.labelScan.lookupOrderByTransactionId.useMutation({
+    onSuccess: (data) => {
+      setError(null);
+      onOrderFound(data);
+    },
+    onError: (err) => {
+      setError(err.message);
+      setInput("");
+      inputRef.current?.focus();
+    },
+  });
+
+  useEffect(() => {
+    // Auto-focus the input when the screen mounts
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
+
+  function handleScan() {
+    const val = input.trim();
+    if (!val) return;
+    setError(null);
+    lookupMutation.mutate({ transactionId: val });
+  }
+
+  const printerConfigured = !!(settings?.printerIp);
+
+  return (
+    <div className="max-w-lg mx-auto p-6 space-y-6">
+      <div className="text-center space-y-2">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-2">
+          <FileText className="h-8 w-8 text-primary" />
+        </div>
+        <h1 className="text-2xl font-bold">QC Scan &amp; Label</h1>
+        <p className="text-muted-foreground text-sm">
+          Scan the barcode on the <strong>pack sheet</strong> to identify the order and start the session.
+        </p>
+      </div>
+
+      {!printerConfigured && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-700 dark:text-amber-400">
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>No printer IP configured. Set it in <strong>Label Scan Settings</strong> before starting.</span>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ScanBarcode className="h-4 w-4" />
+            Scan Pack Sheet Barcode
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="packsheet">Extensiv Transaction ID</Label>
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                id="packsheet"
+                placeholder="Scan or type transaction ID…"
+                value={input}
+                onChange={(e) => { setInput(e.target.value); setError(null); }}
+                onKeyDown={(e) => e.key === "Enter" && handleScan()}
+                disabled={lookupMutation.isPending}
+                className={error ? "border-red-400 focus-visible:ring-red-400" : ""}
+              />
+              <Button
+                onClick={handleScan}
+                disabled={!input.trim() || lookupMutation.isPending}
+                className="shrink-0"
+              >
+                {lookupMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ScanBarcode className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            {error && (
+              <p className="text-xs text-red-600 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {error}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              The transaction ID is printed as a barcode on the GD Wizard pack sheet.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Order Confirm Screen ───────────────────────────────────────────────────
+
+function OrderConfirmScreen({
+  orderInfo,
+  onConfirm,
+  onBack,
+}: {
+  orderInfo: OrderInfo;
+  onConfirm: (printerIp: string, printerPort: number) => void;
+  onBack: () => void;
+}) {
+  const { data: settings } = trpc.labelScan.getSettings.useQuery();
   const [printerIp, setPrinterIp] = useState("");
   const [printerPort, setPrinterPort] = useState("9100");
 
@@ -66,104 +184,113 @@ function SetupScreen({
     }
   }, [settings]);
 
-  function handleStart() {
-    if (!orderRef.trim()) {
-      toast.error("Order reference is required");
-      return;
-    }
+  function handleConfirm() {
     const port = parseInt(printerPort, 10);
-    onStart({
-      orderRef: orderRef.trim(),
-      clientName: clientName.trim(),
-      expectedCartons: expectedCartons ? parseInt(expectedCartons, 10) : undefined,
-      printerIp: printerIp.trim(),
-      printerPort: isNaN(port) ? 9100 : port,
-    });
+    onConfirm(printerIp.trim(), isNaN(port) ? 9100 : port);
   }
 
   return (
     <div className="max-w-lg mx-auto p-6 space-y-6">
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-2">
-          <Tag className="h-7 w-7 text-primary" />
+      <div className="text-center space-y-1">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/30 mb-2">
+          <CheckCircle2 className="h-7 w-7 text-green-600" />
         </div>
-        <h1 className="text-2xl font-bold">QC Scan &amp; Label</h1>
-        <p className="text-muted-foreground text-sm">
-          Scan carton barcodes on the automated line. The app will match each barcode to its label file and dispatch ZPL to the print-and-apply machine.
-        </p>
+        <h1 className="text-xl font-bold">Order Found</h1>
+        <p className="text-muted-foreground text-sm">Confirm the details before starting the line.</p>
       </div>
 
+      {/* Order details */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Session Details</CardTitle>
+        <CardContent className="pt-5 space-y-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div className="space-y-0.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <Hash className="h-3 w-3" /> Transaction ID
+              </p>
+              <p className="font-mono font-semibold">{orderInfo.transactionId}</p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <FileText className="h-3 w-3" /> Order Ref
+              </p>
+              <p className="font-semibold">{orderInfo.orderRef}</p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <Building2 className="h-3 w-3" /> Client
+              </p>
+              <p className="font-semibold">{orderInfo.clientName || "—"}</p>
+            </div>
+            {orderInfo.shipToName && (
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ship To</p>
+                <p className="font-semibold">{orderInfo.shipToName}</p>
+              </div>
+            )}
+            {orderInfo.poNum && (
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">PO #</p>
+                <p className="font-semibold">{orderInfo.poNum}</p>
+              </div>
+            )}
+            {orderInfo.expectedCartons !== undefined && (
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <Boxes className="h-3 w-3" /> Expected Cartons
+                </p>
+                <p className="font-semibold">{orderInfo.expectedCartons}</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Printer settings */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-muted-foreground">Print-and-Apply Machine</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="orderRef">Order Reference *</Label>
-            <Input
-              id="orderRef"
-              placeholder="e.g. PO-4821"
-              value={orderRef}
-              onChange={(e) => setOrderRef(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleStart()}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="clientName">Client Name</Label>
-            <Input
-              id="clientName"
-              placeholder="e.g. Walmart"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="expectedCartons">Expected Carton Count</Label>
-            <Input
-              id="expectedCartons"
-              type="number"
-              min="1"
-              placeholder="Optional"
-              value={expectedCartons}
-              onChange={(e) => setExpectedCartons(e.target.value)}
-            />
-          </div>
-
-          <Separator />
-
+        <CardContent className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="printerIp">Printer IP</Label>
+              <Label htmlFor="printerIp" className="text-xs">Printer IP</Label>
               <Input
                 id="printerIp"
                 placeholder="192.168.1.50"
                 value={printerIp}
                 onChange={(e) => setPrinterIp(e.target.value)}
+                className="text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="printerPort">Port</Label>
+              <Label htmlFor="printerPort" className="text-xs">Port</Label>
               <Input
                 id="printerPort"
                 placeholder="9100"
                 value={printerPort}
                 onChange={(e) => setPrinterPort(e.target.value)}
+                className="text-sm"
               />
             </div>
           </div>
           {!printerIp && (
             <p className="text-xs text-amber-600 flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />
-              No printer IP — configure in Label Scan Settings or enter above
+              No printer IP — the line will run but labels won't dispatch
             </p>
           )}
         </CardContent>
       </Card>
 
-      <Button className="w-full gap-2" size="lg" onClick={handleStart}>
-        <Play className="h-4 w-4" />
-        Start Session
-      </Button>
+      <div className="flex gap-3">
+        <Button variant="outline" className="flex-1" onClick={onBack}>
+          Back
+        </Button>
+        <Button className="flex-1 gap-2" onClick={handleConfirm}>
+          <Play className="h-4 w-4" />
+          Start Line
+        </Button>
+      </div>
     </div>
   );
 }
@@ -195,15 +322,15 @@ function LineStoppedScreen({
       <div className="max-w-lg w-full space-y-6 text-white text-center">
         {/* Big error icon */}
         <div className="flex justify-center">
-          <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
-            <XCircle className="h-14 w-14 text-white" />
+          <div className="w-28 h-28 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
+            <XCircle className="h-16 w-16 text-white" />
           </div>
         </div>
 
         {/* Error heading */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-black tracking-tight">LINE STOPPED</h1>
-          <p className="text-xl font-semibold opacity-90">
+          <h1 className="text-5xl font-black tracking-tight">LINE STOPPED</h1>
+          <p className="text-2xl font-semibold opacity-90">
             {exception?.reason === "no_label"
               ? "No Label Found"
               : "Label Dispatch Failed"}
@@ -214,7 +341,7 @@ function LineStoppedScreen({
         <div className="bg-white/15 rounded-xl p-5 text-left space-y-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider opacity-70">Scanned Barcode</p>
-            <p className="text-2xl font-mono font-bold mt-0.5">{exception?.barcode}</p>
+            <p className="text-3xl font-mono font-bold mt-0.5">{exception?.barcode}</p>
           </div>
           <Separator className="bg-white/20" />
           <div>
@@ -245,7 +372,7 @@ function LineStoppedScreen({
         <Button
           size="lg"
           variant="secondary"
-          className="w-full gap-2 bg-white text-red-600 hover:bg-white/90 font-bold text-base"
+          className="w-full gap-2 bg-white text-red-600 hover:bg-white/90 font-bold text-lg"
           disabled={resolveMutation.isPending}
           onClick={() =>
             resolveMutation.mutate({
@@ -273,6 +400,7 @@ function ScanningScreen({
   sessionId,
   orderRef,
   clientName,
+  transactionId,
   expectedCartons,
   onLineStopped,
   onComplete,
@@ -280,20 +408,22 @@ function ScanningScreen({
   sessionId: number;
   orderRef: string;
   clientName: string;
+  transactionId: string;
   expectedCartons: number | undefined;
   onLineStopped: (result: ScanResult) => void;
   onComplete: () => void;
 }) {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [scanHistory, setScanHistory] = useState<ScanResult[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
   const completeMutation = trpc.labelScan.completeSession.useMutation({
     onSuccess: () => {
       toast.success("Session completed");
       onComplete();
     },
   });
+
   const scanMutation = trpc.labelScan.scanCarton.useMutation({
     onSuccess: (data) => {
       const result: ScanResult = {
@@ -301,185 +431,163 @@ function ScanningScreen({
         barcode: barcodeInput.trim(),
         success: data.success,
         lineStopped: data.lineStopped,
-        labelFilename: "labelFile" in data && data.labelFile ? data.labelFile.filename : undefined,
-        labelType: "labelFile" in data && data.labelFile ? data.labelFile.labelType : undefined,
-        exception: "exception" in data ? data.exception : undefined,
+        labelFilename: (data as any).labelFile?.filename,
+        labelType: (data as any).labelFile?.labelType,
+        exception: (data as any).exception,
         timestamp: new Date(),
       };
       setScanHistory((prev) => [result, ...prev]);
       setBarcodeInput("");
-      setIsScanning(false);
-
       if (data.lineStopped) {
         onLineStopped(result);
       } else {
-        toast.success(`Label dispatched for ${barcodeInput.trim()}`);
-        // Refocus for next scan
-        setTimeout(() => inputRef.current?.focus(), 50);
+        toast.success(`Label dispatched — ${result.barcode}`, { duration: 1500 });
       }
+      // Re-focus for next scan
+      setTimeout(() => inputRef.current?.focus(), 50);
     },
     onError: (err) => {
       toast.error(`Scan error: ${err.message}`);
-      setIsScanning(false);
+      setBarcodeInput("");
       setTimeout(() => inputRef.current?.focus(), 50);
     },
   });
 
-  // Auto-focus input on mount
   useEffect(() => {
-    inputRef.current?.focus();
+    setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
-  const { data: sessionData } = trpc.labelScan.getSession.useQuery(
-    { sessionId },
-    { refetchInterval: 5000 }
-  );
-  const session = sessionData?.session;
-
   function handleScan() {
-    const barcode = barcodeInput.trim();
-    if (!barcode) return;
-    setIsScanning(true);
-    scanMutation.mutate({ sessionId, barcode });
+    const val = barcodeInput.trim();
+    if (!val || scanMutation.isPending) return;
+    scanMutation.mutate({ sessionId, barcode: val });
   }
 
-  const scanned = session?.scannedCount ?? scanHistory.length;
-  const dispatched = session?.dispatchedCount ?? scanHistory.filter((s) => s.success).length;
-  const exceptions = session?.exceptionCount ?? scanHistory.filter((s) => !s.success).length;
+  const dispatched = scanHistory.filter((s) => s.success).length;
+  const exceptions = scanHistory.filter((s) => !s.success).length;
 
   return (
-    <div className="flex flex-col h-full p-4 gap-4">
+    <div className="max-w-2xl mx-auto p-4 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <Tag className="h-5 w-5 text-primary" />
-            QC Scan &amp; Label
+            <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+            Line Active
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {orderRef}{clientName ? ` — ${clientName}` : ""}
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {orderRef} {clientName && `· ${clientName}`}
           </p>
+          <p className="text-xs text-muted-foreground font-mono">TX {transactionId}</p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="gap-1.5 shrink-0"
           onClick={() => completeMutation.mutate({ sessionId })}
           disabled={completeMutation.isPending}
         >
-          <StopCircle className="h-4 w-4" />
-          Complete
+          {completeMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <StopCircle className="h-3.5 w-3.5" />
+          )}
+          End Session
         </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="text-center p-3">
-          <p className="text-2xl font-bold">{scanned}</p>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <Card className="p-2">
+          <p className="text-xl font-bold">{scanHistory.length}</p>
           <p className="text-xs text-muted-foreground">Scanned</p>
-          {expectedCartons && (
-            <p className="text-xs text-muted-foreground">of {expectedCartons}</p>
-          )}
         </Card>
-        <Card className="text-center p-3 border-green-200 bg-green-50 dark:bg-green-950/20">
-          <p className="text-2xl font-bold text-green-600">{dispatched}</p>
+        <Card className="p-2 border-green-200 bg-green-50 dark:bg-green-950/20">
+          <p className="text-xl font-bold text-green-600">{dispatched}</p>
           <p className="text-xs text-muted-foreground">Dispatched</p>
         </Card>
-        <Card className="text-center p-3 border-red-200 bg-red-50 dark:bg-red-950/20">
-          <p className="text-2xl font-bold text-red-600">{exceptions}</p>
+        <Card className="p-2 border-red-200 bg-red-50 dark:bg-red-950/20">
+          <p className="text-xl font-bold text-red-600">{exceptions}</p>
           <p className="text-xs text-muted-foreground">Exceptions</p>
         </Card>
       </div>
 
-      {/* Scan input */}
+      {/* Manual scan input (for testing / fallback) */}
       <Card>
-        <CardContent className="pt-4 space-y-3">
-          <Label htmlFor="barcodeInput" className="text-sm font-medium">
-            Scan or enter carton barcode
-          </Label>
+        <CardContent className="pt-4 pb-3 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Manual / Fallback Scan
+          </p>
           <div className="flex gap-2">
             <Input
-              id="barcodeInput"
               ref={inputRef}
-              placeholder="Waiting for scan..."
+              placeholder="Barcode auto-received from vision system…"
               value={barcodeInput}
               onChange={(e) => setBarcodeInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleScan()}
-              className="font-mono text-lg h-12"
-              disabled={isScanning}
-              autoComplete="off"
+              disabled={scanMutation.isPending}
+              className="font-mono"
             />
             <Button
               onClick={handleScan}
-              disabled={!barcodeInput.trim() || isScanning}
-              className="h-12 px-5 gap-2"
+              disabled={!barcodeInput.trim() || scanMutation.isPending}
+              className="shrink-0"
             >
-              {isScanning ? (
+              {scanMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <ScanBarcode className="h-4 w-4" />
               )}
-              Scan
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Press Enter or click Scan after each barcode. On an automated line, the scanner fires automatically.
+            The vision system sends barcodes automatically via <code className="bg-muted px-1 rounded text-xs">POST /api/scan</code>. Use this input for manual testing.
           </p>
         </CardContent>
       </Card>
 
       {/* Scan history */}
       {scanHistory.length > 0 && (
-        <Card className="flex-1 min-h-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Scan History
-            </CardTitle>
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm">Recent Scans</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-64">
-              <div className="px-4 pb-4 space-y-2">
-                {scanHistory.map((s, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-3 p-2.5 rounded-lg text-sm ${
-                      s.success
-                        ? "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
-                        : "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800"
-                    }`}
-                  >
-                    {s.success ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-mono font-medium truncate">{s.barcode}</p>
-                      {s.success ? (
-                        <p className="text-xs text-muted-foreground">
-                          Label dispatched{s.labelFilename ? ` — ${s.labelFilename}` : ""}
-                          {s.labelType ? ` (${s.labelType.toUpperCase()})` : ""}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-red-600">{s.exception?.detail}</p>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground shrink-0">
-                      {s.timestamp.toLocaleTimeString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
+          <ScrollArea className="h-64">
+            <div className="px-4 pb-3 space-y-1.5">
+              {scanHistory.map((s, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
+                    s.success
+                      ? "bg-green-50 dark:bg-green-950/20"
+                      : "bg-red-50 dark:bg-red-950/20"
+                  }`}
+                >
+                  {s.success ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+                  )}
+                  <span className="font-mono font-medium flex-1">{s.barcode}</span>
+                  {s.labelFilename && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+                      {s.labelFilename}
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {s.timestamp.toLocaleTimeString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
         </Card>
       )}
     </div>
   );
 }
 
-// ─── Complete Screen ───────────────────────────────────────────────────────
+// ─── Complete Screen ────────────────────────────────────────────────────────
 
 function CompleteScreen({
   sessionId,
@@ -495,13 +603,13 @@ function CompleteScreen({
   const cartons = data?.cartons ?? [];
 
   return (
-    <div className="max-w-lg mx-auto p-6 space-y-6 text-center">
-      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30">
-        <CheckCircle2 className="h-9 w-9 text-green-600" />
-      </div>
-      <div>
+    <div className="max-w-lg mx-auto p-6 space-y-6">
+      <div className="text-center space-y-2">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-2">
+          <CheckCircle2 className="h-8 w-8 text-green-600" />
+        </div>
         <h1 className="text-2xl font-bold">Session Complete</h1>
-        <p className="text-muted-foreground mt-1">{orderRef}</p>
+        <p className="text-muted-foreground">{orderRef}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-center">
@@ -510,11 +618,15 @@ function CompleteScreen({
           <p className="text-xs text-muted-foreground">Total Scanned</p>
         </Card>
         <Card className="p-3 border-green-200 bg-green-50 dark:bg-green-950/20">
-          <p className="text-2xl font-bold text-green-600">{session?.dispatchedCount ?? cartons.filter((c) => c.dispatched).length}</p>
+          <p className="text-2xl font-bold text-green-600">
+            {session?.dispatchedCount ?? cartons.filter((c) => c.dispatched).length}
+          </p>
           <p className="text-xs text-muted-foreground">Labels Applied</p>
         </Card>
         <Card className="p-3 border-red-200 bg-red-50 dark:bg-red-950/20">
-          <p className="text-2xl font-bold text-red-600">{session?.exceptionCount ?? cartons.filter((c) => c.hasException).length}</p>
+          <p className="text-2xl font-bold text-red-600">
+            {session?.exceptionCount ?? cartons.filter((c) => c.hasException).length}
+          </p>
           <p className="text-xs text-muted-foreground">Exceptions</p>
         </Card>
       </div>
@@ -530,11 +642,9 @@ function CompleteScreen({
 // ─── Main Page ─────────────────────────────────────────────────────────────
 
 export default function QcScanLabel() {
-  const [phase, setPhase] = useState<Phase>("setup");
+  const [phase, setPhase] = useState<Phase>("packsheet");
+  const [orderInfo, setOrderInfo] = useState<OrderInfo | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
-  const [orderRef, setOrderRef] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [expectedCartons, setExpectedCartons] = useState<number | undefined>();
   const [stoppedResult, setStoppedResult] = useState<ScanResult | null>(null);
 
   const startMutation = trpc.labelScan.startSession.useMutation({
@@ -547,22 +657,20 @@ export default function QcScanLabel() {
     onError: (err) => toast.error(`Failed to start session: ${err.message}`),
   });
 
-  function handleStart(opts: {
-    orderRef: string;
-    clientName: string;
-    expectedCartons: number | undefined;
-    printerIp: string;
-    printerPort: number;
-  }) {
-    setOrderRef(opts.orderRef);
-    setClientName(opts.clientName);
-    setExpectedCartons(opts.expectedCartons);
+  function handleOrderFound(info: OrderInfo) {
+    setOrderInfo(info);
+    setPhase("confirm");
+  }
+
+  function handleConfirm(printerIp: string, printerPort: number) {
+    if (!orderInfo) return;
     startMutation.mutate({
-      orderRef: opts.orderRef,
-      clientName: opts.clientName || undefined,
-      expectedCartons: opts.expectedCartons,
-      printerIp: opts.printerIp || undefined,
-      printerPort: opts.printerPort,
+      orderRef: orderInfo.orderRef,
+      clientName: orderInfo.clientName || undefined,
+      expectedCartons: orderInfo.expectedCartons,
+      printerIp: printerIp || undefined,
+      printerPort,
+      extensivTransactionId: orderInfo.transactionId,
     });
   }
 
@@ -581,11 +689,9 @@ export default function QcScanLabel() {
   }
 
   function handleNewSession() {
-    setPhase("setup");
+    setPhase("packsheet");
     setSessionId(null);
-    setOrderRef("");
-    setClientName("");
-    setExpectedCartons(undefined);
+    setOrderInfo(null);
     setStoppedResult(null);
   }
 
@@ -598,8 +704,18 @@ export default function QcScanLabel() {
     );
   }
 
-  if (phase === "setup") {
-    return <SetupScreen onStart={handleStart} />;
+  if (phase === "packsheet") {
+    return <PackSheetScanScreen onOrderFound={handleOrderFound} />;
+  }
+
+  if (phase === "confirm" && orderInfo) {
+    return (
+      <OrderConfirmScreen
+        orderInfo={orderInfo}
+        onConfirm={handleConfirm}
+        onBack={() => setPhase("packsheet")}
+      />
+    );
   }
 
   if (phase === "stopped" && stoppedResult && sessionId) {
@@ -613,24 +729,25 @@ export default function QcScanLabel() {
     );
   }
 
-  if (phase === "scanning" && sessionId) {
+  if (phase === "scanning" && sessionId && orderInfo) {
     return (
       <ScanningScreen
         sessionId={sessionId}
-        orderRef={orderRef}
-        clientName={clientName}
-        expectedCartons={expectedCartons}
+        orderRef={orderInfo.orderRef}
+        clientName={orderInfo.clientName}
+        transactionId={orderInfo.transactionId}
+        expectedCartons={orderInfo.expectedCartons}
         onLineStopped={handleLineStopped}
         onComplete={handleComplete}
       />
     );
   }
 
-  if (phase === "complete" && sessionId) {
+  if (phase === "complete" && sessionId && orderInfo) {
     return (
       <CompleteScreen
         sessionId={sessionId}
-        orderRef={orderRef}
+        orderRef={orderInfo.orderRef}
         onNewSession={handleNewSession}
       />
     );

@@ -697,6 +697,8 @@ export const labelScanSettings = mysqlTable("label_scan_settings", {
   gs1Prefix: varchar("gs1Prefix", { length: 32 }).notNull().default(""),
   // Human-readable label for the network folder path (informational only)
   labelFolderPath: varchar("labelFolderPath", { length: 512 }).notNull().default(""),
+  // Optional API key for the /api/scan REST endpoint (vision system auth)
+  scanApiKey: varchar("scanApiKey", { length: 256 }),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type LabelScanSettings = typeof labelScanSettings.$inferSelect;
@@ -712,6 +714,10 @@ export const labelFiles = mysqlTable("label_files", {
   s3Url: varchar("s3Url", { length: 1024 }).notNull(),
   // Optional grouping: which session/batch these labels belong to
   batchName: varchar("batchName", { length: 256 }),
+  // Extensiv transaction ID — used to scope labels to a specific order/session
+  extensivTransactionId: varchar("extensivTransactionId", { length: 128 }),
+  // Human-readable order reference (e.g. PO number)
+  orderRef: varchar("orderRef", { length: 256 }),
   // Client / retailer these labels are for
   clientName: varchar("clientName", { length: 256 }),
   // Label type: ucc128 | fba | other
@@ -725,6 +731,8 @@ export type InsertLabelFile = typeof labelFiles.$inferInsert;
 // A label scan session — one per production run on the automated line
 export const labelScanSessions = mysqlTable("label_scan_sessions", {
   id: int("id").primaryKey().autoincrement(),
+  // Extensiv transaction ID from the pack sheet barcode
+  extensivTransactionId: varchar("extensivTransactionId", { length: 128 }),
   // Human-readable reference (e.g. order number or batch name)
   orderRef: varchar("orderRef", { length: 256 }).notNull(),
   clientName: varchar("clientName", { length: 256 }),

@@ -2344,6 +2344,53 @@ export async function getLabelFileByBarcode(barcode: string): Promise<LabelFile 
   return rows[0] ?? null;
 }
 
+/**
+ * Look up a label file by barcode, scoped to a specific Extensiv transaction ID.
+ * If extensivTransactionId is provided, prefer files tagged with that ID;
+ * fall back to untagged files only if no scoped match is found.
+ */
+export async function getLabelFileByBarcodeScoped(
+  barcode: string,
+  extensivTransactionId?: string
+): Promise<LabelFile | null> {
+  const db = await getDb();
+  if (!db) return null;
+  if (extensivTransactionId) {
+    // First: exact match on barcode + transaction ID
+    const scoped = await db
+      .select()
+      .from(labelFiles)
+      .where(and(eq(labelFiles.barcode, barcode), eq(labelFiles.extensivTransactionId, extensivTransactionId)))
+      .limit(1);
+    if (scoped.length > 0) return scoped[0]!;
+    // Fallback: barcode match with no transaction ID tag
+    const untagged = await db
+      .select()
+      .from(labelFiles)
+      .where(and(eq(labelFiles.barcode, barcode), isNull(labelFiles.extensivTransactionId)))
+      .limit(1);
+    return untagged[0] ?? null;
+  }
+  // No scoping — match by barcode only
+  const rows = await db.select().from(labelFiles).where(eq(labelFiles.barcode, barcode)).limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Return the single active label scan session (status = 'active'), if any.
+ */
+export async function getActiveLabelScanSession(): Promise<LabelScanSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(labelScanSessions)
+    .where(eq(labelScanSessions.status, "active"))
+    .orderBy(desc(labelScanSessions.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function listLabelFiles(batchName?: string): Promise<LabelFile[]> {
   const db = await getDb();
   if (!db) return [];

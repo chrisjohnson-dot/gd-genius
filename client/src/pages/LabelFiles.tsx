@@ -42,6 +42,7 @@ export default function LabelFiles() {
   const [uploadBatch, setUploadBatch] = useState("");
   const [uploadClient, setUploadClient] = useState("");
   const [uploadType, setUploadType] = useState<LabelType>("ucc128");
+  const [uploadTransactionId, setUploadTransactionId] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +110,7 @@ export default function LabelFiles() {
           batchName: uploadBatch.trim() || undefined,
           clientName: uploadClient.trim() || undefined,
           labelType: uploadType,
+          extensivTransactionId: uploadTransactionId.trim() || undefined,
         });
         successCount++;
         setUploadedCount(successCount);
@@ -153,12 +155,13 @@ export default function LabelFiles() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Batch Name</Label>
+              <Label>Extensiv Transaction ID</Label>
               <Input
-                placeholder="e.g. Walmart-PO-4821"
-                value={uploadBatch}
-                onChange={(e) => setUploadBatch(e.target.value)}
+                placeholder="e.g. 12345678 (from pack sheet)"
+                value={uploadTransactionId}
+                onChange={(e) => setUploadTransactionId(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">Links these labels to a specific order session</p>
             </div>
             <div className="space-y-1.5">
               <Label>Client Name</Label>
@@ -169,7 +172,15 @@ export default function LabelFiles() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label>Batch Name</Label>
+              <Input
+                placeholder="e.g. Walmart-PO-4821"
+                value={uploadBatch}
+                onChange={(e) => setUploadBatch(e.target.value)}
+              />
+            </div>
             <div className="space-y-1.5">
               <Label>Label Type</Label>
               <Select value={uploadType} onValueChange={(v) => setUploadType(v as LabelType)}>

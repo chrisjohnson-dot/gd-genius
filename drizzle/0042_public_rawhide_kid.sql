@@ -1,0 +1,1 @@
+ALTER TABLE `label_scan_settings` ADD `scanApiKey` varchar(256);

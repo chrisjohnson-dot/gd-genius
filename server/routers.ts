@@ -4217,6 +4217,8 @@ const labelScanRouter = router({
       batchName: z.string().optional(),
       clientName: z.string().optional(),
       labelType: z.enum(["ucc128", "fba", "other"]).optional(),
+      extensivTransactionId: z.string().optional(),
+      orderRef: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       // Decode base64 and upload to S3
@@ -4232,6 +4234,8 @@ const labelScanRouter = router({
         clientName: input.clientName ?? null,
         labelType: input.labelType ?? "ucc128",
         uploadedBy: ctx.user.name ?? null,
+        extensivTransactionId: input.extensivTransactionId ?? null,
+        orderRef: input.orderRef ?? null,
       });
       return { id, url };
     }),
@@ -4241,6 +4245,35 @@ const labelScanRouter = router({
     .mutation(async ({ input }) => {
       await deleteLabelFile(input.id);
       return { success: true };
+    }),
+
+  // ── Order Lookup ───────────────────────────────────────────────────────────
+  // Scan the pack sheet barcode (Extensiv transaction ID) to pre-fill session details
+  lookupOrderByTransactionId: protectedProcedure
+    .input(z.object({ transactionId: z.string().min(1) }))  
+    .mutation(async ({ input }) => {
+      const configs = await getExtensivConfigs();
+      const config = configs.find((c) => c.isActive) ?? configs[0];
+      if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found. Please set up an Extensiv API config first." });
+
+      const txId = parseInt(input.transactionId.trim(), 10);
+      if (isNaN(txId)) throw new TRPCError({ code: "BAD_REQUEST", message: `"${input.transactionId}" is not a valid transaction ID.` });
+
+      const { order } = await fetchOrderWithDetail(config, txId);
+      const clientName = order.readOnly?.customerIdentifier?.name ?? "";
+      const orderRef = order.referenceNum ?? String(txId);
+      const expectedCartons = order.readOnly?.totalCartons ?? undefined;
+      const poNum = order.poNum ?? undefined;
+      const shipToName = order.shipTo?.companyName ?? order.shipTo?.name ?? "";
+
+      return {
+        transactionId: String(txId),
+        orderRef,
+        clientName,
+        expectedCartons,
+        poNum,
+        shipToName,
+      };
     }),
 
   // ── Sessions ───────────────────────────────────────────────────────────────
@@ -4264,6 +4297,7 @@ const labelScanRouter = router({
       expectedCartons: z.number().int().positive().optional(),
       printerIp: z.string().optional(),
       printerPort: z.number().int().optional(),
+      extensivTransactionId: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const id = await createLabelScanSession({
@@ -4277,6 +4311,7 @@ const labelScanRouter = router({
         dispatchedCount: 0,
         exceptionCount: 0,
         createdBy: ctx.user.name ?? null,
+        extensivTransactionId: input.extensivTransactionId ?? null,
       });
       const session = await getLabelScanSessionById(id);
       return { session };

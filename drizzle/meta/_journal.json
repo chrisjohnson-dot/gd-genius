@@ -274,6 +274,13 @@
       "when": 1774808874921,
       "tag": "0038_purple_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1775254954642,
+      "tag": "0039_bored_wallop",
+      "breakpoints": true
     }
   ]
 }

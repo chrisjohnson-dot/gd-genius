@@ -124,6 +124,19 @@ import {
   getPutAwayPriorities,
   savePutAwayPriorities,
   deletePutAwayPriorities,
+  getLabelScanSettings,
+  upsertLabelScanSettings,
+  createLabelFile,
+  getLabelFileByBarcode,
+  listLabelFiles,
+  deleteLabelFile,
+  createLabelScanSession,
+  getLabelScanSessionById,
+  listLabelScanSessions,
+  updateLabelScanSession,
+  createLabelScanCarton,
+  getLabelScanCartonsBySession,
+  updateLabelScanCarton,
   type VerificationStatus,
   type OrderVerificationResult,
 } from "./db";
@@ -4172,6 +4185,297 @@ const auditDocumentsRouter = router({
     }),
 });
 
+// ─── Label Scan Router ──────────────────────────────────────────────────────
+const labelScanRouter = router({
+  // ── Settings ──────────────────────────────────────────────────────────────
+  getSettings: protectedProcedure.query(async () => {
+    return getLabelScanSettings();
+  }),
+
+  updateSettings: protectedProcedure
+    .input(z.object({
+      printerIp: z.string().optional(),
+      printerPort: z.number().int().min(1).max(65535).optional(),
+      gs1Prefix: z.string().optional(),
+      labelFolderPath: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await upsertLabelScanSettings(input);
+      return { success: true };
+    }),
+
+  // ── Label Files ────────────────────────────────────────────────────────────
+  listLabelFiles: protectedProcedure
+    .input(z.object({ batchName: z.string().optional() }))
+    .query(async ({ input }) => listLabelFiles(input.batchName)),
+
+  uploadLabelFile: protectedProcedure
+    .input(z.object({
+      barcode: z.string().min(1),
+      filename: z.string().min(1),
+      fileBase64: z.string().min(1), // base64-encoded ZPL content
+      batchName: z.string().optional(),
+      clientName: z.string().optional(),
+      labelType: z.enum(["ucc128", "fba", "other"]).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Decode base64 and upload to S3
+      const buffer = Buffer.from(input.fileBase64, "base64");
+      const s3Key = `label-files/${Date.now()}-${input.barcode}-${input.filename}`;
+      const { url } = await storagePut(s3Key, buffer, "application/octet-stream");
+      const id = await createLabelFile({
+        barcode: input.barcode.trim(),
+        filename: input.filename,
+        s3Key,
+        s3Url: url,
+        batchName: input.batchName ?? null,
+        clientName: input.clientName ?? null,
+        labelType: input.labelType ?? "ucc128",
+        uploadedBy: ctx.user.name ?? null,
+      });
+      return { id, url };
+    }),
+
+  deleteLabelFile: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteLabelFile(input.id);
+      return { success: true };
+    }),
+
+  // ── Sessions ───────────────────────────────────────────────────────────────
+  listSessions: protectedProcedure
+    .input(z.object({ limit: z.number().optional() }))
+    .query(async ({ input }) => listLabelScanSessions(input.limit ?? 50)),
+
+  getSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const session = await getLabelScanSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+      const cartons = await getLabelScanCartonsBySession(input.sessionId);
+      return { session, cartons };
+    }),
+
+  startSession: protectedProcedure
+    .input(z.object({
+      orderRef: z.string().min(1),
+      clientName: z.string().optional(),
+      expectedCartons: z.number().int().positive().optional(),
+      printerIp: z.string().optional(),
+      printerPort: z.number().int().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const id = await createLabelScanSession({
+        orderRef: input.orderRef,
+        clientName: input.clientName ?? null,
+        expectedCartons: input.expectedCartons ?? null,
+        status: "active",
+        printerIp: input.printerIp ?? null,
+        printerPort: input.printerPort ?? null,
+        scannedCount: 0,
+        dispatchedCount: 0,
+        exceptionCount: 0,
+        createdBy: ctx.user.name ?? null,
+      });
+      const session = await getLabelScanSessionById(id);
+      return { session };
+    }),
+
+  completeSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      await updateLabelScanSession(input.sessionId, {
+        status: "complete",
+        completedAt: new Date(),
+      });
+      return { success: true };
+    }),
+
+  // ── Carton Scan ────────────────────────────────────────────────────────────
+  // Core procedure: scan a carton barcode, look up label, dispatch ZPL to printer
+  scanCarton: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      barcode: z.string().min(1),
+      // QC fields
+      qcItemCount: z.number().int().optional(),
+      qcNotes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const session = await getLabelScanSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.status !== "active") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Session is ${session.status} — cannot scan` });
+      }
+
+      // Look up label file by barcode
+      const labelFile = await getLabelFileByBarcode(input.barcode.trim());
+
+      if (!labelFile) {
+        // ── EXCEPTION: no matching label ──────────────────────────────────────
+        // Stop the line: set session status to "stopped"
+        await updateLabelScanSession(input.sessionId, {
+          status: "stopped",
+          scannedCount: (session.scannedCount ?? 0) + 1,
+          exceptionCount: (session.exceptionCount ?? 0) + 1,
+        });
+        const cartonId = await createLabelScanCarton({
+          sessionId: input.sessionId,
+          barcode: input.barcode.trim(),
+          labelFileId: null,
+          dispatched: false,
+          hasException: true,
+          exceptionReason: "no_label",
+          exceptionDetail: `No label file found for barcode "${input.barcode.trim()}". Upload a ZPL label file with this barcode before resuming.`,
+          qcItemCount: input.qcItemCount ?? null,
+          qcNotes: input.qcNotes ?? null,
+        });
+        return {
+          success: false,
+          lineStopped: true,
+          cartonId,
+          exception: {
+            reason: "no_label" as const,
+            barcode: input.barcode.trim(),
+            detail: `No label file found for barcode "${input.barcode.trim()}". Upload a ZPL label file with this barcode before resuming.`,
+          },
+        };
+      }
+
+      // ── Dispatch ZPL to print-and-apply machine ───────────────────────────
+      // Determine printer IP/port: session override > global settings
+      const settings = await getLabelScanSettings();
+      const printerIp = session.printerIp ?? settings?.printerIp ?? "";
+      const printerPort = session.printerPort ?? settings?.printerPort ?? 9100;
+
+      let dispatched = false;
+      let dispatchError: string | null = null;
+
+      if (printerIp) {
+        try {
+          // Fetch ZPL content from S3 URL (Node 18+ built-in fetch)
+          const resp = await fetch(labelFile.s3Url);
+          if (!resp.ok) throw new Error(`S3 fetch failed: ${resp.status}`);
+          const zplArrayBuffer = await resp.arrayBuffer();
+          const zplBuffer = Buffer.from(zplArrayBuffer);
+
+          // Send ZPL over TCP to the print-and-apply machine
+          await new Promise<void>((resolve, reject) => {
+            const net = require("net");
+            const socket = new net.Socket();
+            const timeout = setTimeout(() => {
+              socket.destroy();
+              reject(new Error("Printer connection timed out after 5s"));
+            }, 5000);
+            socket.connect(printerPort, printerIp, () => {
+              socket.write(zplBuffer, () => {
+                clearTimeout(timeout);
+                socket.end();
+                resolve();
+              });
+            });
+            socket.on("error", (err: Error) => {
+              clearTimeout(timeout);
+              reject(err);
+            });
+          });
+          dispatched = true;
+        } catch (err: any) {
+          dispatchError = err?.message ?? "Unknown dispatch error";
+        }
+      } else {
+        dispatchError = "No printer IP configured";
+      }
+
+      if (!dispatched) {
+        // Dispatch failed — stop the line
+        await updateLabelScanSession(input.sessionId, {
+          status: "stopped",
+          scannedCount: (session.scannedCount ?? 0) + 1,
+          exceptionCount: (session.exceptionCount ?? 0) + 1,
+        });
+        const cartonId = await createLabelScanCarton({
+          sessionId: input.sessionId,
+          barcode: input.barcode.trim(),
+          labelFileId: labelFile.id,
+          dispatched: false,
+          hasException: true,
+          exceptionReason: "dispatch_failed",
+          exceptionDetail: dispatchError ?? "Label dispatch failed",
+          qcItemCount: input.qcItemCount ?? null,
+          qcNotes: input.qcNotes ?? null,
+        });
+        return {
+          success: false,
+          lineStopped: true,
+          cartonId,
+          exception: {
+            reason: "dispatch_failed" as const,
+            barcode: input.barcode.trim(),
+            detail: dispatchError ?? "Label dispatch failed",
+          },
+        };
+      }
+
+      // ── Success ───────────────────────────────────────────────────────────
+      const cartonId = await createLabelScanCarton({
+        sessionId: input.sessionId,
+        barcode: input.barcode.trim(),
+        labelFileId: labelFile.id,
+        dispatched: true,
+        dispatchedAt: new Date(),
+        hasException: false,
+        qcItemCount: input.qcItemCount ?? null,
+        qcNotes: input.qcNotes ?? null,
+      });
+      await updateLabelScanSession(input.sessionId, {
+        scannedCount: (session.scannedCount ?? 0) + 1,
+        dispatchedCount: (session.dispatchedCount ?? 0) + 1,
+      });
+      return {
+        success: true,
+        lineStopped: false,
+        cartonId,
+        labelFile: { id: labelFile.id, filename: labelFile.filename, labelType: labelFile.labelType },
+      };
+    }),
+
+  // Supervisor resolves a stop-line exception and resumes the session
+  resolveException: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      cartonId: z.number(),
+      resolvedBy: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      await updateLabelScanCarton(input.cartonId, {
+        exceptionResolvedBy: input.resolvedBy,
+        exceptionResolvedAt: new Date(),
+      });
+      // Resume the session
+      await updateLabelScanSession(input.sessionId, { status: "active" });
+      return { success: true };
+    }),
+
+  // Update QC fields on a carton
+  updateCartonQc: protectedProcedure
+    .input(z.object({
+      cartonId: z.number(),
+      qcItemCount: z.number().int().optional(),
+      qcPhotos: z.array(z.string()).optional(),
+      qcNotes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await updateLabelScanCarton(input.cartonId, {
+        qcItemCount: input.qcItemCount ?? undefined,
+        qcPhotos: input.qcPhotos ?? undefined,
+        qcNotes: input.qcNotes ?? undefined,
+      });
+      return { success: true };
+    }),
+});
+
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
 export const appRouter = router({
   ..._appRouter._def.record,
@@ -4185,5 +4489,6 @@ export const appRouter = router({
   receiving: receivingRouter,
   putAway: putAwayRouter,
   auditDocuments: auditDocumentsRouter,
+  labelScan: labelScanRouter,
 });
 export type AppRouter = typeof appRouter;

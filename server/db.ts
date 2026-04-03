@@ -2288,3 +2288,126 @@ export async function deletePutAwayPriorities(
       )
     );
 }
+
+// ─── Label Scan Settings ──────────────────────────────────────────────────────
+import {
+  labelScanSettings,
+  LabelScanSettings,
+  labelFiles,
+  LabelFile,
+  InsertLabelFile,
+  labelScanSessions,
+  LabelScanSession,
+  InsertLabelScanSession,
+  labelScanCartons,
+  LabelScanCarton,
+  InsertLabelScanCarton,
+} from "../drizzle/schema";
+
+export async function getLabelScanSettings(): Promise<LabelScanSettings | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(labelScanSettings).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertLabelScanSettings(
+  data: Partial<Omit<LabelScanSettings, "id" | "updatedAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await getLabelScanSettings();
+  if (existing) {
+    await db.update(labelScanSettings).set(data).where(eq(labelScanSettings.id, existing.id));
+  } else {
+    await db.insert(labelScanSettings).values({
+      printerIp: data.printerIp ?? "",
+      printerPort: data.printerPort ?? 9100,
+      gs1Prefix: data.gs1Prefix ?? "",
+      labelFolderPath: data.labelFolderPath ?? "",
+    });
+  }
+}
+
+// ─── Label Files ──────────────────────────────────────────────────────────────
+export async function createLabelFile(data: InsertLabelFile): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(labelFiles).values(data) as any;
+  return result.insertId;
+}
+
+export async function getLabelFileByBarcode(barcode: string): Promise<LabelFile | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(labelFiles).where(eq(labelFiles.barcode, barcode)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listLabelFiles(batchName?: string): Promise<LabelFile[]> {
+  const db = await getDb();
+  if (!db) return [];
+  if (batchName) {
+    return db.select().from(labelFiles).where(eq(labelFiles.batchName, batchName)).orderBy(labelFiles.uploadedAt);
+  }
+  return db.select().from(labelFiles).orderBy(labelFiles.uploadedAt);
+}
+
+export async function deleteLabelFile(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(labelFiles).where(eq(labelFiles.id, id));
+}
+
+// ─── Label Scan Sessions ──────────────────────────────────────────────────────
+export async function createLabelScanSession(data: InsertLabelScanSession): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(labelScanSessions).values(data) as any;
+  return result.insertId;
+}
+
+export async function getLabelScanSessionById(id: number): Promise<LabelScanSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(labelScanSessions).where(eq(labelScanSessions.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listLabelScanSessions(limit = 50): Promise<LabelScanSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(labelScanSessions).orderBy(labelScanSessions.createdAt).limit(limit);
+}
+
+export async function updateLabelScanSession(
+  id: number,
+  data: Partial<Omit<LabelScanSession, "id" | "createdAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(labelScanSessions).set(data).where(eq(labelScanSessions.id, id));
+}
+
+// ─── Label Scan Cartons ───────────────────────────────────────────────────────
+export async function createLabelScanCarton(data: InsertLabelScanCarton): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(labelScanCartons).values(data) as any;
+  return result.insertId;
+}
+
+export async function getLabelScanCartonsBySession(sessionId: number): Promise<LabelScanCarton[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(labelScanCartons).where(eq(labelScanCartons.sessionId, sessionId)).orderBy(labelScanCartons.scannedAt);
+}
+
+export async function updateLabelScanCarton(
+  id: number,
+  data: Partial<Omit<LabelScanCarton, "id" | "createdAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(labelScanCartons).set(data).where(eq(labelScanCartons.id, id));
+}

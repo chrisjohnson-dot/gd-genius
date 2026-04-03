@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `label_files` (`id` int AUTO_INCREMENT NOT NULL, `barcode` varchar(128) NOT NULL, `filename` varchar(512) NOT NULL, `s3Key` varchar(512) NOT NULL, `s3Url` varchar(1024) NOT NULL, `batchName` varchar(256), `clientName` varchar(256), `labelType` varchar(32) NOT NULL DEFAULT 'ucc128', `uploadedBy` varchar(256), `uploadedAt` timestamp NOT NULL DEFAULT (now()), CONSTRAINT `label_files_id` PRIMARY KEY(`id`))",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE IF NOT EXISTS `label_files` (`id` int AUTO_INCREMENT NOT NULL, `barcode` varchar(128) NOT NULL, `filename` varchar(512) NOT NULL, `s3Key` varchar(512) NOT NULL, `s3Url` varchar(1024) NOT NULL, `batchName` varchar(256), `clientName` varchar(256), `labelType` varchar(32) NOT NULL DEFAULT 'ucc128', `uploadedBy` varchar(256), `uploadedAt` timestamp NOT NULL DEFAULT (now()), CONSTRAINT `label_files_id` PRIMARY KEY(`id`))",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 610
+}

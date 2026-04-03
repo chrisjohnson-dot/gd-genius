@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `label_scan_cartons` (`id` int AUTO_INCREMENT NOT NULL, `sessionId` int NOT NULL, `barcode` varchar(128) NOT NULL, `labelFileId` int, `dispatched` boolean NOT NULL DEFAULT false, `dispatchedAt` timestamp NULL, `hasException` boolean NOT NULL DEFAULT false, `exceptionReason` varchar(64), `exceptionDetail` text, `exceptionResolvedBy` varchar(256), `exceptionResolvedAt` timestamp NULL, `qcItemCount` int, `qcPhotos` json, `qcNotes` text, `scannedAt` timestamp NOT NULL DEFAULT (now()), `createdAt` timestamp NOT NULL DEFAULT (now()), CONSTRAINT `label_scan_cartons_id` PRIMARY KEY(`id`))",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute CREATE TABLE IF NOT EXISTS `label_scan_cartons` (`id` int AUTO_INCREMENT NOT NULL, `sessionId` int NOT NULL, `barcode` varchar(128) NOT NULL, `labelFileId` int, `dispatched` boolean NOT NULL DEFAULT false, `dispatchedAt` timestamp NULL, `hasException` boolean NOT NULL DEFAULT false, `exceptionReason` varchar(64), `exceptionDetail` text, `exceptionResolvedBy` varchar(256), `exceptionResolvedAt` timestamp NULL, `qcItemCount` int, `qcPhotos` json, `qcNotes` text, `scannedAt` timestamp NOT NULL DEFAULT (now()), `createdAt` timestamp NOT NULL DEFAULT (now()), CONSTRAINT `label_scan_cartons_id` PRIMARY KEY(`id`))",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 139
+}

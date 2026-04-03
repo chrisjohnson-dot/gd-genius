@@ -685,3 +685,91 @@ export const putAwayPriority = mysqlTable("put_away_priority", {
 });
 export type PutAwayPriority = typeof putAwayPriority.$inferSelect;
 export type InsertPutAwayPriority = typeof putAwayPriority.$inferInsert;
+
+// ─── QC Scan and Label ────────────────────────────────────────────────────────
+// Global settings for the label scan module (singleton — one row)
+export const labelScanSettings = mysqlTable("label_scan_settings", {
+  id: int("id").primaryKey().autoincrement(),
+  // Print-and-apply machine network address
+  printerIp: varchar("printerIp", { length: 128 }).notNull().default(""),
+  printerPort: int("printerPort").notNull().default(9100),
+  // GS1 Company Prefix for SSCC-18 generation
+  gs1Prefix: varchar("gs1Prefix", { length: 32 }).notNull().default(""),
+  // Human-readable label for the network folder path (informational only)
+  labelFolderPath: varchar("labelFolderPath", { length: 512 }).notNull().default(""),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LabelScanSettings = typeof labelScanSettings.$inferSelect;
+export type InsertLabelScanSettings = typeof labelScanSettings.$inferInsert;
+
+// Pre-uploaded ZPL label files indexed by manufacturer case barcode
+export const labelFiles = mysqlTable("label_files", {
+  id: int("id").primaryKey().autoincrement(),
+  // The manufacturer barcode (ITF-14 or UPC-A) that identifies this carton
+  barcode: varchar("barcode", { length: 128 }).notNull(),
+  filename: varchar("filename", { length: 512 }).notNull(),
+  s3Key: varchar("s3Key", { length: 512 }).notNull(),
+  s3Url: varchar("s3Url", { length: 1024 }).notNull(),
+  // Optional grouping: which session/batch these labels belong to
+  batchName: varchar("batchName", { length: 256 }),
+  // Client / retailer these labels are for
+  clientName: varchar("clientName", { length: 256 }),
+  // Label type: ucc128 | fba | other
+  labelType: varchar("labelType", { length: 32 }).notNull().default("ucc128"),
+  uploadedBy: varchar("uploadedBy", { length: 256 }),
+  uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
+});
+export type LabelFile = typeof labelFiles.$inferSelect;
+export type InsertLabelFile = typeof labelFiles.$inferInsert;
+
+// A label scan session — one per production run on the automated line
+export const labelScanSessions = mysqlTable("label_scan_sessions", {
+  id: int("id").primaryKey().autoincrement(),
+  // Human-readable reference (e.g. order number or batch name)
+  orderRef: varchar("orderRef", { length: 256 }).notNull(),
+  clientName: varchar("clientName", { length: 256 }),
+  expectedCartons: int("expectedCartons"),
+  // active | stopped | complete
+  status: varchar("status", { length: 32 }).notNull().default("active"),
+  // Printer override for this session (falls back to global settings if null)
+  printerIp: varchar("printerIp", { length: 128 }),
+  printerPort: int("printerPort"),
+  // Counts
+  scannedCount: int("scannedCount").notNull().default(0),
+  dispatchedCount: int("dispatchedCount").notNull().default(0),
+  exceptionCount: int("exceptionCount").notNull().default(0),
+  createdBy: varchar("createdBy", { length: 256 }),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LabelScanSession = typeof labelScanSessions.$inferSelect;
+export type InsertLabelScanSession = typeof labelScanSessions.$inferInsert;
+
+// Each carton scanned during a label scan session
+export const labelScanCartons = mysqlTable("label_scan_cartons", {
+  id: int("id").primaryKey().autoincrement(),
+  sessionId: int("sessionId").notNull(),
+  // The barcode scanned on the carton (ITF-14 / UPC-A)
+  barcode: varchar("barcode", { length: 128 }).notNull(),
+  // FK to label_files — null if no matching label was found
+  labelFileId: int("labelFileId"),
+  // Dispatch result
+  dispatched: boolean("dispatched").notNull().default(false),
+  dispatchedAt: timestamp("dispatchedAt"),
+  // Exception tracking
+  hasException: boolean("hasException").notNull().default(false),
+  // Reason codes: no_label | dispatch_failed | duplicate
+  exceptionReason: varchar("exceptionReason", { length: 64 }),
+  exceptionDetail: text("exceptionDetail"),
+  exceptionResolvedBy: varchar("exceptionResolvedBy", { length: 256 }),
+  exceptionResolvedAt: timestamp("exceptionResolvedAt"),
+  // QC verification fields (same depth as existing QC Scanner)
+  qcItemCount: int("qcItemCount"),
+  qcPhotos: json("qcPhotos").$type<string[]>(),
+  qcNotes: text("qcNotes"),
+  scannedAt: timestamp("scannedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type LabelScanCarton = typeof labelScanCartons.$inferSelect;
+export type InsertLabelScanCarton = typeof labelScanCartons.$inferInsert;

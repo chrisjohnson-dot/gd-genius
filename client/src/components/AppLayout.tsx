@@ -35,6 +35,8 @@ import {
   Flag,
   Inbox,
   ConciergeBell,
+  Tag,
+  FileText,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -60,8 +62,10 @@ const allocationItems = [
 const qcItems = [
   { href: "/qc",              label: "QC Dashboard",  icon: BarChart3 },
   { href: "/qc/reports",     label: "QC Reports",    icon: FileBarChart2 },
-  { href: "/qc/scanner",     label: "QC Scanner",    icon: ScanBarcode },
-  { href: "/qc/flagged",     label: "Flagged Scans", icon: Flag },
+  { href: "/qc/scanner",     label: "QC Scanner",      icon: ScanBarcode },
+  { href: "/qc/scan-label",  label: "QC Scan & Label", icon: Tag },
+  { href: "/qc/label-files", label: "Label Files",      icon: FileText },
+  { href: "/qc/flagged",     label: "Flagged Scans",   icon: Flag },
 ];
 
 const shippingItems = [
@@ -93,6 +97,7 @@ const configItems = [
   { href: "/client-visibility",          label: "Client Visibility",  icon: Users },
   { href: "/cortex-settings",            label: "Cortex Integration", icon: Network },
   { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },
+  { href: "/config/label-scan",            label: "Label Scan Settings", icon: ScanBarcode },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

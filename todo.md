@@ -695,3 +695,25 @@
 - [ ] Add UPC assignment UI in QC Scanner pallet management: scan/type UPC per pallet, show assigned UPC with edit option
 - [ ] Auto-generate a UPC if none is scanned (GD-{sessionId}-{palletIndex} format) so every pallet always has a scannable identifier
 - [ ] Show assigned UPCs in the pallet list with a barcode icon and copy-to-clipboard
+
+## QC Scan and Label Module
+
+- [ ] DB: label_files table (id, barcode, filename, s3_key, s3_url, uploaded_at)
+- [ ] DB: label_scan_sessions table (id, client, order_ref, expected_cartons, status, printer_ip, printer_port, created_at, completed_at)
+- [ ] DB: label_scan_cartons table (id, session_id, barcode, label_file_id, dispatched_at, exception, exception_resolved_at, qc_item_count, qc_photos, qc_notes)
+- [ ] DB: label_settings table (printer_ip, printer_port, gs1_prefix, label_folder_path)
+- [ ] Server: label file upload procedure (store in S3, index by barcode)
+- [ ] Server: label file list/delete procedures
+- [ ] Server: create/get/complete label scan session procedures
+- [ ] Server: scan carton procedure (lookup label by barcode, dispatch ZPL via TCP to printer IP, log result, return exception if no label found)
+- [ ] Server: resolve exception procedure (supervisor clears stop-line flag)
+- [ ] Server: label settings get/update procedures
+- [ ] Config page: add Print-and-Apply Machine IP, Port, GS1 Company Prefix fields
+- [ ] QC Scan and Label page: session start form (client, order ref, expected cartons, printer IP override)
+- [ ] QC Scan and Label page: live scan feed (barcode input, label dispatched confirmation, stop-line exception UI)
+- [ ] QC Scan and Label page: full QC verification panel (item counts, photos, notes per carton)
+- [ ] QC Scan and Label page: session summary (all cartons, dispatch status, exceptions)
+- [ ] Label Files management page: upload ZPL files, view indexed labels, delete
+- [ ] Downloadable local sync agent script (Node.js, watches network folder, uploads to app)
+- [ ] Sidebar: add "QC Scan & Label" under QC Scanner section
+- [ ] Tests for all new server procedures

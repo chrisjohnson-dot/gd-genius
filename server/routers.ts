@@ -128,6 +128,7 @@ import {
   upsertLabelScanSettings,
   createLabelFile,
   getLabelFileByBarcode,
+  getLabelFileById,
   listLabelFiles,
   deleteLabelFile,
   createLabelScanSession,
@@ -136,6 +137,7 @@ import {
   updateLabelScanSession,
   createLabelScanCarton,
   getLabelScanCartonsBySession,
+  getLabelScanCartonById,
   updateLabelScanCarton,
   type VerificationStatus,
   type OrderVerificationResult,
@@ -4477,6 +4479,7 @@ const labelScanRouter = router({
     }),
 
   // Supervisor resolves a stop-line exception and resumes the session
+  // If the carton has a label file associated, automatically retries ZPL dispatch before resuming.
   resolveException: protectedProcedure
     .input(z.object({
       sessionId: z.number(),
@@ -4484,13 +4487,81 @@ const labelScanRouter = router({
       resolvedBy: z.string(),
     }))
     .mutation(async ({ input }) => {
+      const session = await getLabelScanSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+
+      const carton = await getLabelScanCartonById(input.cartonId);
+
+      let retryDispatched = false;
+      let retryError: string | null = null;
+      let retryAttempted = false;
+
+      // ── Auto-retry ZPL dispatch if the carton has a label file ──────────────
+      if (carton?.labelFileId) {
+        retryAttempted = true;
+        try {
+          const labelFile = await getLabelFileById(carton.labelFileId);
+          if (!labelFile) throw new Error("Label file record not found");
+
+          const settings = await getLabelScanSettings();
+          const printerIp = session.printerIp ?? settings?.printerIp ?? "";
+          const printerPort = session.printerPort ?? settings?.printerPort ?? 9100;
+
+          if (!printerIp) throw new Error("No printer IP configured");
+
+          const resp = await fetch(labelFile.s3Url);
+          if (!resp.ok) throw new Error(`S3 fetch failed: ${resp.status}`);
+          const zplArrayBuffer = await resp.arrayBuffer();
+          const zplBuffer = Buffer.from(zplArrayBuffer);
+
+          await new Promise<void>((resolve, reject) => {
+            const net = require("net");
+            const socket = new net.Socket();
+            const timeout = setTimeout(() => {
+              socket.destroy();
+              reject(new Error("Printer connection timed out after 5s"));
+            }, 5000);
+            socket.connect(printerPort, printerIp, () => {
+              socket.write(zplBuffer, () => {
+                clearTimeout(timeout);
+                socket.end();
+                resolve();
+              });
+            });
+            socket.on("error", (err: Error) => {
+              clearTimeout(timeout);
+              reject(err);
+            });
+          });
+          retryDispatched = true;
+        } catch (err: any) {
+          retryError = err?.message ?? "Retry dispatch failed";
+        }
+      }
+
+      // Update carton record with resolution details and retry outcome
       await updateLabelScanCarton(input.cartonId, {
         exceptionResolvedBy: input.resolvedBy,
         exceptionResolvedAt: new Date(),
+        ...(retryAttempted && retryDispatched ? { dispatched: true, dispatchedAt: new Date() } : {}),
       });
-      // Resume the session
-      await updateLabelScanSession(input.sessionId, { status: "active" });
-      return { success: true };
+
+      // If retry succeeded, increment the session's dispatched count
+      if (retryDispatched) {
+        await updateLabelScanSession(input.sessionId, {
+          status: "active",
+          dispatchedCount: (session.dispatchedCount ?? 0) + 1,
+        });
+      } else {
+        await updateLabelScanSession(input.sessionId, { status: "active" });
+      }
+
+      return {
+        success: true,
+        retryAttempted,
+        retryDispatched,
+        retryError,
+      };
     }),
 
   // Update QC fields on a carton

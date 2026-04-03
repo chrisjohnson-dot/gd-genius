@@ -2406,6 +2406,13 @@ export async function deleteLabelFile(id: number): Promise<void> {
   await db.delete(labelFiles).where(eq(labelFiles.id, id));
 }
 
+export async function getLabelFileById(id: number): Promise<LabelFile | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(labelFiles).where(eq(labelFiles.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
 // ─── Label Scan Sessions ──────────────────────────────────────────────────────
 export async function createLabelScanSession(data: InsertLabelScanSession): Promise<number> {
   const db = await getDb();
@@ -2448,6 +2455,13 @@ export async function getLabelScanCartonsBySession(sessionId: number): Promise<L
   const db = await getDb();
   if (!db) return [];
   return db.select().from(labelScanCartons).where(eq(labelScanCartons.sessionId, sessionId)).orderBy(labelScanCartons.scannedAt);
+}
+
+export async function getLabelScanCartonById(id: number): Promise<LabelScanCarton | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(labelScanCartons).where(eq(labelScanCartons.id, id)).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function updateLabelScanCarton(

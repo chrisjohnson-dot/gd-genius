@@ -309,12 +309,31 @@ function LineStoppedScreen({
   onResolved: () => void;
 }) {
   const { user } = useAuth();
+  const [retryStatus, setRetryStatus] = useState<"idle" | "retrying" | "success" | "failed">("idle");
+  const [retryErrorMsg, setRetryErrorMsg] = useState<string | null>(null);
+
   const resolveMutation = trpc.labelScan.resolveException.useMutation({
-    onSuccess: () => {
-      toast.success("Exception resolved — line resumed");
-      onResolved();
+    onMutate: () => setRetryStatus("retrying"),
+    onSuccess: (data) => {
+      if (data.retryAttempted) {
+        if (data.retryDispatched) {
+          setRetryStatus("success");
+          toast.success("Label re-dispatched successfully — line resumed");
+        } else {
+          setRetryStatus("failed");
+          setRetryErrorMsg(data.retryError ?? "Retry dispatch failed");
+          toast.error(`Retry failed: ${data.retryError ?? "Unknown error"}`);
+        }
+      } else {
+        toast.success("Exception resolved — line resumed");
+      }
+      // Always resume the UI regardless of retry outcome
+      setTimeout(() => onResolved(), data.retryAttempted && !data.retryDispatched ? 2500 : 800);
     },
-    onError: (err) => toast.error(`Failed to resolve: ${err.message}`),
+    onError: (err) => {
+      setRetryStatus("idle");
+      toast.error(`Failed to resolve: ${err.message}`);
+    },
   });
 
   return (
@@ -368,12 +387,36 @@ function LineStoppedScreen({
           )}
         </div>
 
+        {/* Retry status feedback */}
+        {retryStatus === "retrying" && (
+          <div className="bg-white/15 rounded-xl p-4 flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin shrink-0" />
+            <p className="text-sm font-medium">Re-dispatching label to printer…</p>
+          </div>
+        )}
+        {retryStatus === "success" && (
+          <div className="bg-green-500/30 border border-green-300/40 rounded-xl p-4 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-200" />
+            <p className="text-sm font-medium">Label re-dispatched — resuming line…</p>
+          </div>
+        )}
+        {retryStatus === "failed" && (
+          <div className="bg-white/15 rounded-xl p-4 text-left space-y-1">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Retry dispatch failed
+            </p>
+            <p className="text-xs opacity-80">{retryErrorMsg}</p>
+            <p className="text-xs opacity-70">The exception is resolved and the line will resume, but this carton may need its label applied manually.</p>
+          </div>
+        )}
+
         {/* Resume button */}
         <Button
           size="lg"
           variant="secondary"
           className="w-full gap-2 bg-white text-red-600 hover:bg-white/90 font-bold text-lg"
-          disabled={resolveMutation.isPending}
+          disabled={resolveMutation.isPending || retryStatus === "success"}
           onClick={() =>
             resolveMutation.mutate({
               sessionId,
@@ -382,12 +425,14 @@ function LineStoppedScreen({
             })
           }
         >
-          {resolveMutation.isPending ? (
+          {retryStatus === "retrying" ? (
             <Loader2 className="h-5 w-5 animate-spin" />
+          ) : retryStatus === "success" ? (
+            <CheckCircle2 className="h-5 w-5" />
           ) : (
             <ShieldCheck className="h-5 w-5" />
           )}
-          Resume Line
+          {retryStatus === "retrying" ? "Dispatching…" : retryStatus === "success" ? "Resuming…" : "Resume Line"}
         </Button>
       </div>
     </div>

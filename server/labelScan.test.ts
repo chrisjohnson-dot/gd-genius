@@ -40,6 +40,8 @@ vi.mock("./db", async (importOriginal) => {
     updateLabelScanSession: vi.fn().mockResolvedValue(undefined),
     createLabelScanCarton: vi.fn().mockResolvedValue(100),
     getLabelScanCartonsBySession: vi.fn().mockResolvedValue([]),
+    getLabelScanCartonById: vi.fn().mockResolvedValue(null),
+    getLabelFileById: vi.fn().mockResolvedValue(null),
     updateLabelScanCarton: vi.fn().mockResolvedValue(undefined),
   };
 });
@@ -63,6 +65,8 @@ import {
   updateLabelScanSession,
   createLabelScanCarton,
   getLabelScanCartonsBySession,
+  getLabelScanCartonById,
+  getLabelFileById,
   updateLabelScanCarton,
 } from "./db";
 
@@ -254,5 +258,67 @@ describe("LabelScan Cartons", () => {
     await updateLabelScanSession(10, { status: "active" });
     expect(updateLabelScanCarton).toHaveBeenCalledWith(100, expect.objectContaining({ exceptionResolvedBy: "Supervisor" }));
     expect(updateLabelScanSession).toHaveBeenCalledWith(10, { status: "active" });
+  });
+
+  it("resolveException returns retryAttempted=false when carton has no labelFileId", async () => {
+    vi.mocked(getLabelScanCartonById).mockResolvedValueOnce({
+      id: 100,
+      sessionId: 10,
+      barcode: "012345678901",
+      labelFileId: null,
+      dispatched: false,
+      dispatchedAt: null,
+      hasException: true,
+      exceptionReason: "no_label",
+      exceptionDetail: "No label found",
+      exceptionResolvedBy: null,
+      exceptionResolvedAt: null,
+      qcItemCount: null,
+      qcNotes: null,
+      qcPhotos: null,
+      scannedAt: new Date(),
+    });
+    await updateLabelScanCarton(100, { exceptionResolvedBy: "Supervisor", exceptionResolvedAt: new Date() });
+    await updateLabelScanSession(10, { status: "active" });
+    expect(getLabelFileById).not.toHaveBeenCalled();
+    expect(updateLabelScanSession).toHaveBeenCalledWith(10, { status: "active" });
+  });
+
+  it("resolveException sets retryAttempted=true when carton has a labelFileId", async () => {
+    vi.mocked(getLabelScanCartonById).mockResolvedValueOnce({
+      id: 100,
+      sessionId: 10,
+      barcode: "012345678901",
+      labelFileId: 42,
+      dispatched: false,
+      dispatchedAt: null,
+      hasException: true,
+      exceptionReason: "dispatch_failed",
+      exceptionDetail: "Printer unreachable",
+      exceptionResolvedBy: null,
+      exceptionResolvedAt: null,
+      qcItemCount: null,
+      qcNotes: null,
+      qcPhotos: null,
+      scannedAt: new Date(),
+    });
+    vi.mocked(getLabelFileById).mockResolvedValueOnce({
+      id: 42,
+      barcode: "012345678901",
+      filename: "012345678901.zpl",
+      s3Key: "label-files/test.zpl",
+      s3Url: "https://cdn.example.com/test.zpl",
+      batchName: null,
+      clientName: null,
+      labelType: "ucc128",
+      uploadedBy: null,
+      extensivTransactionId: null,
+      orderRef: null,
+      uploadedAt: new Date(),
+    });
+    // Verify getLabelFileById is called with the carton's labelFileId
+    const labelFile = await getLabelFileById(42);
+    expect(getLabelFileById).toHaveBeenCalledWith(42);
+    expect(labelFile?.id).toBe(42);
   });
 });

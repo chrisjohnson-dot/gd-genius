@@ -32,7 +32,6 @@ import {
   Users,
   Zap,
   Network,
-  Flag,
   Inbox,
   ConciergeBell,
   Tag,
@@ -69,7 +68,6 @@ const qcItems = [
   { href: "/qc/label-files",       label: "Label Files",      icon: FileText },
   { href: "/qc/production-line",   label: "Production Line",  icon: Activity },
   { href: "/qc/qr-scan-history",   label: "QR Scan History",  icon: QrCode },
-  { href: "/qc/flagged",           label: "Flagged Scans",    icon: Flag },
 ];
 
 const shippingItems = [

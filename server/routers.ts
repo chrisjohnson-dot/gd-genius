@@ -3307,10 +3307,17 @@ const qcScannerRouter = router({
       return { id };
     }),
 
-  // List flagged scans
+  // List flagged scans (global)
   listFlaggedScans: protectedProcedure
     .input(z.object({ status: z.string().optional() }))
     .query(async ({ input }) => listQcFlaggedScans(input.status ?? undefined)),
+  // List flagged scans for a specific session
+  listFlaggedBySession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const all = await listQcFlaggedScans();
+      return { flags: all.filter((f) => f.sessionId === input.sessionId) };
+    }),
 
   // Resolve a flagged scan
   resolveFlaggedScan: protectedProcedure

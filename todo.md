@@ -784,3 +784,13 @@
 - [x] Frontend: LabelScanSettings — Scan Image Retention Policy dropdown (60/90/180/365/Never)
 - [x] Frontend: AuditImages page — full gallery replacing placeholder, filters, lightbox, CSV manifest export, manual purge trigger
 - [x] Frontend: Lightbox — click-to-enlarge with camera tabs (A/B/C), carton ID, verdict, fail reason, timestamps, per-image download
+
+## QC Scanner — Close Confirmation Gate
+- [x] Remove "Flagged Scans" sidebar nav item from AppLayout
+- [x] Add mandatory operator confirmation step before session can be closed (same QC scanner workflow)
+- [x] "Complete Order" button now opens "Complete & Confirm Order" dialog
+- [x] Confirmation screen shows session summary (reference, customer, units scanned, pallets, open flags)
+- [x] Operator must type CONFIRMED before the close button is enabled (Enter key also works)
+- [x] Warnings shown for incomplete scans and unresolved flags
+- [x] On confirm: session closes and returns to the same QC scanner start/session-list view
+- [x] listFlaggedBySession tRPC procedure added to qcScanner router

@@ -338,6 +338,7 @@ export default function QcScanner() {
   const [flagBarcode, setFlagBarcode] = useState("");
   const [flagDesc, setFlagDesc] = useState("");
   const [completeDialog, setCompleteDialog] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
   const [activePalletTab, setActivePalletTab] = useState("0");
   const [extensivLoadError, setExtensivLoadError] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
@@ -492,6 +493,12 @@ export default function QcScanner() {
     onError: (e) => toast.error(e.message),
   });
 
+  const flagsQuery = trpc.qcScanner.listFlaggedBySession.useQuery(
+    { sessionId: session?.id ?? 0 },
+    { enabled: !!session && completeDialog }
+  );
+  const openFlags = (flagsQuery.data?.flags ?? []).filter((f) => f.status === "open");
+
   const completeSession = trpc.qcScanner.completeSession.useMutation({
     onSuccess: () => {
       toast.success("Session completed and saved");
@@ -501,6 +508,7 @@ export default function QcScanner() {
       setPallets([]);
       setRefInput("");
       setCompleteDialog(false);
+      setConfirmText("");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -1206,45 +1214,97 @@ export default function QcScanner() {
         </DialogContent>
       </Dialog>
 
-      {/* Complete Order Dialog */}
-      <Dialog open={completeDialog} onOpenChange={setCompleteDialog}>
-        <DialogContent>
+      {/* Complete Order — Mandatory Confirmation Gate */}
+      <Dialog open={completeDialog} onOpenChange={(open) => { setCompleteDialog(open); if (!open) setConfirmText(""); }}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-green-500" /> Complete Order
+              <CheckCircle2 className="w-5 h-5 text-green-500" /> Complete &amp; Confirm Order
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 text-sm">
-            <p>Mark this order as complete and close the scan session?</p>
-            <div className="bg-muted rounded-lg p-3 space-y-1">
+
+          <div className="space-y-4 text-sm">
+            {/* Session summary */}
+            <div className="bg-muted rounded-lg p-3 space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Reference</span>
                 <span className="font-mono font-semibold">{session?.referenceNumber}</span>
               </div>
+              {session?.customerName && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Customer</span>
+                  <span className="font-semibold">{session.customerName}</span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total scanned</span>
-                <span className="font-semibold">{totalScanned} / {totalExpected}</span>
+                <span className="text-muted-foreground">Units scanned</span>
+                <span className={`font-semibold ${allComplete ? "text-green-600" : "text-amber-600"}`}>
+                  {totalScanned} / {totalExpected}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Pallets</span>
                 <span className="font-semibold">{pallets.length}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Open flags</span>
+                <span className={`font-semibold ${openFlags.length > 0 ? "text-red-600" : "text-green-600"}`}>
+                  {flagsQuery.isLoading ? "…" : openFlags.length}
+                </span>
+              </div>
             </div>
+
+            {/* Warnings */}
             {!allComplete && (
-              <div className="flex items-center gap-2 text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded p-2">
+              <div className="flex items-center gap-2 text-amber-700 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-2.5">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>Not all items have been fully scanned. Complete anyway?</span>
+                <span>Not all items have been fully scanned ({totalExpected - totalScanned} units remaining).</span>
               </div>
             )}
+            {openFlags.length > 0 && (
+              <div className="flex items-center gap-2 text-red-700 bg-red-50 dark:bg-red-950/20 rounded-lg p-2.5">
+                <Flag className="w-4 h-4 shrink-0" />
+                <span>{openFlags.length} flagged scan{openFlags.length !== 1 ? "s" : ""} still open. Resolve them before closing or confirm to proceed.</span>
+              </div>
+            )}
+
+            {/* Confirmation input */}
+            <div className="space-y-2">
+              <p className="text-muted-foreground">
+                Type <span className="font-mono font-bold text-foreground">CONFIRMED</span> below to close this session and return to the scanner.
+              </p>
+              <Input
+                autoFocus
+                placeholder="Type CONFIRMED…"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && confirmText === "CONFIRMED" && session && !completeSession.isPending) {
+                    completeSession.mutate({ sessionId: session.id });
+                  }
+                }}
+                className={`font-mono text-center text-base h-11 ${
+                  confirmText === "CONFIRMED"
+                    ? "border-green-500 ring-1 ring-green-500"
+                    : ""
+                }`}
+              />
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCompleteDialog(false)}>Cancel</Button>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setCompleteDialog(false); setConfirmText(""); }}>Cancel</Button>
             <Button
               className="bg-green-600 hover:bg-green-700"
               onClick={() => session && completeSession.mutate({ sessionId: session.id })}
-              disabled={completeSession.isPending}
+              disabled={confirmText !== "CONFIRMED" || completeSession.isPending}
             >
-              <CheckCircle2 className="w-4 h-4 mr-1" /> Confirm Complete
+              {completeSession.isPending ? (
+                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mr-1" />
+              )}
+              Confirm &amp; Close Session
             </Button>
           </DialogFooter>
         </DialogContent>

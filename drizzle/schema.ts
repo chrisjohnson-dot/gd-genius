@@ -740,6 +740,12 @@ export const labelScanSettings = mysqlTable("label_scan_settings", {
   tampXMmFixed: decimal("tampXMmFixed", { precision: 8, scale: 2 }).notNull().default("120.00"), // fixed constant set at commissioning
   squaringTimeoutMs: int("squaringTimeoutMs").notNull().default(2000), // max ms to wait for SQUARE_CONFIRMED
   tampReadyTimeoutMs: int("tampReadyTimeoutMs").notNull().default(1000), // max ms to wait for TAMP_READY
+  // Camera C — post-apply verification camera (downstream of tamp station)
+  // Leave camCIp blank until hardware is installed; endpoint returns 503 when unconfigured
+  camCIp: varchar("camCIp", { length: 128 }).notNull().default(""),
+  camCPort: int("camCPort").notNull().default(8080),
+  // Scan image retention policy (days). 0 = never purge.
+  scanImageRetentionDays: int("scanImageRetentionDays").notNull().default(60),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type LabelScanSettings = typeof labelScanSettings.$inferSelect;
@@ -883,6 +889,15 @@ export const productionScans = mysqlTable("production_scans", {
   tampYMm: decimal("tampYMm", { precision: 8, scale: 2 }),
   zplSent: text("zplSent"), // full ZPL string as sent to printer
   printedAt: timestamp("printedAt"),
+  // Scan images stored in S3 — URLs populated after edge compute uploads via pre-signed URL
+  camAImageUrl: varchar("camAImageUrl", { length: 1024 }), // Camera A: label/barcode face (pre-apply)
+  camAImageKey: varchar("camAImageKey", { length: 512 }),  // S3 key for Camera A image
+  camBImageUrl: varchar("camBImageUrl", { length: 1024 }), // Camera B: opposite face (pre-apply)
+  camBImageKey: varchar("camBImageKey", { length: 512 }),  // S3 key for Camera B image
+  // Camera C: post-apply verification (populated by /api/scan/post-apply)
+  postApplyImageUrl: varchar("postApplyImageUrl", { length: 1024 }),
+  postApplyImageKey: varchar("postApplyImageKey", { length: 512 }),
+  postApplyReceivedAt: timestamp("postApplyReceivedAt"), // when Camera C image was received
   scannedAt: timestamp("scannedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

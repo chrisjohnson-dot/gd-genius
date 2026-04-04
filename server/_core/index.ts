@@ -14,9 +14,11 @@ import { startShipwellSyncScheduler } from "../scheduler/shipwellSync";
 import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 import { registerCortexRoutes } from "../cortex/routes";
 import { registerScanEndpoint } from "../scanEndpoint";
+import { registerScanImageEndpoints } from "../scanImageEndpoint";
 import { flushPendingWebhooks } from "../cortex/webhook";
 import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
 import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
+import { startScanImagePurgeScheduler } from "../scheduler/scanImagePurge";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -51,6 +53,9 @@ async function startServer() {
   registerCortexRoutes(app);
   // Vision system scan endpoint — /api/scan
   registerScanEndpoint(app);
+  // Scan image upload/post-apply endpoints — raw body parser must come before JSON
+  app.use("/api/scan/image-receive", express.raw({ type: "*/*", limit: "20mb" }));
+  registerScanImageEndpoints(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -89,6 +94,8 @@ async function startServer() {
     startWebhookRetryScheduler();
     // Record nightly SLA rate snapshots for all facilities at midnight UTC
     startSlaNightlySnapshot();
+    // Nightly scan image retention purge at 02:00 UTC
+    startScanImagePurgeScheduler();
   });
 }
 

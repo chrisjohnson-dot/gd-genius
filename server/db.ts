@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, isNotNull, isNull, sql, inArray, or } from "drizzle-orm";
+import { eq, desc, and, gte, lte, isNotNull, isNull, sql, inArray, or, count, SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -2612,4 +2612,167 @@ export async function deleteProductionSkuConfig(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(productionSkuConfigs).where(eq(productionSkuConfigs.id, id));
+}
+
+// ─── Scan Image helpers ───────────────────────────────────────────────────────
+
+/** Update image URL/key columns on a production scan record */
+export async function updateProductionScanImages(
+  scanId: string,
+  data: {
+    camAImageUrl?: string;
+    camAImageKey?: string;
+    camBImageUrl?: string;
+    camBImageKey?: string;
+    postApplyImageUrl?: string;
+    postApplyImageKey?: string;
+    postApplyReceivedAt?: Date;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(productionScans)
+    .set(data)
+    .where(eq(productionScans.scanId, scanId));
+}
+
+/** Get a production scan by cartonId (most recent) */
+export async function getProductionScanByCartonId(
+  cartonId: string
+): Promise<ProductionScan | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(productionScans)
+    .where(eq(productionScans.cartonId, cartonId))
+    .orderBy(desc(productionScans.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Get a production scan by scanId */
+export async function getProductionScanByScanId(
+  scanId: string
+): Promise<ProductionScan | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(productionScans)
+    .where(eq(productionScans.scanId, scanId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** List production scans with optional filters for the audit image gallery */
+export async function listProductionScansForAudit(opts: {
+  runId?: string;
+  verdict?: "pass" | "fail" | "hold";
+  hasImages?: boolean; // only scans that have at least one image
+  fromTs?: Date;
+  toTs?: Date;
+  limit?: number;
+  offset?: number;
+}): Promise<ProductionScan[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: SQL[] = [];
+  if (opts.runId) conditions.push(eq(productionScans.runId, opts.runId));
+  if (opts.verdict) conditions.push(eq(productionScans.verdict, opts.verdict));
+  if (opts.fromTs) conditions.push(gte(productionScans.scannedAt, opts.fromTs));
+  if (opts.toTs) conditions.push(lte(productionScans.scannedAt, opts.toTs));
+  if (opts.hasImages) {
+    conditions.push(
+      or(
+        isNotNull(productionScans.camAImageUrl),
+        isNotNull(productionScans.camBImageUrl),
+        isNotNull(productionScans.postApplyImageUrl)
+      )!
+    );
+  }
+  const q = db
+    .select()
+    .from(productionScans)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(productionScans.scannedAt))
+    .limit(opts.limit ?? 50)
+    .offset(opts.offset ?? 0);
+  return q;
+}
+
+/** Count production scans matching audit filters */
+export async function countProductionScansForAudit(opts: {
+  runId?: string;
+  verdict?: "pass" | "fail" | "hold";
+  hasImages?: boolean;
+  fromTs?: Date;
+  toTs?: Date;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions: SQL[] = [];
+  if (opts.runId) conditions.push(eq(productionScans.runId, opts.runId));
+  if (opts.verdict) conditions.push(eq(productionScans.verdict, opts.verdict));
+  if (opts.fromTs) conditions.push(gte(productionScans.scannedAt, opts.fromTs));
+  if (opts.toTs) conditions.push(lte(productionScans.scannedAt, opts.toTs));
+  if (opts.hasImages) {
+    conditions.push(
+      or(
+        isNotNull(productionScans.camAImageUrl),
+        isNotNull(productionScans.camBImageUrl),
+        isNotNull(productionScans.postApplyImageUrl)
+      )!
+    );
+  }
+  const rows = await db
+    .select({ count: count() })
+    .from(productionScans)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  return rows[0]?.count ?? 0;
+}
+
+/** Purge old scan images: delete S3 keys and clear URL columns for scans older than cutoff */
+export async function listOldScanImages(cutoffDate: Date): Promise<
+  Array<{ scanId: string; camAImageKey: string | null; camBImageKey: string | null; postApplyImageKey: string | null }>
+> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      scanId: productionScans.scanId,
+      camAImageKey: productionScans.camAImageKey,
+      camBImageKey: productionScans.camBImageKey,
+      postApplyImageKey: productionScans.postApplyImageKey,
+    })
+    .from(productionScans)
+    .where(
+      and(
+        lte(productionScans.scannedAt, cutoffDate),
+        or(
+          isNotNull(productionScans.camAImageKey),
+          isNotNull(productionScans.camBImageKey),
+          isNotNull(productionScans.postApplyImageKey)
+        )!
+      )
+    );
+}
+
+/** Clear image columns for a set of scanIds after S3 deletion */
+export async function clearScanImageColumns(scanIds: string[]): Promise<void> {
+  const db = await getDb();
+  if (!db || scanIds.length === 0) return;
+  await db
+    .update(productionScans)
+    .set({
+      camAImageUrl: null,
+      camAImageKey: null,
+      camBImageUrl: null,
+      camBImageKey: null,
+      postApplyImageUrl: null,
+      postApplyImageKey: null,
+      postApplyReceivedAt: null,
+    })
+    .where(inArray(productionScans.scanId, scanIds));
 }

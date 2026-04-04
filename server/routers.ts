@@ -4253,6 +4253,11 @@ const labelScanRouter = router({
       tampXMmFixed: z.number().min(0).optional(),
       squaringTimeoutMs: z.number().int().min(100).optional(),
       tampReadyTimeoutMs: z.number().int().min(100).optional(),
+      // Camera C — post-apply verification camera seat
+      camCIp: z.string().optional(),
+      camCPort: z.number().int().min(1).max(65535).optional(),
+      // Scan image retention policy (days; 0 = never purge)
+      scanImageRetentionDays: z.number().int().min(0).optional(),
     }))
     .mutation(async ({ input }) => {
       const { tampXMmFixed, ...rest } = input;
@@ -5118,9 +5123,109 @@ const qrScanningRouter = router({
     }),
 });
 
-// Re-export appRouter augmented with production line + QR scanning
+// ─── Audit Images Routerr ──────────────────────────────────────────────────────
+import {
+  listProductionScansForAudit,
+  countProductionScansForAudit,
+  getProductionScanByScanId,
+} from "./db";
+import { runScanImagePurgeOnce } from "./scheduler/scanImagePurge";
+
+const auditImagesRouter = router({
+  /** Paginated list of production scans with image URLs, supporting gallery filters */
+  list: protectedProcedure
+    .input(z.object({
+      runId: z.string().optional(),
+      verdict: z.enum(["pass", "fail", "hold"]).optional(),
+      hasImages: z.boolean().optional(),
+      fromTs: z.number().optional(), // UTC ms
+      toTs: z.number().optional(),   // UTC ms
+      limit: z.number().int().min(1).max(100).default(50),
+      offset: z.number().int().min(0).default(0),
+    }))
+    .query(async ({ input }) => {
+      const [scans, total] = await Promise.all([
+        listProductionScansForAudit({
+          runId: input.runId,
+          verdict: input.verdict,
+          hasImages: input.hasImages,
+          fromTs: input.fromTs ? new Date(input.fromTs) : undefined,
+          toTs: input.toTs ? new Date(input.toTs) : undefined,
+          limit: input.limit,
+          offset: input.offset,
+        }),
+        countProductionScansForAudit({
+          runId: input.runId,
+          verdict: input.verdict,
+          hasImages: input.hasImages,
+          fromTs: input.fromTs ? new Date(input.fromTs) : undefined,
+          toTs: input.toTs ? new Date(input.toTs) : undefined,
+        }),
+      ]);
+      return { scans, total };
+    }),
+
+  /** Single scan with all image URLs */
+  getScanDetail: protectedProcedure
+    .input(z.object({ scanId: z.string() }))
+    .query(async ({ input }) => {
+      const scan = await getProductionScanByScanId(input.scanId);
+      if (!scan) throw new TRPCError({ code: "NOT_FOUND", message: "Scan not found" });
+      return scan;
+    }),
+
+  /** List all production runs for the filter dropdown */
+  listRuns: protectedProcedure
+    .query(async () => {
+      const runs = await listProductionRuns(200);
+      return runs.map((r) => ({
+        runId: r.runId,
+        lineId: r.lineId,
+        expectedGtin: r.expectedGtin,
+        expectedLot: r.expectedLot,
+        status: r.status,
+        startedAt: r.startedAt,
+      }));
+    }),
+
+  /** Export image manifest CSV for a run (all scans with image URLs) */
+  exportRunManifest: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(async ({ input }) => {
+      const scans = await listProductionScansForAudit({ runId: input.runId, limit: 5000 });
+      const header = [
+        "scan_id", "carton_id", "run_id", "verdict", "fail_reason",
+        "scanned_gtin", "scanned_lot", "scanned_expiry",
+        "cam_a_image_url", "cam_b_image_url", "post_apply_image_url",
+        "post_apply_received_at", "scanned_at",
+      ];
+      const rows = scans.map((s) => [
+        s.scanId, s.cartonId, s.runId, s.verdict, s.failReason ?? "",
+        s.scannedGtin ?? "", s.scannedLot ?? "", s.scannedExpiry ?? "",
+        s.camAImageUrl ?? "", s.camBImageUrl ?? "", s.postApplyImageUrl ?? "",
+        s.postApplyReceivedAt ? new Date(s.postApplyReceivedAt).toISOString() : "",
+        new Date(s.scannedAt).toISOString(),
+      ]);
+      const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      return {
+        filename: `scan-images-${input.runId}-${new Date().toISOString().slice(0, 10)}.csv`,
+        csv,
+        totalRows: scans.length,
+      };
+    }),
+
+  /** Manually trigger the image retention purge (admin use) */
+  triggerRetentionPurge: protectedProcedure
+    .mutation(async () => {
+      const result = await runScanImagePurgeOnce();
+      return result;
+    }),
+});
+
+// Re-export appRouter augmented with production line + QR scanning + audit images
 export const appRouterFull = router({
   ...appRouterWithProductionLine._def.record,
   qrScanning: qrScanningRouter,
+  auditImages: auditImagesRouter,
 });
 export type AppRouterFull = typeof appRouterFull;

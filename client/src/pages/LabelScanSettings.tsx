@@ -94,6 +94,13 @@ export default function LabelScanSettings() {
   const [squaringTimeoutMs, setSquaringTimeoutMs] = useState("2000");
   const [tampReadyTimeoutMs, setTampReadyTimeoutMs] = useState("1000");
 
+  // ── Camera C (post-apply verification) ──────────────────────────────────────
+  const [camCIp, setCamCIp] = useState("");
+  const [camCPort, setCamCPort] = useState("8080");
+
+  // ── Scan image retention ─────────────────────────────────────────────────────
+  const [scanImageRetentionDays, setScanImageRetentionDays] = useState("60");
+
   useEffect(() => {
     if (settings) {
       setPrinterIp(settings.printerIp ?? "");
@@ -134,6 +141,11 @@ export default function LabelScanSettings() {
       setTampXMmFixed(String(settings.tampXMmFixed ?? 120));
       setSquaringTimeoutMs(String(settings.squaringTimeoutMs ?? 2000));
       setTampReadyTimeoutMs(String(settings.tampReadyTimeoutMs ?? 1000));
+      // Camera C
+      setCamCIp(settings.camCIp ?? "");
+      setCamCPort(String(settings.camCPort ?? 8080));
+      // Image retention
+      setScanImageRetentionDays(String(settings.scanImageRetentionDays ?? 60));
     }
   }, [settings]);
 
@@ -186,6 +198,11 @@ export default function LabelScanSettings() {
       tampXMmFixed: parseFloat(tampXMmFixed) || 120,
       squaringTimeoutMs: parseInt(squaringTimeoutMs, 10) || 2000,
       tampReadyTimeoutMs: parseInt(tampReadyTimeoutMs, 10) || 1000,
+      // Camera C
+      camCIp: camCIp.trim(),
+      camCPort: parseInt(camCPort, 10) || 8080,
+      // Image retention
+      scanImageRetentionDays: parseInt(scanImageRetentionDays, 10) || 60,
     });
   }
 
@@ -389,6 +406,84 @@ fs.watch(WATCH_FOLDER, async (event, filename) => {
                     while the squaring cylinder is still extending, saving ~150ms per cycle. The PLC waits for
                     C10 TAMP_READY = 1 before firing C3 TAMP_FIRE.
                   </span>
+                </div>
+              </div>
+              <Separator />
+              {/* Camera C — Post-Apply Verification */}
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium mb-3">
+                  <Server className="h-4 w-4" />
+                  Camera C — Post-Apply Verification
+                  {!camCIp && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-400">
+                      <AlertCircle className="h-3 w-3" /> Not commissioned
+                    </span>
+                  )}
+                  {camCIp && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs text-green-700 dark:text-green-400">
+                      <CheckCircle2 className="h-3 w-3" /> Commissioned
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4 max-w-md">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="camCIp">Camera C IP Address</Label>
+                    <Input
+                      id="camCIp"
+                      placeholder="192.168.1.60"
+                      value={camCIp}
+                      onChange={(e) => setCamCIp(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Leave blank until camera is installed</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="camCPort">Camera C Port</Label>
+                    <Input
+                      id="camCPort"
+                      placeholder="8080"
+                      value={camCPort}
+                      onChange={(e) => setCamCPort(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Edge compute HTTP port for Camera C</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-start gap-2 p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-lg text-xs text-amber-800 dark:text-amber-300">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>
+                    Camera C fires ~500ms after the tamp and photographs the applied label.
+                    The edge compute calls <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">POST /api/scan/post-apply</code> with
+                    the carton ID and S3 key. The seat is reserved — the endpoint returns 503 until this IP is set.
+                  </span>
+                </div>
+              </div>
+              <Separator />
+              {/* Scan Image Retention */}
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium mb-3">
+                  <Settings2 className="h-4 w-4" />
+                  Scan Image Retention Policy
+                </div>
+                <div className="max-w-xs space-y-1.5">
+                  <Label htmlFor="retentionDays">Retain images for (days)</Label>
+                  <Select
+                    value={scanImageRetentionDays}
+                    onValueChange={setScanImageRetentionDays}
+                  >
+                    <SelectTrigger id="retentionDays">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="60">60 days</SelectItem>
+                      <SelectItem value="90">90 days</SelectItem>
+                      <SelectItem value="180">180 days (6 months)</SelectItem>
+                      <SelectItem value="365">365 days (1 year)</SelectItem>
+                      <SelectItem value="0">Never purge</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Camera A, B, and C images older than this window are deleted from S3 nightly at 02:00 UTC.
+                    Set to “Never purge” to retain all images indefinitely.
+                  </p>
                 </div>
               </div>
             </CardContent>

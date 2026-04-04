@@ -769,3 +769,18 @@
 - [x] Frontend: Filter bar — by customer, date range, status
 - [x] Sidebar: Add "QR Scan History" nav item under QC section
 - [x] Tests for new tRPC procedures (covered by existing 361-test suite; 0 TS errors)
+
+## Scan Image Capture & Audit
+- [x] DB: camAImageUrl, camAImageKey, camBImageUrl, camBImageKey, postApplyImageUrl, postApplyImageKey, postApplyReceivedAt columns on production_scans
+- [x] DB: scanImageRetentionDays column on label_scan_settings (default 60, options 60/90/180/365/0=never)
+- [x] DB: camCIp, camCPort columns on label_scan_settings (Camera C seat)
+- [x] Server: GET /api/scan/image-upload-url — returns upload endpoint for edge compute
+- [x] Server: POST /api/scan/image-receive — receives raw image bytes, uploads to S3, updates scan record
+- [x] Server: POST /api/scan/post-apply — Camera C post-apply confirmation (returns 503 until camCIp is set)
+- [x] Server: scanImageRetention.ts — nightly purge logic (configurable retention window)
+- [x] Server: scheduler/scanImagePurge.ts — cron job at 02:00 UTC daily
+- [x] Server: auditImages tRPC router — list, getScanDetail, listRuns, exportRunManifest, triggerRetentionPurge
+- [x] Frontend: LabelScanSettings — Camera C IP/port fields with commissioned/not-commissioned badge
+- [x] Frontend: LabelScanSettings — Scan Image Retention Policy dropdown (60/90/180/365/Never)
+- [x] Frontend: AuditImages page — full gallery replacing placeholder, filters, lightbox, CSV manifest export, manual purge trigger
+- [x] Frontend: Lightbox — click-to-enlarge with camera tabs (A/B/C), carton ID, verdict, fail reason, timestamps, per-image download

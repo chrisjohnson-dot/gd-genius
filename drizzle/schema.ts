@@ -713,10 +713,33 @@ export const labelScanSettings = mysqlTable("label_scan_settings", {
   enipTagBeltStop: varchar("enipTagBeltStop", { length: 128 }).notNull().default("GD_BeltStop"),
   enipTagTampFire: varchar("enipTagTampFire", { length: 128 }).notNull().default("GD_TampFire"),
   enipTagDivertOn: varchar("enipTagDivertOn", { length: 128 }).notNull().default("GD_DivertOn"),
-  // Modbus coil addresses for each PLC action (Modbus TCP mode)
-  modbusCoilBeltStop: int("modbusCoilBeltStop").notNull().default(0),
-  modbusCoilTampFire: int("modbusCoilTampFire").notNull().default(1),
-  modbusCoilDivertOn: int("modbusCoilDivertOn").notNull().default(2),
+  // Modbus coil addresses — Click! PLC map (v3 spec)
+  // App → PLC write coils
+  modbusCoilDivert: int("modbusCoilDivert").notNull().default(0),       // C1 DIVERT (auto-reset)
+  modbusCoilBeltStop: int("modbusCoilBeltStop").notNull().default(1),   // C2 BELT_STOP
+  modbusCoilTampFire: int("modbusCoilTampFire").notNull().default(2),   // C3 TAMP_FIRE
+  modbusCoilStopPlate: int("modbusCoilStopPlate").notNull().default(3), // C4 STOP_PLATE
+  modbusCoilSquareExtend: int("modbusCoilSquareExtend").notNull().default(4), // C5 SQUARE_EXTEND
+  modbusCoilSquareRetract: int("modbusCoilSquareRetract").notNull().default(5), // C6 SQUARE_RETRACT
+  // PLC → App read coils
+  modbusCoilTampReady: int("modbusCoilTampReady").notNull().default(9),       // C10 TAMP_READY
+  modbusCoilBeltRunning: int("modbusCoilBeltRunning").notNull().default(10),  // C11 BELT_RUNNING
+  modbusCoilSquareConfirmed: int("modbusCoilSquareConfirmed").notNull().default(11), // C12 SQUARE_CONFIRMED
+  modbusCoilSquareHome: int("modbusCoilSquareHome").notNull().default(12),    // C13 SQUARE_HOME
+  // Modbus data registers (DS)
+  modbusRegTampX: int("modbusRegTampX").notNull().default(0),   // DS1 TAMP_X (tenths of mm)
+  modbusRegTampY: int("modbusRegTampY").notNull().default(1),   // DS2 TAMP_Y (tenths of mm)
+  modbusRegEncoderPos: int("modbusRegEncoderPos").notNull().default(9), // DS10 ENCODER_POS (read)
+  // Network topology — fixed IPs per v3 spec
+  qcAppIp: varchar("qcAppIp", { length: 128 }).notNull().default("192.168.1.10"),
+  edgeComputeIp: varchar("edgeComputeIp", { length: 128 }).notNull().default("192.168.1.20"),
+  zebraIp: varchar("zebraIp", { length: 128 }).notNull().default("192.168.1.30"),
+  lpaIp: varchar("lpaIp", { length: 128 }).notNull().default("192.168.1.50"),
+  lpaPort: int("lpaPort").notNull().default(9200),
+  // Squaring station config
+  tampXMmFixed: decimal("tampXMmFixed", { precision: 8, scale: 2 }).notNull().default("120.00"), // fixed constant set at commissioning
+  squaringTimeoutMs: int("squaringTimeoutMs").notNull().default(2000), // max ms to wait for SQUARE_CONFIRMED
+  tampReadyTimeoutMs: int("tampReadyTimeoutMs").notNull().default(1000), // max ms to wait for TAMP_READY
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type LabelScanSettings = typeof labelScanSettings.$inferSelect;

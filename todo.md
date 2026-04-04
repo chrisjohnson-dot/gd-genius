@@ -731,3 +731,18 @@
 - [ ] SKU shelf-life config: per-SKU acceptable expiry window and hold thresholds
 - [ ] Sidebar navigation entry for Production Line
 - [ ] Tests for verdict logic and ZPL generation
+
+## v3 Production Line Updates (completed)
+- [x] Expanded Modbus register map: 10 coils (C1-C13) + 3 data registers (DS1, DS2, DS10) in DB schema, router, and PLC lib
+- [x] Full squaring station sequence with overlap optimization (v3 §9.5): raise stop plate → extend squaring → write tamp X/Y in parallel → wait SQUARE_CONFIRMED → wait TAMP_READY → fire tamp → retract squaring → drop stop plate
+- [x] tamp_x_mm is now a fixed config constant (tampXMmFixed) — only tamp_y_mm varies per carton
+- [x] carton_id (UUID) tracking from edge compute in production_scans table
+- [x] Auto belt-stop on PLC connection loss (socket close handler asserts belt stop on reconnect)
+- [x] Divert-on-fail (C1) fires on all fail/hold verdicts in /api/scan
+- [x] /api/scan endpoint already optimized for <500ms: settings loaded once, verdict engine is synchronous, DB writes are non-blocking
+- [x] LabelScanSettings: expanded to 4 tabs (Network, PLC, Label Sync, Hardware Reference)
+- [x] Network topology panel: all 5 device IPs (app server, edge compute, Zebra, PLC, LPA servo)
+- [x] PLC tab: full Modbus coil map (output coils C1-C6, input coils C10-C13, data registers DS1/DS2/DS10)
+- [x] Tamp & squaring station config: tampXMmFixed, squaringTimeoutMs, tampReadyTimeoutMs
+- [x] Hardware Reference tab: BOM, cycle time budget, commissioning checklist, vendor questions
+- [x] Router updateSettings schema expanded to include all v3 fields

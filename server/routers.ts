@@ -4226,15 +4226,46 @@ const labelScanRouter = router({
       enipTagBeltStop: z.string().optional(),
       enipTagTampFire: z.string().optional(),
       enipTagDivertOn: z.string().optional(),
-      // Modbus coil addresses
+      // Modbus coil addresses — v3 full map
+      // Output coils (App → PLC)
+      modbusCoilDivert: z.number().int().min(0).optional(),
       modbusCoilBeltStop: z.number().int().min(0).optional(),
       modbusCoilTampFire: z.number().int().min(0).optional(),
-      modbusCoilDivertOn: z.number().int().min(0).optional(),
+      modbusCoilStopPlate: z.number().int().min(0).optional(),
+      modbusCoilSquareExtend: z.number().int().min(0).optional(),
+      modbusCoilSquareRetract: z.number().int().min(0).optional(),
+      // Input coils (PLC → App)
+      modbusCoilTampReady: z.number().int().min(0).optional(),
+      modbusCoilBeltRunning: z.number().int().min(0).optional(),
+      modbusCoilSquareConfirmed: z.number().int().min(0).optional(),
+      modbusCoilSquareHome: z.number().int().min(0).optional(),
+      // Data registers
+      modbusRegTampX: z.number().int().min(0).optional(),
+      modbusRegTampY: z.number().int().min(0).optional(),
+      modbusRegEncoderPos: z.number().int().min(0).optional(),
+      // Network topology
+      qcAppIp: z.string().optional(),
+      edgeComputeIp: z.string().optional(),
+      zebraIp: z.string().optional(),
+      lpaIp: z.string().optional(),
+      lpaPort: z.number().int().min(1).max(65535).optional(),
+      // Squaring station / tamp config
+      tampXMmFixed: z.number().min(0).optional(),
+      squaringTimeoutMs: z.number().int().min(100).optional(),
+      tampReadyTimeoutMs: z.number().int().min(100).optional(),
     }))
     .mutation(async ({ input }) => {
-      await upsertLabelScanSettings(input);
+      const { tampXMmFixed, ...rest } = input;
+      await upsertLabelScanSettings({
+        ...rest,
+        ...(tampXMmFixed !== undefined ? { tampXMmFixed: String(tampXMmFixed) } : {}),
+      });
       return { success: true };
     }),
+
+
+
+
 
   // ── Label Files ────────────────────────────────────────────────────────────
   listLabelFiles: protectedProcedure

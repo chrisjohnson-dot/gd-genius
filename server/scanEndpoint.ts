@@ -43,6 +43,7 @@ import {
   getProductionSkuConfig,
 } from "./db";
 import { evaluateVerdict } from "./productionLine";
+import { plcWrite, squareAndTamp, plcDivertOn, plcBeltStop, buildPlcConfig } from "./plcModbus";
 
 // ── TCP ZPL dispatch helper ────────────────────────────────────────────────────
 async function dispatchZplOverTcp(
@@ -157,18 +158,71 @@ export function registerScanEndpoint(app: Router) {
           : null
       );
 
-      // If pass, dispatch ZPL to printer
+      // ── tamp_x_mm: use fixed config constant (v3 spec — X is set mechanically)
+      const tampXFixed = settings?.tampXMmFixed != null ? Number(settings.tampXMmFixed) : 120;
+      const finalTampX = tampXFixed;
+      const finalTampY = result.tampYMm;
+
+      // ── Build PLC config from settings ────────────────────────────────────────
+      const plcCfg = settings ? buildPlcConfig({
+        plcProtocol: settings.plcProtocol ?? "modbus",
+        plcIp: settings.plcIp ?? "",
+        plcPort: settings.plcPort ?? 502,
+        plcUnitId: settings.plcUnitId ?? 1,
+        plcStubMode: settings.plcStubMode ?? true,
+        modbusCoilDivert: settings.modbusCoilDivert ?? 0,
+        modbusCoilBeltStop: settings.modbusCoilBeltStop ?? 1,
+        modbusCoilTampFire: settings.modbusCoilTampFire ?? 2,
+        modbusCoilStopPlate: settings.modbusCoilStopPlate ?? 3,
+        modbusCoilSquareExtend: settings.modbusCoilSquareExtend ?? 4,
+        modbusCoilSquareRetract: settings.modbusCoilSquareRetract ?? 5,
+        modbusCoilTampReady: settings.modbusCoilTampReady ?? 9,
+        modbusCoilBeltRunning: settings.modbusCoilBeltRunning ?? 10,
+        modbusCoilSquareConfirmed: settings.modbusCoilSquareConfirmed ?? 11,
+        modbusCoilSquareHome: settings.modbusCoilSquareHome ?? 12,
+        modbusRegTampX: settings.modbusRegTampX ?? 0,
+        modbusRegTampY: settings.modbusRegTampY ?? 1,
+        modbusRegEncoderPos: settings.modbusRegEncoderPos ?? 9,
+        squaringTimeoutMs: settings.squaringTimeoutMs ?? 2000,
+        tampReadyTimeoutMs: settings.tampReadyTimeoutMs ?? 1000,
+        enipSlot: settings.enipSlot,
+        enipTagBeltStop: settings.enipTagBeltStop,
+        enipTagTampFire: settings.enipTagTampFire,
+        enipTagDivertOn: settings.enipTagDivertOn,
+      }) : null;
+
+      // ── On fail/hold: fire divert solenoid (C1) ───────────────────────────────
+      if (result.verdict !== "pass" && plcCfg) {
+        try { await plcDivertOn(plcCfg); } catch (e) {
+          console.error("[scanEndpoint] PLC divert error:", (e as Error).message);
+          // If PLC is unreachable, assert belt stop for safety
+          try { await plcBeltStop(plcCfg); } catch { /* best effort */ }
+        }
+      }
+
+      // ── On pass: dispatch ZPL to printer + squaring+tamp sequence ─────────────
       let printedAt: Date | null = null;
       if (result.verdict === "pass" && result.labelZpl) {
-        const printerIp = settings?.printerIp ?? "";
+        const printerIp = settings?.zebraIp ?? settings?.printerIp ?? "";
         const printerPort = settings?.printerPort ?? 9100;
         if (printerIp) {
           try {
             await dispatchZplOverTcp(result.labelZpl, printerIp, printerPort);
             printedAt = new Date();
           } catch (err: any) {
-            // Printer error doesn't change the verdict — log it but continue
             console.error("[scanEndpoint] ZPL dispatch error:", err?.message);
+          }
+        }
+        // Squaring + tamp with overlap optimization (v3 spec §9.5)
+        if (plcCfg) {
+          try {
+            const tampResult = await squareAndTamp(plcCfg, finalTampX, finalTampY);
+            if (!tampResult.success) {
+              console.error("[scanEndpoint] squareAndTamp failed:", tampResult.failStep);
+            }
+          } catch (e) {
+            console.error("[scanEndpoint] PLC squareAndTamp error:", (e as Error).message);
+            try { await plcBeltStop(plcCfg); } catch { /* best effort */ }
           }
         }
       }
@@ -209,8 +263,8 @@ export function registerScanEndpoint(app: Router) {
         verdict: result.verdict,
         fail_reason: result.failReason ?? null,
         placement: result.placement,
-        tamp_x_mm: result.tampXMm,
-        tamp_y_mm: result.tampYMm,
+        tamp_x_mm: finalTampX,
+        tamp_y_mm: finalTampY,
         label_zpl: result.labelZpl ?? null,
         scan_id: scanId,
         run_id: run.runId,

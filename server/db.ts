@@ -2335,9 +2335,30 @@ export async function upsertLabelScanSettings(
       enipTagBeltStop: data.enipTagBeltStop ?? "GD_BeltStop",
       enipTagTampFire: data.enipTagTampFire ?? "GD_TampFire",
       enipTagDivertOn: data.enipTagDivertOn ?? "GD_DivertOn",
-      modbusCoilBeltStop: data.modbusCoilBeltStop ?? 0,
-      modbusCoilTampFire: data.modbusCoilTampFire ?? 1,
-      modbusCoilDivertOn: data.modbusCoilDivertOn ?? 2,
+      // v3 Modbus coil map
+      modbusCoilDivert: data.modbusCoilDivert ?? 0,
+      modbusCoilBeltStop: data.modbusCoilBeltStop ?? 1,
+      modbusCoilTampFire: data.modbusCoilTampFire ?? 2,
+      modbusCoilStopPlate: data.modbusCoilStopPlate ?? 3,
+      modbusCoilSquareExtend: data.modbusCoilSquareExtend ?? 4,
+      modbusCoilSquareRetract: data.modbusCoilSquareRetract ?? 5,
+      modbusCoilTampReady: data.modbusCoilTampReady ?? 9,
+      modbusCoilBeltRunning: data.modbusCoilBeltRunning ?? 10,
+      modbusCoilSquareConfirmed: data.modbusCoilSquareConfirmed ?? 11,
+      modbusCoilSquareHome: data.modbusCoilSquareHome ?? 12,
+      modbusRegTampX: data.modbusRegTampX ?? 0,
+      modbusRegTampY: data.modbusRegTampY ?? 1,
+      modbusRegEncoderPos: data.modbusRegEncoderPos ?? 9,
+      // Network topology
+      qcAppIp: data.qcAppIp ?? "192.168.1.10",
+      edgeComputeIp: data.edgeComputeIp ?? "192.168.1.20",
+      zebraIp: data.zebraIp ?? "192.168.1.30",
+      lpaIp: data.lpaIp ?? "192.168.1.50",
+      lpaPort: data.lpaPort ?? 9200,
+      // Squaring station
+      tampXMmFixed: data.tampXMmFixed ?? "120.00",
+      squaringTimeoutMs: data.squaringTimeoutMs ?? 2000,
+      tampReadyTimeoutMs: data.tampReadyTimeoutMs ?? 1000,
     });
   }
 }

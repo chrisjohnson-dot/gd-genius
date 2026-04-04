@@ -37,6 +37,7 @@ import {
   ConciergeBell,
   Tag,
   FileText,
+  Activity,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -64,8 +65,9 @@ const qcItems = [
   { href: "/qc/reports",     label: "QC Reports",    icon: FileBarChart2 },
   { href: "/qc/scanner",     label: "QC Scanner",      icon: ScanBarcode },
   { href: "/qc/scan-label",  label: "QC Scan & Label", icon: Tag },
-  { href: "/qc/label-files", label: "Label Files",      icon: FileText },
-  { href: "/qc/flagged",     label: "Flagged Scans",   icon: Flag },
+  { href: "/qc/label-files",       label: "Label Files",      icon: FileText },
+  { href: "/qc/production-line",   label: "Production Line",  icon: Activity },
+  { href: "/qc/flagged",           label: "Flagged Scans",    icon: Flag },
 ];
 
 const shippingItems = [

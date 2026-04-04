@@ -2472,3 +2472,110 @@ export async function updateLabelScanCarton(
   if (!db) return;
   await db.update(labelScanCartons).set(data).where(eq(labelScanCartons.id, id));
 }
+
+// ─── Production Line DB Helpers ───────────────────────────────────────────────
+import {
+  productionRuns,
+  ProductionRun,
+  InsertProductionRun,
+  productionScans,
+  ProductionScan,
+  InsertProductionScan,
+  productionSkuConfigs,
+  ProductionSkuConfig,
+  InsertProductionSkuConfig,
+} from "../drizzle/schema";
+
+export async function createProductionRun(data: InsertProductionRun): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(productionRuns).values(data);
+  return (result as any).insertId;
+}
+
+export async function getActiveProductionRun(lineId: string): Promise<ProductionRun | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(productionRuns)
+    .where(and(eq(productionRuns.lineId, lineId), eq(productionRuns.status, "active")))
+    .orderBy(desc(productionRuns.startedAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getProductionRunByRunId(runId: string): Promise<ProductionRun | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(productionRuns).where(eq(productionRuns.runId, runId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateProductionRun(
+  runId: string,
+  data: Partial<Omit<ProductionRun, "id" | "runId" | "createdAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(productionRuns).set(data).where(eq(productionRuns.runId, runId));
+}
+
+export async function listProductionRuns(limit = 50): Promise<ProductionRun[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(productionRuns).orderBy(desc(productionRuns.startedAt)).limit(limit);
+}
+
+export async function createProductionScan(data: InsertProductionScan): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(productionScans).values(data);
+  return (result as any).insertId;
+}
+
+export async function listProductionScans(runId: string, limit = 100): Promise<ProductionScan[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(productionScans)
+    .where(eq(productionScans.runId, runId))
+    .orderBy(desc(productionScans.scannedAt))
+    .limit(limit);
+}
+
+export async function getProductionSkuConfig(gtin: string): Promise<ProductionSkuConfig | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(productionSkuConfigs).where(eq(productionSkuConfigs.gtin, gtin)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertProductionSkuConfig(data: InsertProductionSkuConfig): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(productionSkuConfigs)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        skuDescription: data.skuDescription,
+        shelfLifeDaysMin: data.shelfLifeDaysMin,
+        holdConfidenceMin: data.holdConfidenceMin,
+        lotPattern: data.lotPattern,
+      },
+    });
+}
+
+export async function listProductionSkuConfigs(): Promise<ProductionSkuConfig[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(productionSkuConfigs).orderBy(productionSkuConfigs.gtin);
+}
+
+export async function deleteProductionSkuConfig(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(productionSkuConfigs).where(eq(productionSkuConfigs.id, id));
+}

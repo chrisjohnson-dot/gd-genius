@@ -781,3 +781,83 @@ export const labelScanCartons = mysqlTable("label_scan_cartons", {
 });
 export type LabelScanCarton = typeof labelScanCartons.$inferSelect;
 export type InsertLabelScanCarton = typeof labelScanCartons.$inferInsert;
+
+// ─── Production Line (Automated QC Carton Line) ───────────────────────────────
+
+// A production run defines the expected values for a batch of cartons on the automated line.
+// All scans during the run are verified against these expected values.
+export const productionRuns = mysqlTable("production_runs", {
+  id: int("id").primaryKey().autoincrement(),
+  runId: varchar("runId", { length: 64 }).notNull().unique(), // UUID assigned at start
+  lineId: varchar("lineId", { length: 64 }).notNull().default("LINE-1"),
+  operatorId: varchar("operatorId", { length: 256 }).notNull(),
+  // Expected values — all scans verified against these
+  expectedGtin: varchar("expectedGtin", { length: 20 }).notNull(),
+  expectedLot: varchar("expectedLot", { length: 128 }).notNull(),
+  expectedExpiry: varchar("expectedExpiry", { length: 10 }).notNull(), // ISO date YYYY-MM-DD
+  // Configurable thresholds
+  confidenceThreshold: decimal("confidenceThreshold", { precision: 4, scale: 3 }).notNull().default("0.850"),
+  shelfLifeDaysMin: int("shelfLifeDaysMin"), // minimum days remaining before expiry is flagged
+  holdConfidenceMin: decimal("holdConfidenceMin", { precision: 4, scale: 3 }), // confidence below this → hold (above fail threshold)
+  // Tamp placement config
+  tampDefaultX: decimal("tampDefaultX", { precision: 8, scale: 2 }), // mm from belt left edge
+  tampDefaultY: decimal("tampDefaultY", { precision: 8, scale: 2 }), // mm from belt front edge
+  // Status
+  status: mysqlEnum("status", ["active", "closed", "aborted"]).notNull().default("active"),
+  // Counters
+  totalScanned: int("totalScanned").notNull().default(0),
+  totalPass: int("totalPass").notNull().default(0),
+  totalFail: int("totalFail").notNull().default(0),
+  totalHold: int("totalHold").notNull().default(0),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ProductionRun = typeof productionRuns.$inferSelect;
+export type InsertProductionRun = typeof productionRuns.$inferInsert;
+
+// Each carton scan event on the automated line — one record per carton
+export const productionScans = mysqlTable("production_scans", {
+  id: int("id").primaryKey().autoincrement(),
+  scanId: varchar("scanId", { length: 64 }).notNull().unique(), // UUID from edge compute
+  runId: varchar("runId", { length: 64 }).notNull(), // FK → production_runs.runId
+  cartonId: varchar("cartonId", { length: 64 }).notNull(), // UUID from edge compute
+  // Decoded barcode fields from GS1-128
+  scannedGtin: varchar("scannedGtin", { length: 20 }),
+  scannedLot: varchar("scannedLot", { length: 128 }),
+  scannedExpiry: varchar("scannedExpiry", { length: 10 }), // YYYYMMDD as received
+  scannedSerial: varchar("scannedSerial", { length: 128 }),
+  poNumber: varchar("poNumber", { length: 128 }),
+  // Vision system metadata
+  skuBbox: json("skuBbox").$type<{ x_mm: number; y_mm: number; w_mm: number; h_mm: number } | null>(),
+  camBClear: boolean("camBClear"),
+  confidence: decimal("confidence", { precision: 5, scale: 4 }),
+  // Verdict
+  verdict: mysqlEnum("verdict", ["pass", "fail", "hold"]).notNull(),
+  failReason: varchar("failReason", { length: 64 }), // GTIN_MISMATCH | LOT_MISMATCH | EXPIRED | EXPIRY_WINDOW | LOW_CONFIDENCE | STRAY_LABEL | NO_ACTIVE_RUN | NO_DECODE
+  // Label / tamp output
+  placement: mysqlEnum("placement", ["over_sku", "fixed_default"]),
+  tampXMm: decimal("tampXMm", { precision: 8, scale: 2 }),
+  tampYMm: decimal("tampYMm", { precision: 8, scale: 2 }),
+  zplSent: text("zplSent"), // full ZPL string as sent to printer
+  printedAt: timestamp("printedAt"),
+  scannedAt: timestamp("scannedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ProductionScan = typeof productionScans.$inferSelect;
+export type InsertProductionScan = typeof productionScans.$inferInsert;
+
+// Per-SKU configuration for shelf-life windows and hold thresholds
+export const productionSkuConfigs = mysqlTable("production_sku_configs", {
+  id: int("id").primaryKey().autoincrement(),
+  gtin: varchar("gtin", { length: 20 }).notNull().unique(),
+  skuDescription: varchar("skuDescription", { length: 256 }),
+  shelfLifeDaysMin: int("shelfLifeDaysMin").notNull().default(30), // fail if < this many days remaining
+  holdConfidenceMin: decimal("holdConfidenceMin", { precision: 4, scale: 3 }).default("0.700"), // hold if confidence between this and fail threshold
+  lotPattern: varchar("lotPattern", { length: 256 }), // optional regex for lot matching
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ProductionSkuConfig = typeof productionSkuConfigs.$inferSelect;
+export type InsertProductionSkuConfig = typeof productionSkuConfigs.$inferInsert;

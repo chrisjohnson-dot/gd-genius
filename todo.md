@@ -717,3 +717,17 @@
 - [ ] Downloadable local sync agent script (Node.js, watches network folder, uploads to app)
 - [ ] Sidebar: add "QC Scan & Label" under QC Scanner section
 - [ ] Tests for all new server procedures
+
+## Production Line Module (Automated QC Carton Line)
+
+- [ ] Database: production_runs and production_scans tables
+- [ ] Server: POST /api/run/start and /api/run/close procedures
+- [ ] Verdict logic: 6 pass conditions, 8 fail reason codes, hold condition
+- [ ] ZPL generation from verified scan data (GTIN, lot, expiry, operator, run ID, QC PASS stamp)
+- [ ] Updated /api/scan: accept full vision system payload, return verdict + tamp_x_mm + tamp_y_mm + label_zpl
+- [ ] PLC Modbus TCP interface: belt stop (C2), tamp fire (C3), divert (C1), tamp X/Y registers
+- [ ] Production Line UI: run setup form (expected GTIN, lot, expiry, operator, line ID)
+- [ ] Live WebSocket dashboard: rolling 20-scan feed, pass/fail/hold counters, active run status
+- [ ] SKU shelf-life config: per-SKU acceptable expiry window and hold thresholds
+- [ ] Sidebar navigation entry for Production Line
+- [ ] Tests for verdict logic and ZPL generation

@@ -143,6 +143,20 @@ import {
   type OrderVerificationResult,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
+import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
+import {
+  createProductionRun,
+  getActiveProductionRun,
+  getProductionRunByRunId,
+  updateProductionRun,
+  listProductionRuns,
+  createProductionScan,
+  listProductionScans,
+  getProductionSkuConfig,
+  upsertProductionSkuConfig,
+  listProductionSkuConfigs,
+  deleteProductionSkuConfig,
+} from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
@@ -4598,3 +4612,244 @@ export const appRouter = router({
   labelScan: labelScanRouter,
 });
 export type AppRouter = typeof appRouter;
+
+// ─── Production Line Router ───────────────────────────────────────────────────
+const productionLineRouter = router({
+  // Start a new production run
+  startRun: protectedProcedure
+    .input(z.object({
+      lineId: z.string().default("LINE-1"),
+      operatorId: z.string().min(1),
+      expectedGtin: z.string().min(1),
+      expectedLot: z.string().min(1),
+      expectedExpiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected ISO date YYYY-MM-DD"),
+      confidenceThreshold: z.number().min(0).max(1).default(0.85),
+      shelfLifeDaysMin: z.number().int().min(0).optional(),
+      holdConfidenceMin: z.number().min(0).max(1).optional(),
+      tampDefaultX: z.number().optional(),
+      tampDefaultY: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      // Check for already-active run on this line
+      const existing = await getActiveProductionRun(input.lineId);
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Line ${input.lineId} already has an active run: ${existing.runId}. Close it first.`,
+        });
+      }
+      const runId = crypto.randomUUID();
+      await createProductionRun({
+        runId,
+        lineId: input.lineId,
+        operatorId: input.operatorId,
+        expectedGtin: input.expectedGtin,
+        expectedLot: input.expectedLot,
+        expectedExpiry: input.expectedExpiry,
+        confidenceThreshold: String(input.confidenceThreshold) as any,
+        shelfLifeDaysMin: input.shelfLifeDaysMin ?? null,
+        holdConfidenceMin: input.holdConfidenceMin != null ? String(input.holdConfidenceMin) as any : null,
+        tampDefaultX: input.tampDefaultX != null ? String(input.tampDefaultX) as any : null,
+        tampDefaultY: input.tampDefaultY != null ? String(input.tampDefaultY) as any : null,
+        status: "active",
+      });
+      return { runId };
+    }),
+
+  // Close the active production run
+  closeRun: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .mutation(async ({ input }) => {
+      const run = await getProductionRunByRunId(input.runId);
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+      if (run.status !== "active") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Run is not active" });
+      }
+      await updateProductionRun(input.runId, {
+        status: "closed",
+        closedAt: new Date(),
+      });
+      return {
+        runId: input.runId,
+        totalScanned: run.totalScanned,
+        totalPass: run.totalPass,
+        totalFail: run.totalFail,
+        totalHold: run.totalHold,
+      };
+    }),
+
+  // Abort the active production run
+  abortRun: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .mutation(async ({ input }) => {
+      const run = await getProductionRunByRunId(input.runId);
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+      await updateProductionRun(input.runId, { status: "aborted", closedAt: new Date() });
+      return { success: true };
+    }),
+
+  // Get the active run for a line (used by dashboard polling)
+  getActiveRun: protectedProcedure
+    .input(z.object({ lineId: z.string().default("LINE-1") }))
+    .query(async ({ input }) => {
+      return getActiveProductionRun(input.lineId);
+    }),
+
+  // Get a specific run by runId
+  getRun: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(async ({ input }) => {
+      const run = await getProductionRunByRunId(input.runId);
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+      return run;
+    }),
+
+  // List all runs (history)
+  listRuns: protectedProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
+    .query(async ({ input }) => {
+      return listProductionRuns(input.limit);
+    }),
+
+  // Get scans for a run (rolling feed)
+  listScans: protectedProcedure
+    .input(z.object({ runId: z.string(), limit: z.number().int().min(1).max(200).default(100) }))
+    .query(async ({ input }) => {
+      return listProductionScans(input.runId, input.limit);
+    }),
+
+  // Manual scan submission (for testing / fallback when vision system is offline)
+  submitScan: protectedProcedure
+    .input(z.object({
+      runId: z.string(),
+      cartonId: z.string().optional(),
+      gtin: z.string().optional(),
+      lot: z.string().optional(),
+      expiry: z.string().optional(),
+      serial: z.string().optional(),
+      poNumber: z.string().optional(),
+      skuBbox: z.object({ x_mm: z.number(), y_mm: z.number(), w_mm: z.number(), h_mm: z.number() }).optional(),
+      camBClear: z.boolean().optional(),
+      confidence: z.number().min(0).max(1).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const run = await getProductionRunByRunId(input.runId);
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+      if (run.status !== "active") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Run is not active" });
+      }
+
+      const skuCfg = input.gtin ? await getProductionSkuConfig(input.gtin) : null;
+      const result = evaluateVerdict(
+        {
+          cartonId: input.cartonId ?? crypto.randomUUID(),
+          gtin: input.gtin,
+          lot: input.lot,
+          expiry: input.expiry,
+          serial: input.serial,
+          poNumber: input.poNumber,
+          skuBbox: input.skuBbox,
+          camBClear: input.camBClear,
+          confidence: input.confidence,
+        },
+        {
+          runId: run.runId,
+          lineId: run.lineId,
+          operatorId: run.operatorId,
+          expectedGtin: run.expectedGtin,
+          expectedLot: run.expectedLot,
+          expectedExpiry: run.expectedExpiry,
+          confidenceThreshold: Number(run.confidenceThreshold),
+          shelfLifeDaysMin: run.shelfLifeDaysMin,
+          holdConfidenceMin: run.holdConfidenceMin != null ? Number(run.holdConfidenceMin) : null,
+          tampDefaultX: run.tampDefaultX != null ? Number(run.tampDefaultX) : null,
+          tampDefaultY: run.tampDefaultY != null ? Number(run.tampDefaultY) : null,
+        },
+        skuCfg
+          ? {
+              shelfLifeDaysMin: skuCfg.shelfLifeDaysMin,
+              holdConfidenceMin: skuCfg.holdConfidenceMin != null ? Number(skuCfg.holdConfidenceMin) : null,
+              lotPattern: skuCfg.lotPattern,
+            }
+          : null
+      );
+
+      const scanId = crypto.randomUUID();
+      await createProductionScan({
+        scanId,
+        runId: run.runId,
+        cartonId: input.cartonId ?? scanId,
+        scannedGtin: input.gtin ?? null,
+        scannedLot: input.lot ?? null,
+        scannedExpiry: input.expiry ?? null,
+        scannedSerial: input.serial ?? null,
+        poNumber: input.poNumber ?? null,
+        skuBbox: input.skuBbox ?? null,
+        camBClear: input.camBClear ?? null,
+        confidence: input.confidence != null ? String(input.confidence) as any : null,
+        verdict: result.verdict,
+        failReason: result.failReason ?? null,
+        placement: result.placement,
+        tampXMm: String(result.tampXMm) as any,
+        tampYMm: String(result.tampYMm) as any,
+        zplSent: result.labelZpl ?? null,
+        printedAt: result.verdict === "pass" ? new Date() : null,
+      });
+
+      // Update run counters
+      const counterUpdate: Record<string, any> = {
+        totalScanned: run.totalScanned + 1,
+        totalPass: run.totalPass + (result.verdict === "pass" ? 1 : 0),
+        totalFail: run.totalFail + (result.verdict === "fail" ? 1 : 0),
+        totalHold: run.totalHold + (result.verdict === "hold" ? 1 : 0),
+      };
+      await updateProductionRun(run.runId, counterUpdate);
+
+      return {
+        scanId,
+        verdict: result.verdict,
+        failReason: result.failReason,
+        placement: result.placement,
+        tampXMm: result.tampXMm,
+        tampYMm: result.tampYMm,
+        labelZpl: result.labelZpl,
+      };
+    }),
+
+  // SKU config CRUD
+  listSkuConfigs: protectedProcedure.query(async () => {
+    return listProductionSkuConfigs();
+  }),
+
+  upsertSkuConfig: protectedProcedure
+    .input(z.object({
+      gtin: z.string().min(1),
+      skuDescription: z.string().optional(),
+      shelfLifeDaysMin: z.number().int().min(0).default(30),
+      holdConfidenceMin: z.number().min(0).max(1).optional(),
+      lotPattern: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await upsertProductionSkuConfig({
+        gtin: input.gtin,
+        skuDescription: input.skuDescription ?? null,
+        shelfLifeDaysMin: input.shelfLifeDaysMin,
+        holdConfidenceMin: input.holdConfidenceMin != null ? String(input.holdConfidenceMin) as any : null,
+        lotPattern: input.lotPattern ?? null,
+      });
+      return { success: true };
+    }),
+
+  deleteSkuConfig: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      await deleteProductionSkuConfig(input.id);
+      return { success: true };
+    }),
+});
+
+// Re-export appRouter augmented with the production line router (defined after appRouter to avoid hoisting issues)
+export const appRouterWithProductionLine = router({
+  ...appRouter._def.record,
+  productionLine: productionLineRouter,
+});

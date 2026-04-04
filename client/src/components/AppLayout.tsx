@@ -38,6 +38,7 @@ import {
   Tag,
   FileText,
   Activity,
+  QrCode,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -100,6 +101,7 @@ const configItems = [
   { href: "/cortex-settings",            label: "Cortex Integration", icon: Network },
   { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },
   { href: "/config/label-scan",            label: "Label Scan Settings", icon: ScanBarcode },
+  { href: "/config/customer-apps",          label: "Customer App Config",  icon: QrCode },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

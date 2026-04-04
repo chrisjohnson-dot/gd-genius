@@ -902,3 +902,77 @@ export const productionSkuConfigs = mysqlTable("production_sku_configs", {
 });
 export type ProductionSkuConfig = typeof productionSkuConfigs.$inferSelect;
 export type InsertProductionSkuConfig = typeof productionSkuConfigs.$inferInsert;
+
+// ─── QR Scanning Integration (Customer Carton Tracking) ───────────────────────
+// Customer app configurations — one row per customer that has a tracking app
+export const customerAppConfigs = mysqlTable("customer_app_configs", {
+  id: int("id").primaryKey().autoincrement(),
+  // Extensiv customer identifier (matches customerName on production runs)
+  customerId: varchar("customerId", { length: 256 }).notNull().unique(),
+  customerName: varchar("customerName", { length: 256 }).notNull(),
+  // The customer's app endpoint that receives QR scan events
+  appUrl: varchar("appUrl", { length: 1024 }).notNull(),
+  // Optional bearer token or API key sent in Authorization header
+  authHeader: varchar("authHeader", { length: 512 }),
+  // Whether this customer's QR forwarding is globally active
+  enabled: boolean("enabled").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CustomerAppConfig = typeof customerAppConfigs.$inferSelect;
+export type InsertCustomerAppConfig = typeof customerAppConfigs.$inferInsert;
+
+// A QR scanning session — one per production run (optional, only when QR scanning is enabled)
+export const qrScanSessions = mysqlTable("qr_scan_sessions", {
+  id: int("id").primaryKey().autoincrement(),
+  sessionId: varchar("sessionId", { length: 64 }).notNull().unique(), // UUID
+  // Linked production run
+  runId: varchar("runId", { length: 64 }).notNull(),
+  lineId: varchar("lineId", { length: 64 }).notNull().default("LINE-1"),
+  // Customer this session is forwarding to
+  customerId: varchar("customerId", { length: 256 }).notNull(),
+  customerName: varchar("customerName", { length: 256 }).notNull(),
+  customerAppUrl: varchar("customerAppUrl", { length: 1024 }).notNull(),
+  // active | paused | closed
+  status: mysqlEnum("qr_session_status", ["active", "paused", "closed"]).notNull().default("active"),
+  // Counters
+  totalScanned: int("totalScanned").notNull().default(0),
+  totalForwarded: int("totalForwarded").notNull().default(0),
+  totalErrors: int("totalErrors").notNull().default(0),
+  startedBy: varchar("startedBy", { length: 256 }),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type QrScanSession = typeof qrScanSessions.$inferSelect;
+export type InsertQrScanSession = typeof qrScanSessions.$inferInsert;
+
+// Each QR code found on a carton during a QR scan session
+export const qrScans = mysqlTable("qr_scans", {
+  id: int("id").primaryKey().autoincrement(),
+  qrScanId: varchar("qrScanId", { length: 64 }).notNull().unique(), // UUID
+  sessionId: varchar("sessionId", { length: 64 }).notNull(), // FK → qr_scan_sessions.sessionId
+  runId: varchar("runId", { length: 64 }).notNull(),
+  // The carton this QR was found on (matches production_scans.cartonId)
+  cartonId: varchar("cartonId", { length: 64 }),
+  // Raw QR code data as decoded by the vision system
+  qrData: text("qrData").notNull(),
+  // Parsed fields (if the QR is structured, e.g. JSON or GS1)
+  qrParsed: json("qrParsed").$type<Record<string, unknown> | null>(),
+  // Camera that captured the QR (cam_a | cam_b | unknown)
+  camera: varchar("camera", { length: 32 }).default("unknown"),
+  // Forwarding status
+  forwarded: boolean("forwarded").notNull().default(false),
+  forwardedAt: timestamp("forwardedAt"),
+  forwardAttempts: int("forwardAttempts").notNull().default(0),
+  forwardError: text("forwardError"),
+  // HTTP response from customer app (stored for audit)
+  customerResponseStatus: int("customerResponseStatus"),
+  customerResponseBody: text("customerResponseBody"),
+  scannedAt: timestamp("scannedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type QrScan = typeof qrScans.$inferSelect;
+export type InsertQrScan = typeof qrScans.$inferInsert;

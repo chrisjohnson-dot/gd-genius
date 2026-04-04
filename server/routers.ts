@@ -4900,3 +4900,138 @@ export const appRouterWithProductionLine = router({
   ...appRouter._def.record,
   productionLine: productionLineRouter,
 });
+
+// ─── QR Scanning Router ───────────────────────────────────────────────────────
+import {
+  listCustomerAppConfigs,
+  getCustomerAppConfig,
+  upsertCustomerAppConfig,
+  deleteCustomerAppConfig,
+  createQrScanSession,
+  getActiveQrScanSession,
+  getQrScanSession,
+  listQrScanSessions,
+  updateQrScanSession,
+  listQrScans,
+} from "./qrScanning.db";
+
+const qrScanningRouter = router({
+  // ── Customer App Configs ──────────────────────────────────────────────────
+  listCustomerApps: protectedProcedure.query(async () => {
+    return listCustomerAppConfigs();
+  }),
+
+  upsertCustomerApp: protectedProcedure
+    .input(z.object({
+      customerId: z.string().min(1),
+      customerName: z.string().min(1),
+      appUrl: z.string().url("Must be a valid URL"),
+      authHeader: z.string().optional(),
+      enabled: z.boolean().default(true),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await upsertCustomerAppConfig({
+        customerId: input.customerId,
+        customerName: input.customerName,
+        appUrl: input.appUrl,
+        authHeader: input.authHeader ?? null,
+        enabled: input.enabled,
+        notes: input.notes ?? null,
+      });
+      return { success: true };
+    }),
+
+  deleteCustomerApp: protectedProcedure
+    .input(z.object({ customerId: z.string() }))
+    .mutation(async ({ input }) => {
+      await deleteCustomerAppConfig(input.customerId);
+      return { success: true };
+    }),
+
+  // ── QR Scan Sessions ──────────────────────────────────────────────────────
+  /** Enable QR scanning for a production run — creates a session linked to the customer */
+  enableQrScanning: protectedProcedure
+    .input(z.object({
+      runId: z.string().min(1),
+      lineId: z.string().default("LINE-1"),
+      customerId: z.string().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Check there isn't already an active session for this run
+      const existing = await getActiveQrScanSession(input.runId);
+      if (existing) {
+        return { sessionId: existing.sessionId, alreadyActive: true };
+      }
+      // Look up customer app config
+      const cfg = await getCustomerAppConfig(input.customerId);
+      if (!cfg) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `No customer app configured for customer "${input.customerId}". Add it in Customer App Settings first.`,
+        });
+      }
+      if (!cfg.enabled) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Customer app for "${cfg.customerName}" is disabled. Enable it in Customer App Settings.`,
+        });
+      }
+      const sessionId = crypto.randomUUID();
+      await createQrScanSession({
+        sessionId,
+        runId: input.runId,
+        lineId: input.lineId,
+        customerId: cfg.customerId,
+        customerName: cfg.customerName,
+        customerAppUrl: cfg.appUrl,
+        status: "active",
+        startedBy: ctx.user?.name ?? ctx.user?.openId ?? "unknown",
+      });
+      return { sessionId, alreadyActive: false };
+    }),
+
+  /** Pause or close a QR scan session */
+  updateQrSession: protectedProcedure
+    .input(z.object({
+      sessionId: z.string(),
+      status: z.enum(["active", "paused", "closed"]),
+    }))
+    .mutation(async ({ input }) => {
+      const session = await getQrScanSession(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "QR session not found" });
+      await updateQrScanSession(input.sessionId, {
+        status: input.status,
+        ...(input.status === "closed" ? { closedAt: new Date() } : {}),
+      });
+      return { success: true };
+    }),
+
+  /** Get the active QR session for a run */
+  getActiveSession: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(async ({ input }) => {
+      return getActiveQrScanSession(input.runId);
+    }),
+
+  /** List all QR sessions (optionally filtered by runId) */
+  listSessions: protectedProcedure
+    .input(z.object({ runId: z.string().optional() }))
+    .query(async ({ input }) => {
+      return listQrScanSessions(input.runId);
+    }),
+
+  /** List recent QR scans for a session */
+  listScans: protectedProcedure
+    .input(z.object({ sessionId: z.string(), limit: z.number().int().min(1).max(200).default(50) }))
+    .query(async ({ input }) => {
+      return listQrScans(input.sessionId, input.limit);
+    }),
+});
+
+// Re-export appRouter augmented with production line + QR scanning
+export const appRouterFull = router({
+  ...appRouterWithProductionLine._def.record,
+  qrScanning: qrScanningRouter,
+});
+export type AppRouterFull = typeof appRouterFull;

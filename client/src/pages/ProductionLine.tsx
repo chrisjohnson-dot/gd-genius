@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   CheckCircle2,
@@ -21,7 +22,12 @@ import {
   Percent,
   ChevronDown,
   ChevronUp,
-  Settings,
+  QrCode,
+  Send,
+  Wifi,
+  WifiOff,
+  Pause,
+  Link as LinkIcon,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -317,6 +323,102 @@ function ManualScanDialog({
   );
 }
 
+// ── Enable QR Scanning Dialog ─────────────────────────────────────────────────
+function EnableQrDialog({
+  open,
+  runId,
+  lineId,
+  onClose,
+  onEnabled,
+}: {
+  open: boolean;
+  runId: string;
+  lineId: string;
+  onClose: () => void;
+  onEnabled: () => void;
+}) {
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const { data: customerApps = [] } = trpc.qrScanning.listCustomerApps.useQuery();
+  const enabledApps = customerApps.filter((a) => a.enabled);
+
+  const enableQr = trpc.qrScanning.enableQrScanning.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.alreadyActive ? "QR scanning already active for this run." : "QR scanning enabled — forwarding to customer app.");
+      onEnabled();
+      onClose();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  function handleEnable() {
+    if (!selectedCustomerId) {
+      toast.error("Please select a customer app.");
+      return;
+    }
+    enableQr.mutate({ runId, lineId, customerId: selectedCustomerId });
+  }
+
+  const selectedApp = enabledApps.find((a) => a.customerId === selectedCustomerId);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <QrCode className="h-5 w-5 text-green-400" />
+            Enable QR Scanning
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground">
+            When enabled, the vision system will look for QR codes on each carton. Each code found
+            will be captured and forwarded in real time to the selected customer's app.
+          </p>
+          {enabledApps.length === 0 ? (
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-300">
+              No customer apps are configured yet. Go to{" "}
+              <strong>Settings → Customer App Config</strong> to add one first.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-xs">Send QR scans to customer *</Label>
+              <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select customer app…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {enabledApps.map((app) => (
+                    <SelectItem key={app.customerId} value={app.customerId}>
+                      {app.customerName} ({app.customerId})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedApp && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                  <LinkIcon className="h-3 w-3 shrink-0" />
+                  <span className="font-mono truncate">{selectedApp.appUrl}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            className="bg-green-600 hover:bg-green-700 gap-2"
+            onClick={handleEnable}
+            disabled={enableQr.isPending || enabledApps.length === 0 || !selectedCustomerId}
+          >
+            <QrCode className="h-4 w-4" />
+            {enableQr.isPending ? "Enabling…" : "Enable QR Scanning"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ProductionLine() {
   const { user } = useAuth();
@@ -324,6 +426,8 @@ export default function ProductionLine() {
   const [showStartDialog, setShowStartDialog] = useState(false);
   const [showManualScan, setShowManualScan] = useState(false);
   const [showScans, setShowScans] = useState(true);
+  const [showQrDialog, setShowQrDialog] = useState(false);
+  const [showQrFeed, setShowQrFeed] = useState(true);
   const scanListRef = useRef<HTMLDivElement>(null);
 
   const utils = trpc.useUtils();
@@ -341,6 +445,22 @@ export default function ProductionLine() {
   );
 
   const scans = scansData ?? [];
+
+  // QR scanning session
+  const { data: qrSession, refetch: refetchQrSession } = trpc.qrScanning.getActiveSession.useQuery(
+    { runId: activeRun?.runId ?? "" },
+    { enabled: !!activeRun?.runId, refetchInterval: 3000 }
+  );
+
+  const { data: qrScans = [] } = trpc.qrScanning.listScans.useQuery(
+    { sessionId: qrSession?.sessionId ?? "", limit: 30 },
+    { enabled: !!qrSession?.sessionId, refetchInterval: 2000 }
+  );
+
+  const updateQrSession = trpc.qrScanning.updateQrSession.useMutation({
+    onSuccess: () => { refetchQrSession(); },
+    onError: (err) => toast.error(err.message),
+  });
 
   // Auto-scroll scan list to top (newest first)
   useEffect(() => {
@@ -511,6 +631,146 @@ export default function ProductionLine() {
             />
           </div>
 
+          {/* QR Scanning Panel */}
+          <Card className={qrSession ? "border-green-500/30 bg-green-500/5" : "border-dashed border-muted-foreground/30"}>
+            <CardHeader className="pb-2 pt-4 px-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-green-400" />
+                  QR Scanning
+                  {qrSession ? (
+                    <Badge className="bg-green-600/20 text-green-400 border-green-600/30 text-[10px] gap-1">
+                      <Wifi className="h-2.5 w-2.5" />
+                      {qrSession.status === "active" ? `Active — ${qrSession.customerName}` : `Paused — ${qrSession.customerName}`}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground gap-1">
+                      <WifiOff className="h-2.5 w-2.5" /> Off
+                    </Badge>
+                  )}
+                </CardTitle>
+                <div className="flex gap-2">
+                  {qrSession ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 text-xs"
+                        onClick={() => setShowQrFeed(!showQrFeed)}
+                      >
+                        {showQrFeed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        {showQrFeed ? "Hide Feed" : "Show Feed"}
+                      </Button>
+                      {qrSession.status === "active" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-xs text-yellow-400 border-yellow-500/30"
+                          onClick={() => updateQrSession.mutate({ sessionId: qrSession.sessionId, status: "paused" })}
+                        >
+                          <Pause className="w-3 h-3" /> Pause
+                        </Button>
+                      )}
+                      {qrSession.status === "paused" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-xs text-green-400 border-green-500/30"
+                          onClick={() => updateQrSession.mutate({ sessionId: qrSession.sessionId, status: "active" })}
+                        >
+                          <Wifi className="w-3 h-3" /> Resume
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 text-xs text-red-400 border-red-500/30"
+                        onClick={() => updateQrSession.mutate({ sessionId: qrSession.sessionId, status: "closed" })}
+                      >
+                        <WifiOff className="w-3 h-3" /> Stop
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="gap-1 text-xs bg-green-600 hover:bg-green-700"
+                      onClick={() => setShowQrDialog(true)}
+                    >
+                      <QrCode className="w-3 h-3" /> Enable QR Scanning
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            {qrSession && (
+              <CardContent className="px-4 pb-4">
+                {/* Session stats */}
+                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mb-3">
+                  <span>Scanned: <strong className="text-foreground">{qrSession.totalScanned}</strong></span>
+                  <span>Forwarded: <strong className="text-green-400">{qrSession.totalForwarded}</strong></span>
+                  {qrSession.totalErrors > 0 && (
+                    <span>Errors: <strong className="text-red-400">{qrSession.totalErrors}</strong></span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <LinkIcon className="h-3 w-3" />
+                    <span className="font-mono truncate max-w-[240px]">{qrSession.customerAppUrl}</span>
+                  </span>
+                </div>
+                {/* QR scan feed */}
+                {showQrFeed && (
+                  <div className="overflow-y-auto max-h-[240px] rounded border border-border/40">
+                    {qrScans.length === 0 ? (
+                      <div className="text-center text-muted-foreground py-6 text-xs">
+                        Waiting for QR codes…
+                      </div>
+                    ) : (
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-background border-b">
+                          <tr className="text-left text-muted-foreground uppercase">
+                            <th className="px-3 py-1.5 font-medium">Time</th>
+                            <th className="px-3 py-1.5 font-medium">Carton</th>
+                            <th className="px-3 py-1.5 font-medium">QR Data</th>
+                            <th className="px-3 py-1.5 font-medium">Camera</th>
+                            <th className="px-3 py-1.5 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {qrScans.map((s) => (
+                            <tr key={s.id} className="border-b last:border-0">
+                              <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
+                                {new Date(s.scannedAt).toLocaleTimeString()}
+                              </td>
+                              <td className="px-3 py-1.5 font-mono">
+                                {s.cartonId ? s.cartonId.slice(0, 8) + "…" : "—"}
+                              </td>
+                              <td className="px-3 py-1.5 font-mono max-w-[200px] truncate">{s.qrData}</td>
+                              <td className="px-3 py-1.5">{s.camera ?? "—"}</td>
+                              <td className="px-3 py-1.5">
+                                {s.forwarded ? (
+                                  <Badge className="bg-green-600/20 text-green-400 border-green-600/30 text-[9px] gap-0.5">
+                                    <Send className="h-2 w-2" /> Sent
+                                  </Badge>
+                                ) : s.forwardError ? (
+                                  <Badge className="bg-red-600/20 text-red-400 border-red-600/30 text-[9px]">
+                                    Error
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[9px] text-muted-foreground">
+                                    Pending
+                                  </Badge>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
           {/* Rolling scan feed */}
           <Card>
             <CardHeader className="pb-2 pt-4 px-4">
@@ -622,6 +882,17 @@ export default function ProductionLine() {
           onScanned={() => {
             refetchRun();
             refetchScans();
+          }}
+        />
+      )}
+      {activeRun && (
+        <EnableQrDialog
+          open={showQrDialog}
+          runId={activeRun.runId}
+          lineId={lineId}
+          onClose={() => setShowQrDialog(false)}
+          onEnabled={() => {
+            refetchQrSession();
           }}
         />
       )}

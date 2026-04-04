@@ -43,6 +43,7 @@ import QcScanLabel from "@/pages/QcScanLabel";
 import LabelFiles from "@/pages/LabelFiles";
 import LabelScanSettings from "@/pages/LabelScanSettings";
 import ProductionLine from "@/pages/ProductionLine";
+import CustomerAppConfig from "@/pages/CustomerAppConfig";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -95,6 +96,7 @@ function AppRoutes() {
         <Route path="/qc/scan-label" component={QcScanLabel} />
         <Route path="/qc/label-files" component={LabelFiles} />
         <Route path="/config/label-scan" component={LabelScanSettings} />
+        <Route path="/config/customer-apps" component={CustomerAppConfig} />
         <Route path="/qc/production-line" component={ProductionLine} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

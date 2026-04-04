@@ -43,6 +43,12 @@ import {
   getProductionSkuConfig,
 } from "./db";
 import { evaluateVerdict } from "./productionLine";
+import {
+  getActiveQrScanSession,
+  createQrScan,
+  updateQrScanSession,
+} from "./qrScanning.db";
+import { processAndForwardQrScan } from "./qrScanning.forward";
 import { plcWrite, squareAndTamp, plcDivertOn, plcBeltStop, buildPlcConfig } from "./plcModbus";
 
 // ── TCP ZPL dispatch helper ────────────────────────────────────────────────────
@@ -115,6 +121,11 @@ export function registerScanEndpoint(app: Router) {
       }
 
       const cartonId = (body.carton_id as string) ?? crypto.randomUUID();
+      // ── QR code data (optional — only present if vision system found a QR on this carton)
+      const qrData = (body.qr_data as string) ?? null;
+      const qrCamera = (body.qr_camera as string) ?? "unknown";
+      const qrParsed: Record<string, unknown> | null =
+        body.qr_parsed && typeof body.qr_parsed === "object" ? body.qr_parsed as Record<string, unknown> : null;
       const gtin = (body.gtin as string) ?? null;
       const lot = (body.lot as string) ?? null;
       const expiry = (body.expiry as string) ?? null;
@@ -224,6 +235,41 @@ export function registerScanEndpoint(app: Router) {
             console.error("[scanEndpoint] PLC squareAndTamp error:", (e as Error).message);
             try { await plcBeltStop(plcCfg); } catch { /* best effort */ }
           }
+        }
+      }
+
+      // ── QR code processing (fire-and-forget, non-blocking) ──────────────────
+      if (qrData) {
+        const qrSession = await getActiveQrScanSession(run.runId);
+        if (qrSession) {
+          const qrScanId = crypto.randomUUID();
+          const newQrScan = {
+            qrScanId,
+            sessionId: qrSession.sessionId,
+            runId: run.runId,
+            cartonId,
+            qrData,
+            qrParsed,
+            camera: qrCamera,
+            forwarded: false,
+            forwardAttempts: 0,
+          };
+          // Persist QR scan record
+          createQrScan(newQrScan).then(async () => {
+            // Update session scan counter
+            await updateQrScanSession(qrSession.sessionId, {
+              totalScanned: qrSession.totalScanned + 1,
+            });
+            // Forward to customer app asynchronously
+            await processAndForwardQrScan(
+              { ...newQrScan, id: 0, forwardError: null, forwardedAt: null,
+                customerResponseStatus: null, customerResponseBody: null,
+                scannedAt: new Date(), createdAt: new Date() },
+              qrSession.sessionId
+            );
+          }).catch((err: Error) => {
+            console.error("[scanEndpoint] QR scan persist error:", err.message);
+          });
         }
       }
 

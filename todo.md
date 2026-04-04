@@ -746,3 +746,14 @@
 - [x] Tamp & squaring station config: tampXMmFixed, squaringTimeoutMs, tampReadyTimeoutMs
 - [x] Hardware Reference tab: BOM, cycle time budget, commissioning checklist, vendor questions
 - [x] Router updateSettings schema expanded to include all v3 fields
+
+## QR Scanning Integration (Customer Carton Tracking)
+- [x] DB: qr_scan_sessions, qr_scans, customer_app_configs tables migrated
+- [x] Server: tRPC qrScanning router — listCustomerApps, upsertCustomerApp, deleteCustomerApp, enableQrScanning, getActiveSession, listScans, updateQrSession
+- [x] Server: /api/scan — detects qr_data field, persists QR scan, forwards to customer app with 3-attempt exponential backoff
+- [x] Server: qrScanning.forward.ts — webhook forwarding service with retry logic
+- [x] Frontend: "Enable QR Scanning" button on Production Line page (opens customer app selector dialog)
+- [x] Frontend: QR session panel — customer name, app URL, live scan count, forwarding stats, Pause/Resume/Stop controls
+- [x] Frontend: Live QR scan feed on Production Line page (last 30 QR scans, Sent/Error/Pending badges)
+- [x] Frontend: Customer App Config page (/config/customer-apps) — manage customer app URLs and auth headers
+- [x] Sidebar: Customer App Config nav item added under Settings section

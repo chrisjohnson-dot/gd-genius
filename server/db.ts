@@ -2325,6 +2325,19 @@ export async function upsertLabelScanSettings(
       printerPort: data.printerPort ?? 9100,
       gs1Prefix: data.gs1Prefix ?? "",
       labelFolderPath: data.labelFolderPath ?? "",
+      plcProtocol: data.plcProtocol ?? "modbus",
+      plcIp: data.plcIp ?? "",
+      plcPort: data.plcPort ?? 502,
+      plcUnitId: data.plcUnitId ?? 1,
+      plcStubMode: data.plcStubMode ?? true,
+      enipSlot: data.enipSlot ?? 0,
+      enipPath: data.enipPath ?? "",
+      enipTagBeltStop: data.enipTagBeltStop ?? "GD_BeltStop",
+      enipTagTampFire: data.enipTagTampFire ?? "GD_TampFire",
+      enipTagDivertOn: data.enipTagDivertOn ?? "GD_DivertOn",
+      modbusCoilBeltStop: data.modbusCoilBeltStop ?? 0,
+      modbusCoilTampFire: data.modbusCoilTampFire ?? 1,
+      modbusCoilDivertOn: data.modbusCoilDivertOn ?? 2,
     });
   }
 }

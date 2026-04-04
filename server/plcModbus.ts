@@ -1,29 +1,39 @@
 /**
- * PLC Modbus TCP Interface
+ * PLC Interface — Modbus TCP and EtherNet/IP (Allen-Bradley) dispatcher
  *
- * Implements belt stop, tamp fire, and divert coil writes to the PLC
- * via Modbus TCP protocol (function code 0x05 — Write Single Coil).
+ * Implements belt stop, tamp fire, and divert coil/tag writes to the PLC.
  *
- * Coil addresses (configurable, defaults from the engineering spec):
- *   BELT_STOP_COIL   — 0x0001  (write TRUE to stop belt, FALSE to resume)
- *   TAMP_FIRE_COIL   — 0x0002  (write TRUE to trigger tamp applicator)
- *   DIVERT_COIL      — 0x0003  (write TRUE to divert carton to hold lane)
+ * Protocol selection:
+ *   - "modbus" (default): Modbus TCP, Function Code 0x05 Write Single Coil
+ *   - "enip": EtherNet/IP CIP Write Tag Service for Allen-Bradley ControlLogix/CompactLogix
  *
- * When stubMode is true, all writes are logged but no TCP connection is made.
- * This allows the app to run in a test environment without physical hardware.
+ * Stub mode: when stubMode is true, all writes are logged but no TCP connection is made.
  */
 
+import { enipWrite, type EnipConfig } from "./plcEnip";
+
+// ─── Shared types ─────────────────────────────────────────────────────────────
+
+export type CoilAction = "belt_stop" | "belt_resume" | "tamp_fire" | "divert_on" | "divert_off";
+
+// ─── Modbus TCP config ────────────────────────────────────────────────────────
+
 export interface PlcConfig {
+  protocol?: "modbus" | "enip";
   ip: string;
-  port: number; // default 502
-  unitId: number; // default 1
+  port: number;       // Modbus: 502 | EtherNet/IP: 44818
+  unitId: number;     // Modbus unit ID (1 default); ignored for EtherNet/IP
   stubMode: boolean;
+  // Modbus coil addresses
   beltStopCoil?: number;
   tampFireCoil?: number;
   divertCoil?: number;
+  // EtherNet/IP tag names (Allen-Bradley)
+  enipSlot?: number;
+  enipTagBeltStop?: string;
+  enipTagTampFire?: string;
+  enipTagDivertOn?: string;
 }
-
-export type CoilAction = "belt_stop" | "belt_resume" | "tamp_fire" | "divert_on" | "divert_off";
 
 const DEFAULT_COILS = {
   beltStopCoil: 0x0001,
@@ -31,9 +41,14 @@ const DEFAULT_COILS = {
   divertCoil: 0x0003,
 };
 
-/**
- * Build a Modbus TCP Write Single Coil (FC05) request frame.
- */
+const DEFAULT_TAGS = {
+  belt_stop: "GD_BeltStop",
+  tamp_fire: "GD_TampFire",
+  divert_on: "GD_DivertOn",
+};
+
+// ─── Modbus TCP implementation ────────────────────────────────────────────────
+
 function buildWriteSingleCoilFrame(
   transactionId: number,
   unitId: number,
@@ -41,20 +56,16 @@ function buildWriteSingleCoilFrame(
   value: boolean
 ): Buffer {
   const buf = Buffer.alloc(12);
-  // Modbus TCP header
-  buf.writeUInt16BE(transactionId, 0); // Transaction ID
-  buf.writeUInt16BE(0x0000, 2);        // Protocol ID (always 0)
-  buf.writeUInt16BE(6, 4);             // Length (6 bytes follow)
-  buf.writeUInt8(unitId, 6);           // Unit ID
-  buf.writeUInt8(0x05, 7);             // Function code: Write Single Coil
-  buf.writeUInt16BE(coilAddress, 8);   // Coil address
-  buf.writeUInt16BE(value ? 0xFF00 : 0x0000, 10); // Value: 0xFF00=ON, 0x0000=OFF
+  buf.writeUInt16BE(transactionId, 0);
+  buf.writeUInt16BE(0x0000, 2);
+  buf.writeUInt16BE(6, 4);
+  buf.writeUInt8(unitId, 6);
+  buf.writeUInt8(0x05, 7);
+  buf.writeUInt16BE(coilAddress, 8);
+  buf.writeUInt16BE(value ? 0xff00 : 0x0000, 10);
   return buf;
 }
 
-/**
- * Send a single Modbus TCP Write Single Coil command.
- */
 async function sendModbusCoil(
   ip: string,
   port: number,
@@ -65,7 +76,7 @@ async function sendModbusCoil(
 ): Promise<void> {
   const { createConnection } = await import("net");
   await new Promise<void>((resolve, reject) => {
-    const transactionId = Math.floor(Math.random() * 0xFFFF);
+    const transactionId = Math.floor(Math.random() * 0xffff);
     const frame = buildWriteSingleCoilFrame(transactionId, unitId, coilAddress, value);
     const socket = createConnection({ host: ip, port }, () => {
       socket.write(frame);
@@ -85,15 +96,12 @@ async function sendModbusCoil(
     });
     socket.on("close", () => {
       clearTimeout(timer);
-      resolve(); // Some PLCs close without sending a response frame
+      resolve();
     });
   });
 }
 
-/**
- * Execute a PLC coil action. In stub mode, logs the action without connecting.
- */
-export async function plcWrite(config: PlcConfig, action: CoilAction): Promise<{ stubbed: boolean }> {
+async function plcWriteModbus(config: PlcConfig, action: CoilAction): Promise<{ stubbed: boolean }> {
   const coils = {
     beltStopCoil: config.beltStopCoil ?? DEFAULT_COILS.beltStopCoil,
     tampFireCoil: config.tampFireCoil ?? DEFAULT_COILS.tampFireCoil,
@@ -104,34 +112,18 @@ export async function plcWrite(config: PlcConfig, action: CoilAction): Promise<{
   let value: boolean;
 
   switch (action) {
-    case "belt_stop":
-      coilAddress = coils.beltStopCoil;
-      value = true;
-      break;
-    case "belt_resume":
-      coilAddress = coils.beltStopCoil;
-      value = false;
-      break;
-    case "tamp_fire":
-      coilAddress = coils.tampFireCoil;
-      value = true;
-      break;
-    case "divert_on":
-      coilAddress = coils.divertCoil;
-      value = true;
-      break;
-    case "divert_off":
-      coilAddress = coils.divertCoil;
-      value = false;
-      break;
-    default:
-      throw new Error(`Unknown PLC action: ${action}`);
+    case "belt_stop":   coilAddress = coils.beltStopCoil; value = true;  break;
+    case "belt_resume": coilAddress = coils.beltStopCoil; value = false; break;
+    case "tamp_fire":   coilAddress = coils.tampFireCoil; value = true;  break;
+    case "divert_on":   coilAddress = coils.divertCoil;  value = true;  break;
+    case "divert_off":  coilAddress = coils.divertCoil;  value = false; break;
+    default: throw new Error(`Unknown PLC action: ${action}`);
   }
 
   if (config.stubMode) {
     console.log(
-      `[PLC STUB] ${action} → coil 0x${coilAddress.toString(16).padStart(4, "0")} = ${value} ` +
-      `(target: ${config.ip}:${config.port}, unit: ${config.unitId})`
+      `[PLC MODBUS STUB] ${action} → coil 0x${coilAddress.toString(16).padStart(4, "0")} = ${value} ` +
+      `(${config.ip}:${config.port}, unit: ${config.unitId})`
     );
     return { stubbed: true };
   }
@@ -140,37 +132,58 @@ export async function plcWrite(config: PlcConfig, action: CoilAction): Promise<{
   return { stubbed: false };
 }
 
+// ─── EtherNet/IP implementation ───────────────────────────────────────────────
+
+async function plcWriteEnip(config: PlcConfig, action: CoilAction): Promise<{ stubbed: boolean }> {
+  const enipConfig: EnipConfig = {
+    ip: config.ip,
+    port: config.port || 44818,
+    slot: config.enipSlot ?? 0,
+    stubMode: config.stubMode,
+  };
+
+  const tags = {
+    belt_stop: config.enipTagBeltStop ?? DEFAULT_TAGS.belt_stop,
+    tamp_fire: config.enipTagTampFire ?? DEFAULT_TAGS.tamp_fire,
+    divert_on: config.enipTagDivertOn ?? DEFAULT_TAGS.divert_on,
+  };
+
+  const result = await enipWrite(enipConfig, action, tags);
+  return { stubbed: result.stubbed };
+}
+
+// ─── Unified dispatcher ───────────────────────────────────────────────────────
+
 /**
- * Stop the belt (emergency stop on fail/hold verdict).
+ * Execute a PLC action using the configured protocol (Modbus TCP or EtherNet/IP).
+ * In stub mode, logs the action without making any network connection.
  */
+export async function plcWrite(config: PlcConfig, action: CoilAction): Promise<{ stubbed: boolean }> {
+  const protocol = config.protocol ?? "modbus";
+  if (protocol === "enip") {
+    return plcWriteEnip(config, action);
+  }
+  return plcWriteModbus(config, action);
+}
+
+// ─── Convenience helpers ──────────────────────────────────────────────────────
+
 export async function plcBeltStop(config: PlcConfig): Promise<void> {
   await plcWrite(config, "belt_stop");
 }
 
-/**
- * Resume the belt after supervisor resolution.
- */
 export async function plcBeltResume(config: PlcConfig): Promise<void> {
   await plcWrite(config, "belt_resume");
 }
 
-/**
- * Fire the tamp applicator (triggered immediately after a pass verdict).
- */
 export async function plcTampFire(config: PlcConfig): Promise<void> {
   await plcWrite(config, "tamp_fire");
 }
 
-/**
- * Activate the divert solenoid (send carton to hold lane on hold verdict).
- */
 export async function plcDivertOn(config: PlcConfig): Promise<void> {
   await plcWrite(config, "divert_on");
 }
 
-/**
- * Deactivate the divert solenoid.
- */
 export async function plcDivertOff(config: PlcConfig): Promise<void> {
   await plcWrite(config, "divert_off");
 }

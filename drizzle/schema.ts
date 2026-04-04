@@ -699,6 +699,24 @@ export const labelScanSettings = mysqlTable("label_scan_settings", {
   labelFolderPath: varchar("labelFolderPath", { length: 512 }).notNull().default(""),
   // Optional API key for the /api/scan REST endpoint (vision system auth)
   scanApiKey: varchar("scanApiKey", { length: 256 }),
+  // PLC integration settings
+  // Protocol: 'modbus' (Modbus TCP, default) or 'enip' (EtherNet/IP, Allen-Bradley)
+  plcProtocol: varchar("plcProtocol", { length: 16 }).notNull().default("modbus"),
+  plcIp: varchar("plcIp", { length: 128 }).notNull().default(""),
+  plcPort: int("plcPort").notNull().default(502),
+  plcUnitId: int("plcUnitId").notNull().default(1),
+  plcStubMode: boolean("plcStubMode").notNull().default(true),
+  // EtherNet/IP specific: slot number (0 for ControlLogix backplane slot) and optional path
+  enipSlot: int("enipSlot").notNull().default(0),
+  enipPath: varchar("enipPath", { length: 256 }).notNull().default(""),
+  // Allen-Bradley tag names for each PLC action (EtherNet/IP mode)
+  enipTagBeltStop: varchar("enipTagBeltStop", { length: 128 }).notNull().default("GD_BeltStop"),
+  enipTagTampFire: varchar("enipTagTampFire", { length: 128 }).notNull().default("GD_TampFire"),
+  enipTagDivertOn: varchar("enipTagDivertOn", { length: 128 }).notNull().default("GD_DivertOn"),
+  // Modbus coil addresses for each PLC action (Modbus TCP mode)
+  modbusCoilBeltStop: int("modbusCoilBeltStop").notNull().default(0),
+  modbusCoilTampFire: int("modbusCoilTampFire").notNull().default(1),
+  modbusCoilDivertOn: int("modbusCoilDivertOn").notNull().default(2),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type LabelScanSettings = typeof labelScanSettings.$inferSelect;

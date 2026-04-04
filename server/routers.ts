@@ -4214,6 +4214,22 @@ const labelScanRouter = router({
       printerPort: z.number().int().min(1).max(65535).optional(),
       gs1Prefix: z.string().optional(),
       labelFolderPath: z.string().optional(),
+      // PLC integration
+      plcProtocol: z.enum(["modbus", "enip"]).optional(),
+      plcIp: z.string().optional(),
+      plcPort: z.number().int().min(1).max(65535).optional(),
+      plcUnitId: z.number().int().min(0).max(255).optional(),
+      plcStubMode: z.boolean().optional(),
+      // EtherNet/IP
+      enipSlot: z.number().int().min(0).max(15).optional(),
+      enipPath: z.string().optional(),
+      enipTagBeltStop: z.string().optional(),
+      enipTagTampFire: z.string().optional(),
+      enipTagDivertOn: z.string().optional(),
+      // Modbus coil addresses
+      modbusCoilBeltStop: z.number().int().min(0).optional(),
+      modbusCoilTampFire: z.number().int().min(0).optional(),
+      modbusCoilDivertOn: z.number().int().min(0).optional(),
     }))
     .mutation(async ({ input }) => {
       await upsertLabelScanSettings(input);

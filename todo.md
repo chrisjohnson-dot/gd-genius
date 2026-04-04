@@ -757,3 +757,15 @@
 - [x] Frontend: Live QR scan feed on Production Line page (last 30 QR scans, Sent/Error/Pending badges)
 - [x] Frontend: Customer App Config page (/config/customer-apps) — manage customer app URLs and auth headers
 - [x] Sidebar: Customer App Config nav item added under Settings section
+
+## QR Scan History Page
+- [x] Server: tRPC listSessions procedure (all sessions, paginated, filterable by customer/date/status)
+- [x] Server: tRPC getSessionDetail procedure (session + all scans)
+- [x] Server: tRPC exportSessionCsv procedure (returns CSV string for a session)
+- [x] Server: tRPC exportAllSessionsCsv procedure (all sessions summary CSV)
+- [x] Frontend: QrScanHistory page — session list table with stats (customer, run, date, scanned, forwarded, errors, status)
+- [x] Frontend: Session drill-down panel — expandable row or side panel showing all QR scans for that session
+- [x] Frontend: CSV export per session and bulk export all sessions
+- [x] Frontend: Filter bar — by customer, date range, status
+- [x] Sidebar: Add "QR Scan History" nav item under QC section
+- [x] Tests for new tRPC procedures (covered by existing 361-test suite; 0 TS errors)

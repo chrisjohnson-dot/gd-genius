@@ -4913,6 +4913,7 @@ import {
   listQrScanSessions,
   updateQrScanSession,
   listQrScans,
+  listQrScanSessionHistory,
 } from "./qrScanning.db";
 
 const qrScanningRouter = router({
@@ -5026,6 +5027,94 @@ const qrScanningRouter = router({
     .input(z.object({ sessionId: z.string(), limit: z.number().int().min(1).max(200).default(50) }))
     .query(async ({ input }) => {
       return listQrScans(input.sessionId, input.limit);
+    }),
+
+  /** Full paginated session history with optional filters */
+  listSessionHistory: protectedProcedure
+    .input(z.object({
+      customerId: z.string().optional(),
+      status: z.enum(["active", "paused", "closed"]).optional(),
+      dateFrom: z.string().optional(), // ISO date string
+      dateTo: z.string().optional(),
+      limit: z.number().int().min(1).max(200).default(50),
+      offset: z.number().int().min(0).default(0),
+    }))
+    .query(async ({ input }) => {
+      return listQrScanSessionHistory(input);
+    }),
+
+  /** Get a single session with all its scans */
+  getSessionDetail: protectedProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .query(async ({ input }) => {
+      const session = await getQrScanSession(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const scans = await listQrScans(input.sessionId, 500);
+      return { session, scans };
+    }),
+
+  /** Export all scans for a session as CSV string */
+  exportSessionCsv: protectedProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .query(async ({ input }) => {
+      const session = await getQrScanSession(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const scans = await listQrScans(input.sessionId, 10000);
+      const header = ["qrScanId", "cartonId", "qrData", "camera", "forwarded", "forwardedAt", "forwardAttempts", "forwardError", "customerResponseStatus", "scannedAt"];
+      const rows = scans.map((s) => [
+        s.qrScanId,
+        s.cartonId ?? "",
+        `"${(s.qrData ?? "").replace(/"/g, '""')}"`,
+        s.camera ?? "",
+        s.forwarded ? "yes" : "no",
+        s.forwardedAt ? new Date(s.forwardedAt).toISOString() : "",
+        String(s.forwardAttempts),
+        `"${(s.forwardError ?? "").replace(/"/g, '""')}"`,
+        s.customerResponseStatus != null ? String(s.customerResponseStatus) : "",
+        new Date(s.scannedAt).toISOString(),
+      ]);
+      const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      return {
+        filename: `qr-session-${session.sessionId.slice(0, 8)}-${session.customerName.replace(/\s+/g, "-")}.csv`,
+        csv,
+        sessionId: session.sessionId,
+        customerName: session.customerName,
+        totalRows: scans.length,
+      };
+    }),
+
+  /** Export all sessions summary as CSV */
+  exportAllSessionsCsv: protectedProcedure
+    .input(z.object({
+      customerId: z.string().optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      const sessions = await listQrScanSessionHistory({ ...input, limit: 10000, offset: 0 });
+      const header = ["sessionId", "runId", "lineId", "customerId", "customerName", "customerAppUrl", "status", "totalScanned", "totalForwarded", "totalErrors", "startedBy", "startedAt", "closedAt"];
+      const rows = sessions.map((s) => [
+        s.sessionId,
+        s.runId,
+        s.lineId,
+        s.customerId,
+        `"${s.customerName.replace(/"/g, '""')}"`,
+        `"${s.customerAppUrl.replace(/"/g, '""')}"`,
+        s.status,
+        String(s.totalScanned),
+        String(s.totalForwarded),
+        String(s.totalErrors),
+        s.startedBy ?? "",
+        new Date(s.startedAt).toISOString(),
+        s.closedAt ? new Date(s.closedAt).toISOString() : "",
+      ]);
+      const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const dateTag = new Date().toISOString().slice(0, 10);
+      return {
+        filename: `qr-sessions-all-${dateTag}.csv`,
+        csv,
+        totalRows: sessions.length,
+      };
     }),
 });
 

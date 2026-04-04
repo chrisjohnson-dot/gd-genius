@@ -15,7 +15,7 @@ import {
   type QrScan,
   type InsertQrScan,
 } from "../drizzle/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
 
 // ─── Customer App Configs ─────────────────────────────────────────────────────
 
@@ -156,6 +156,38 @@ export async function updateQrScan(
     .update(qrScans)
     .set(data as any)
     .where(eq(qrScans.qrScanId, qrScanId));
+}
+
+/** Full paginated session history with optional filters */
+export async function listQrScanSessionHistory(opts: {
+  customerId?: string;
+  status?: "active" | "paused" | "closed";
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<QrScanSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const { customerId, status, dateFrom, dateTo, limit = 50, offset = 0 } = opts;
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (customerId) conditions.push(eq(qrScanSessions.customerId, customerId));
+  if (status) conditions.push(eq(qrScanSessions.status, status));
+  if (dateFrom) conditions.push(gte(qrScanSessions.startedAt, new Date(dateFrom)));
+  if (dateTo) {
+    const end = new Date(dateTo);
+    end.setHours(23, 59, 59, 999);
+    conditions.push(lte(qrScanSessions.startedAt, end));
+  }
+  const base = db
+    .select()
+    .from(qrScanSessions)
+    .orderBy(desc(qrScanSessions.startedAt))
+    .limit(limit)
+    .offset(offset);
+  if (conditions.length === 0) return base;
+  if (conditions.length === 1) return base.where(conditions[0]);
+  return base.where(and(...conditions));
 }
 
 /** Get pending (not yet forwarded) QR scans for a session */

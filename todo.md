@@ -821,3 +821,6 @@
 
 ## D2C Landing Page
 - [x] Rewrite OpenOrdersD2C.tsx to match full B2B layout (warehouse cards, lifecycle lanes, SLA breach summary, overdue badges, Sync Now, Run Allocation Tool, CSV/PDF export, full-screen mode, associate assignment, SLA extension, Shipwell integration, undo)
+
+## Open Orders UI Cleanup
+- [x] Remove lifecycle summary bar (Unalloc/Allocated/Picking/QC/QC Done/Ship Ready tiles) from B2B and D2C Open Orders pages

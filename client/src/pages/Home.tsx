@@ -1643,47 +1643,25 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Global KPI bar — lifecycle stages (shown only on grid view) */}
-        {!selectedFacility && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-              {(Object.entries(LIFECYCLE_CONFIG) as [LifecycleStatus, typeof LIFECYCLE_CONFIG[LifecycleStatus]][]).map(([status, cfg]) => (
-                <div
-                  key={status}
-                  className="rounded-xl px-3 py-2.5 text-center border"
-                  style={{ background: cfg.bg, borderColor: cfg.border }}
-                >
-                  <p className="text-[22px] font-extrabold tracking-tight leading-none" style={{ color: cfg.text }}>
-                    {isLoading ? "—" : kpis[status]}
-                  </p>
-                  <p className="text-[9px] mt-1 font-semibold uppercase tracking-[0.04em] truncate" style={{ color: cfg.text }}>
-                    {cfg.label}
-                  </p>
-                </div>
-              ))}
+        {/* Verification Issues KPI card — only shown when there are unresolved issues */}
+        {!selectedFacility && (verifData?.count ?? 0) > 0 && (
+          <Link href="/history">
+            <div
+              className="flex items-center gap-3 rounded-xl px-4 py-3 border cursor-pointer hover:opacity-90 transition-opacity"
+              style={{ background: "#fee2e2", borderColor: "#fca5a5" }}
+            >
+              <ShieldAlert className="h-5 w-5 shrink-0" style={{ color: "#dc2626" }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold" style={{ color: "#991b1b" }}>
+                  {verifData!.count} Allocation Run{verifData!.count !== 1 ? "s" : ""} with Verification Issues
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "#b91c1c" }}>
+                  Extensiv reported a mismatch or partial allocation — review in Run History
+                </p>
+              </div>
+              <span className="text-xs font-semibold shrink-0" style={{ color: "#dc2626" }}>View →</span>
             </div>
-
-            {/* Verification Issues KPI card — only shown when there are unresolved issues */}
-            {(verifData?.count ?? 0) > 0 && (
-              <Link href="/history">
-                <div
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 border cursor-pointer hover:opacity-90 transition-opacity"
-                  style={{ background: "#fee2e2", borderColor: "#fca5a5" }}
-                >
-                  <ShieldAlert className="h-5 w-5 shrink-0" style={{ color: "#dc2626" }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold" style={{ color: "#991b1b" }}>
-                      {verifData!.count} Allocation Run{verifData!.count !== 1 ? "s" : ""} with Verification Issues
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: "#b91c1c" }}>
-                      Extensiv reported a mismatch or partial allocation — review in Run History
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold shrink-0" style={{ color: "#dc2626" }}>View →</span>
-                </div>
-              </Link>
-            )}
-          </div>
+          </Link>
         )}
 
         {/* Loading skeletons */}

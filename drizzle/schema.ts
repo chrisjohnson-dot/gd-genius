@@ -339,6 +339,8 @@ export const clientVisibility = mysqlTable("client_visibility", {
   isVisible: boolean("isVisible").notNull().default(true),
   // When true, the sync job will never override isVisible back to true
   isLocked: boolean("isLocked").notNull().default(false),
+  // Channel classification: b2b = wholesale/retail, d2c = direct-to-consumer, both = show in both views
+  orderChannel: mysqlEnum("orderChannel", ["b2b", "d2c", "both"]).notNull().default("both"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
   uniqConfigClient: uniqueIndex("client_visibility_config_client_idx").on(t.configId, t.clientId),

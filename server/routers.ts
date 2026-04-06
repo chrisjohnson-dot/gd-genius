@@ -62,6 +62,7 @@ import {
   setClientLock,
   syncClientVisibilityFromOrders,
   getHiddenClientIds,
+  getClientChannelMap,
   dismissZeroBidWarning,
   getAllSlaRules,
   getSlaRulesForClient,
@@ -2106,6 +2107,38 @@ const _appRouter = router({
         };
       }),
 
+    /** Return orders filtered by channel (b2b or d2c) */
+    listByChannel: protectedProcedure
+      .input(z.object({ channel: z.enum(["b2b", "d2c"]), facilityId: z.number().optional() }))
+      .query(async ({ input }) => {
+        const allOrders = await getTrackedOrders(input.facilityId);
+        const lastSync = await getLastSyncTime();
+        const syncInfo = getLastSyncInfo();
+        const thresholds = await getLaneThresholds();
+        const configIds = Array.from(new Set(allOrders.map((o) => o.configId)));
+        const hiddenByConfig = new Map<number, Set<number>>();
+        const channelByConfig = new Map<number, Map<number, "b2b" | "d2c" | "both">>();
+        await Promise.all(
+          configIds.map(async (cid) => {
+            hiddenByConfig.set(cid, await getHiddenClientIds(cid));
+            channelByConfig.set(cid, await getClientChannelMap(cid));
+          })
+        );
+        const orders = allOrders.filter((o) => {
+          const hidden = hiddenByConfig.get(o.configId);
+          if (hidden?.has(o.clientId)) return false;
+          const chMap = channelByConfig.get(o.configId);
+          const ch = chMap?.get(o.clientId) ?? "both";
+          return ch === input.channel || ch === "both";
+        });
+        return {
+          orders,
+          lastSyncAt: lastSync,
+          syncRunning: syncInfo.syncRunning,
+          laneThresholds: thresholds,
+        };
+      }),
+
     /** Advance an order to the next lifecycle stage */
     updateStatus: protectedProcedure
       .input(
@@ -2707,7 +2740,7 @@ const clientVisibilityRouter = router({
       });
       return { success: true };
     }),
-  /** Save visibility toggles for a batch of clients */
+  /** Save visibility toggles and channel for a batch of clients */
   save: protectedProcedure
     .input(
       z.object({
@@ -2717,6 +2750,7 @@ const clientVisibilityRouter = router({
             clientId: z.number(),
             clientName: z.string(),
             isVisible: z.boolean(),
+            orderChannel: z.enum(["b2b", "d2c", "both"]).optional(),
           })
         ),
       })

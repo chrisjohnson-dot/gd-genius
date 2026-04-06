@@ -1297,15 +1297,16 @@ export async function getClientVisibility(configId: number): Promise<ClientVisib
  * Locking is a separate, explicit action via setClientLock / lockAllHiddenClients.
  */
 export async function upsertClientVisibility(
-  rows: Array<{ configId: number; clientId: number; clientName: string; isVisible: boolean }>
+  rows: Array<{ configId: number; clientId: number; clientName: string; isVisible: boolean; orderChannel?: "b2b" | "d2c" | "both" }>
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
   for (const row of rows) {
+    const channel = row.orderChannel ?? "both";
     await db
       .insert(clientVisibility)
-      .values({ ...row, isLocked: false })
-      .onDuplicateKeyUpdate({ set: { isVisible: row.isVisible, clientName: row.clientName } });
+      .values({ ...row, orderChannel: channel, isLocked: false })
+      .onDuplicateKeyUpdate({ set: { isVisible: row.isVisible, clientName: row.clientName, orderChannel: channel } });
   }
 }
 
@@ -1391,18 +1392,29 @@ export async function syncClientVisibilityFromOrders(configId: number): Promise<
     await db
       .insert(clientVisibility)
       .values({ configId, clientId: row.clientId, clientName: row.clientName, isVisible: true, isLocked: false })
-      // Only update the cached name; never touch isVisible/isLocked for existing rows
-      // (locked rows stay hidden, and we never re-enable manually hidden clients)
+      // On conflict (existing row): ONLY update the cached name.
+      // NEVER touch isVisible or isLocked — those are user-managed.
+      // New rows default to visible=true; existing rows keep whatever the user set.
       .onDuplicateKeyUpdate({
         set: {
-          // Update name if it changed in Extensiv
           clientName: row.clientName,
-          // Only set isVisible=true for rows that are NOT locked
-          // MySQL conditional: IF(isLocked = 0, 1, isVisible)
-          isVisible: sql`IF(${clientVisibility.isLocked} = 0, 1, ${clientVisibility.isVisible})`,
         },
       });
   }
+}
+
+/**
+ * Return a map of clientId → orderChannel for a given configId.
+ * Clients not in client_visibility default to 'both'.
+ */
+export async function getClientChannelMap(configId: number): Promise<Map<number, "b2b" | "d2c" | "both">> {
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({ clientId: clientVisibility.clientId, orderChannel: clientVisibility.orderChannel })
+    .from(clientVisibility)
+    .where(eq(clientVisibility.configId, configId));
+  return new Map(rows.map((r) => [r.clientId, (r.orderChannel ?? "both") as "b2b" | "d2c" | "both"]));
 }
 
 // ─── SLA Rules (per-client named sub-rules) ──────────────────────────────────

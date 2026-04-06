@@ -183,7 +183,7 @@ function SendToShipwellButton({
   const sendOrder = trpc.shipwell.sendOrder.useMutation({
     onSuccess: (data) => {
       toast.success(`Order sent to Shipwell. PO ID: ${data.shipwellOrderId}`);
-      utils.pickSchedule.list.invalidate();
+      utils.pickSchedule.listByChannel.invalidate();
       onSent();
     },
     onError: (err) => {
@@ -344,7 +344,7 @@ function AdvanceButton({
 
   const updateStatus = trpc.pickSchedule.updateStatus.useMutation({
     onSuccess: () => {
-      utils.pickSchedule.list.invalidate();
+      utils.pickSchedule.listByChannel.invalidate();
       setShowDialog(false);
       setAssociateName("");
       onAdvanced();
@@ -477,7 +477,7 @@ function UndoButton({ order, onUndone }: { order: TrackedOrder; onUndone: () => 
 
   const undoStatus = trpc.pickSchedule.undoStatus.useMutation({
     onSuccess: () => {
-      utils.pickSchedule.list.invalidate();
+      utils.pickSchedule.listByChannel.invalidate();
       onUndone();
       toast.success(`Order moved back to ${prevLabel}`);
     },
@@ -517,7 +517,7 @@ function SlaExtensionButton({
 
   const setExt = trpc.sla.setExtension.useMutation({
     onSuccess: () => {
-      utils.pickSchedule.list.invalidate();
+      utils.pickSchedule.listByChannel.invalidate();
       onChanged();
       setOpen(false);
       toast.success(`SLA extended by ${days} day${days !== 1 ? "s" : ""} for order ${order.referenceNum ?? `#${order.extensivOrderId}`}`);
@@ -527,7 +527,7 @@ function SlaExtensionButton({
 
   const clearExt = trpc.sla.clearExtension.useMutation({
     onSuccess: () => {
-      utils.pickSchedule.list.invalidate();
+      utils.pickSchedule.listByChannel.invalidate();
       onChanged();
       toast.success(`SLA extension cleared for order ${order.referenceNum ?? `#${order.extensivOrderId}`}`);
     },
@@ -644,7 +644,7 @@ function DismissWarningButton({
 
   const dismiss = trpc.pickSchedule.dismissZeroBidWarning.useMutation({
     onSuccess: () => {
-      utils.pickSchedule.list.invalidate();
+      utils.pickSchedule.listByChannel.invalidate();
       onDismissed();
       toast.success("Warning dismissed — clock reset. Alert will re-fire after the next threshold period.");
     },
@@ -1526,7 +1526,7 @@ function WarehouseCard({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const { data, isLoading, refetch, isFetching } = trpc.pickSchedule.list.useQuery({});
+  const { data, isLoading, refetch, isFetching } = trpc.pickSchedule.listByChannel.useQuery({ channel: "b2b" });
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
 
   const syncNow = trpc.pickSchedule.syncNow.useMutation({
@@ -1613,7 +1613,7 @@ export default function Home() {
                 {selectedFacility ? `Open Orders › ${selectedFacility.facilityName}` : "Overview"}
               </p>
               <h1 className="page-title">
-                {selectedFacility ? selectedFacility.facilityName : "Open Orders"}
+                {selectedFacility ? selectedFacility.facilityName : "Open Orders — B2B"}
               </h1>
               {lastSyncAt && (
                 <p className="text-xs text-muted-foreground mt-0.5">

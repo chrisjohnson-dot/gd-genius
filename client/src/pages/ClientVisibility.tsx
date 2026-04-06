@@ -17,6 +17,7 @@ interface ClientRow {
   clientName: string;
   isVisible: boolean;
   isLocked: boolean;
+  orderChannel: "b2b" | "d2c" | "both";
 }
 
 // ─── Per-warehouse panel ──────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
 
   // Isolated edits for this warehouse only
   const [edits, setEdits] = useState<Record<number, boolean>>({});
+  const [channelEdits, setChannelEdits] = useState<Record<number, "b2b" | "d2c" | "both">>({}); 
   const [search, setSearch] = useState("");
   const [lockedOnly, setLockedOnly] = useState(false);
 
@@ -46,9 +48,10 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
         ...c,
         isVisible: c.clientId in edits ? edits[c.clientId] : c.isVisible,
         isLocked: c.isLocked ?? false,
+        orderChannel: (c.clientId in channelEdits ? channelEdits[c.clientId] : (c.orderChannel ?? "both")) as "b2b" | "d2c" | "both",
       }))
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
-  }, [clients, edits]);
+  }, [clients, edits, channelEdits]);
 
   const lockedCount = rows.filter((r) => r.isLocked).length;
 
@@ -61,7 +64,7 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
     });
   }, [rows, search, lockedOnly]);
 
-  const hasEdits = Object.keys(edits).length > 0;
+  const hasEdits = Object.keys(edits).length > 0 || Object.keys(channelEdits).length > 0;
   const visibleCount = rows.filter((r) => (r.clientId in edits ? edits[r.clientId] : r.isVisible)).length;
   const hiddenCount = rows.length - visibleCount;
 
@@ -93,6 +96,7 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
     onSuccess: () => {
       toast.success(`Client visibility saved for ${configName}`);
       setEdits({});
+      setChannelEdits({});
       utils.clientVisibility.list.invalidate({ configId });
     },
     onError: (e) => toast.error(e.message),
@@ -110,6 +114,7 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
       clientId: r.clientId,
       clientName: r.clientName,
       isVisible: r.clientId in edits ? edits[r.clientId] : r.isVisible,
+      orderChannel: r.orderChannel,
     }));
     saveMutation.mutate({ rows: rowsToSave });
   }
@@ -227,7 +232,8 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
               {filteredRows.map((row) => {
                 const unalloc = unallocatedByClient[row.clientId] ?? 0;
                 const isVisible = row.clientId in edits ? edits[row.clientId] : row.isVisible;
-                const isEdited = row.clientId in edits;
+                const channel = row.orderChannel;
+                const isEdited = row.clientId in edits || row.clientId in channelEdits;
                 const isLockPending =
                   setLockMutation.isPending &&
                   (setLockMutation.variables as { clientId: number } | undefined)?.clientId === row.clientId;
@@ -273,6 +279,28 @@ function WarehousePanel({ configId, configName, unallocatedByClient, scheduleRea
                           Unsaved
                         </span>
                       )}
+
+                      {/* Channel selector: B2B / D2C / Both */}
+                      <div className="flex items-center rounded-md border border-border overflow-hidden text-[11px] font-semibold">
+                        {(["b2b", "d2c", "both"] as const).map((ch) => (
+                          <button
+                            key={ch}
+                            type="button"
+                            onClick={() => setChannelEdits((prev) => ({ ...prev, [row.clientId]: ch }))}
+                            className={`px-2 py-1 transition-colors ${
+                              channel === ch
+                                ? ch === "b2b"
+                                  ? "bg-blue-600 text-white"
+                                  : ch === "d2c"
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-slate-600 text-white"
+                                : "bg-transparent text-muted-foreground hover:bg-muted"
+                            }`}
+                          >
+                            {ch === "both" ? "Both" : ch.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
 
                       {/* Per-row lock/unlock toggle */}
                       <TooltipProvider delayDuration={200}>

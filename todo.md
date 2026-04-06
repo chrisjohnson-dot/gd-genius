@@ -794,3 +794,21 @@
 - [x] Warnings shown for incomplete scans and unresolved flags
 - [x] On confirm: session closes and returns to the same QC scanner start/session-list view
 - [x] listFlaggedBySession tRPC procedure added to qcScanner router
+
+## Client Visibility Bug Fix + B2B/D2C Split
+- [ ] Fix client visibility save bug (Boom and Threshold unselect not persisting)
+- [ ] Add orderChannel (B2B/D2C/both) field to clients table
+- [ ] Add B2B/D2C channel toggle per client in visibility settings UI
+- [ ] Split Open Orders page into Open Orders - B2B and Open Orders - D2C tabs or pages
+- [ ] Sidebar nav: two separate nav items for B2B and D2C open orders
+
+## Client Visibility Bug Fix & B2B/D2C Channel Split
+- [x] Bug fix: syncClientVisibilityFromOrders no longer overwrites isVisible on existing rows (root cause of Boom/Threshold not saving)
+- [x] DB: orderChannel column added to client_visibility table (enum: b2b | d2c | both, default both)
+- [x] Server: getClientChannelMap helper in db.ts
+- [x] Server: pickSchedule.listByChannel tRPC procedure (filters orders by client channel assignment)
+- [x] Home.tsx: updated to use listByChannel(b2b) and titled "Open Orders — B2B"
+- [x] OpenOrdersD2C.tsx: new page using listByChannel(d2c), titled "Open Orders — D2C"
+- [x] App.tsx: /open-orders-d2c route added
+- [x] AppLayout: sidebar split into "Open Orders — B2B" (/) and "Open Orders — D2C" (/open-orders-d2c)
+- [x] ClientVisibility: B2B / D2C / Both toggle buttons per client row, saved with visibility state

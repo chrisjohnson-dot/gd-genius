@@ -812,3 +812,9 @@
 - [x] App.tsx: /open-orders-d2c route added
 - [x] AppLayout: sidebar split into "Open Orders — B2B" (/) and "Open Orders — D2C" (/open-orders-d2c)
 - [x] ClientVisibility: B2B / D2C / Both toggle buttons per client row, saved with visibility state
+
+## Duplicate Orders Bug
+- [x] Root cause: upsertTrackedOrders UPDATE WHERE clause missing configId+facilityId filter, causing cross-config rows to be missed and re-inserted each sync
+- [x] Fix: UPDATE now uses WHERE extensivOrderId=X AND configId=Y AND facilityId=Z
+- [x] DB cleanup: 15,030 duplicate rows deleted from order_tracking
+- [x] Unique index added: uq_order_config_facility (extensivOrderId, configId, facilityId) to prevent future duplicates

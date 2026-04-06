@@ -554,10 +554,17 @@ export async function upsertTrackedOrders(
           requiredShipDate: o.requiredShipDate ?? undefined,
           lastSyncedAt: now,
         })
-        .where(eq(orderTracking.extensivOrderId, o.extensivOrderId));
+        .where(
+          and(
+            eq(orderTracking.extensivOrderId, o.extensivOrderId),
+            eq(orderTracking.configId, configId),
+            eq(orderTracking.facilityId, facilityId)
+          )
+        );
       updated++;
     } else {
-      // Insert new order as unallocated
+      // Insert new order as unallocated; use onDuplicateKeyUpdate as a safety net
+      // in case the unique index catches a race between the existingMap fetch and this insert.
       await db.insert(orderTracking).values({
         extensivOrderId: o.extensivOrderId,
         referenceNum: o.referenceNum ?? undefined,
@@ -579,6 +586,23 @@ export async function upsertTrackedOrders(
         lifecycleStatus: "unallocated",
         firstSeenAt: now,
         lastSyncedAt: now,
+      }).onDuplicateKeyUpdate({
+        set: {
+          referenceNum: o.referenceNum ?? undefined,
+          poNum: o.poNum ?? undefined,
+          clientName: o.clientName,
+          facilityName: o.facilityName,
+          shipToName: o.shipToName ?? undefined,
+          shipToCity: o.shipToCity ?? undefined,
+          totalPieces: o.totalPieces,
+          skuCount: o.skuCount,
+          notes: o.notes ?? undefined,
+          savedElements: o.savedElements ?? undefined,
+          extensivStatus: o.extensivStatus,
+          creationDate: o.creationDate ?? undefined,
+          requiredShipDate: o.requiredShipDate ?? undefined,
+          lastSyncedAt: now,
+        },
       });
       inserted++;
     }

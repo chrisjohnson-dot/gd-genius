@@ -993,3 +993,28 @@ export const qrScans = mysqlTable("qr_scans", {
 });
 export type QrScan = typeof qrScans.$inferSelect;
 export type InsertQrScan = typeof qrScans.$inferInsert;
+
+// ── SLA Snapshots ─────────────────────────────────────────────────────────────
+export const slaSnapshots = mysqlTable("sla_snapshots", {
+  id: int("id").primaryKey().autoincrement(),
+  snapshotDate: varchar("snapshotDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  orderId: int("orderId").notNull(),
+  clientId: int("clientId").notNull(),
+  clientName: varchar("clientName", { length: 120 }).notNull(),
+  poNum: varchar("poNum", { length: 80 }).default(""),
+  refNum: varchar("refNum", { length: 80 }).default(""),
+  creation: varchar("creation", { length: 10 }).default(""), // YYYY-MM-DD
+  company: varchar("company", { length: 160 }).default(""),
+  notes: text("notes"),
+  facility: varchar("facility", { length: 80 }).default(""),
+  fullyAllocated: boolean("fullyAllocated").notNull().default(false),
+  rule: varchar("rule", { length: 255 }).notNull(),
+  slaDate: varchar("slaDate", { length: 10 }), // YYYY-MM-DD or null
+  outOfSla: boolean("outOfSla").notNull().default(false),
+  alwaysFlag: boolean("alwaysFlag").notNull().default(false),
+  flagNote: varchar("flagNote", { length: 255 }),
+  bizDaysLate: int("bizDaysLate"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SlaSnapshot = typeof slaSnapshots.$inferSelect;
+export type InsertSlaSnapshot = typeof slaSnapshots.$inferInsert;

@@ -824,3 +824,17 @@
 
 ## Open Orders UI Cleanup
 - [x] Remove lifecycle summary bar (Unalloc/Allocated/Picking/QC/QC Done/Ship Ready tiles) from B2B and D2C Open Orders pages
+
+## SLA Performance Integration (from sla-report.py)
+- [x] Port SLA classification engine to TypeScript (all 50+ client classifiers, date helpers, biz-day math, late-receipt adjustment, inventory shortage reclassification)
+- [x] DB: sla_snapshots table (per-order SLA result: orderId, clientId, slaDue, status, rule, bizDaysLate, flagNote, facility, snapshotDate)
+- [x] Server: tRPC slaPerformance.runSnapshot — runs all classifiers against current open orders and writes results
+- [x] Server: tRPC slaPerformance.listBreaches — paginated list of OOS orders, filterable by client/facility/date
+- [x] Server: tRPC slaPerformance.listWatch — watch items (inventory shortage, tracking present, receipt-adjusted)
+- [x] Server: tRPC slaPerformance.getSummary — aggregate stats (total open, OOS count, watch count, compliance %)
+- [x] Server: tRPC slaPerformance.getClientRules — returns the SLA rule definition for each client
+- [x] Frontend: SLA Performance page — summary header (total open, OOS, watch, compliance %), breach table, watch table
+- [x] Frontend: Per-client rule reference panel (expandable)
+- [x] Frontend: Filter bar — by client, facility, date range, status
+- [x] Frontend: CSV export of current breach/watch list
+- [x] Sidebar: Add SLA Performance nav item

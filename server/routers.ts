@@ -5270,3 +5270,124 @@ export const appRouterFull = router({
   auditImages: auditImagesRouter,
 });
 export type AppRouterFull = typeof appRouterFull;
+
+// ── SLA Performance Router ────────────────────────────────────────────────────
+import { classifyOrders, SLA_CLIENTS } from "./slaEngine.js";
+import {
+  writeSlaSnapshot,
+  getSlaSummary,
+  listSlaBreaches,
+  listSlaWatch,
+  listSnapshotDates,
+  getSlaClientHistory,
+  listAllSlaOrders,
+} from "./sla.db.js";
+import type { OrderTracking } from "../drizzle/schema.js";
+
+/** Map an OrderTracking DB row to the shape expected by slaEngine.classifyOrder */
+function orderTrackingToExtensiv(o: OrderTracking) {
+  return {
+    readOnly: {
+      orderId: o.extensivOrderId,
+      creationDate: o.creationDate ?? "",
+      fullyAllocated: o.lifecycleStatus !== "unallocated",
+      isClosed: false,
+      facilityIdentifier: { name: o.facilityName ?? "" },
+      customerIdentifier: { id: o.clientId, name: o.clientName },
+      trackingNumber: null as string | null,
+    },
+    poNum: o.poNum ?? "",
+    referenceNum: o.referenceNum ?? "",
+    notes: o.notes ?? "",
+    shipTo: { companyName: o.shipToName ?? "" },
+  };
+}
+
+const slaPerformanceRouter = router({
+  /** Run a fresh SLA snapshot against all tracked orders and persist it */
+  runSnapshot: protectedProcedure
+    .input(z.object({ date: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const snapshotDate = input.date ?? new Date().toISOString().slice(0, 10);
+      const tracked = await getTrackedOrders();
+      const extensivOrders = tracked.map(orderTrackingToExtensiv);
+      const results = classifyOrders(extensivOrders);
+      const written = await writeSlaSnapshot(results, snapshotDate);
+      return { snapshotDate, classified: results.length, written };
+    }),
+
+  /** Get summary stats for a snapshot date */
+  getSummary: protectedProcedure
+    .input(z.object({ date: z.string() }))
+    .query(async ({ input }) => {
+      return getSlaSummary(input.date);
+    }),
+
+  /** List all OOS (out-of-SLA) orders for a snapshot date */
+  listBreaches: protectedProcedure
+    .input(z.object({ date: z.string(), clientId: z.number().optional() }))
+    .query(async ({ input }) => {
+      return listSlaBreaches(input.date, input.clientId);
+    }),
+
+  /** List watch items (alwaysFlag=true but not yet OOS) for a snapshot date */
+  listWatch: protectedProcedure
+    .input(z.object({ date: z.string(), clientId: z.number().optional() }))
+    .query(async ({ input }) => {
+      return listSlaWatch(input.date, input.clientId);
+    }),
+
+  /** List all available snapshot dates (most recent first) */
+  listDates: protectedProcedure
+    .query(async () => {
+      return listSnapshotDates(60);
+    }),
+
+  /** Per-client compliance history across recent snapshots */
+  getClientHistory: protectedProcedure
+    .input(z.object({ clientId: z.number() }))
+    .query(async ({ input }) => {
+      return getSlaClientHistory(input.clientId);
+    }),
+
+  /** All classified orders for a snapshot (for CSV export) */
+  listAll: protectedProcedure
+    .input(z.object({ date: z.string(), clientId: z.number().optional() }))
+    .query(async ({ input }) => {
+      return listAllSlaOrders(input.date, input.clientId);
+    }),
+
+  /** Return the list of all SLA-tracked clients with their IDs and names */
+  getClientRules: protectedProcedure
+    .query(async () => {
+      return Object.entries(SLA_CLIENTS).map(([id, name]) => ({
+        clientId: Number(id),
+        clientName: name,
+      })).sort((a, b) => a.clientName.localeCompare(b.clientName));
+    }),
+  /** Export all orders for a snapshot as CSV string */
+  exportCsv: protectedProcedure
+    .input(z.object({ date: z.string(), clientId: z.number().optional() }))
+    .query(async ({ input }) => {
+      const rows = await listAllSlaOrders(input.date, input.clientId);
+      const header = ["orderId","clientName","poNum","refNum","creation","company","facility","fullyAllocated","rule","slaDate","outOfSla","alwaysFlag","flagNote","bizDaysLate"];
+      const lines = rows.map((r) => [
+        r.orderId, r.clientName, r.poNum, r.refNum, r.creation, r.company,
+        r.facility, r.fullyAllocated ? "Y" : "N", r.rule, r.slaDate ?? "",
+        r.outOfSla ? "Y" : "N", r.alwaysFlag ? "Y" : "N",
+        r.flagNote ?? "", r.bizDaysLate ?? "",
+      ].map(String).join(","));
+      return {
+        filename: `sla-report-${input.date}.csv`,
+        csv: [header.join(","), ...lines].join("\n"),
+        totalRows: rows.length,
+      };
+    }),
+});
+
+// Re-export appRouter augmented with all feature routers including SLA
+export const appRouterV4 = router({
+  ...appRouterFull._def.record,
+  slaPerformance: slaPerformanceRouter,
+});
+export type AppRouterV4 = typeof appRouterV4;

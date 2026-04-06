@@ -5,7 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerPdfRoutes } from "../pdf/routes";
-import { appRouterFull as appRouter } from "../routers";
+import { appRouterV4 as appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { initScheduler } from "../scheduler/autoRun";

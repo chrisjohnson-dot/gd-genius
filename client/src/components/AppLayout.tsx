@@ -48,7 +48,6 @@ import { Skeleton } from "./ui/skeleton";
 const dashboardItems = [
   { href: "/",                 label: "Open Orders — B2B", icon: FolderOpen, badge: true },
   { href: "/open-orders-d2c", label: "Open Orders — D2C", icon: FolderOpen },
-  { href: "/sla-tracker",     label: "SLA Tracker",       icon: Timer },
   { href: "/sla-performance",  label: "SLA Performance",   icon: TrendingUp },
 ];
 

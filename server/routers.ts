@@ -2602,6 +2602,98 @@ const _appRouter = router({
       const results = await recordSlaNightlySnapshot();
       return { recorded: results.length, facilities: results };
     }),
+    /**
+     * Waive an out-of-SLA order: marks it as waived in the audit trail.
+     * The order remains visible but is flagged as waived (not counted against compliance).
+     */
+    waiveOrder: protectedProcedure
+      .input(z.object({
+        extensivOrderId: z.number().int(),
+        referenceNum: z.string().nullable().optional(),
+        clientId: z.number().int(),
+        clientName: z.string(),
+        facilityId: z.number().int(),
+        facilityName: z.string().nullable().optional(),
+        reason: z.string().min(1, "Reason is required").max(1000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await createSlaOrderAction({
+          extensivOrderId: input.extensivOrderId,
+          referenceNum: input.referenceNum ?? null,
+          clientId: input.clientId,
+          clientName: input.clientName,
+          facilityId: input.facilityId,
+          facilityName: input.facilityName ?? null,
+          action: "waive",
+          reason: input.reason,
+          performedByUserId: String(ctx.user.id),
+          performedByName: ctx.user.name ?? ctx.user.email ?? String(ctx.user.id),
+        });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.waiveOrder",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: { reason: input.reason, clientName: input.clientName },
+        });
+        return { success: true };
+      }),
+    /**
+     * Remove an out-of-SLA order from the SLA dashboard entirely.
+     * The order is hidden from the SLA tracker and not counted in compliance.
+     */
+    removeOrder: protectedProcedure
+      .input(z.object({
+        extensivOrderId: z.number().int(),
+        referenceNum: z.string().nullable().optional(),
+        clientId: z.number().int(),
+        clientName: z.string(),
+        facilityId: z.number().int(),
+        facilityName: z.string().nullable().optional(),
+        reason: z.string().min(1, "Reason is required").max(1000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await createSlaOrderAction({
+          extensivOrderId: input.extensivOrderId,
+          referenceNum: input.referenceNum ?? null,
+          clientId: input.clientId,
+          clientName: input.clientName,
+          facilityId: input.facilityId,
+          facilityName: input.facilityName ?? null,
+          action: "remove",
+          reason: input.reason,
+          performedByUserId: String(ctx.user.id),
+          performedByName: ctx.user.name ?? ctx.user.email ?? String(ctx.user.id),
+        });
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.removeOrder",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: { reason: input.reason, clientName: input.clientName },
+        });
+        return { success: true };
+      }),
+    /** Restore an order to active SLA tracking (undo a waive or remove). */
+    restoreOrder: protectedProcedure
+      .input(z.object({ extensivOrderId: z.number().int() }))
+      .mutation(async ({ input, ctx }) => {
+        await clearSlaOrderAction(input.extensivOrderId);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "sla.restoreOrder",
+          entityType: "order_tracking",
+          entityId: String(input.extensivOrderId),
+          details: {},
+        });
+        return { success: true };
+      }),
+    /** List all SLA order actions (audit trail), newest first. */
+    listOrderActions: protectedProcedure
+      .input(z.object({ extensivOrderId: z.number().int().optional() }))
+      .query(async ({ input }) => {
+        return listSlaOrderActions(input.extensivOrderId);
+      }),
   }),
 });
 // ─── Lane Threshold router ───────────────────────────────────────────────────
@@ -5164,6 +5256,12 @@ const qrScanningRouter = router({
     }),
 });
 
+// ─── SLA Order Actions ──────────────────────────────────────────────────────
+import {
+  createSlaOrderAction,
+  listSlaOrderActions,
+  clearSlaOrderAction,
+} from "./db";
 // ─── Audit Images Routerr ──────────────────────────────────────────────────────
 import {
   listProductionScansForAudit,

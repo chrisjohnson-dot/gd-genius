@@ -79,6 +79,9 @@ import {
   muLabels,
   receiptItemConfirmations,
   putAwayPriority,
+  slaOrderActions,
+  SlaOrderAction,
+  InsertSlaOrderAction,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -902,17 +905,33 @@ export async function getOrderSlaStatuses(): Promise<
       slaStatus: "in_sla" | "out_of_sla";
       daysRemaining: number;
       matchedRuleName: string | null;
+      orderChannel: "b2b" | "d2c" | "both";
+      slaActionStatus: "active" | "waived" | "removed";
     }
   >
 > {
   const db = await getDb();
   if (!db) return [];
 
-  const [orders, requirements, allRules] = await Promise.all([
+  const [orders, requirements, allRules, channelRows, actionRows] = await Promise.all([
     db.select().from(orderTracking),
     db.select().from(slaRequirements),
     db.select().from(slaRules),
+    db.select({ clientId: clientVisibility.clientId, configId: clientVisibility.configId, orderChannel: clientVisibility.orderChannel }).from(clientVisibility),
+    db.select().from(slaOrderActions).orderBy(desc(slaOrderActions.performedAt)),
   ]);
+  // Build channel map: clientId → channel (last config wins; 'both' is default)
+  const channelMap = new Map<number, "b2b" | "d2c" | "both">();
+  for (const r of channelRows) {
+    channelMap.set(r.clientId, (r.orderChannel ?? "both") as "b2b" | "d2c" | "both");
+  }
+  // Build action map: extensivOrderId → latest action
+  const actionMap = new Map<number, "waived" | "removed">();
+  for (const a of actionRows) {
+    if (!actionMap.has(a.extensivOrderId)) {
+      actionMap.set(a.extensivOrderId, a.action as "waived" | "removed");
+    }
+  }
 
   // Build a map of clientId → base slaDays for fast lookup
   const slaMap = new Map<number, number>();
@@ -973,7 +992,9 @@ export async function getOrderSlaStatuses(): Promise<
     const slaStatus: "in_sla" | "out_of_sla" =
       daysRemaining >= 0 ? "in_sla" : "out_of_sla";
 
-    return { ...order, slaDays: effectiveSlaDays, ageCalendarDays, slaStatus, daysRemaining, matchedRuleName, slaExtensionDays: extensionDays };
+    const orderChannel = channelMap.get(order.clientId) ?? "both";
+    const slaActionStatus: "active" | "waived" | "removed" = actionMap.get(order.extensivOrderId) ?? "active";
+    return { ...order, slaDays: effectiveSlaDays, ageCalendarDays, slaStatus, daysRemaining, matchedRuleName, slaExtensionDays: extensionDays, orderChannel, slaActionStatus };
   });
 }
 
@@ -2811,4 +2832,35 @@ export async function clearScanImageColumns(scanIds: string[]): Promise<void> {
       postApplyReceivedAt: null,
     })
     .where(inArray(productionScans.scanId, scanIds));
+}
+
+// ─── SLA Order Actions (Remove / Waive) ──────────────────────────────────────
+
+/** Record a Remove or Waive action on an out-of-SLA order. */
+export async function createSlaOrderAction(
+  data: Omit<InsertSlaOrderAction, "id" | "performedAt">
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(slaOrderActions).values(data);
+}
+
+/** List all SLA order actions, newest first. Optionally filter by extensivOrderId. */
+export async function listSlaOrderActions(
+  extensivOrderId?: number
+): Promise<SlaOrderAction[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const q = db.select().from(slaOrderActions).orderBy(desc(slaOrderActions.performedAt));
+  if (extensivOrderId !== undefined) {
+    return q.where(eq(slaOrderActions.extensivOrderId, extensivOrderId));
+  }
+  return q;
+}
+
+/** Clear the latest action for an order (restore it to active SLA tracking). */
+export async function clearSlaOrderAction(extensivOrderId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(slaOrderActions).where(eq(slaOrderActions.extensivOrderId, extensivOrderId));
 }

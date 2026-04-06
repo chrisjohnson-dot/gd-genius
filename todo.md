@@ -838,3 +838,13 @@
 - [x] Frontend: Filter bar — by client, facility, date range, status
 - [x] Frontend: CSV export of current breach/watch list
 - [x] Sidebar: Add SLA Performance nav item
+
+## SLA Merge (Apr 2026)
+- [x] Merge SLA Tracker and SLA Performance into one unified "SLA Performance" tab
+- [x] B2B/D2C channel split in warehouse cards (separate sections with counts)
+- [x] Remove/Waive dialog on out-of-SLA orders with mandatory reason entry
+- [x] Audit trail tab tracking user name, action, reason, and timestamp
+- [x] Restore button to undo waive/remove actions
+- [x] sla_order_actions DB table with migration
+- [x] waiveOrder, removeOrder, restoreOrder, listOrderActions tRPC procedures
+- [x] Remove old SLA Tracker nav item; redirect /sla-tracker → /sla-performance

@@ -1018,3 +1018,23 @@ export const slaSnapshots = mysqlTable("sla_snapshots", {
 });
 export type SlaSnapshot = typeof slaSnapshots.$inferSelect;
 export type InsertSlaSnapshot = typeof slaSnapshots.$inferInsert;
+
+// ── SLA Order Actions (Remove / Waive) ────────────────────────────────────────
+// Tracks every Remove or Waive action taken on an out-of-SLA order, with the
+// user who made the change and the mandatory reason they entered.
+export const slaOrderActions = mysqlTable("sla_order_actions", {
+  id: int("id").primaryKey().autoincrement(),
+  extensivOrderId: int("extensivOrderId").notNull(),          // FK → order_tracking.extensivOrderId
+  referenceNum: varchar("referenceNum", { length: 256 }),     // denormalised for display
+  clientId: int("clientId").notNull(),
+  clientName: varchar("clientName", { length: 256 }).notNull(),
+  facilityId: int("facilityId").notNull(),
+  facilityName: varchar("facilityName", { length: 256 }),
+  action: mysqlEnum("action", ["remove", "waive"]).notNull(),
+  reason: text("reason").notNull(),
+  performedByUserId: varchar("performedByUserId", { length: 128 }).notNull(),
+  performedByName: varchar("performedByName", { length: 256 }),
+  performedAt: timestamp("performedAt").defaultNow().notNull(),
+});
+export type SlaOrderAction = typeof slaOrderActions.$inferSelect;
+export type InsertSlaOrderAction = typeof slaOrderActions.$inferInsert;

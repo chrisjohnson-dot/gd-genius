@@ -818,3 +818,6 @@
 - [x] Fix: UPDATE now uses WHERE extensivOrderId=X AND configId=Y AND facilityId=Z
 - [x] DB cleanup: 15,030 duplicate rows deleted from order_tracking
 - [x] Unique index added: uq_order_config_facility (extensivOrderId, configId, facilityId) to prevent future duplicates
+
+## D2C Landing Page
+- [x] Rewrite OpenOrdersD2C.tsx to match full B2B layout (warehouse cards, lifecycle lanes, SLA breach summary, overdue badges, Sync Now, Run Allocation Tool, CSV/PDF export, full-screen mode, associate assignment, SLA extension, Shipwell integration, undo)

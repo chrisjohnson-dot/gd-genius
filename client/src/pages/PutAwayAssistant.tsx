@@ -25,6 +25,8 @@ type Suggestion = {
   priority: number;
   isPriorityAisle: boolean;
   aislePriorityOrder: number | null;
+  /** The level matched by the priority rule, e.g. "A", "B", or "*" for wildcard aisle match */
+  matchedLevel?: string | null;
 };
 
 type ScanRecord = {
@@ -425,15 +427,24 @@ function ScanSession({
                               <span className="font-mono font-semibold text-sm text-foreground">{s.locationName}</span>
                               {locationTypeBadge(s.locationType)}
                               {reasonBadge(s.reason)}
-                              {s.isPriorityAisle && (
-                                <Badge
-                                  className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-xs gap-1"
-                                  title={s.aislePriorityOrder !== null ? `Priority #${s.aislePriorityOrder}` : "Priority aisle"}
-                                >
-                                  <Flame className="h-3 w-3" />
-                                  Priority Aisle{s.aislePriorityOrder !== null ? ` #${s.aislePriorityOrder}` : ""}
-                                </Badge>
-                              )}
+                              {s.isPriorityAisle && (() => {
+                                const parts = s.locationName.split("-");
+                                const aisle = parts[0] ?? "";
+                                const level = s.matchedLevel && s.matchedLevel !== "*" ? s.matchedLevel : null;
+                                const label = level ? `${aisle}/${level}` : `Aisle ${aisle}`;
+                                const title = s.aislePriorityOrder !== null
+                                  ? `Priority #${s.aislePriorityOrder} · ${label}`
+                                  : `Priority · ${label}`;
+                                return (
+                                  <Badge
+                                    className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-xs gap-1"
+                                    title={title}
+                                  >
+                                    <Flame className="h-3 w-3" />
+                                    {s.aislePriorityOrder !== null ? `#${s.aislePriorityOrder} · ` : ""}{label}
+                                  </Badge>
+                                );
+                              })()}
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                               {s.currentQty > 0 && <span>{s.currentQty.toLocaleString()} units on hand</span>}
@@ -483,9 +494,9 @@ function ScanSession({
               >
                 <div className="flex items-center gap-2">
                   <Flame className="h-4 w-4 text-orange-400" />
-                  <span className="text-sm font-semibold text-orange-300">Aisle Priority Map</span>
+                  <span className="text-sm font-semibold text-orange-300">Location Priority Map</span>
                   <Badge className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-xs">
-                    {priorityRows.length} aisle{priorityRows.length !== 1 ? "s" : ""}
+                    {priorityRows.length} rule{priorityRows.length !== 1 ? "s" : ""}
                   </Badge>
                 </div>
                 {legendOpen
@@ -496,29 +507,36 @@ function ScanSession({
               {legendOpen && (
                 <div className="border-t border-orange-500/20 px-4 pb-4 pt-3 space-y-2">
                   <p className="text-xs text-muted-foreground mb-3">
-                    Suggestions in these aisles are ranked first within each tier. Lower number = higher priority.
+                    Suggestions matching these rules are ranked first. Lower number = higher priority.
+                    A wildcard (*) rule applies to the entire aisle; a specific level (e.g. A, B) only applies to that level.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {priorityRows
                       .slice()
                       .sort((a: { priorityOrder: number }, b: { priorityOrder: number }) => a.priorityOrder - b.priorityOrder)
-                      .map((row: { id: number; aisle: string; level: string; priorityOrder: number }) => (
-                        <div
-                          key={row.id}
-                          className="flex items-center gap-3 rounded-lg border border-orange-500/15 bg-orange-500/8 px-3 py-2"
-                        >
-                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-500/20 text-orange-300 text-xs font-bold flex items-center justify-center">
-                            {row.priorityOrder}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <span className="font-mono text-sm font-semibold text-foreground">Aisle {row.aisle}</span>
-                            {row.level && row.level !== "*" && (
-                              <span className="text-xs text-muted-foreground ml-1.5">Level {row.level}</span>
-                            )}
+                      .map((row: { id: number; aisle: string; level: string; priorityOrder: number }) => {
+                        const isWildcard = !row.level || row.level === "*";
+                        const locationLabel = isWildcard
+                          ? `Aisle ${row.aisle} (all levels)`
+                          : `${row.aisle}/${row.level}`;
+                        return (
+                          <div
+                            key={row.id}
+                            className="flex items-center gap-3 rounded-lg border border-orange-500/15 bg-orange-500/8 px-3 py-2"
+                          >
+                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-500/20 text-orange-300 text-xs font-bold flex items-center justify-center">
+                              {row.priorityOrder}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-mono text-sm font-semibold text-foreground">{locationLabel}</span>
+                              {isWildcard && (
+                                <span className="ml-1.5 text-[10px] text-orange-400/70 border border-orange-500/20 rounded px-1">wildcard</span>
+                              )}
+                            </div>
+                            <ListOrdered className="h-3.5 w-3.5 text-orange-400/60 shrink-0" />
                           </div>
-                          <ListOrdered className="h-3.5 w-3.5 text-orange-400/60 shrink-0" />
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
                 </div>
               )}

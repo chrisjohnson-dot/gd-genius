@@ -4111,19 +4111,66 @@ const putAwayRouter = router({
 
       // Build aisle priority map: aisle (uppercase) -> priorityOrder (1 = highest priority)
       // Priority config entries with level="*" apply to all locations in that aisle.
+      // Entries with a specific level (e.g. "A") apply only to that aisle+level combination.
+      //
+      // Location name format: "AISLE-ROW-LEVEL" (e.g. "D-017-C") or "AISLE-ROW" (e.g. "D-017").
+      // The level segment is the LAST dash-separated token.
+      // The aisle segment is the FIRST dash-separated token.
+      //
+      // Priority lookup order (first match wins):
+      //   1. Exact aisle+level match  (e.g. priority row { aisle: "D", level: "A" } matches "D-017-A")
+      //   2. Wildcard aisle match     (e.g. priority row { aisle: "D", level: "*" } matches any "D-*")
+
+      // Build two maps:
+      //   exactPriorityMap: "AISLE|LEVEL" -> priorityOrder
+      //   aislePriorityMap: "AISLE"       -> priorityOrder  (wildcard / level="*" entries)
+      const exactPriorityMap = new Map<string, number>();
       const aislePriorityMap = new Map<string, number>();
       for (const p of priorityConfig) {
-        aislePriorityMap.set(p.aisle.toUpperCase(), p.priorityOrder);
+        const aisleKey = p.aisle.toUpperCase();
+        if (!p.level || p.level === "*") {
+          // Wildcard: applies to the whole aisle (only if no more-specific entry already set)
+          if (!aislePriorityMap.has(aisleKey)) {
+            aislePriorityMap.set(aisleKey, p.priorityOrder);
+          }
+        } else {
+          // Exact aisle+level match
+          const exactKey = `${aisleKey}|${p.level.toUpperCase()}`;
+          if (!exactPriorityMap.has(exactKey)) {
+            exactPriorityMap.set(exactKey, p.priorityOrder);
+          }
+        }
       }
 
       /**
-       * Returns the configured aisle priority for a location name.
-       * Location names follow the pattern "AISLE-ROW-LEVEL" (e.g. "D-017-C").
-       * If no priority is configured for the aisle, returns null.
+       * Returns the best matching priority order for a location name, or null if none configured.
+       * Also returns the matched level for display purposes.
+       *
+       * Location names follow the pattern "AISLE-ROW-LEVEL" (e.g. "D-017-C") or "AISLE-ROW".
+       * Match priority: exact aisle+level > wildcard aisle.
        */
+      function getLocationPriority(locationName: string): { order: number; level: string } | null {
+        const parts = locationName.split("-");
+        const aisle = (parts[0] ?? "").toUpperCase();
+        const level = parts.length >= 3 ? (parts[parts.length - 1] ?? "").toUpperCase() : "";
+        // 1. Exact match
+        if (level) {
+          const exactKey = `${aisle}|${level}`;
+          if (exactPriorityMap.has(exactKey)) {
+            return { order: exactPriorityMap.get(exactKey)!, level };
+          }
+        }
+        // 2. Wildcard aisle match
+        if (aislePriorityMap.has(aisle)) {
+          return { order: aislePriorityMap.get(aisle)!, level: "*" };
+        }
+        return null;
+      }
+
+      // Keep backward-compatible helper used in sort comparator
       function getAislePriority(locationName: string): number | null {
-        const aisle = locationName.split("-")[0]?.toUpperCase() ?? "";
-        return aislePriorityMap.has(aisle) ? aislePriorityMap.get(aisle)! : null;
+        const match = getLocationPriority(locationName);
+        return match ? match.order : null;
       }
 
       // Build location type map: locationId -> locationType
@@ -4170,8 +4217,10 @@ const putAwayRouter = router({
         expirationDate?: string;
         lotNumber?: string;
         priority: number; // lower = better
-        isPriorityAisle: boolean; // true when this location is in a user-configured priority aisle
+        isPriorityAisle: boolean; // true when this location matches a user-configured priority entry
         aislePriorityOrder: number | null; // the configured priority order (1 = highest), null if not configured
+        /** The level that was matched (e.g. "A", "B") or "*" for a wildcard aisle match */
+        matchedLevel: string | null;
       };
 
       const suggestions: Suggestion[] = [];
@@ -4187,7 +4236,7 @@ const putAwayRouter = router({
       //   8  - empty warehouse (no priority config)
       // Within the same tier, sort by aislePriority (ascending) then alphabetically.
 
-      const hasPriorityConfig = aislePriorityMap.size > 0;
+      const hasPriorityConfig = aislePriorityMap.size > 0 || exactPriorityMap.size > 0;
 
       // 1. Consolidation candidates (locations already holding this SKU)
       for (const [locName, recs] of Array.from(skuLocationMap.entries())) {
@@ -4202,8 +4251,8 @@ const putAwayRouter = router({
           return a.receiveItemId - b.receiveItemId;
         });
         const totalQty = recs.reduce((s: number, r: { available: number }) => s + r.available, 0);
-        const aislePri = getAislePriority(locName);
-        const isPrioritised = aislePri !== null;
+        const locPri = getLocationPriority(locName);
+        const isPrioritised = locPri !== null;
         let priority: number;
         if (hasPriorityConfig) {
           priority = locType === "pick_face"
@@ -4221,7 +4270,8 @@ const putAwayRouter = router({
           lotNumber: sorted[0]?.lotNumber,
           priority,
           isPriorityAisle: isPrioritised,
-          aislePriorityOrder: aislePri,
+          aislePriorityOrder: locPri?.order ?? null,
+          matchedLevel: locPri?.level ?? null,
         });
       }
 
@@ -4230,8 +4280,8 @@ const putAwayRouter = router({
         if (locationStockMap.has(loc.name)) continue; // has stock
         const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
         if (locType !== "pick_face") continue;
-        const aislePri = getAislePriority(loc.name);
-        const isPrioritised = aislePri !== null;
+        const locPri = getLocationPriority(loc.name);
+        const isPrioritised = locPri !== null;
         suggestions.push({
           locationName: loc.name,
           locationType: "pick_face",
@@ -4239,7 +4289,8 @@ const putAwayRouter = router({
           currentQty: 0,
           priority: hasPriorityConfig ? (isPrioritised ? 5 : 7) : 3,
           isPriorityAisle: isPrioritised,
-          aislePriorityOrder: aislePri,
+          aislePriorityOrder: locPri?.order ?? null,
+          matchedLevel: locPri?.level ?? null,
         });
       }
 
@@ -4248,8 +4299,8 @@ const putAwayRouter = router({
         if (locationStockMap.has(loc.name)) continue;
         const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
         if (locType !== "warehouse") continue;
-        const aislePri = getAislePriority(loc.name);
-        const isPrioritised = aislePri !== null;
+        const locPri = getLocationPriority(loc.name);
+        const isPrioritised = locPri !== null;
         suggestions.push({
           locationName: loc.name,
           locationType: "warehouse",
@@ -4257,7 +4308,8 @@ const putAwayRouter = router({
           currentQty: 0,
           priority: hasPriorityConfig ? (isPrioritised ? 6 : 8) : 4,
           isPriorityAisle: isPrioritised,
-          aislePriorityOrder: aislePri,
+          aislePriorityOrder: locPri?.order ?? null,
+          matchedLevel: locPri?.level ?? null,
         });
       }
 

@@ -934,3 +934,7 @@
 - [x] Config: add TechShip DB table (techship_configs) with location name, base URL, API key, API secret
 - [x] Config: seed four TechShip locations (Calgary, Mississauga, Renous, Columbus)
 - [x] Config: build TechShip config UI tab with add/edit/delete per location
+- [x] Shipping Integration: restructure page into LTL (Shipwell) and Small Parcel (TechShip, Veeqo) sections
+- [x] Shipping Integration: add active integration selector per category (LTL and Small Parcel)
+- [x] Shipping Integration: add shipping_integration_settings DB table to persist active integration per category
+- [x] Shipping Integration: landing overview shows both categories with active integration badge and quick-switch button

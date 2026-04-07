@@ -100,6 +100,8 @@ import {
   techshipConfigs,
   TechshipConfig,
   InsertTechshipConfig,
+  shippingIntegrationSettings,
+  ShippingIntegrationSetting,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3362,4 +3364,26 @@ export async function deleteTechshipConfig(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(techshipConfigs).where(eq(techshipConfigs.id, id));
+}
+
+// ─── Shipping Integration Active Selection ───────────────────────────────────
+export async function getActiveShippingIntegration(category: "ltl" | "small_parcel"): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(shippingIntegrationSettings).where(eq(shippingIntegrationSettings.category, category));
+  return rows[0]?.activeIntegration ?? null;
+}
+
+export async function setActiveShippingIntegration(category: "ltl" | "small_parcel", integration: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(shippingIntegrationSettings)
+    .values({ category, activeIntegration: integration })
+    .onDuplicateKeyUpdate({ set: { activeIntegration: integration } });
+}
+
+export async function getAllShippingIntegrationSettings(): Promise<ShippingIntegrationSetting[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(shippingIntegrationSettings);
 }

@@ -168,6 +168,8 @@ import {
   getTechshipConfig,
   upsertTechshipConfig,
   deleteTechshipConfig,
+  getActiveShippingIntegration,
+  setActiveShippingIntegration,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -6225,11 +6227,31 @@ const techshipRouter = router({
     }),
 });
 
+const shippingIntegrationRouter = router({
+  getSettings: protectedProcedure.query(async () => {
+    const [ltl, sp] = await Promise.all([
+      getActiveShippingIntegration('ltl'),
+      getActiveShippingIntegration('small_parcel'),
+    ]);
+    return { ltl: ltl ?? 'shipwell', small_parcel: sp ?? 'techship' };
+  }),
+  setActive: protectedProcedure
+    .input(z.object({
+      category: z.enum(['ltl', 'small_parcel']),
+      integration: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      await setActiveShippingIntegration(input.category, input.integration);
+      return { success: true };
+    }),
+});
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
   shippingDashboard: shippingDashboardRouter,
   smallParcel: smallParcelRouter,
   techship: techshipRouter,
+  shippingIntegration: shippingIntegrationRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

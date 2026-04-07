@@ -1209,3 +1209,14 @@ export const techshipConfigs = mysqlTable("techship_configs", {
 });
 export type TechshipConfig = typeof techshipConfigs.$inferSelect;
 export type InsertTechshipConfig = typeof techshipConfigs.$inferInsert;
+
+// ─── Shipping Integration Active Selection ───────────────────────────────────
+export const shippingIntegrationSettings = mysqlTable("shipping_integration_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 'ltl' or 'small_parcel' */
+  category: varchar("category", { length: 50 }).notNull().unique(),
+  /** e.g. 'shipwell' for LTL, 'techship' or 'veeqo' for small parcel */
+  activeIntegration: varchar("active_integration", { length: 50 }).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ShippingIntegrationSetting = typeof shippingIntegrationSettings.$inferSelect;

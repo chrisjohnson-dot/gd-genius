@@ -5262,6 +5262,11 @@ import {
   listSlaOrderActions,
   clearSlaOrderAction,
 } from "./db";
+// ─── Shipping Dashboard ───────────────────────────────────────────────────────
+import {
+  getShipReadyOrders,
+  updateOutboundDetails,
+} from "./db";
 // ─── Audit Images Routerr ──────────────────────────────────────────────────────
 import {
   listProductionScansForAudit,
@@ -5401,6 +5406,26 @@ function orderTrackingToExtensiv(o: OrderTracking) {
   };
 }
 
+// ─── Shipping Dashboard Router ──────────────────────────────────────────────
+const shippingDashboardRouter = router({
+  /** Return all ship_ready orders for the outbound dashboard */
+  listOutbound: protectedProcedure.query(async () => {
+    return getShipReadyOrders();
+  }),
+  /** Update outbound location and/or pallet count for an order */
+  updateOutbound: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      outboundLocation: z.string().optional(),
+      palletCount: z.number().int().min(0).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateOutboundDetails(id, data);
+      return { success: true };
+    }),
+});
+
 const slaPerformanceRouter = router({
   /** Run a fresh SLA snapshot against all tracked orders and persist it */
   runSnapshot: protectedProcedure
@@ -5487,5 +5512,6 @@ const slaPerformanceRouter = router({
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
+  shippingDashboard: shippingDashboardRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

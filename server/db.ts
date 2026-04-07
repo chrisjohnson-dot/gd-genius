@@ -2864,3 +2864,59 @@ export async function clearSlaOrderAction(extensivOrderId: number): Promise<void
   if (!db) return;
   await db.delete(slaOrderActions).where(eq(slaOrderActions.extensivOrderId, extensivOrderId));
 }
+
+// ─── Shipping Dashboard ───────────────────────────────────────────────────────
+/** Return all ship_ready orders for the Shipping Dashboard, ordered by shipReadyAt asc. */
+export async function getShipReadyOrders(): Promise<Array<{
+  id: number;
+  extensivOrderId: number;
+  referenceNum: string | null;
+  poNum: string | null;
+  clientId: number;
+  clientName: string;
+  facilityId: number;
+  facilityName: string | null;
+  shipToName: string | null;
+  shipToCity: string | null;
+  totalPieces: number | null;
+  requiredShipDate: string | null;
+  outboundLocation: string | null;
+  palletCount: number | null;
+  shipReadyAt: Date | null;
+  firstSeenAt: Date;
+}>> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: orderTracking.id,
+      extensivOrderId: orderTracking.extensivOrderId,
+      referenceNum: orderTracking.referenceNum,
+      poNum: orderTracking.poNum,
+      clientId: orderTracking.clientId,
+      clientName: orderTracking.clientName,
+      facilityId: orderTracking.facilityId,
+      facilityName: orderTracking.facilityName,
+      shipToName: orderTracking.shipToName,
+      shipToCity: orderTracking.shipToCity,
+      totalPieces: orderTracking.totalPieces,
+      requiredShipDate: orderTracking.requiredShipDate,
+      outboundLocation: orderTracking.outboundLocation,
+      palletCount: orderTracking.palletCount,
+      shipReadyAt: orderTracking.shipReadyAt,
+      firstSeenAt: orderTracking.firstSeenAt,
+    })
+    .from(orderTracking)
+    .where(eq(orderTracking.lifecycleStatus, "ship_ready"))
+    .orderBy(orderTracking.shipReadyAt);
+}
+
+/** Update outbound location and pallet count for an order. */
+export async function updateOutboundDetails(
+  id: number,
+  data: { outboundLocation?: string; palletCount?: number }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(orderTracking).set(data).where(eq(orderTracking.id, id));
+}

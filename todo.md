@@ -848,3 +848,14 @@
 - [x] sla_order_actions DB table with migration
 - [x] waiveOrder, removeOrder, restoreOrder, listOrderActions tRPC procedures
 - [x] Remove old SLA Tracker nav item; redirect /sla-tracker → /sla-performance
+
+## Shipping Dashboard (Apr 2026)
+- [x] Add outboundLocation and palletCount columns to order_tracking table
+- [x] Add getShipReadyOrders and updateOutboundDetails DB helpers
+- [x] Add shippingDashboard tRPC router (listOutbound, updateOutbound)
+- [x] Redesign ShippingDashboard.tsx with warehouse-grouped outbound table
+- [x] KPI tiles: Orders Ready, Total Pallets, Aging (3+ days), Critical (5+ days)
+- [x] Days-in-outbound counter with color-coded badge (green/yellow/orange/red)
+- [x] Inline edit dialog for outbound location and pallet count
+- [x] No-location warning banner
+- [x] Search filter by order ID, client, ship-to, location

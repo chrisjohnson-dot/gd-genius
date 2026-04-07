@@ -916,3 +916,4 @@
 - [x] Small Parcel: build Audit Log page (/small-parcel/audit-log) with filters by event type, date, user
 - [x] Small Parcel: add Audit Log to sidebar nav under Small Parcel section
 - [x] Small Parcel: pre-populate carrier/service in Pack & Ship from Extensiv order data
+- [x] Small Parcel: require operator to select a reason from a dropdown before manual item confirmation is accepted

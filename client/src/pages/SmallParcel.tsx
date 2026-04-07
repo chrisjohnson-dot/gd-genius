@@ -28,6 +28,21 @@ import {
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
 import { Link } from "wouter";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Steps: 1=Scan TX ID, 2=Select Package Size, 3=Scan Items, 4=Pack & Ship
@@ -305,6 +320,20 @@ function Step3ScanItems({
   const [overrideBannerDismissed, setOverrideBannerDismissed] = useState(false);
   // Per-row qty input state for manual entry
   const [qtyInputs, setQtyInputs] = useState<Record<number, string>>({});
+  // Reason dialog state: pending confirmation awaiting a reason
+  const [pendingConfirm, setPendingConfirm] = useState<{ itemIndex: number; remaining: number; sku: string } | null>(null);
+  const [selectedReason, setSelectedReason] = useState<string>("");
+  // Reason dialog for qty-set overrides
+  const [pendingQtyConfirm, setPendingQtyConfirm] = useState<{ itemIndex: number; newScanned: number; prevScanned: number; sku: string } | null>(null);
+
+  const OVERRIDE_REASONS = [
+    "Barcode damaged / unreadable",
+    "Scanner not available",
+    "Item pre-verified by supervisor",
+    "Barcode missing",
+    "Item already counted",
+    "Other",
+  ];
 
   const updateMutation = trpc.smallParcel.updateScannedItems.useMutation();
   const logAuditMutation = trpc.smallParcel.logAuditEvent.useMutation();
@@ -361,59 +390,91 @@ function Step3ScanItems({
     if (e.key === "Enter") handleScan();
   };
 
-  /** Mark an item as fully confirmed manually (circle click) */
+  /** Open reason dialog before confirming manually (circle click) */
   const handleManualConfirm = (i: number) => {
     const item = scannedItems[i];
     if (item.scanned >= item.qty) return;
     const remaining = item.qty - item.scanned;
+    setSelectedReason("");
+    setPendingConfirm({ itemIndex: i, remaining, sku: item.sku });
+  };
+
+  /** Called after operator selects a reason and confirms */
+  const commitManualConfirm = () => {
+    if (!pendingConfirm || !selectedReason) return;
+    const { itemIndex, remaining, sku } = pendingConfirm;
     const updated = scannedItems.map((it, idx) =>
-      idx === i ? { ...it, scanned: it.qty } : it
+      idx === itemIndex ? { ...it, scanned: it.qty } : it
     );
     setScannedItems(updated);
     updateMutation.mutate({ id: sessionId, scannedItems: updated });
-    setManualOverrides((prev) => new Set(prev).add(i));
+    setManualOverrides((prev) => new Set(prev).add(itemIndex));
     setOverrideBannerDismissed(false);
-    // Log the override
     logAuditMutation.mutate({
       sessionId,
       extensivOrderId,
       clientName,
       eventType: "manual_override",
-      sku: item.sku,
+      sku,
       qty: remaining,
-      notes: `Manually confirmed ${remaining} unit(s) without scanning`,
+      notes: `Reason: ${selectedReason}. Manually confirmed ${remaining} unit(s) without scanning.`,
     });
-    toast.warning(`${item.sku} — manually confirmed (${remaining} unit${remaining !== 1 ? "s" : ""} not scanned)`);
+    toast.warning(`${sku} — manually confirmed (${remaining} unit${remaining !== 1 ? "s" : ""} not scanned)`);
+    setPendingConfirm(null);
+    setSelectedReason("");
     scanInputRef.current?.focus();
   };
 
-  /** Set a specific qty via the inline number input */
+  /** Open reason dialog before committing a manual qty set */
   const handleManualQtySet = (i: number) => {
     const raw = qtyInputs[i];
     if (!raw) return;
     const newScanned = Math.min(parseInt(raw, 10) || 0, scannedItems[i].qty);
     const item = scannedItems[i];
     const prevScanned = item.scanned;
-    if (newScanned === prevScanned) return;
+    if (newScanned === prevScanned) {
+      setQtyInputs((prev) => { const n = { ...prev }; delete n[i]; return n; });
+      return;
+    }
+    if (newScanned > prevScanned) {
+      // Requires reason
+      setSelectedReason("");
+      setPendingQtyConfirm({ itemIndex: i, newScanned, prevScanned, sku: item.sku });
+    } else {
+      // Decreasing qty — no reason required
+      const updated = scannedItems.map((it, idx) =>
+        idx === i ? { ...it, scanned: newScanned } : it
+      );
+      setScannedItems(updated);
+      updateMutation.mutate({ id: sessionId, scannedItems: updated });
+      setQtyInputs((prev) => { const n = { ...prev }; delete n[i]; return n; });
+      scanInputRef.current?.focus();
+    }
+  };
+
+  /** Called after operator selects a reason for a manual qty set */
+  const commitManualQtySet = () => {
+    if (!pendingQtyConfirm || !selectedReason) return;
+    const { itemIndex, newScanned, prevScanned, sku } = pendingQtyConfirm;
     const updated = scannedItems.map((it, idx) =>
-      idx === i ? { ...it, scanned: newScanned } : it
+      idx === itemIndex ? { ...it, scanned: newScanned } : it
     );
     setScannedItems(updated);
     updateMutation.mutate({ id: sessionId, scannedItems: updated });
-    setQtyInputs((prev) => { const n = { ...prev }; delete n[i]; return n; });
-    if (newScanned > prevScanned) {
-      setManualOverrides((prev) => new Set(prev).add(i));
-      setOverrideBannerDismissed(false);
-      logAuditMutation.mutate({
-        sessionId,
-        extensivOrderId,
-        clientName,
-        eventType: "manual_override",
-        sku: item.sku,
-        qty: newScanned - prevScanned,
-        notes: `Manually set qty to ${newScanned}/${item.qty}`,
-      });
-    }
+    setQtyInputs((prev) => { const n = { ...prev }; delete n[itemIndex]; return n; });
+    setManualOverrides((prev) => new Set(prev).add(itemIndex));
+    setOverrideBannerDismissed(false);
+    logAuditMutation.mutate({
+      sessionId,
+      extensivOrderId,
+      clientName,
+      eventType: "manual_override",
+      sku,
+      qty: newScanned - prevScanned,
+      notes: `Reason: ${selectedReason}. Manually set qty to ${newScanned}/${scannedItems[itemIndex].qty}.`,
+    });
+    setPendingQtyConfirm(null);
+    setSelectedReason("");
     scanInputRef.current?.focus();
   };
 
@@ -581,6 +642,84 @@ function Step3ScanItems({
           </Button>
         </div>
       )}
+
+      {/* ── Manual Override Reason Dialog (circle-click confirm) ── */}
+      <Dialog open={!!pendingConfirm} onOpenChange={(open) => { if (!open) { setPendingConfirm(null); setSelectedReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Manual Override Required
+            </DialogTitle>
+            <DialogDescription>
+              You are confirming <span className="font-semibold font-mono">{pendingConfirm?.sku}</span> without scanning{pendingConfirm && pendingConfirm.remaining > 0 ? ` (${pendingConfirm.remaining} unit${pendingConfirm.remaining !== 1 ? "s" : ""} remaining)` : ""}. Please select a reason — this will be recorded in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Select value={selectedReason} onValueChange={setSelectedReason}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a reason…" />
+              </SelectTrigger>
+              <SelectContent>
+                {OVERRIDE_REASONS.map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setPendingConfirm(null); setSelectedReason(""); }}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedReason}
+              onClick={commitManualConfirm}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Confirm Override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Manual Override Reason Dialog (qty input confirm) ── */}
+      <Dialog open={!!pendingQtyConfirm} onOpenChange={(open) => { if (!open) { setPendingQtyConfirm(null); setSelectedReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Manual Override Required
+            </DialogTitle>
+            <DialogDescription>
+              You are manually setting <span className="font-semibold font-mono">{pendingQtyConfirm?.sku}</span> to {pendingQtyConfirm?.newScanned}/{pendingQtyConfirm && scannedItems[pendingQtyConfirm.itemIndex]?.qty} without scanning the additional units. Please select a reason — this will be recorded in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Select value={selectedReason} onValueChange={setSelectedReason}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a reason…" />
+              </SelectTrigger>
+              <SelectContent>
+                {OVERRIDE_REASONS.map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setPendingQtyConfirm(null); setSelectedReason(""); setQtyInputs((prev) => { if (!pendingQtyConfirm) return prev; const n = { ...prev }; delete n[pendingQtyConfirm.itemIndex]; return n; }); }}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedReason}
+              onClick={commitManualQtySet}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Confirm Override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

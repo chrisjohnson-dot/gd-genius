@@ -434,13 +434,13 @@ export default function LocationConfig() {
         {/* Config selector */}
         <div className="bg-card border border-border rounded-2xl px-5 py-4">
             <div className="flex items-center gap-4">
-              <Label className="shrink-0">API Configuration:</Label>
+              <Label className="shrink-0">Warehouse:</Label>
               <Select
                 value={selectedConfigId ? String(selectedConfigId) : ""}
                 onValueChange={(v) => setSelectedConfigId(Number(v))}
               >
                 <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Select a configuration..." />
+                  <SelectValue placeholder="Select a warehouse..." />
                 </SelectTrigger>
                 <SelectContent>
                   {(configs ?? []).map((c) => (

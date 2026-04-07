@@ -3164,6 +3164,17 @@ const returnsRouter = router({
       if (!config) throw new TRPCError({ code: "NOT_FOUND" });
       return fetchAllFacilities(config);
     }),
+
+  // Look up a SKU in Extensiv to auto-fill description
+  lookupSku: protectedProcedure
+    .input(z.object({ configId: z.number(), clientId: z.number(), sku: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+      const descMap = await fetchItemDescriptions(config, input.clientId);
+      const description = descMap.get(input.sku) ?? null;
+      return { sku: input.sku, description };
+    }),
 });
 // ─── Cortex Integration Router ────────────────────────────────────────────────
 const cortexRouter = router({

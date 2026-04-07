@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   QrCode,
   Download,
@@ -25,6 +27,14 @@ import {
   Clock,
   Link as LinkIcon,
   User,
+  Search,
+  Settings2,
+  Plus,
+  Pencil,
+  Trash2,
+  Globe,
+  Key,
+  XCircle,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -262,29 +272,36 @@ function SessionDetailDialog({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function QrScanHistory() {
-  const [filterCustomerId, setFilterCustomerId] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"" | "active" | "paused" | "closed">("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
+  const [search, setSearch] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const { data: customerApps = [] } = trpc.qrScanning.listCustomerApps.useQuery();
-
   const queryInput = useMemo(() => ({
-    customerId: filterCustomerId || undefined,
-    status: (filterStatus || undefined) as "active" | "paused" | "closed" | undefined,
     dateFrom: filterDateFrom || undefined,
     dateTo: filterDateTo || undefined,
-    limit: 100,
+    limit: 200,
     offset: 0,
-  }), [filterCustomerId, filterStatus, filterDateFrom, filterDateTo]);
+  }), [filterDateFrom, filterDateTo]);
 
-  const { data: sessions = [], isLoading, refetch } = trpc.qrScanning.listSessionHistory.useQuery(queryInput);
+  const { data: allSessions = [], isLoading, refetch } = trpc.qrScanning.listSessionHistory.useQuery(queryInput);
+
+  const sessions = useMemo(() => {
+    if (!search.trim()) return allSessions;
+    const q = search.toLowerCase();
+    return allSessions.filter((s) =>
+      (s.customerName ?? "").toLowerCase().includes(q) ||
+      (s.customerId ?? "").toLowerCase().includes(q) ||
+      (s.runId ?? "").toLowerCase().includes(q) ||
+      (s.lineId ?? "").toLowerCase().includes(q) ||
+      (s.sessionId ?? "").toLowerCase().includes(q)
+    );
+  }, [allSessions, search]);
 
   // Bulk export query (lazy)
   const exportAll = trpc.qrScanning.exportAllSessionsCsv.useQuery(
-    { customerId: filterCustomerId || undefined, dateFrom: filterDateFrom || undefined, dateTo: filterDateTo || undefined },
+    { dateFrom: filterDateFrom || undefined, dateTo: filterDateTo || undefined },
     { enabled: false }
   );
 
@@ -307,13 +324,12 @@ export default function QrScanHistory() {
   }
 
   function clearFilters() {
-    setFilterCustomerId("");
-    setFilterStatus("");
     setFilterDateFrom("");
     setFilterDateTo("");
+    setSearch("");
   }
 
-  const hasFilters = filterCustomerId || filterStatus || filterDateFrom || filterDateTo;
+  const hasFilters = filterDateFrom || filterDateTo || search;
 
   // Summary stats
   const totalScanned = sessions.reduce((sum, s) => sum + s.totalScanned, 0);
@@ -400,37 +416,7 @@ export default function QrScanHistory() {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Customer</label>
-              <Select value={filterCustomerId || "all"} onValueChange={(v) => setFilterCustomerId(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="All customers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All customers</SelectItem>
-                  {customerApps.map((a) => (
-                    <SelectItem key={a.customerId} value={a.customerId}>
-                      {a.customerName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Status</label>
-              <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v as any)}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="paused">Paused</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">From date</label>
               <Input
@@ -448,6 +434,23 @@ export default function QrScanHistory() {
                 value={filterDateTo}
                 onChange={(e) => setFilterDateTo(e.target.value)}
               />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Search</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  className="h-8 text-xs pl-8 pr-8"
+                  placeholder="Customer, run, line, session ID…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setSearch("")}>
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>
@@ -573,6 +576,9 @@ export default function QrScanHistory() {
           onClose={() => setSelectedSessionId(null)}
         />
       )}
+
+      {/* Customer App Config (item 13) */}
+      <CustomerAppConfigSection />
     </div>
   );
 }
@@ -652,6 +658,191 @@ function ExpandedSessionRow({ sessionId }: { sessionId: string }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ── Customer App Config Section (item 13) ─────────────────────────────────────
+type CustomerApp = {
+  id: number;
+  customerId: string;
+  customerName: string;
+  appUrl: string;
+  authHeader?: string | null;
+  enabled: boolean;
+  notes?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const EMPTY_APP_FORM = {
+  customerId: "",
+  customerName: "",
+  appUrl: "",
+  authHeader: "",
+  enabled: true,
+  notes: "",
+};
+
+function CustomerAppConfigSection() {
+  const utils = trpc.useUtils();
+  const { data: apps = [], isLoading } = trpc.qrScanning.listCustomerApps.useQuery();
+  const [expanded, setExpanded] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomerApp | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_APP_FORM });
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const upsert = trpc.qrScanning.upsertCustomerApp.useMutation({
+    onSuccess: () => {
+      utils.qrScanning.listCustomerApps.invalidate();
+      toast.success(editing ? "Customer app updated." : "Customer app added.");
+      setDialogOpen(false);
+      setEditing(null);
+      setForm({ ...EMPTY_APP_FORM });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const remove = trpc.qrScanning.deleteCustomerApp.useMutation({
+    onSuccess: () => {
+      utils.qrScanning.listCustomerApps.invalidate();
+      toast.success("Customer app removed.");
+      setDeleteConfirm(null);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  function openAdd() { setEditing(null); setForm({ ...EMPTY_APP_FORM }); setDialogOpen(true); }
+  function openEdit(app: CustomerApp) { setEditing(app); setForm({ customerId: app.customerId, customerName: app.customerName, appUrl: app.appUrl, authHeader: app.authHeader ?? "", enabled: app.enabled, notes: app.notes ?? "" }); setDialogOpen(true); }
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    upsert.mutate({ customerId: form.customerId.trim(), customerName: form.customerName.trim(), appUrl: form.appUrl.trim(), authHeader: form.authHeader?.trim() || undefined, enabled: form.enabled, notes: form.notes?.trim() || undefined });
+  }
+
+  return (
+    <div className="border border-border/60 rounded-xl overflow-hidden">
+      {/* Collapsible header */}
+      <button
+        className="w-full flex items-center gap-3 px-5 py-4 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <Settings2 className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex-1">
+          <span className="font-semibold text-sm">Customer App Configuration</span>
+          <span className="ml-2 text-xs text-muted-foreground">
+            {isLoading ? "…" : `${apps.length} app${apps.length !== 1 ? "s" : ""} configured`}
+          </span>
+        </div>
+        {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+      </button>
+
+      {expanded && (
+        <div className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Configure customer app endpoints that receive QR scan events from the production line in real time.
+            </p>
+            <Button size="sm" onClick={openAdd} className="gap-1.5 shrink-0 ml-4">
+              <Plus className="h-3.5 w-3.5" /> Add App
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="text-xs text-muted-foreground">Loading…</div>
+          ) : apps.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              <QrCode className="h-8 w-8 mx-auto mb-2 opacity-20" />
+              No customer apps configured yet.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {apps.map((app) => (
+                <div key={app.customerId} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border/50 bg-card">
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm">{app.customerName}</span>
+                      <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">{app.customerId}</Badge>
+                      {app.enabled
+                        ? <Badge className="bg-green-600/20 text-green-400 border-green-600/30 text-[10px] gap-1"><CheckCircle2 className="h-2.5 w-2.5" /> Active</Badge>
+                        : <Badge className="bg-red-600/20 text-red-400 border-red-600/30 text-[10px] gap-1"><XCircle className="h-2.5 w-2.5" /> Disabled</Badge>
+                      }
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Globe className="h-3 w-3 shrink-0" />
+                      <span className="truncate font-mono">{app.appUrl}</span>
+                    </div>
+                    {app.authHeader && (
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Key className="h-3 w-3 shrink-0" />
+                        <span className="font-mono">{"•".repeat(Math.min(app.authHeader.length, 20))}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(app as CustomerApp)}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => setDeleteConfirm(app.customerId)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditing(null); setForm({ ...EMPTY_APP_FORM }); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Customer App" : "Add Customer App"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSave} className="space-y-3 pt-1">
+            <div className="space-y-1">
+              <Label className="text-xs">Customer ID *</Label>
+              <Input value={form.customerId} onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))} placeholder="e.g. CUST-001" required disabled={!!editing} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Customer Name *</Label>
+              <Input value={form.customerName} onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))} placeholder="e.g. Acme Corp" required />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">App URL *</Label>
+              <Input value={form.appUrl} onChange={(e) => setForm((f) => ({ ...f, appUrl: e.target.value }))} placeholder="https://app.customer.com/webhook" required />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Auth Header (optional)</Label>
+              <Input value={form.authHeader} onChange={(e) => setForm((f) => ({ ...f, authHeader: e.target.value }))} placeholder="Bearer token or API key" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Notes (optional)</Label>
+              <Input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={form.enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, enabled: v }))} id="app-enabled" />
+              <Label htmlFor="app-enabled" className="text-xs cursor-pointer">Enabled</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={upsert.isPending}>{upsert.isPending ? "Saving…" : editing ? "Update" : "Add"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(o) => { if (!o) setDeleteConfirm(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Remove Customer App?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">This will remove the customer app configuration. Active QR scan sessions linked to this customer will stop forwarding.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="destructive" disabled={remove.isPending} onClick={() => deleteConfirm && remove.mutate({ customerId: deleteConfirm })}>
+              {remove.isPending ? "Removing…" : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

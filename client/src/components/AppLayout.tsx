@@ -68,7 +68,7 @@ const allocationItems = [
 
 const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
-  { href: "/small-parcel/history", label: "Session History", icon: ScrollText },
+  { href: "/small-parcel/history", label: "Label is Printed", icon: ScrollText },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
   { href: "/small-parcel/package-sizes", label: "Package Sizes", icon: Package },
   { href: "/small-parcel/high-value-skus", label: "High-Value SKUs", icon: ShieldAlert },
@@ -79,10 +79,10 @@ const smallParcelItems = [
 
 const qcItems = [
   { href: "/qc/scanner",     label: "QC Scanner",      icon: ScanBarcode },
-  { href: "/qc/scan-label",  label: "QC Scan & Label", icon: Tag },
-  { href: "/qc/label-files",       label: "Label Files",      icon: FileText },
   { href: "/qc/production-line",   label: "Production Line Scans",  icon: Activity },
-  { href: "/qc/qr-scan-history",   label: "K18 QR Scan History",  icon: QrCode },
+  { href: "/qc/scan-label",  label: "QC Scan & Label", icon: Tag },
+  { href: "/qc/qr-scan-history",   label: "K18QR Scanning",  icon: QrCode },
+  { href: "/qc/label-files",       label: "Label Files",      icon: FileText },
   { href: "/qc/audit",             label: "Audit Log",        icon: ClipboardList },
 ];
 
@@ -90,7 +90,6 @@ const shippingItems = [
   { href: "/shipping",              label: "Shipping Dashboard", icon: Ship },
   { href: "/shipping/pallet-scan",  label: "Pallet Scanner",      icon: ScanBarcode },
   { href: "/shipping/history", label: "Shipping History",    icon: ScrollText },
-  { href: "/shipping/carriers",label: "Carriers",            icon: Truck },
 ];
 
 const returnsItems = [
@@ -108,14 +107,14 @@ const configItems = [
   { href: "/settings",                   label: "API Settings",       icon: Cog },
   { href: "/locations",                  label: "Location Config",    icon: MapPin },
   { href: "/rules",                      label: "Allocation Rules",   icon: ListChecks },
-  { href: "/schedule",                   label: "Auto-Run Schedule",  icon: CalendarClock },
+  { href: "/schedule",                   label: "Auto-Run Allocation",  icon: CalendarClock },
   { href: "/diagnostics",                label: "API Diagnostics",    icon: Stethoscope },
   { href: "/shipping-integration",       label: "Shipping Integration", icon: Truck },
   { href: "/client-visibility",          label: "Client Visibility",  icon: Users },
   { href: "/cortex-settings",            label: "Cortex Integration", icon: Network },
   { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },
-  { href: "/config/label-scan",            label: "Label Scan Settings", icon: ScanBarcode },
-  { href: "/config/customer-apps",          label: "Customer App Config",  icon: QrCode },
+  { href: "/config/wh-location",          label: "WH Location Config",  icon: MapPin },
+  { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";
@@ -256,36 +255,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const isOnConfigRoute = configItems.some((item) => location === item.href);
-  // Default: open when on a config route, otherwise use stored preference (default closed)
-  const [configOpen, setConfigOpen] = useState(() =>
-    readStoredBool("sidebar:configOpen", isOnConfigRoute)
-  );
-
-  // Persist config section state whenever it changes
-  useEffect(() => {
-    try { localStorage.setItem("sidebar:configOpen", String(configOpen)); } catch { /* ignore */ }
-  }, [configOpen]);
-
-  // Auto-expand when navigating to a config route
-  useEffect(() => {
-    if (isOnConfigRoute) setConfigOpen(true);
-  }, [isOnConfigRoute]);
+  const [configOpen, setConfigOpen] = useState(() => readStoredBool("sidebar:configOpen", isOnConfigRoute));
+  useEffect(() => { try { localStorage.setItem("sidebar:configOpen", String(configOpen)); } catch { /* ignore */ } }, [configOpen]);
+  useEffect(() => { if (isOnConfigRoute) setConfigOpen(true); }, [isOnConfigRoute]);
 
   const isOnAuditRoute = auditItems.some((item) => location === item.href);
-  // Default: open when on an audit route, otherwise use stored preference (default closed)
-  const [auditOpen, setAuditOpen] = useState(() =>
-    readStoredBool("sidebar:auditOpen", isOnAuditRoute)
-  );
+  const [auditOpen, setAuditOpen] = useState(() => readStoredBool("sidebar:auditOpen", isOnAuditRoute));
+  useEffect(() => { try { localStorage.setItem("sidebar:auditOpen", String(auditOpen)); } catch { /* ignore */ } }, [auditOpen]);
+  useEffect(() => { if (isOnAuditRoute) setAuditOpen(true); }, [isOnAuditRoute]);
 
-  // Persist audit section state whenever it changes
-  useEffect(() => {
-    try { localStorage.setItem("sidebar:auditOpen", String(auditOpen)); } catch { /* ignore */ }
-  }, [auditOpen]);
+  const isOnSmallParcelRoute = smallParcelItems.some((item) => location === item.href);
+  const [smallParcelOpen, setSmallParcelOpen] = useState(() => readStoredBool("sidebar:smallParcelOpen", isOnSmallParcelRoute));
+  useEffect(() => { try { localStorage.setItem("sidebar:smallParcelOpen", String(smallParcelOpen)); } catch { /* ignore */ } }, [smallParcelOpen]);
+  useEffect(() => { if (isOnSmallParcelRoute) setSmallParcelOpen(true); }, [isOnSmallParcelRoute]);
 
-  // Auto-expand when navigating to an audit route
-  useEffect(() => {
-    if (isOnAuditRoute) setAuditOpen(true);
-  }, [isOnAuditRoute]);
+  const isOnQcRoute = qcItems.some((item) => location === item.href);
+  const [qcOpen, setQcOpen] = useState(() => readStoredBool("sidebar:qcOpen", isOnQcRoute));
+  useEffect(() => { try { localStorage.setItem("sidebar:qcOpen", String(qcOpen)); } catch { /* ignore */ } }, [qcOpen]);
+  useEffect(() => { if (isOnQcRoute) setQcOpen(true); }, [isOnQcRoute]);
+
+  const isOnShippingRoute = shippingItems.some((item) => location === item.href);
+  const [shippingOpen, setShippingOpen] = useState(() => readStoredBool("sidebar:shippingOpen", isOnShippingRoute));
+  useEffect(() => { try { localStorage.setItem("sidebar:shippingOpen", String(shippingOpen)); } catch { /* ignore */ } }, [shippingOpen]);
+  useEffect(() => { if (isOnShippingRoute) setShippingOpen(true); }, [isOnShippingRoute]);
+
+  const isOnReturnsRoute = returnsItems.some((item) => location === item.href);
+  const [returnsOpen, setReturnsOpen] = useState(() => readStoredBool("sidebar:returnsOpen", isOnReturnsRoute));
+  useEffect(() => { try { localStorage.setItem("sidebar:returnsOpen", String(returnsOpen)); } catch { /* ignore */ } }, [returnsOpen]);
+  useEffect(() => { if (isOnReturnsRoute) setReturnsOpen(true); }, [isOnReturnsRoute]);
 
   // Save nav scroll position before navigation, restore after
   useEffect(() => {
@@ -403,51 +400,64 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Small Parcel section */}
+          {/* Small Parcel section — collapsible */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Small Parcel
-            </p>
-            <div className="space-y-0.5">
-              {smallParcelItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
-          </div>
-          {/* QC section */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              QC
-            </p>
-            <div className="space-y-0.5">
-              {qcItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setSmallParcelOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Small Parcel</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${smallParcelOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {smallParcelOpen && (
+              <div className="space-y-0.5">
+                {smallParcelItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Shipping section */}
+          {/* QC section — collapsible */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Shipping
-            </p>
-            <div className="space-y-0.5">
-              {shippingItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setQcOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">QC</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${qcOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {qcOpen && (
+              <div className="space-y-0.5">
+                {qcItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Returns section */}
+          {/* Shipping section — collapsible */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Returns
-            </p>
-            <div className="space-y-0.5">
-              {returnsItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setShippingOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Shipping</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${shippingOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {shippingOpen && (
+              <div className="space-y-0.5">
+                {shippingItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Returns section — collapsible */}
+          <div>
+            <button onClick={() => setReturnsOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Returns</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${returnsOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {returnsOpen && (
+              <div className="space-y-0.5">
+                {returnsItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Audit section — collapsible */}

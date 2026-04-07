@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Ship, RefreshCw, MapPin, Package, Clock, Search,
-  ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer,
+  ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer, Truck,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -207,6 +207,150 @@ function WarehouseSection({ facilityName, orders, onEdit }: {
   );
 }
 
+// ─── B2B Shipments Mock Data ────────────────────────────────────────────────────────────────
+
+const MOCK_B2B_SHIPMENTS = [
+  {
+    id: "B2B-001",
+    client: "Keurig Dr Pepper",
+    shipTo: "Walmart Distribution Center #7042",
+    shipToAddress: "1050 Walmart Blvd, Bentonville, AR 72712",
+    pallets: 24,
+    outboundLocation: "OB-A3",
+    carrier: "XPO Logistics",
+    proNum: "XPO-8841923",
+    requiredShipDate: "2026-04-09",
+    status: "staged" as const,
+  },
+  {
+    id: "B2B-002",
+    client: "Keurig Dr Pepper",
+    shipTo: "Costco Wholesale — Mississauga DC",
+    shipToAddress: "5900 Hurontario St, Mississauga, ON L5R 4B3",
+    pallets: 18,
+    outboundLocation: "OB-B1",
+    carrier: "Day & Ross Freight",
+    proNum: "DR-20261104",
+    requiredShipDate: "2026-04-10",
+    status: "staged" as const,
+  },
+  {
+    id: "B2B-003",
+    client: "Keurig Dr Pepper",
+    shipTo: "Loblaw Companies — Brampton RDC",
+    shipToAddress: "1 Presidents Choice Circle, Brampton, ON L6Y 5S5",
+    pallets: 30,
+    outboundLocation: "OB-C2",
+    carrier: "Challenger Motor Freight",
+    proNum: "CMF-774412",
+    requiredShipDate: "2026-04-08",
+    status: "awaiting_pickup" as const,
+  },
+  {
+    id: "B2B-004",
+    client: "Keurig Dr Pepper",
+    shipTo: "Amazon Fulfillment Center YYZ4",
+    shipToAddress: "8050 Heritage Rd, Brampton, ON L6Y 0C4",
+    pallets: 12,
+    outboundLocation: "OB-A1",
+    carrier: "FedEx Freight",
+    proNum: "FXF-9920341",
+    requiredShipDate: "2026-04-11",
+    status: "staged" as const,
+  },
+  {
+    id: "B2B-005",
+    client: "Keurig Dr Pepper",
+    shipTo: "Metro Inc. — Laval DC",
+    shipToAddress: "3050 Boul. Le Carrefour, Laval, QC H7T 2K7",
+    pallets: 20,
+    outboundLocation: "OB-D4",
+    carrier: "Mullen Trucking",
+    proNum: "MUL-330192",
+    requiredShipDate: "2026-04-12",
+    status: "staged" as const,
+  },
+];
+
+function B2BShipmentsSection() {
+  const [collapsed, setCollapsed] = useState(false);
+  const statusLabel = (s: string) =>
+    s === "staged" ? { label: "Staged", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" }
+    : { label: "Awaiting Pickup", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-[#1a1d24] overflow-hidden mb-4">
+      <button
+        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left"
+        onClick={() => setCollapsed((c) => !c)}
+      >
+        {collapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+        <Truck className="h-4 w-4 text-blue-400 shrink-0" />
+        <span className="font-semibold text-[15px] text-white flex-1">B2B Shipments — Outbound Staging</span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1"><Ship className="h-3.5 w-3.5" />{MOCK_B2B_SHIPMENTS.length} shipments</span>
+          <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" />{MOCK_B2B_SHIPMENTS.reduce((s, o) => s + o.pallets, 0)} pallets</span>
+          <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">Mock Data</Badge>
+        </div>
+      </button>
+
+      {!collapsed && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-t border-white/[0.06] bg-white/[0.02]">
+                {["Shipment ID", "Client", "Ship-To Address", "Carrier / PRO#", "Req. Ship Date"].map((h) => (
+                  <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
+                ))}
+                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span className="flex items-center justify-center gap-1"><MapPin className="h-3 w-3" />Location</span>
+                </th>
+                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span className="flex items-center justify-center gap-1"><Package className="h-3 w-3" />Pallets</span>
+                </th>
+                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {MOCK_B2B_SHIPMENTS.map((s, idx) => {
+                const st = statusLabel(s.status);
+                return (
+                  <tr key={s.id} className={cn("border-t border-white/[0.04] hover:bg-white/[0.025] transition-colors", idx % 2 !== 0 && "bg-white/[0.015]")}>
+                    <td className="px-4 py-3">
+                      <div className="font-mono text-[13px] font-semibold text-white">{s.id}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-[13px] text-[#e2e8f0] font-medium">{s.client}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-[13px] text-[#cbd5e1]">{s.shipTo}</div>
+                      <div className="text-[11px] text-muted-foreground">{s.shipToAddress}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-[13px] text-[#cbd5e1]">{s.carrier}</div>
+                      <div className="font-mono text-[11px] text-muted-foreground">{s.proNum}</div>
+                    </td>
+                    <td className="px-4 py-3 text-[13px] text-[#cbd5e1] whitespace-nowrap">{fmtDate(s.requiredShipDate)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center gap-1 text-[13px] text-[#93c5fd]"><MapPin className="h-3 w-3 shrink-0" />{s.outboundLocation}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-white"><Package className="h-3.5 w-3.5 text-muted-foreground" />{s.pallets}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", st.cls)}>{st.label}</Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ShippingDashboard() {
@@ -289,6 +433,9 @@ export default function ShippingDashboard() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input className="pl-8 text-sm h-9" placeholder="Search order, client, location…" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
+
+      {/* B2B Shipments section */}
+      <B2BShipmentsSection />
 
       {/* Content */}
       {isLoading ? (

@@ -941,3 +941,23 @@
 - [x] Small Parcel Scan Items: remove Back and New Shipment buttons; single large Pack & Ship / Print Label button; auto-reset to scan screen after label purchase
 - [x] Small Parcel: show 10-second countdown reprint button after label purchase; auto-resets to Step 1 when countdown expires or operator dismisses
 - [ ] Small Parcel: configurable reprint countdown duration (5/10/15/30s) stored in DB, editable by supervisors under Small Parcel settings
+
+## Apr 2026 — 17-item batch
+
+- [ ] 1. Remove company-wide summary from SLA screen top
+- [ ] 2. Make SLA orders clickable to show order detail drawer
+- [ ] 3. Make all list screens start collapsed (Small Parcel, QC, Shipping, Returns sections in sidebar)
+- [ ] 4. Rename "Session History" under Small Parcel to "Label is Printed"; add search by transaction ID / customer / client
+- [ ] 5. Under QC folder: move Label Files down to just above Audit Log
+- [ ] 6. Under QC folder: move Production Line Scans up to above QC Scan & Label
+- [ ] 7. Scan History (QrScanHistory): remove customer filter and status filter; keep date range + free-text search
+- [ ] 8. Shipping Dashboard: add mock B2B shipment section with client, ship-to address, pallet count, outbound location
+- [ ] 9. Remove Carriers from Shipping nav section
+- [ ] 10. Process Returns: show only customers belonging to the selected warehouse
+- [ ] 11. Scan Items (Returns): add inbound shipping barcode scan field with "Not Available" button before item scan
+- [ ] 12. Scan Items (Returns): remove qty input and description; auto-lookup item in Extensiv on SKU scan; show condition inline
+- [ ] 13. Merge Customer App Config into K18 QR Scan History page; rename to "K18QR Scanning"
+- [ ] 14. Rename "Label Scan Settings" to "Scan and Label Settings"
+- [ ] 15. Location Config: remove API configuration selector; go straight to customer details; add location config functionality to individual customers under Allocation Rules
+- [ ] 16. Put Away Config / Location Priority Config: filter customers by selected warehouse; show only aisles+levels (not all locations); add new WH Location Config for warehouse numbering setup
+- [ ] 17. Rename "Auto-Run Schedule" to "Auto-Run Allocation" (nav + page title)

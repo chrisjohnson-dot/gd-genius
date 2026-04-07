@@ -56,6 +56,7 @@ import SmallParcelAuditLog from "@/pages/SmallParcelAuditLog";
 import SmallParcelSupervisorPins from "@/pages/SmallParcelSupervisorPins";
 import SmallParcelHighValueSkus from "@/pages/SmallParcelHighValueSkus";
 import SmallParcelSettings from "@/pages/SmallParcelSettings";
+import WhLocationConfig from "@/pages/WhLocationConfig";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -109,6 +110,7 @@ function AppRoutes() {
         <Route path="/qc/scan-label" component={QcScanLabel} />
         <Route path="/qc/label-files" component={LabelFiles} />
         <Route path="/config/label-scan" component={LabelScanSettings} />
+        <Route path="/config/wh-location" component={WhLocationConfig} />
         <Route path="/config/customer-apps" component={CustomerAppConfig} />
         <Route path="/qc/production-line" component={ProductionLine} />
         <Route path="/qc/qr-scan-history" component={QrScanHistory} />

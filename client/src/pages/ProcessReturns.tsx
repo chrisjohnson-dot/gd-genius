@@ -203,20 +203,26 @@ function StepWarehouse({
   );
 }
 
-// ─── Step 2: Select Customer ──────────────────────────────────────────────────
+// // ─── Step 2: Select Customer ──────────────────────────────────────────────
 function StepCustomer({
   configId,
+  facilityId,
   warehouseName,
   onSelect,
   onBack,
 }: {
   configId: number;
+  facilityId: number;
   warehouseName: string;
   onSelect: (clientId: number, clientName: string) => void;
   onBack: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const { data: customers = [], isLoading } = trpc.extensiv.customers.useQuery({ configId });
+  // Use facility-scoped customers so only customers at this warehouse are shown
+  const { data: customers = [], isLoading } = trpc.extensiv.customersForFacility.useQuery(
+    { configId, facilityId },
+    { enabled: !!configId && !!facilityId }
+  );;
 
   const filtered = [...customers]
     .filter((c: { id: number; name: string }) =>
@@ -289,30 +295,49 @@ function StepScanItems({
   onBack: () => void;
 }) {
   const utils = trpc.useUtils();
+  const inboundRef = useRef<HTMLInputElement>(null);
   const skuRef = useRef<HTMLInputElement>(null);
 
-  // Form state
+  // Inbound shipping barcode (item 11)
+  const [inboundBarcode, setInboundBarcode] = useState("");
+  const [inboundConfirmed, setInboundConfirmed] = useState(false);
+
+  // Scan form state — no manual quantity or description (items 11 & 12)
   const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [condition, setCondition] = useState<Condition>("good");
+  const [condition, setCondition] = useState<Condition | null>(null);
   const [disposition, setDisposition] = useState<Disposition>("restock");
   const [lotNumber, setLotNumber] = useState("");
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [skuLookupEnabled, setSkuLookupEnabled] = useState(false);
+
+  // Auto-lookup SKU description from Extensiv when SKU is scanned
+  const { data: skuData, isFetching: skuLooking } = trpc.returns.lookupSku.useQuery(
+    { configId: session.configId, clientId: session.clientId, sku: sku.trim() },
+    { enabled: skuLookupEnabled && sku.trim().length > 0 }
+  );
+
+  // When SKU lookup returns, fill description and show condition picker
+  useEffect(() => {
+    if (skuData && skuLookupEnabled) {
+      setDescription(skuData.description ?? "");
+      setSkuLookupEnabled(false);
+    }
+  }, [skuData, skuLookupEnabled]);
 
   const addItem = trpc.returns.addItem.useMutation({
     onSuccess: () => {
       utils.returns.getSession.invalidate({ id: session.id });
       onItemAdded();
-      // Reset form but keep condition/disposition
       setSku("");
       setDescription("");
-      setQuantity(1);
+      setCondition(null);
       setLotNumber("");
       setNotes("");
       setEditingId(null);
+      setSkuLookupEnabled(false);
       setTimeout(() => skuRef.current?.focus(), 50);
     },
     onError: (err) => toast.error(err.message),
@@ -324,10 +349,11 @@ function StepScanItems({
       onItemAdded();
       setSku("");
       setDescription("");
-      setQuantity(1);
+      setCondition(null);
       setLotNumber("");
       setNotes("");
       setEditingId(null);
+      setSkuLookupEnabled(false);
       setTimeout(() => skuRef.current?.focus(), 50);
     },
     onError: (err) => toast.error(err.message),
@@ -360,18 +386,27 @@ function StepScanItems({
     },
   });
 
-  // Auto-focus SKU input on mount
+  // Auto-focus inbound barcode input on mount
   useEffect(() => {
-    setTimeout(() => skuRef.current?.focus(), 100);
+    setTimeout(() => inboundRef.current?.focus(), 100);
   }, []);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // When SKU is entered (via scan/Enter), trigger Extensiv lookup
+  function handleSkuKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && sku.trim()) {
+      e.preventDefault();
+      setSkuLookupEnabled(true);
+    }
+  }
+
+  // When condition is selected, immediately add the item (qty = 1 per scan)
+  function handleConditionSelect(c: Condition) {
     if (!sku.trim()) return;
+    setCondition(c);
     if (editingId !== null) {
-      updateItem.mutate({ id: editingId, sku: sku.trim(), description: description || undefined, quantity, condition, disposition, lotNumber: lotNumber || undefined, notes: notes || undefined });
+      updateItem.mutate({ id: editingId, sku: sku.trim(), description: description || undefined, quantity: 1, condition: c, disposition, lotNumber: lotNumber || undefined, notes: notes || undefined });
     } else {
-      addItem.mutate({ sessionId: session.id, sku: sku.trim(), description: description || undefined, quantity, condition, disposition, lotNumber: lotNumber || undefined, notes: notes || undefined });
+      addItem.mutate({ sessionId: session.id, sku: sku.trim(), description: description || undefined, quantity: 1, condition: c, disposition, lotNumber: lotNumber || undefined, notes: notes || undefined });
     }
   }
 
@@ -379,7 +414,6 @@ function StepScanItems({
     setEditingId(item.id);
     setSku(item.sku);
     setDescription(item.description ?? "");
-    setQuantity(item.quantity);
     setCondition(item.condition);
     setDisposition(item.disposition);
     setLotNumber(item.lotNumber ?? "");
@@ -391,9 +425,10 @@ function StepScanItems({
     setEditingId(null);
     setSku("");
     setDescription("");
-    setQuantity(1);
+    setCondition(null);
     setLotNumber("");
     setNotes("");
+    setSkuLookupEnabled(false);
     setTimeout(() => skuRef.current?.focus(), 50);
   }
 
@@ -422,126 +457,138 @@ function StepScanItems({
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         {/* Scan form */}
         <Card className="shadow-sm border-0 bg-white dark:bg-card">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 mb-4">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center gap-2">
               <ScanBarcode className="h-4 w-4 text-blue-600" />
               <h3 className="font-semibold text-sm">
-                {editingId !== null ? "Edit Item" : "Scan / Enter Item"}
+                {editingId !== null ? "Edit Item" : "Scan Items"}
               </h3>
               {editingId !== null && (
-                <button
-                  onClick={handleCancelEdit}
-                  className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                >
+                <button onClick={handleCancelEdit} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
                   <X className="h-3 w-3" /> Cancel edit
                 </button>
               )}
             </div>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {/* SKU */}
-              <div>
-                <Label className="text-xs font-semibold mb-1 block">SKU / Barcode *</Label>
-                <Input
-                  ref={skuRef}
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  placeholder="Scan barcode or type SKU…"
-                  className="font-mono"
-                  required
-                />
-              </div>
 
-              {/* Description */}
-              <div>
-                <Label className="text-xs font-semibold mb-1 block">Description</Label>
-                <Input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional item description"
-                />
-              </div>
-
-              {/* Qty + Condition */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold mb-1 block">Quantity</Label>
+            {/* Step A: Inbound shipping barcode (item 11) */}
+            {!inboundConfirmed && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                <Label className="text-xs font-semibold block text-amber-700 dark:text-amber-400">Step 1 — Scan Inbound Shipping Barcode</Label>
+                <div className="flex gap-2">
                   <Input
-                    type="number"
-                    min={1}
-                    value={quantity}
-                    onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="tabular-nums"
+                    ref={inboundRef}
+                    value={inboundBarcode}
+                    onChange={(e) => setInboundBarcode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && inboundBarcode.trim()) {
+                        e.preventDefault();
+                        setInboundConfirmed(true);
+                        setTimeout(() => skuRef.current?.focus(), 50);
+                      }
+                    }}
+                    placeholder="Scan inbound shipping label barcode…"
+                    className="font-mono flex-1"
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0 text-xs"
+                    onClick={() => { setInboundBarcode("N/A"); setInboundConfirmed(true); setTimeout(() => skuRef.current?.focus(), 50); }}
+                  >
+                    Not Available
+                  </Button>
                 </div>
-                <div>
-                  <Label className="text-xs font-semibold mb-1 block">Condition</Label>
-                  <Select value={condition} onValueChange={(v) => setCondition(v as Condition)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CONDITION_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Disposition */}
-              <div>
-                <Label className="text-xs font-semibold mb-1 block">Disposition</Label>
-                <Select value={disposition} onValueChange={(v) => setDisposition(v as Disposition)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DISPOSITION_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Lot + Notes */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold mb-1 block">Lot / Serial #</Label>
-                  <Input
-                    value={lotNumber}
-                    onChange={(e) => setLotNumber(e.target.value)}
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold mb-1 block">Notes</Label>
-                  <Input
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Optional"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full gap-2"
-                disabled={addItem.isPending || updateItem.isPending}
-              >
-                {addItem.isPending || updateItem.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : editingId !== null ? (
-                  <Pencil className="h-4 w-4" />
-                ) : (
-                  <Plus className="h-4 w-4" />
+                {inboundBarcode.trim() && (
+                  <Button size="sm" className="w-full gap-1" onClick={() => { setInboundConfirmed(true); setTimeout(() => skuRef.current?.focus(), 50); }}>
+                    <CheckCircle className="h-3.5 w-3.5" /> Confirm Inbound Barcode
+                  </Button>
                 )}
-                {editingId !== null ? "Update Item" : "Add Item"}
-              </Button>
-            </form>
+              </div>
+            )}
+
+            {inboundConfirmed && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                Inbound: <span className="font-mono font-medium text-foreground">{inboundBarcode || "N/A"}</span>
+                <button className="ml-auto text-[10px] underline" onClick={() => { setInboundConfirmed(false); setInboundBarcode(""); }}>Change</button>
+              </div>
+            )}
+
+            {/* Step B: Scan item barcode (item 12) — only enabled after inbound confirmed */}
+            {inboundConfirmed && (
+              <>
+                <div>
+                  <Label className="text-xs font-semibold mb-1 block">Step 2 — Scan Item Barcode / SKU</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      ref={skuRef}
+                      value={sku}
+                      onChange={(e) => { setSku(e.target.value); setSkuLookupEnabled(false); setCondition(null); }}
+                      onKeyDown={handleSkuKeyDown}
+                      placeholder="Scan item barcode or type SKU, then press Enter…"
+                      className="font-mono flex-1"
+                    />
+                    {skuLooking && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />}
+                  </div>
+                  {description && (
+                    <p className="text-xs text-muted-foreground mt-1 pl-1">{description}</p>
+                  )}
+                </div>
+
+                {/* Step C: Condition picker — appears after SKU is entered (item 12) */}
+                {sku.trim() && !skuLooking && (
+                  <div>
+                    <Label className="text-xs font-semibold mb-2 block">Step 3 — Select Condition</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {CONDITION_OPTIONS.map((o) => (
+                        <button
+                          key={o.value}
+                          type="button"
+                          disabled={addItem.isPending || updateItem.isPending}
+                          onClick={() => handleConditionSelect(o.value)}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-semibold transition-all ${
+                            condition === o.value
+                              ? o.color + " ring-2 ring-offset-1 ring-current"
+                              : "border-border bg-card hover:border-blue-400"
+                          }`}
+                        >
+                          {addItem.isPending && condition === o.value ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" />
+                          ) : o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Disposition + optional lot/notes */}
+                {sku.trim() && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs font-semibold mb-1 block">Disposition</Label>
+                      <Select value={disposition} onValueChange={(v) => setDisposition(v as Disposition)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {DISPOSITION_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs font-semibold mb-1 block">Lot / Serial #</Label>
+                        <Input value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} placeholder="Optional" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold mb-1 block">Notes</Label>
+                        <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -838,6 +885,7 @@ export default function ProcessReturns() {
           {step === 2 && configId !== null && (
             <StepCustomer
               configId={configId}
+              facilityId={facilityId ?? 0}
               warehouseName={warehouseName}
               onSelect={handleCustomerSelect}
               onBack={() => setStep(1)}

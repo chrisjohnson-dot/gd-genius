@@ -14,9 +14,12 @@ import {
   Clock,
   MapPin,
   Hash,
+  Search,
+  X,
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
 import { Link } from "wouter";
+import { Input } from "@/components/ui/input";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Session {
@@ -162,12 +165,24 @@ function StatusBadge({ status }: { status: Session["status"] }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SmallParcelHistory() {
   const [statusFilter, setStatusFilter] = useState<Session["status"] | "all">("all");
+  const [search, setSearch] = useState("");
 
   const { data: sessions, isLoading, refetch } = trpc.smallParcel.listSessions.useQuery(
-    statusFilter !== "all" ? { status: statusFilter, limit: 100 } : { limit: 100 }
+    statusFilter !== "all" ? { status: statusFilter, limit: 200 } : { limit: 200 }
   );
 
-  const filtered = sessions ?? [];
+  const filtered = (sessions ?? []).filter((s) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      (s.referenceNum ?? "").toLowerCase().includes(q) ||
+      (s.clientName ?? "").toLowerCase().includes(q) ||
+      (s.shipToName ?? "").toLowerCase().includes(q) ||
+      (s.veeqoTrackingNumber ?? "").toLowerCase().includes(q) ||
+      (s.pickTicketNum ?? "").toLowerCase().includes(q) ||
+      String(s.extensivOrderId ?? "").includes(q)
+    );
+  });
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-5xl mx-auto">
@@ -178,7 +193,7 @@ export default function SmallParcelHistory() {
             <Package className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Session History</h1>
+            <h1 className="text-2xl font-bold">Label is Printed</h1>
             <p className="text-muted-foreground text-sm">
               Recent Pack &amp; Ship sessions — reprint any label directly to your Zebra printer.
             </p>
@@ -188,6 +203,22 @@ export default function SmallParcelHistory() {
           <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
           Refresh
         </Button>
+      </div>
+
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="pl-9 pr-9"
+          placeholder="Search by transaction ID, client, customer, tracking number…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setSearch("")}>
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Filter tabs */}

@@ -537,9 +537,6 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-bold text-foreground">{facilityName}</h2>
-                  {slaHealth === "green" && <Badge className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold">{Math.round(slaRatePct)}% In SLA</Badge>}
-                  {slaHealth === "yellow" && <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-200 text-[10px] font-bold"><AlertTriangle className="h-2.5 w-2.5 mr-1" />{Math.round(slaRatePct)}% In SLA</Badge>}
-                  {slaHealth === "red" && <Badge className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold"><AlertTriangle className="h-2.5 w-2.5 mr-1" />{Math.round(slaRatePct)}% In SLA</Badge>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{orders.length} orders tracked</p>
               </div>
@@ -557,7 +554,7 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
               {/* Four stat boxes: B2B In SLA, B2B OOS, D2C In SLA, D2C OOS */}
               <div className="hidden md:flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 {/* B2B In SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 56 }}>
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 64, width: 64 }}>
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <Truck className="h-2 w-2 text-green-600" />
                     <span className="text-[8px] font-bold uppercase tracking-wide text-green-600">B2B</span>
@@ -566,7 +563,7 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
                 </div>
                 {/* B2B Out of SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 56 }}>
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 64, width: 64 }}>
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <Truck className="h-2 w-2 text-red-600" />
                     <span className="text-[8px] font-bold uppercase tracking-wide text-red-600">B2B</span>
@@ -575,7 +572,7 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
                 </div>
                 {/* D2C In SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 56 }}>
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 64, width: 64 }}>
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <ShoppingCart className="h-2 w-2 text-green-600" />
                     <span className="text-[8px] font-bold uppercase tracking-wide text-green-600">D2C</span>
@@ -584,7 +581,7 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
                 </div>
                 {/* D2C Out of SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 56 }}>
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 64, width: 64 }}>
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <ShoppingCart className="h-2 w-2 text-red-600" />
                     <span className="text-[8px] font-bold uppercase tracking-wide text-red-600">D2C</span>

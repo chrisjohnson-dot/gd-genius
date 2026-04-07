@@ -568,7 +568,7 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                         className={`rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-all select-none ${
                           active ? "ring-2 ring-offset-1 ring-blue-400 scale-105" : "hover:scale-105 hover:shadow-md"
                         }`}
-                        style={{ background: bg, border: `1px solid ${bdr}`, minWidth: 64, width: 64 }}
+                        style={{ background: bg, border: `1px solid ${bdr}`, width: 72, height: 64, flexShrink: 0 }}
                         onClick={handleClick}
                         title={active ? "Click to clear filter" : `Filter: ${label} ${ch.toUpperCase()}`}
                       >

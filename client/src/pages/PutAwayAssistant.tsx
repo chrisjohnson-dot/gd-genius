@@ -447,9 +447,17 @@ function ScanSession({
                               })()}
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              {s.currentQty > 0 && <span>{s.currentQty.toLocaleString()} units on hand</span>}
-                              {s.expirationDate && <span>Exp: {new Date(s.expirationDate).toLocaleDateString()}</span>}
-                              {s.lotNumber && <span>Lot: {s.lotNumber}</span>}
+                              {/* Priority tier explanation */}
+                              <span className={s.isPriorityAisle ? "text-orange-400/80" : ""}>{
+                                s.reason === "consolidate"
+                                  ? s.isPriorityAisle ? "Consolidate · Priority location" : "Consolidate · existing stock"
+                                  : s.reason === "empty_pick_face"
+                                    ? s.isPriorityAisle ? "Empty pick face · Priority location" : "Empty pick face"
+                                    : s.isPriorityAisle ? "Empty warehouse · Priority location" : "Empty warehouse"
+                              }</span>
+                              {s.currentQty > 0 && <><span className="opacity-40">·</span><span>{s.currentQty.toLocaleString()} units on hand</span></>}
+                              {s.expirationDate && <><span className="opacity-40">·</span><span>Exp: {new Date(s.expirationDate).toLocaleDateString()}</span></>}
+                              {s.lotNumber && <><span className="opacity-40">·</span><span>Lot: {s.lotNumber}</span></>}
                             </div>
                           </div>
                           <Button

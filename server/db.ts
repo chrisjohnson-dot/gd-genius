@@ -102,6 +102,8 @@ import {
   InsertTechshipConfig,
   shippingIntegrationSettings,
   ShippingIntegrationSetting,
+  smallParcelSettings,
+  SmallParcelSetting,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3386,4 +3388,20 @@ export async function getAllShippingIntegrationSettings(): Promise<ShippingInteg
   const db = await getDb();
   if (!db) return [];
   return db.select().from(shippingIntegrationSettings);
+}
+
+// ─── Small Parcel Settings ───────────────────────────────────────────────────
+export async function getSmallParcelSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(smallParcelSettings).where(eq(smallParcelSettings.settingKey, key));
+  return rows[0]?.settingValue ?? null;
+}
+
+export async function setSmallParcelSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(smallParcelSettings)
+    .values({ settingKey: key, settingValue: value })
+    .onDuplicateKeyUpdate({ set: { settingValue: value } });
 }

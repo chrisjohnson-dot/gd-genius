@@ -55,6 +55,7 @@ import SmallParcelPackageSizes from "@/pages/SmallParcelPackageSizes";
 import SmallParcelAuditLog from "@/pages/SmallParcelAuditLog";
 import SmallParcelSupervisorPins from "@/pages/SmallParcelSupervisorPins";
 import SmallParcelHighValueSkus from "@/pages/SmallParcelHighValueSkus";
+import SmallParcelSettings from "@/pages/SmallParcelSettings";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -121,6 +122,7 @@ function AppRoutes() {
         <Route path="/small-parcel/audit-log" component={SmallParcelAuditLog} />
         <Route path="/small-parcel/supervisor-pins" component={SmallParcelSupervisorPins} />
         <Route path="/small-parcel/high-value-skus" component={SmallParcelHighValueSkus} />
+        <Route path="/small-parcel/settings" component={SmallParcelSettings} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

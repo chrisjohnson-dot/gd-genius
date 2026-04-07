@@ -914,6 +914,10 @@ function Step4PackShip({
   const [reprinting, setReprinting] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
 
+  // Load configurable countdown duration from settings
+  const { data: spSettings } = trpc.smallParcel.getAllSettings.useQuery();
+  const countdownDuration = spSettings?.reprintCountdownSeconds ?? 10;
+
   const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useBrowserPrint();
 
   const updateDimsMutation = trpc.smallParcel.updateDimensions.useMutation();
@@ -944,8 +948,8 @@ function Step4PackShip({
         }
       }
 
-      // ── Start 10-second countdown then auto-reset ──
-      setCountdown(10);
+      // ── Start configurable countdown then auto-reset ──
+      setCountdown(countdownDuration);
     },
     onError: (err) => {
       toast.error(`Label purchase failed: ${err.message}`);
@@ -1144,7 +1148,7 @@ function Step4PackShip({
           <div className="w-full h-1.5 bg-green-200 dark:bg-green-800 rounded-full overflow-hidden">
             <div
               className="h-full bg-green-500 dark:bg-green-400 rounded-full transition-all duration-1000 ease-linear"
-              style={{ width: `${(countdown / 10) * 100}%` }}
+              style={{ width: `${(countdown / countdownDuration) * 100}%` }}
             />
           </div>
           <div className="flex gap-2">

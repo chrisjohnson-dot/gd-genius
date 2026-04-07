@@ -170,6 +170,8 @@ import {
   deleteTechshipConfig,
   getActiveShippingIntegration,
   setActiveShippingIntegration,
+  getSmallParcelSetting,
+  setSmallParcelSetting,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -6165,6 +6167,30 @@ const smallParcelRouter = router({
       const highValue = await isHighValueSku(input.sku, input.clientName);
       return { highValue };
     }),
+
+  /** Get a small parcel setting by key */
+  getSetting: protectedProcedure
+    .input(z.object({ key: z.string() }))
+    .query(async ({ input }) => {
+      const value = await getSmallParcelSetting(input.key);
+      return { value };
+    }),
+
+  /** Update a small parcel setting */
+  setSetting: protectedProcedure
+    .input(z.object({ key: z.string(), value: z.string() }))
+    .mutation(async ({ input }) => {
+      await setSmallParcelSetting(input.key, input.value);
+      return { success: true };
+    }),
+
+  /** Get all small parcel settings as a key/value map */
+  getAllSettings: protectedProcedure.query(async () => {
+    const countdown = await getSmallParcelSetting('reprint_countdown_seconds');
+    return {
+      reprintCountdownSeconds: countdown ? parseInt(countdown, 10) : 10,
+    };
+  }),
 });
 
 // Re-export appRouter augmented with all feature routers including SLA

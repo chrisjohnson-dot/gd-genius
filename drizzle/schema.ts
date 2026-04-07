@@ -1220,3 +1220,12 @@ export const shippingIntegrationSettings = mysqlTable("shipping_integration_sett
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 export type ShippingIntegrationSetting = typeof shippingIntegrationSettings.$inferSelect;
+
+// ─── Small Parcel Settings ────────────────────────────────────────────────────
+export const smallParcelSettings = mysqlTable("small_parcel_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("setting_key", { length: 100 }).notNull().unique(),
+  settingValue: varchar("setting_value", { length: 255 }).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type SmallParcelSetting = typeof smallParcelSettings.$inferSelect;

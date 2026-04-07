@@ -42,6 +42,7 @@ import {
   Package,
   Printer,
   ShieldAlert,
+  Settings,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -73,6 +74,7 @@ const smallParcelItems = [
   { href: "/small-parcel/high-value-skus", label: "High-Value SKUs", icon: ShieldAlert },
   { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs", icon: ShieldCheck },
   { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
+  { href: "/small-parcel/settings", label: "Settings", icon: Settings },
 ];
 
 const qcItems = [

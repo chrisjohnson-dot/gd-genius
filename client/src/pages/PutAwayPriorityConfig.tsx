@@ -302,6 +302,34 @@ export default function PutAwayPriorityConfig() {
     }
   }
 
+  /** Add all chips in an aisle group that aren't already selected */
+  function handleSelectAllInAisle(aisleChips: { aisle: string; level: string }[]) {
+    if (!selectedCustomerId) return;
+    setIsDirty(true);
+    setPriorityEntries((prev) => {
+      const existingKeys = new Set(prev.map((e) => `${e.aisle}::${e.level}`));
+      const toAdd = aisleChips.filter((c) => !existingKeys.has(`${c.aisle}::${c.level}`));
+      if (toAdd.length === 0) return prev;
+      const newEntries = toAdd.map((c, i) => ({
+        aisle: c.aisle,
+        level: c.level,
+        priorityOrder: prev.length + i + 1,
+      }));
+      return [...prev, ...newEntries];
+    });
+  }
+
+  /** Remove all chips in an aisle group that are currently selected */
+  function handleDeselectAllInAisle(aisleChips: { aisle: string; level: string }[]) {
+    if (!selectedCustomerId) return;
+    setIsDirty(true);
+    const keysToRemove = new Set(aisleChips.map((c) => `${c.aisle}::${c.level}`));
+    setPriorityEntries((prev) => {
+      const filtered = prev.filter((e) => !keysToRemove.has(`${e.aisle}::${e.level}`));
+      return filtered.map((e, i) => ({ ...e, priorityOrder: i + 1 }));
+    });
+  }
+
   function handleMoveUp(index: number) {
     if (index === 0) return;
     setIsDirty(true);
@@ -550,11 +578,37 @@ export default function PutAwayPriorityConfig() {
                       {(whConfig.aisleRules as AisleRule[]).filter(r => r.aislePrefix).map((rule) => {
                         const chips = availableChips.filter(c => c.aisle === rule.aislePrefix);
                         if (chips.length === 0) return null;
+                        const allSelected = chips.every(c => selectedKeys.has(`${c.aisle}::${c.level}`));
+                        const noneSelected = chips.every(c => !selectedKeys.has(`${c.aisle}::${c.level}`));
                         return (
                           <div key={rule.aislePrefix}>
-                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                              Aisle {rule.aislePrefix}{rule.description ? ` — ${rule.description}` : ""}
-                            </p>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                Aisle {rule.aislePrefix}{rule.description ? ` — ${rule.description}` : ""}
+                              </p>
+                              {canInteract && chips.length > 1 && (
+                                <div className="flex items-center gap-1">
+                                  {!allSelected && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSelectAllInAisle(chips)}
+                                      className="text-[10px] text-primary hover:text-primary/80 font-medium px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors"
+                                    >
+                                      Select all
+                                    </button>
+                                  )}
+                                  {!noneSelected && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeselectAllInAisle(chips)}
+                                      className="text-[10px] text-muted-foreground hover:text-foreground font-medium px-1.5 py-0.5 rounded hover:bg-muted/40 transition-colors"
+                                    >
+                                      Clear
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                             <div className="flex flex-wrap gap-1.5">
                               {chips.map((chip) => {
                                 const key = `${chip.aisle}::${chip.level}`;

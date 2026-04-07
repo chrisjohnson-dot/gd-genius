@@ -676,21 +676,14 @@ function Step3ScanItems({
                 : "All items scanned. Ready to pack and ship."}
             </p>
           </div>
-          <Button onClick={() => onComplete(scannedItems)} className="ml-auto bg-green-600 hover:bg-green-700">
-            Continue to Pack &amp; Ship
+          <Button onClick={() => onComplete(scannedItems)} className="ml-auto h-11 px-6 text-base bg-green-600 hover:bg-green-700">
+            Pack &amp; Ship — Print Label
             <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
         </div>
       )}
 
-      {onBack && (
-        <div className="flex gap-3 pt-2">
-          <Button variant="outline" size="sm" onClick={onBack}>
-            <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-            Back to Package Size
-          </Button>
-        </div>
-      )}
+
 
       {/* ── Shared PIN section rendered inside both override dialogs ── */}
       {/* ── Manual Override Reason Dialog (circle-click confirm) ── */}
@@ -939,7 +932,6 @@ function Step4PackShip({
       }
 
       // ── Auto-print ZPL label ──
-      // data.labelZpl is the ZPL generated/returned by the server
       const zpl = data.labelZpl;
       if (zpl) {
         setLastZpl(zpl);
@@ -950,6 +942,11 @@ function Step4PackShip({
           console.error("[SmallParcel] Auto-print error:", err);
         }
       }
+
+      // ── Auto-reset to Step 1 after 2 seconds ──
+      setTimeout(() => {
+        onReset();
+      }, 2000);
     },
     onError: (err) => {
       toast.error(`Label purchase failed: ${err.message}`);
@@ -1147,30 +1144,20 @@ function Step4PackShip({
         </div>
       )}
 
-      <div className="flex gap-3 flex-wrap">
-        {onBack && !labelPurchased && (
-          <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
-            <RotateCcw className="w-3.5 h-3.5" />
-            Back
-          </Button>
-        )}
-        <Button variant="outline" onClick={onReset} className="flex-1">
-          <RotateCcw className="w-4 h-4 mr-2" />
-          New Shipment
-        </Button>
+      {!labelPurchased && (
         <Button
           onClick={handlePackShip}
-          disabled={isLoading || printStatus === "printing" || labelPurchased}
-          className="flex-1 bg-blue-600 hover:bg-blue-700"
+          disabled={isLoading || printStatus === "printing"}
+          className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700"
         >
           {isLoading || printStatus === "printing" ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
           ) : (
-            <Printer className="w-4 h-4 mr-2" />
+            <Printer className="w-5 h-5 mr-2" />
           )}
-          {labelPurchased ? "Label Purchased" : "Pack & Ship — Print Label"}
+          Pack &amp; Ship — Print Label
         </Button>
-      </div>
+      )}
     </div>
   );
 }

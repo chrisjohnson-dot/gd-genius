@@ -24,17 +24,9 @@ import { Link } from "wouter";
 // ─── Shared types (mirror WhLocationConfig) ────────────────────────────────
 
 type AisleRule = {
-  prefix: string;
-  description: string;
+  aislePrefix: string;
+  description?: string;
   levels: string[];
-};
-
-type WhConfig = {
-  facilityId: number;
-  facilityName: string;
-  locationFormat: string;
-  aisleRules: AisleRule[];
-  notes: string;
 };
 
 type PriorityEntry = {
@@ -44,17 +36,6 @@ type PriorityEntry = {
 };
 
 // ─── localStorage helpers ──────────────────────────────────────────────────
-
-const WH_CONFIG_KEY = "wh_location_configs";
-
-function loadWhConfig(facilityId: number): WhConfig | null {
-  try {
-    const stored = JSON.parse(localStorage.getItem(WH_CONFIG_KEY) ?? "{}");
-    return stored[facilityId] ?? null;
-  } catch {
-    return null;
-  }
-}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -183,7 +164,6 @@ export default function PutAwayPriorityConfig() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [priorityEntries, setPriorityEntries] = useState<PriorityEntry[]>([]);
   const [isDirty, setIsDirty] = useState(false);
-  const [whConfig, setWhConfig] = useState<WhConfig | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -204,6 +184,13 @@ export default function PutAwayPriorityConfig() {
   );
   const customers = customersQuery.data ?? [];
 
+  // Fetch WH Location Config from DB for the selected facility
+  const whConfigQuery = trpc.whLocationConfig.get.useQuery(
+    { configId: selectedConfigId!, facilityId: selectedFacilityId! },
+    { enabled: !!selectedConfigId && !!selectedFacilityId }
+  );
+  const whConfig = whConfigQuery.data ?? null;
+
   // Only fetch Extensiv locations if there is NO WH Location Config for this facility
   const needExtensivLocations = !!selectedFacilityId && !whConfig;
   const locationsQuery = trpc.extensiv.locations.useQuery(
@@ -220,15 +207,6 @@ export default function PutAwayPriorityConfig() {
     },
     { enabled: !!selectedConfigId && !!selectedFacilityId && !!selectedCustomerId }
   );
-
-  // ── Load WH config from localStorage when facility changes ──
-  useEffect(() => {
-    if (selectedFacilityId) {
-      setWhConfig(loadWhConfig(selectedFacilityId));
-    } else {
-      setWhConfig(null);
-    }
-  }, [selectedFacilityId]);
 
   // ── Load saved priorities when selection changes ──
   useEffect(() => {
@@ -252,15 +230,15 @@ export default function PutAwayPriorityConfig() {
   const availableChips = useMemo<{ aisle: string; level: string; description?: string }[]>(() => {
     if (whConfig && whConfig.aisleRules.length > 0) {
       const chips: { aisle: string; level: string; description?: string }[] = [];
-      for (const rule of whConfig.aisleRules) {
-        if (!rule.prefix) continue;
+      for (const rule of whConfig.aisleRules as AisleRule[]) {
+        if (!rule.aislePrefix) continue;
         if (rule.levels.length === 0) {
           // No levels defined — show just the aisle
-          chips.push({ aisle: rule.prefix, level: "*", description: rule.description });
+          chips.push({ aisle: rule.aislePrefix, level: "*", description: rule.description });
         } else {
           // Show one chip per level
           for (const lvl of rule.levels) {
-            chips.push({ aisle: rule.prefix, level: lvl, description: rule.description });
+            chips.push({ aisle: rule.aislePrefix, level: lvl, description: rule.description });
           }
         }
       }
@@ -569,13 +547,13 @@ export default function PutAwayPriorityConfig() {
                   {/* Group chips by aisle when using WH config with levels */}
                   {whConfig && whConfig.aisleRules.length > 0 ? (
                     <div className="space-y-3">
-                      {whConfig.aisleRules.filter(r => r.prefix).map((rule) => {
-                        const chips = availableChips.filter(c => c.aisle === rule.prefix);
+                      {(whConfig.aisleRules as AisleRule[]).filter(r => r.aislePrefix).map((rule) => {
+                        const chips = availableChips.filter(c => c.aisle === rule.aislePrefix);
                         if (chips.length === 0) return null;
                         return (
-                          <div key={rule.prefix}>
+                          <div key={rule.aislePrefix}>
                             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                              Aisle {rule.prefix}{rule.description ? ` — ${rule.description}` : ""}
+                              Aisle {rule.aislePrefix}{rule.description ? ` — ${rule.description}` : ""}
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               {chips.map((chip) => {

@@ -2368,6 +2368,105 @@ export async function deletePutAwayPriorities(
     );
 }
 
+// ─── WH Location Config ─────────────────────────────────────────────────────
+import {
+  whLocationConfigs,
+  WhLocationConfig,
+  InsertWhLocationConfig,
+} from "../drizzle/schema";
+
+export type { WhLocationConfig };
+
+export type AisleRule = {
+  aislePrefix: string;
+  levels: string[];
+  description?: string;
+};
+
+export async function getWhLocationConfig(
+  configId: number,
+  facilityId: number
+): Promise<WhLocationConfig | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(whLocationConfigs)
+    .where(
+      and(
+        eq(whLocationConfigs.configId, configId),
+        eq(whLocationConfigs.facilityId, facilityId)
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listWhLocationConfigs(
+  configId: number
+): Promise<WhLocationConfig[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(whLocationConfigs)
+    .where(eq(whLocationConfigs.configId, configId))
+    .orderBy(whLocationConfigs.facilityName);
+}
+
+export async function upsertWhLocationConfig(
+  configId: number,
+  facilityId: number,
+  facilityName: string,
+  aisleRules: AisleRule[],
+  notes: string | null,
+  updatedBy: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const now = Date.now();
+  const rulesJson = JSON.stringify(aisleRules);
+  // Try update first, then insert
+  const existing = await getWhLocationConfig(configId, facilityId);
+  if (existing) {
+    await db
+      .update(whLocationConfigs)
+      .set({ facilityName, aisleRules: rulesJson, notes, updatedAt: now, updatedBy })
+      .where(
+        and(
+          eq(whLocationConfigs.configId, configId),
+          eq(whLocationConfigs.facilityId, facilityId)
+        )
+      );
+  } else {
+    await db.insert(whLocationConfigs).values({
+      configId,
+      facilityId,
+      facilityName,
+      aisleRules: rulesJson,
+      notes,
+      updatedAt: now,
+      updatedBy,
+    });
+  }
+}
+
+export async function deleteWhLocationConfig(
+  configId: number,
+  facilityId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(whLocationConfigs)
+    .where(
+      and(
+        eq(whLocationConfigs.configId, configId),
+        eq(whLocationConfigs.facilityId, facilityId)
+      )
+    );
+}
+
 // ─── Label Scan Settings ──────────────────────────────────────────────────────
 import {
   labelScanSettings,

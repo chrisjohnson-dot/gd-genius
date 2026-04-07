@@ -694,6 +694,30 @@ export const putAwayPriority = mysqlTable("put_away_priority", {
 export type PutAwayPriority = typeof putAwayPriority.$inferSelect;
 export type InsertPutAwayPriority = typeof putAwayPriority.$inferInsert;
 
+// ─── WH Location Config ───────────────────────────────────────────────────────
+// Stores the aisle/level numbering structure for each warehouse (facility).
+// One row per configId+facilityId combination; aisleRules stored as JSON.
+export const whLocationConfigs = mysqlTable("wh_location_configs", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Extensiv config ID this belongs to */
+  configId: int("config_id").notNull(),
+  /** Extensiv facility ID */
+  facilityId: int("facility_id").notNull(),
+  /** Human-readable warehouse name (cached for display) */
+  facilityName: varchar("facility_name", { length: 255 }).notNull().default(""),
+  /**
+   * JSON array of aisle rules:
+   * [{ aislePrefix: string, levels: string[], description?: string }]
+   */
+  aisleRules: text("aisle_rules").notNull(),
+  /** Optional free-text notes about this warehouse's numbering scheme */
+  notes: text("notes"),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  updatedBy: varchar("updated_by", { length: 255 }),
+});
+export type WhLocationConfig = typeof whLocationConfigs.$inferSelect;
+export type InsertWhLocationConfig = typeof whLocationConfigs.$inferInsert;
+
 // ─── QC Scan and Label ────────────────────────────────────────────────────────
 // Global settings for the label scan module (singleton — one row)
 export const labelScanSettings = mysqlTable("label_scan_settings", {

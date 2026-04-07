@@ -125,6 +125,11 @@ import {
   getPutAwayPriorities,
   savePutAwayPriorities,
   deletePutAwayPriorities,
+  getWhLocationConfig,
+  listWhLocationConfigs,
+  upsertWhLocationConfig,
+  deleteWhLocationConfig,
+  type AisleRule,
   getLabelScanSettings,
   upsertLabelScanSettings,
   createLabelFile,
@@ -4973,6 +4978,69 @@ const labelScanRouter = router({
     }),
 });
 
+// ─── WH Location Config Router ──────────────────────────────────────────────
+const whLocationConfigRouter = router({
+  /** Get the WH location config for a specific warehouse */
+  get: protectedProcedure
+    .input(z.object({ configId: z.number(), facilityId: z.number() }))
+    .query(async ({ input }) => {
+      const row = await getWhLocationConfig(input.configId, input.facilityId);
+      if (!row) return null;
+      return {
+        ...row,
+        aisleRules: JSON.parse(row.aisleRules || "[]") as AisleRule[],
+      };
+    }),
+
+  /** List all WH location configs for a config (all warehouses) */
+  list: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .query(async ({ input }) => {
+      const rows = await listWhLocationConfigs(input.configId);
+      return rows.map((r) => ({
+        ...r,
+        aisleRules: JSON.parse(r.aisleRules || "[]") as AisleRule[],
+      }));
+    }),
+
+  /** Create or update the WH location config for a warehouse */
+  upsert: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        facilityId: z.number(),
+        facilityName: z.string(),
+        aisleRules: z.array(
+          z.object({
+            aislePrefix: z.string().min(1),
+            levels: z.array(z.string().min(1)),
+            description: z.string().optional(),
+          })
+        ),
+        notes: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await upsertWhLocationConfig(
+        input.configId,
+        input.facilityId,
+        input.facilityName,
+        input.aisleRules,
+        input.notes ?? null,
+        ctx.user.name ?? ctx.user.openId
+      );
+      return { success: true };
+    }),
+
+  /** Delete the WH location config for a warehouse */
+  delete: protectedProcedure
+    .input(z.object({ configId: z.number(), facilityId: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteWhLocationConfig(input.configId, input.facilityId);
+      return { success: true };
+    }),
+});
+
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
 export const appRouter = router({
   ..._appRouter._def.record,
@@ -4987,6 +5055,7 @@ export const appRouter = router({
   putAway: putAwayRouter,
   auditDocuments: auditDocumentsRouter,
   labelScan: labelScanRouter,
+  whLocationConfig: whLocationConfigRouter,
 });
 export type AppRouter = typeof appRouter;
 

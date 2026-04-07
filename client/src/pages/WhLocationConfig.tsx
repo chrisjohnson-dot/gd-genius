@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -16,20 +16,19 @@ import {
   Info,
   ChevronDown,
   ChevronRight,
+  Database,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type AisleRule = {
-  prefix: string;       // e.g. "A", "B", "HR"
-  description: string;  // e.g. "Main floor aisle A"
-  levels: string[];     // e.g. ["A", "B", "C"] or ["1", "2", "3"]
+  aislePrefix: string;   // e.g. "A", "B", "HR"
+  description?: string;  // e.g. "Main floor aisle A"
+  levels: string[];      // e.g. ["A", "B", "C"] or ["1", "2", "3"]
 };
 
-type WhConfig = {
-  facilityId: number;
-  facilityName: string;
-  locationFormat: string;   // e.g. "AISLE-SLOT-LEVEL" or "AISLE-SLOT"
+type LocalDraft = {
+  locationFormat: string;
   aisleRules: AisleRule[];
   notes: string;
 };
@@ -41,7 +40,16 @@ const FORMAT_OPTIONS = [
   { value: "CUSTOM",           label: "Custom / Other" },
 ];
 
+const DEFAULT_DRAFT: LocalDraft = {
+  locationFormat: "AISLE-SLOT-LEVEL",
+  aisleRules: [],
+  notes: "",
+};
+
 export default function WhLocationConfig() {
+  const utils = trpc.useUtils();
+
+  // ── Config / facility selectors ─────────────────────────────────────────────
   const configQuery = trpc.config.list.useQuery();
   const selectedConfigId = (configQuery.data ?? [])[0]?.id ?? null;
 
@@ -51,61 +59,125 @@ export default function WhLocationConfig() {
   );
   const facilities = facilitiesQuery.data ?? [];
 
-  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
-  const [configs, setConfigs] = useState<Record<number, WhConfig>>({});
-  const [expandedFacility, setExpandedFacility] = useState<number | null>(null);
+  // ── DB data ─────────────────────────────────────────────────────────────────
+  const dbConfigsQuery = trpc.whLocationConfig.list.useQuery(
+    { configId: selectedConfigId! },
+    { enabled: !!selectedConfigId }
+  );
+  const dbConfigs = dbConfigsQuery.data ?? [];
 
-  function getConfig(facilityId: number, facilityName: string): WhConfig {
-    return configs[facilityId] ?? {
-      facilityId,
-      facilityName,
-      locationFormat: "AISLE-SLOT-LEVEL",
-      aisleRules: [],
-      notes: "",
-    };
+  // ── Local draft state (per facility, keyed by facilityId) ───────────────────
+  const [drafts, setDrafts] = useState<Record<number, LocalDraft>>({});
+  const [expandedFacility, setExpandedFacility] = useState<number | null>(null);
+  const [saving, setSaving] = useState<Record<number, boolean>>({});
+
+  // Populate drafts from DB when data arrives
+  useEffect(() => {
+    if (dbConfigs.length === 0) return;
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const row of dbConfigs) {
+        if (!next[row.facilityId]) {
+          next[row.facilityId] = {
+            locationFormat: "AISLE-SLOT-LEVEL",
+            aisleRules: row.aisleRules as AisleRule[],
+            notes: row.notes ?? "",
+          };
+        }
+      }
+      return next;
+    });
+  }, [dbConfigs]);
+
+  const upsertMutation = trpc.whLocationConfig.upsert.useMutation({
+    onSuccess: () => {
+      utils.whLocationConfig.list.invalidate();
+      utils.whLocationConfig.get.invalidate();
+    },
+  });
+
+  const deleteMutation = trpc.whLocationConfig.delete.useMutation({
+    onSuccess: () => {
+      utils.whLocationConfig.list.invalidate();
+      utils.whLocationConfig.get.invalidate();
+    },
+  });
+
+  // ── Draft helpers ────────────────────────────────────────────────────────────
+  function getDraft(facilityId: number): LocalDraft {
+    return drafts[facilityId] ?? DEFAULT_DRAFT;
   }
 
-  function updateConfig(facilityId: number, facilityName: string, update: Partial<WhConfig>) {
-    setConfigs((prev) => ({
+  function updateDraft(facilityId: number, update: Partial<LocalDraft>) {
+    setDrafts((prev) => ({
       ...prev,
-      [facilityId]: { ...getConfig(facilityId, facilityName), ...update },
+      [facilityId]: { ...getDraft(facilityId), ...update },
     }));
   }
 
-  function addAisleRule(facilityId: number, facilityName: string) {
-    const cfg = getConfig(facilityId, facilityName);
-    updateConfig(facilityId, facilityName, {
-      aisleRules: [...cfg.aisleRules, { prefix: "", description: "", levels: [] }],
+  function addAisleRule(facilityId: number) {
+    const d = getDraft(facilityId);
+    updateDraft(facilityId, {
+      aisleRules: [...d.aisleRules, { aislePrefix: "", description: "", levels: [] }],
     });
   }
 
-  function updateAisleRule(facilityId: number, facilityName: string, idx: number, rule: Partial<AisleRule>) {
-    const cfg = getConfig(facilityId, facilityName);
-    const updated = cfg.aisleRules.map((r, i) => i === idx ? { ...r, ...rule } : r);
-    updateConfig(facilityId, facilityName, { aisleRules: updated });
+  function updateAisleRule(facilityId: number, idx: number, rule: Partial<AisleRule>) {
+    const d = getDraft(facilityId);
+    updateDraft(facilityId, {
+      aisleRules: d.aisleRules.map((r, i) => i === idx ? { ...r, ...rule } : r),
+    });
   }
 
-  function removeAisleRule(facilityId: number, facilityName: string, idx: number) {
-    const cfg = getConfig(facilityId, facilityName);
-    updateConfig(facilityId, facilityName, { aisleRules: cfg.aisleRules.filter((_, i) => i !== idx) });
+  function removeAisleRule(facilityId: number, idx: number) {
+    const d = getDraft(facilityId);
+    updateDraft(facilityId, { aisleRules: d.aisleRules.filter((_, i) => i !== idx) });
   }
 
-  function handleSave(facilityId: number, facilityName: string) {
-    const cfg = getConfig(facilityId, facilityName);
-    // Persist to localStorage as a simple local config store
-    const stored = JSON.parse(localStorage.getItem("wh_location_configs") ?? "{}");
-    stored[facilityId] = cfg;
-    localStorage.setItem("wh_location_configs", JSON.stringify(stored));
-    toast.success(`WH Location Config saved for ${facilityName}`);
-  }
-
-  // Load from localStorage on mount
-  useState(() => {
-    const stored = JSON.parse(localStorage.getItem("wh_location_configs") ?? "{}");
-    if (Object.keys(stored).length > 0) {
-      setConfigs(stored);
+  async function handleSave(facilityId: number, facilityName: string) {
+    const d = getDraft(facilityId);
+    const invalidAisles = d.aisleRules.filter((r) => !r.aislePrefix.trim());
+    if (invalidAisles.length > 0) {
+      toast.error("All aisle rules must have a prefix.");
+      return;
     }
-  });
+    setSaving((s) => ({ ...s, [facilityId]: true }));
+    try {
+      await upsertMutation.mutateAsync({
+        configId: selectedConfigId!,
+        facilityId,
+        facilityName,
+        aisleRules: d.aisleRules,
+        notes: d.notes || null,
+      });
+      toast.success(`WH Location Config saved for ${facilityName}`);
+    } catch {
+      toast.error("Failed to save config. Please try again.");
+    } finally {
+      setSaving((s) => ({ ...s, [facilityId]: false }));
+    }
+  }
+
+  async function handleDelete(facilityId: number, facilityName: string) {
+    try {
+      await deleteMutation.mutateAsync({ configId: selectedConfigId!, facilityId });
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[facilityId];
+        return next;
+      });
+      toast.success(`Config cleared for ${facilityName}`);
+    } catch {
+      toast.error("Failed to delete config.");
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function getDbRow(facilityId: number) {
+    return dbConfigs.find((r) => r.facilityId === facilityId) ?? null;
+  }
+
+  const isLoading = configQuery.isLoading || facilitiesQuery.isLoading || dbConfigsQuery.isLoading;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -117,6 +189,12 @@ export default function WhLocationConfig() {
           Train the system on how each warehouse's location numbering is structured — aisles, levels, and naming format.
           This information is used by the Put Away Wizard and Location Priority Config to show only relevant aisles and levels.
         </p>
+      </div>
+
+      {/* DB persistence badge */}
+      <div className="flex items-center gap-2 text-xs text-green-400">
+        <Database className="h-3.5 w-3.5" />
+        <span>Configs are saved to the database and shared across all workstations.</span>
       </div>
 
       {/* Info card */}
@@ -134,8 +212,11 @@ export default function WhLocationConfig() {
       </div>
 
       {/* Facility list */}
-      {facilitiesQuery.isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading warehouses…</div>
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading warehouses…
+        </div>
       ) : facilities.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -146,10 +227,11 @@ export default function WhLocationConfig() {
       ) : (
         <div className="space-y-3">
           {facilities.map((facility) => {
-            const cfg = getConfig(facility.id, facility.name);
+            const draft = getDraft(facility.id);
+            const dbRow = getDbRow(facility.id);
             const isOpen = expandedFacility === facility.id;
-            const savedCfg = JSON.parse(localStorage.getItem("wh_location_configs") ?? "{}")[facility.id];
-            const isSaved = !!savedCfg;
+            const isSaved = !!dbRow;
+            const isSavingNow = saving[facility.id] ?? false;
 
             return (
               <div key={facility.id} className="border border-border/60 rounded-xl overflow-hidden">
@@ -160,10 +242,18 @@ export default function WhLocationConfig() {
                 >
                   <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="font-semibold text-sm flex-1">{facility.name}</span>
-                  {isSaved && (
-                    <Badge className="bg-green-600/20 text-green-400 border-green-600/30 text-[10px]">Configured</Badge>
+                  {isSaved ? (
+                    <Badge className="bg-green-600/20 text-green-400 border-green-600/30 text-[10px]">
+                      Configured · {(dbRow.aisleRules as AisleRule[]).length} aisle{(dbRow.aisleRules as AisleRule[]).length !== 1 ? "s" : ""}
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-muted/40 text-muted-foreground border-border/40 text-[10px]">Not configured</Badge>
                   )}
-                  <span className="text-xs text-muted-foreground">{cfg.locationFormat}</span>
+                  {isSaved && dbRow.updatedBy && (
+                    <span className="text-[10px] text-muted-foreground hidden sm:inline">
+                      by {dbRow.updatedBy}
+                    </span>
+                  )}
                   {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                 </button>
 
@@ -173,8 +263,8 @@ export default function WhLocationConfig() {
                     <div className="space-y-1.5">
                       <Label className="text-xs font-semibold">Location Format</Label>
                       <Select
-                        value={cfg.locationFormat}
-                        onValueChange={(v) => updateConfig(facility.id, facility.name, { locationFormat: v })}
+                        value={draft.locationFormat}
+                        onValueChange={(v) => updateDraft(facility.id, { locationFormat: v })}
                       >
                         <SelectTrigger className="w-full max-w-sm">
                           <SelectValue />
@@ -194,33 +284,33 @@ export default function WhLocationConfig() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-semibold">Aisles &amp; Levels</Label>
-                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => addAisleRule(facility.id, facility.name)}>
+                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => addAisleRule(facility.id)}>
                           <Plus className="h-3.5 w-3.5" /> Add Aisle
                         </Button>
                       </div>
 
-                      {cfg.aisleRules.length === 0 ? (
+                      {draft.aisleRules.length === 0 ? (
                         <div className="text-center py-6 text-muted-foreground text-xs border border-dashed border-border rounded-lg">
                           No aisles configured. Click "Add Aisle" to define the aisle structure for this warehouse.
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {cfg.aisleRules.map((rule, idx) => (
+                          {draft.aisleRules.map((rule, idx) => (
                             <div key={idx} className="grid grid-cols-[1fr_2fr_2fr_auto] gap-2 items-start">
                               <div className="space-y-1">
                                 <Label className="text-[10px] text-muted-foreground">Prefix</Label>
                                 <Input
-                                  value={rule.prefix}
-                                  onChange={(e) => updateAisleRule(facility.id, facility.name, idx, { prefix: e.target.value.toUpperCase() })}
+                                  value={rule.aislePrefix}
+                                  onChange={(e) => updateAisleRule(facility.id, idx, { aislePrefix: e.target.value.toUpperCase() })}
                                   placeholder="e.g. D"
                                   className="h-8 text-xs font-mono"
                                 />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-[10px] text-muted-foreground">Description</Label>
+                                <Label className="text-[10px] text-muted-foreground">Description (optional)</Label>
                                 <Input
-                                  value={rule.description}
-                                  onChange={(e) => updateAisleRule(facility.id, facility.name, idx, { description: e.target.value })}
+                                  value={rule.description ?? ""}
+                                  onChange={(e) => updateAisleRule(facility.id, idx, { description: e.target.value })}
                                   placeholder="e.g. Main floor aisle D"
                                   className="h-8 text-xs"
                                 />
@@ -229,7 +319,7 @@ export default function WhLocationConfig() {
                                 <Label className="text-[10px] text-muted-foreground">Levels (comma-separated)</Label>
                                 <Input
                                   value={rule.levels.join(", ")}
-                                  onChange={(e) => updateAisleRule(facility.id, facility.name, idx, {
+                                  onChange={(e) => updateAisleRule(facility.id, idx, {
                                     levels: e.target.value.split(",").map((l) => l.trim().toUpperCase()).filter(Boolean),
                                   })}
                                   placeholder="e.g. A, B, C"
@@ -241,7 +331,7 @@ export default function WhLocationConfig() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                  onClick={() => removeAisleRule(facility.id, facility.name, idx)}
+                                  onClick={() => removeAisleRule(facility.id, idx)}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
@@ -256,17 +346,32 @@ export default function WhLocationConfig() {
                     <div className="space-y-1.5">
                       <Label className="text-xs font-semibold">Notes</Label>
                       <Input
-                        value={cfg.notes}
-                        onChange={(e) => updateConfig(facility.id, facility.name, { notes: e.target.value })}
+                        value={draft.notes}
+                        onChange={(e) => updateDraft(facility.id, { notes: e.target.value })}
                         placeholder="Any additional notes about this warehouse's location structure…"
                         className="text-xs"
                       />
                     </div>
 
-                    {/* Save */}
-                    <div className="flex justify-end">
-                      <Button className="gap-2" onClick={() => handleSave(facility.id, facility.name)}>
-                        <Save className="h-4 w-4" /> Save Config
+                    {/* Actions */}
+                    <div className="flex items-center justify-between pt-1">
+                      {isSaved ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs gap-1.5"
+                          onClick={() => handleDelete(facility.id, facility.name)}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Clear Config
+                        </Button>
+                      ) : (
+                        <span />
+                      )}
+                      <Button className="gap-2" onClick={() => handleSave(facility.id, facility.name)} disabled={isSavingNow}>
+                        {isSavingNow ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Save Config
                       </Button>
                     </div>
                   </div>

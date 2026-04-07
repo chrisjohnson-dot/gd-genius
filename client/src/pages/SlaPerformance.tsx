@@ -375,6 +375,10 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
   const d2cOrders = activeOrders.filter((o) => o.orderChannel === "d2c" || o.orderChannel === "both");
   const b2bOos = b2bOrders.filter((o) => o.slaStatus === "out_of_sla" && o.slaActionStatus === "active").length;
   const d2cOos = d2cOrders.filter((o) => o.slaStatus === "out_of_sla" && o.slaActionStatus === "active").length;
+  const b2bInSla = b2bOrders.filter((o) => o.slaStatus === "in_sla" || o.slaActionStatus === "waived").length;
+  const d2cInSla = d2cOrders.filter((o) => o.slaStatus === "in_sla" || o.slaActionStatus === "waived").length;
+  const b2bPct = b2bOrders.length > 0 ? (b2bInSla / b2bOrders.length) * 100 : 100;
+  const d2cPct = d2cOrders.length > 0 ? (d2cInSla / d2cOrders.length) * 100 : 100;
 
   const slaRatePct = activeOrders.length > 0 ? (inSlaCount / activeOrders.length) * 100 : 100;
   const slaHealth: "green" | "yellow" | "red" = slaRatePct >= greenThreshold ? "green" : slaRatePct >= yellowThreshold ? "yellow" : "red";
@@ -537,10 +541,36 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   {slaHealth === "yellow" && <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-200 text-[10px] font-bold"><AlertTriangle className="h-2.5 w-2.5 mr-1" />{Math.round(slaRatePct)}% In SLA</Badge>}
                   {slaHealth === "red" && <Badge className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold"><AlertTriangle className="h-2.5 w-2.5 mr-1" />{Math.round(slaRatePct)}% In SLA</Badge>}
                 </div>
-                <div className="flex items-center gap-3 mt-0.5">
-                  <p className="text-xs text-muted-foreground">{orders.length} orders tracked</p>
-                  {b2bOrders.length > 0 && <span className="text-[10px] text-blue-600 font-medium"><Truck className="h-2.5 w-2.5 inline mr-0.5" />B2B: {b2bOrders.length} ({b2bOos} OOS)</span>}
-                  {d2cOrders.length > 0 && <span className="text-[10px] text-orange-600 font-medium"><ShoppingCart className="h-2.5 w-2.5 inline mr-0.5" />D2C: {d2cOrders.length} ({d2cOos} OOS)</span>}
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <p className="text-xs text-muted-foreground mr-1">{orders.length} orders</p>
+                  {/* B2B compliance pill */}
+                  {b2bOrders.length > 0 && (
+                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+                      b2bPct >= greenThreshold ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400"
+                      : b2bPct >= yellowThreshold ? "bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/30 dark:border-yellow-800 dark:text-yellow-400"
+                      : "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400"
+                    }`}>
+                      <Truck className="h-2.5 w-2.5" />
+                      <span className="uppercase tracking-wide">B2B</span>
+                      <span className="font-extrabold">{Math.round(b2bPct)}%</span>
+                      <span className="font-normal opacity-75">{b2bOrders.length} orders</span>
+                      {b2bOos > 0 && <span className="ml-0.5 px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] font-bold">{b2bOos} OOS</span>}
+                    </div>
+                  )}
+                  {/* D2C compliance pill */}
+                  {d2cOrders.length > 0 && (
+                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+                      d2cPct >= greenThreshold ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400"
+                      : d2cPct >= yellowThreshold ? "bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/30 dark:border-yellow-800 dark:text-yellow-400"
+                      : "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400"
+                    }`}>
+                      <ShoppingCart className="h-2.5 w-2.5" />
+                      <span className="uppercase tracking-wide">D2C</span>
+                      <span className="font-extrabold">{Math.round(d2cPct)}%</span>
+                      <span className="font-normal opacity-75">{d2cOrders.length} orders</span>
+                      {d2cOos > 0 && <span className="ml-0.5 px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] font-bold">{d2cOos} OOS</span>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

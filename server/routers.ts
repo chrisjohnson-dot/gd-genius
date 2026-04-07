@@ -141,6 +141,8 @@ import {
   getLabelScanCartonById,
   updateLabelScanCarton,
   getOrderById,
+  listQcAuditLog,
+  type QcAuditEvent,
   type VerificationStatus,
   type OrderVerificationResult,
 } from "./db";
@@ -3583,9 +3585,29 @@ const qcScannerRouter = router({
       }
       return { assigned: results, skipped: pallets.length - unassigned.length };
     }),
-});
 
-// Pallet Scanner router (Shipping section)
+  // Unified QC Audit Log — merges QC Scanner and Label Scanner events
+  listAuditLog: protectedProcedure
+    .input(z.object({
+      fromDate: z.date().optional(),
+      toDate: z.date().optional(),
+      user: z.string().optional(),
+      item: z.string().optional(),
+      limit: z.number().min(1).max(500).optional(),
+      offset: z.number().min(0).optional(),
+    }))
+    .query(async ({ input }) => {
+      return listQcAuditLog({
+        fromDate: input.fromDate,
+        toDate: input.toDate,
+        user: input.user,
+        item: input.item,
+        limit: input.limit ?? 100,
+        offset: input.offset ?? 0,
+      });
+    }),
+});
+// Pallet Scanner router (Shipping section))
 const palletScannerRouter = router({
   // Log a new pallet scan
   logScan: protectedProcedure

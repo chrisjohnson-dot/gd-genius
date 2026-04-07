@@ -2928,3 +2928,135 @@ export async function getOrderById(id: number): Promise<OrderTracking | null> {
   const rows = await db.select().from(orderTracking).where(eq(orderTracking.id, id)).limit(1);
   return rows[0] ?? null;
 }
+
+// ─── QC Audit Log ─────────────────────────────────────────────────────────────
+export type QcAuditEvent = {
+  id: string;
+  eventType: "qc_scan" | "label_scan";
+  sessionId: number;
+  referenceNumber: string | null;
+  customerName: string | null;
+  warehouseName: string | null;
+  createdBy: string | null;
+  sku: string | null;
+  barcode: string | null;
+  scannedQty: number | null;
+  status: string | null;
+  scannedAt: Date;
+  sessionCreatedAt: Date;
+};
+
+export async function listQcAuditLog(opts: {
+  fromDate?: Date;
+  toDate?: Date;
+  user?: string;
+  item?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ events: QcAuditEvent[]; total: number }> {
+  const db = await getDb();
+  if (!db) return { events: [], total: 0 };
+
+  const limit = opts.limit ?? 100;
+  const offset = opts.offset ?? 0;
+
+  // ── QC Scanner scan items ──────────────────────────────────────────────────
+  const qcQuery = db
+    .select({
+      sessionId: qcScanSessions.id,
+      referenceNumber: qcScanSessions.referenceNumber,
+      customerName: qcScanSessions.customerName,
+      warehouseName: qcScanSessions.warehouseName,
+      createdBy: qcScanSessions.createdBy,
+      status: qcScanSessions.status,
+      sessionCreatedAt: qcScanSessions.createdAt,
+      itemId: qcScanItems.id,
+      sku: qcScanItems.sku,
+      scannedQty: qcScanItems.scannedQty,
+      itemUpdatedAt: qcScanItems.updatedAt,
+    })
+    .from(qcScanItems)
+    .innerJoin(qcScanSessions, eq(qcScanItems.sessionId, qcScanSessions.id));
+
+  // ── Label Scanner cartons ──────────────────────────────────────────────────
+  const labelQuery = db
+    .select({
+      sessionId: labelScanSessions.id,
+      referenceNumber: labelScanSessions.orderRef,
+      customerName: labelScanSessions.clientName,
+      createdBy: labelScanSessions.createdBy,
+      status: labelScanSessions.status,
+      sessionCreatedAt: labelScanSessions.createdAt,
+      cartonId: labelScanCartons.id,
+      barcode: labelScanCartons.barcode,
+      scannedAt: labelScanCartons.scannedAt,
+    })
+    .from(labelScanCartons)
+    .innerJoin(labelScanSessions, eq(labelScanCartons.sessionId, labelScanSessions.id));
+
+  const [qcRows, labelRows] = await Promise.all([qcQuery, labelQuery]);
+
+  // Merge into unified events
+  const allEvents: QcAuditEvent[] = [
+    ...qcRows.map((r) => ({
+      id: `qc-${r.sessionId}-${r.itemId}`,
+      eventType: "qc_scan" as const,
+      sessionId: r.sessionId,
+      referenceNumber: r.referenceNumber,
+      customerName: r.customerName ?? null,
+      warehouseName: r.warehouseName ?? null,
+      createdBy: r.createdBy ?? null,
+      sku: r.sku,
+      barcode: null,
+      scannedQty: r.scannedQty,
+      status: r.status,
+      scannedAt: r.itemUpdatedAt,
+      sessionCreatedAt: r.sessionCreatedAt,
+    })),
+    ...labelRows.map((r) => ({
+      id: `label-${r.sessionId}-${r.cartonId}`,
+      eventType: "label_scan" as const,
+      sessionId: r.sessionId,
+      referenceNumber: r.referenceNumber ?? null,
+      customerName: r.customerName ?? null,
+      warehouseName: null,
+      createdBy: r.createdBy ?? null,
+      sku: null,
+      barcode: r.barcode,
+      scannedQty: null,
+      status: r.status,
+      scannedAt: r.scannedAt,
+      sessionCreatedAt: r.sessionCreatedAt,
+    })),
+  ];
+
+  // Apply filters
+  let filtered = allEvents;
+  if (opts.fromDate) filtered = filtered.filter((e) => e.scannedAt >= opts.fromDate!);
+  if (opts.toDate) {
+    const end = new Date(opts.toDate);
+    end.setHours(23, 59, 59, 999);
+    filtered = filtered.filter((e) => e.scannedAt <= end);
+  }
+  if (opts.user) {
+    const u = opts.user.toLowerCase();
+    filtered = filtered.filter((e) => (e.createdBy ?? "").toLowerCase().includes(u));
+  }
+  if (opts.item) {
+    const q = opts.item.toLowerCase();
+    filtered = filtered.filter(
+      (e) =>
+        (e.sku ?? "").toLowerCase().includes(q) ||
+        (e.barcode ?? "").toLowerCase().includes(q) ||
+        (e.referenceNumber ?? "").toLowerCase().includes(q) ||
+        (e.customerName ?? "").toLowerCase().includes(q)
+    );
+  }
+
+  // Sort newest first
+  filtered.sort((a, b) => b.scannedAt.getTime() - a.scannedAt.getTime());
+
+  const total = filtered.length;
+  const events = filtered.slice(offset, offset + limit);
+  return { events, total };
+}

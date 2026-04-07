@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import {
   AlertCircle,
   CheckCircle2,
+  CheckSquare,
+  Square,
   Loader2,
   MapPin,
   Save,
@@ -533,22 +535,55 @@ export default function PutAwayPriorityConfig() {
                 <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   {whConfig && whConfig.aisleRules.length > 0 ? "Configured Aisles & Levels" : "Available Aisles"}
                 </CardTitle>
-                {!whConfig && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1.5 text-xs"
-                    onClick={() => locationsQuery.refetch()}
-                    disabled={locationsQuery.isFetching}
-                  >
-                    {locationsQuery.isFetching ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3" />
-                    )}
-                    Refresh
-                  </Button>
-                )}
+                <div className="flex items-center gap-1">
+                  {/* Global Select All / Clear All */}
+                  {availableChips.length > 0 && (() => {
+                    const allGlobalSelected = availableChips.every(c => selectedKeys.has(`${c.aisle}::${c.level}`));
+                    const noneGlobalSelected = availableChips.every(c => !selectedKeys.has(`${c.aisle}::${c.level}`));
+                    return (
+                      <>
+                        {!allGlobalSelected && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 text-xs text-primary hover:text-primary/80"
+                            onClick={() => handleSelectAllInAisle(availableChips)}
+                          >
+                            <CheckSquare className="h-3 w-3" />
+                            Select all
+                          </Button>
+                        )}
+                        {!noneGlobalSelected && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 text-xs"
+                            onClick={() => handleDeselectAllInAisle(availableChips)}
+                          >
+                            <Square className="h-3 w-3" />
+                            Clear all
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
+                  {!whConfig && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={() => locationsQuery.refetch()}
+                      disabled={locationsQuery.isFetching}
+                    >
+                      {locationsQuery.isFetching ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                      Refresh
+                    </Button>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Click an aisle{whConfig && whConfig.aisleRules.length > 0 ? "/level" : ""} to add it to the priority list. Click again to remove it.

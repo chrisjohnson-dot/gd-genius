@@ -879,3 +879,5 @@
 - [x] Extend getOrderDetail backend with slaSnapshot and auditHistory
 - [x] Add getLatestSlaSnapshotForOrder and getOrderAuditHistory helpers to db.ts
 - [x] Write vitest tests for getOrderDetail slaSnapshot/auditHistory additions
+- [x] Add Send to Shipwell button in Order Detail Drawer Shipwell tab for orders not yet submitted
+- [x] Add Send to Shipwell button in Order Detail Drawer Shipwell tab for orders not yet submitted

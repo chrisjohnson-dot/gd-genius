@@ -41,8 +41,10 @@ import {
   ShieldCheck,
   Eye,
   History,
+  Send,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type LifecycleStatus =
@@ -615,80 +617,167 @@ export function OrderDetailDrawer({ orderId, onClose }: Props) {
             </div>
           )}
 
-          {/* ── SHIPWELL TAB ── */}
+           // ── SHIPWELL TAB ── */
           {!isLoading && !error && order && tab === "Shipwell" && (
-            <div className="space-y-5">
-              {!order.shipwellOrderId ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                  <Truck className="h-8 w-8 mb-2 opacity-30" />
-                  <p className="text-sm font-medium">Not yet sent to Shipwell</p>
-                  <p className="text-xs mt-1 opacity-70">This order has not been submitted to the Shipwell TMS.</p>
-                </div>
-              ) : (
-                <>
-                  <section>
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <Truck className="h-3 w-3" /> Shipwell Status
-                    </h3>
-                    <div className="bg-muted/30 rounded-xl px-4 py-1">
-                      <Row label="Status" value={
-                        <span className="capitalize font-semibold">{order.shipwellStatus?.replace(/_/g, " ") ?? "—"}</span>
-                      } />
-                      <Row label="Carrier" value={data?.carrierName} />
-                      <Row label="Ship Via" value={data?.shipVia} />
-                      <Row label="Tracking #" value={data?.trackingNumber} mono />
-                      <Row label="BOL #" value={data?.bolNumber} mono />
-                      <Row label="Total Weight" value={data?.totalWeight ? `${data.totalWeight} lbs` : null} />
-                      <Row label="Bid Count" value={order.shipwellBidCount ?? "—"} />
-                    </div>
-                  </section>
-
-                  <section>
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <Clock className="h-3 w-3" /> Shipwell Timestamps
-                    </h3>
-                    <div className="bg-muted/30 rounded-xl px-4 py-1">
-                      <Row label="Sent to Shipwell" value={fmtDate(order.shipwellSentAt)} />
-                      <Row label="Quoting Started" value={fmtDate(order.shipwellQuotingStartedAt)} />
-                      <Row label="Status Updated" value={fmtDate(order.shipwellStatusUpdatedAt)} />
-                    </div>
-                  </section>
-
-                  <section>
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <ExternalLink className="h-3 w-3" /> Links
-                    </h3>
-                    <div className="flex flex-col gap-2">
-                      {order.shipwellPoUrl && (
-                        <a
-                          href={order.shipwellPoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-xs font-medium text-primary hover:underline"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          View Purchase Order in Shipwell
-                        </a>
-                      )}
-                      {order.shipwellShipmentUrl && (
-                        <a
-                          href={order.shipwellShipmentUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-xs font-medium text-primary hover:underline"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          View Shipment in Shipwell
-                        </a>
-                      )}
-                    </div>
-                  </section>
-                </>
-              )}
-            </div>
+            <ShipwellTabContent
+              order={order}
+              onSent={() => {
+                refetch();
+              }}
+              carrierName={data?.carrierName}
+              shipVia={data?.shipVia}
+              trackingNumber={data?.trackingNumber}
+              bolNumber={data?.bolNumber}
+              totalWeight={data?.totalWeight}
+            />
           )}
         </div>
       </div>
     </>
   );
 }
+
+// ─── Shipwell tab content (extracted to own component for clean hook usage) ──
+function ShipwellTabContent({
+  order,
+  onSent,
+  carrierName,
+  shipVia,
+  trackingNumber,
+  bolNumber,
+  totalWeight,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  order: any;
+  onSent: () => void;
+  carrierName?: string | null;
+  shipVia?: string | null;
+  trackingNumber?: string | null;
+  bolNumber?: string | null;
+  totalWeight?: number | null;
+}) {
+  const utils = trpc.useUtils();
+  const sendOrder = trpc.shipwell.sendOrder.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Order sent to Shipwell. PO ID: ${data.shipwellOrderId}`);
+      utils.pickSchedule.listByChannel.invalidate();
+      onSent();
+    },
+    onError: (err) => {
+      toast.error(`Shipwell error: ${err.message}`);
+    },
+  });
+
+  const isShipReady = order.lifecycleStatus === "ship_ready";
+  const alreadySent = !!order.shipwellOrderId;
+
+  return (
+    <div className="space-y-5">
+      {!alreadySent ? (
+        <>
+          {/* Send to Shipwell CTA */}
+          <div className={`rounded-xl border px-5 py-5 flex flex-col items-center text-center gap-3 ${
+            isShipReady
+              ? "bg-blue-50 border-blue-200"
+              : "bg-muted/30 border-border"
+          }`}>
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+              isShipReady ? "bg-blue-100" : "bg-muted"
+            }`}>
+              <Truck className={`h-6 w-6 ${isShipReady ? "text-blue-600" : "text-muted-foreground opacity-40"}`} />
+            </div>
+            <div>
+              <p className={`text-sm font-semibold ${
+                isShipReady ? "text-blue-900" : "text-muted-foreground"
+              }`}>
+                {isShipReady ? "Ready to send to Shipwell" : "Not yet sent to Shipwell"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isShipReady
+                  ? "This order is Ship Ready. Click below to create a Purchase Order in Shipwell."
+                  : `Order must be at Ship Ready status before sending to Shipwell. Current status: ${order.lifecycleStatus.replace(/_/g, " ")}.`}
+              </p>
+            </div>
+            {isShipReady && (
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5"
+                disabled={sendOrder.isPending}
+                onClick={() => sendOrder.mutate({ extensivOrderId: order.extensivOrderId })}
+              >
+                {sendOrder.isPending ? (
+                  <><RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> Sending…</>
+                ) : (
+                  <><Send className="h-3.5 w-3.5 mr-2" /> Send to Shipwell</>
+                )}
+              </Button>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <section>
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Truck className="h-3 w-3" /> Shipwell Status
+            </h3>
+            <div className="bg-muted/30 rounded-xl px-4 py-1">
+              <Row label="Status" value={
+                <span className="capitalize font-semibold">{order.shipwellStatus?.replace(/_/g, " ") ?? "—"}</span>
+              } />
+              <Row label="Carrier" value={carrierName} />
+              <Row label="Ship Via" value={shipVia} />
+              <Row label="Tracking #" value={trackingNumber} mono />
+              <Row label="BOL #" value={bolNumber} mono />
+              <Row label="Total Weight" value={totalWeight ? `${totalWeight} lbs` : null} />
+              <Row label="Bid Count" value={order.shipwellBidCount ?? "—"} />
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Clock className="h-3 w-3" /> Shipwell Timestamps
+            </h3>
+            <div className="bg-muted/30 rounded-xl px-4 py-1">
+              <Row label="Sent to Shipwell" value={fmtDate(order.shipwellSentAt)} />
+              <Row label="Quoting Started" value={fmtDate(order.shipwellQuotingStartedAt)} />
+              <Row label="Status Updated" value={fmtDate(order.shipwellStatusUpdatedAt)} />
+            </div>
+          </section>
+
+          {(order.shipwellPoUrl || order.shipwellShipmentUrl) && (
+            <section>
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+                <ExternalLink className="h-3 w-3" /> Links
+              </h3>
+              <div className="flex flex-col gap-2">
+                {order.shipwellPoUrl && (
+                  <a
+                    href={order.shipwellPoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-xs font-medium text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    View Purchase Order in Shipwell
+                  </a>
+                )}
+                {order.shipwellShipmentUrl && (
+                  <a
+                    href={order.shipwellShipmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-xs font-medium text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    View Shipment in Shipwell
+                  </a>
+                )}
+              </div>
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+

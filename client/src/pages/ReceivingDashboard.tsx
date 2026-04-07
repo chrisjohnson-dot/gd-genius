@@ -73,6 +73,30 @@ function fmt(d?: string) {
   try { return new Date(d).toLocaleDateString(); } catch { return d; }
 }
 
+function daysSince(dateStr?: string): number | null {
+  if (!dateStr) return null;
+  try {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    return Math.floor(diff / 86_400_000);
+  } catch { return null; }
+}
+
+function AgingBadge({ days }: { days: number }) {
+  const color =
+    days === 0
+      ? "bg-green-500/10 text-green-400 border-green-500/20"
+      : days <= 2
+      ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+      : days <= 4
+      ? "bg-orange-500/10 text-orange-400 border-orange-500/20"
+      : "bg-red-500/10 text-red-400 border-red-500/20";
+  return (
+    <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border", color)}>
+      {days === 0 ? "Today" : `${days}d`}
+    </span>
+  );
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type Receiver = {
@@ -501,13 +525,17 @@ function ClientGroup({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                    {r.readOnly.creationDate && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-2.5 w-2.5" />
-                        Set up {fmt(r.readOnly.creationDate)}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                    {r.readOnly.creationDate && (() => {
+                      const d = daysSince(r.readOnly.creationDate);
+                      return (
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="h-2.5 w-2.5" />
+                          Set up {fmt(r.readOnly.creationDate)}
+                          {d !== null && <AgingBadge days={d} />}
+                        </span>
+                      );
+                    })()}
                     {r.expectedDate && <span>Expected {fmt(r.expectedDate)}</span>}
                     {skuCount > 0 && <span>{skuCount} SKU{skuCount !== 1 ? "s" : ""}</span>}
                   </div>

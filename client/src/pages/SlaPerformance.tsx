@@ -911,6 +911,16 @@ export default function SlaPerformance() {
   const totalWaived = (slaOrders as SlaOrder[]).filter((o) => o.slaActionStatus === "waived").length;
   const liveCompliancePct = activeOrders.length > 0 ? Math.round((totalInSla / activeOrders.length) * 100) : 100;
 
+  // B2B / D2C company-wide OOS totals
+  const totalB2bActive = activeOrders.filter((o) => o.orderChannel === "b2b" || o.orderChannel === "both");
+  const totalD2cActive = activeOrders.filter((o) => o.orderChannel === "d2c" || o.orderChannel === "both");
+  const totalB2bOos = totalB2bActive.filter((o) => o.slaStatus === "out_of_sla" && o.slaActionStatus === "active").length;
+  const totalD2cOos = totalD2cActive.filter((o) => o.slaStatus === "out_of_sla" && o.slaActionStatus === "active").length;
+  const totalB2bInSla = totalB2bActive.filter((o) => o.slaStatus === "in_sla" || o.slaActionStatus === "waived").length;
+  const totalD2cInSla = totalD2cActive.filter((o) => o.slaStatus === "in_sla" || o.slaActionStatus === "waived").length;
+  const b2bCompliancePct = totalB2bActive.length > 0 ? Math.round((totalB2bInSla / totalB2bActive.length) * 100) : 100;
+  const d2cCompliancePct = totalD2cActive.length > 0 ? Math.round((totalD2cInSla / totalD2cActive.length) * 100) : 100;
+
   // Snapshot compliance
   const compliancePct = summary && summary.total > 0 ? Math.round((summary.inSla / summary.total) * 100) : 0;
 
@@ -978,6 +988,62 @@ export default function SlaPerformance() {
 
           {/* ── Live Dashboard ── */}
           <TabsContent value="dashboard" className="space-y-4 mt-4">
+            {/* ── Company-wide B2B / D2C summary bar ── */}
+            {!isLoading && activeOrders.length > 0 && (
+              <div className="rounded-2xl border border-border bg-card px-6 py-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Company-Wide SLA Summary</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* B2B panel */}
+                  <div className="rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Truck className="h-4 w-4 text-blue-600" />
+                      <span className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">B2B</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">{totalB2bActive.length} orders</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 rounded-lg bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
+                        <p className="text-xl font-extrabold text-green-700 dark:text-green-400 leading-none">{totalB2bInSla}</p>
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-green-600 mt-0.5">In SLA</p>
+                      </div>
+                      <div className={`flex-1 rounded-lg border px-3 py-2 text-center ${
+                        totalB2bOos > 0 ? "bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800" : "bg-muted border-border"
+                      }`}>
+                        <p className={`text-xl font-extrabold leading-none ${ totalB2bOos > 0 ? "text-red-700 dark:text-red-400" : "text-muted-foreground" }`}>{totalB2bOos}</p>
+                        <p className={`text-[9px] font-semibold uppercase tracking-wide mt-0.5 ${ totalB2bOos > 0 ? "text-red-600" : "text-muted-foreground" }`}>Out of SLA</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-2xl font-extrabold leading-none ${complianceColor(b2bCompliancePct)}`}>{b2bCompliancePct}%</p>
+                        <p className="text-[9px] text-muted-foreground mt-0.5 uppercase tracking-wide">Compliance</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* D2C panel */}
+                  <div className="rounded-xl border border-orange-100 dark:border-orange-900 bg-orange-50/60 dark:bg-orange-950/20 px-4 py-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ShoppingCart className="h-4 w-4 text-orange-600" />
+                      <span className="text-xs font-bold uppercase tracking-wide text-orange-700 dark:text-orange-300">D2C</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">{totalD2cActive.length} orders</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 rounded-lg bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
+                        <p className="text-xl font-extrabold text-green-700 dark:text-green-400 leading-none">{totalD2cInSla}</p>
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-green-600 mt-0.5">In SLA</p>
+                      </div>
+                      <div className={`flex-1 rounded-lg border px-3 py-2 text-center ${
+                        totalD2cOos > 0 ? "bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800" : "bg-muted border-border"
+                      }`}>
+                        <p className={`text-xl font-extrabold leading-none ${ totalD2cOos > 0 ? "text-red-700 dark:text-red-400" : "text-muted-foreground" }`}>{totalD2cOos}</p>
+                        <p className={`text-[9px] font-semibold uppercase tracking-wide mt-0.5 ${ totalD2cOos > 0 ? "text-red-600" : "text-muted-foreground" }`}>Out of SLA</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-2xl font-extrabold leading-none ${complianceColor(d2cCompliancePct)}`}>{d2cCompliancePct}%</p>
+                        <p className="text-[9px] text-muted-foreground mt-0.5 uppercase tracking-wide">Compliance</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {!isLoading && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl">
                 <Card>

@@ -152,6 +152,9 @@ import {
   createPackageSize,
   deletePackageSize,
   updatePackageSize,
+  logSmallParcelAuditEvent,
+  getSmallParcelAuditLog,
+  countSmallParcelAuditLog,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -6020,6 +6023,48 @@ const smallParcelRouter = router({
     .mutation(async ({ input }) => {
       await deletePackageSize(input.id);
       return { ok: true };
+    }),
+
+  // ── Audit Log ─────────────────────────────────────────────────────────────
+
+  /** Log a single audit event (called from frontend for manual overrides, carrier changes, etc.) */
+  logAuditEvent: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      extensivOrderId: z.number().optional(),
+      clientName: z.string().optional(),
+      eventType: z.enum(["manual_override", "label_purchased", "reprint", "carrier_changed", "scan_error"]),
+      sku: z.string().optional(),
+      qty: z.number().optional(),
+      trackingNumber: z.string().optional(),
+      carrier: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await logSmallParcelAuditEvent({
+        ...input,
+        userId: ctx.user.openId,
+        userName: ctx.user.name ?? ctx.user.email ?? ctx.user.openId,
+      });
+      return { ok: true };
+    }),
+
+  /** Query the audit log with optional filters and pagination */
+  listAuditLog: protectedProcedure
+    .input(z.object({
+      sessionId: z.number().optional(),
+      eventType: z.string().optional(),
+      userId: z.string().optional(),
+      limit: z.number().int().min(1).max(500).optional().default(100),
+      offset: z.number().int().min(0).optional().default(0),
+    }).optional())
+    .query(async ({ input }) => {
+      const opts = input ?? {};
+      const [rows, total] = await Promise.all([
+        getSmallParcelAuditLog(opts),
+        countSmallParcelAuditLog(opts),
+      ]);
+      return { rows, total };
     }),
 });
 

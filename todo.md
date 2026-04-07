@@ -908,3 +908,11 @@
 - [x] Small Parcel: add tRPC procedures to list/create/delete package sizes per client
 - [x] Small Parcel: add Package Size Config page under Small Parcel settings
 - [x] Small Parcel: store selected package size on session and pass to Pack & Ship dimensions
+- [x] Small Parcel: click-to-confirm items without scanning (circle button per row, qty input for qty>1)
+- [x] Small Parcel: show dismissible amber "Manual overrides are being tracked" banner when any item is confirmed manually
+- [x] Small Parcel: record manual override events to DB (order, SKU, qty, user, timestamp, override reason)
+- [x] Small Parcel: add small_parcel_audit_log DB table (session_id, order_id, event_type, sku, qty, user_id, user_name, notes, created_at)
+- [x] Small Parcel: add tRPC procedures for logAuditEvent and listAuditLog
+- [x] Small Parcel: build Audit Log page (/small-parcel/audit-log) with filters by event type, date, user
+- [x] Small Parcel: add Audit Log to sidebar nav under Small Parcel section
+- [x] Small Parcel: pre-populate carrier/service in Pack & Ship from Extensiv order data

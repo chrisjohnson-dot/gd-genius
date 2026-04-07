@@ -88,6 +88,9 @@ import {
   smallParcelPackageSizes,
   SmallParcelPackageSize,
   InsertSmallParcelPackageSize,
+  smallParcelAuditLog,
+  SmallParcelAuditLog,
+  InsertSmallParcelAuditLog,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3190,4 +3193,59 @@ export async function updatePackageSize(id: number, data: Partial<Omit<InsertSma
   const db = await getDb();
   if (!db) return;
   await db.update(smallParcelPackageSizes).set({ ...data, updatedAt: new Date() }).where(eq(smallParcelPackageSizes.id, id));
+}
+
+// ─── Small Parcel Audit Log ───────────────────────────────────────────────────
+
+export async function logSmallParcelAuditEvent(
+  data: Omit<InsertSmallParcelAuditLog, "id" | "createdAt">
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(smallParcelAuditLog).values(data);
+}
+
+export async function getSmallParcelAuditLog(opts: {
+  sessionId?: number;
+  eventType?: string;
+  userId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<SmallParcelAuditLog[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const { sessionId, eventType, userId, limit = 100, offset = 0 } = opts;
+  const conditions = [];
+  if (sessionId !== undefined) conditions.push(eq(smallParcelAuditLog.sessionId, sessionId));
+  if (eventType) conditions.push(eq(smallParcelAuditLog.eventType, eventType));
+  if (userId) conditions.push(eq(smallParcelAuditLog.userId, userId));
+  const query = db
+    .select()
+    .from(smallParcelAuditLog)
+    .orderBy(smallParcelAuditLog.createdAt)
+    .limit(limit)
+    .offset(offset);
+  if (conditions.length > 0) {
+    return query.where(conditions.length === 1 ? conditions[0] : and(...conditions)) as Promise<SmallParcelAuditLog[]>;
+  }
+  return query as Promise<SmallParcelAuditLog[]>;
+}
+
+export async function countSmallParcelAuditLog(opts: {
+  sessionId?: number;
+  eventType?: string;
+  userId?: string;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const { sessionId, eventType, userId } = opts;
+  const conditions = [];
+  if (sessionId !== undefined) conditions.push(eq(smallParcelAuditLog.sessionId, sessionId));
+  if (eventType) conditions.push(eq(smallParcelAuditLog.eventType, eventType));
+  if (userId) conditions.push(eq(smallParcelAuditLog.userId, userId));
+  const q = db.select({ count: sql<number>`count(*)` }).from(smallParcelAuditLog);
+  const rows = conditions.length > 0
+    ? await (q.where(conditions.length === 1 ? conditions[0] : and(...conditions)) as ReturnType<typeof q.where>)
+    : await q;
+  return Number((rows as { count: number }[])[0]?.count ?? 0);
 }

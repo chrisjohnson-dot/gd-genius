@@ -24,6 +24,7 @@ import {
   Settings,
   WifiOff,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
 import { Link } from "wouter";
@@ -282,11 +283,15 @@ function Step2PackageSize({
 /// ─── Step 3: Scan Items ────────────────────────────────────────────────────
 function Step3ScanItems({
   sessionId,
+  extensivOrderId,
+  clientName,
   items,
   onComplete,
   onBack,
 }: {
   sessionId: number;
+  extensivOrderId?: number;
+  clientName?: string;
   items: ScannedItem[];
   onComplete: (items: ScannedItem[]) => void;
   onBack?: () => void;
@@ -294,10 +299,18 @@ function Step3ScanItems({
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>(items);
   const [scanInput, setScanInput] = useState("");
   const scanInputRef = useRef<HTMLInputElement>(null);
+  // Track which items were manually overridden (by index)
+  const [manualOverrides, setManualOverrides] = useState<Set<number>>(new Set());
+  // Show/hide the override warning banner
+  const [overrideBannerDismissed, setOverrideBannerDismissed] = useState(false);
+  // Per-row qty input state for manual entry
+  const [qtyInputs, setQtyInputs] = useState<Record<number, string>>({});
 
   const updateMutation = trpc.smallParcel.updateScannedItems.useMutation();
+  const logAuditMutation = trpc.smallParcel.logAuditEvent.useMutation();
 
   const allDone = scannedItems.every((item) => item.scanned >= item.qty);
+  const hasManualOverrides = manualOverrides.size > 0;
 
   const handleScan = useCallback(() => {
     const sku = scanInput.trim().toUpperCase();
@@ -313,6 +326,15 @@ function Step3ScanItems({
         toast.warning(`${sku} already fully scanned (${knownSku.qty}/${knownSku.qty})`);
       } else {
         toast.error(`SKU "${sku}" not found on this order`);
+        // Log scan error
+        logAuditMutation.mutate({
+          sessionId,
+          extensivOrderId,
+          clientName,
+          eventType: "scan_error",
+          sku,
+          notes: "SKU not found on order",
+        });
       }
       setScanInput("");
       return;
@@ -333,10 +355,66 @@ function Step3ScanItems({
 
     setScanInput("");
     scanInputRef.current?.focus();
-  }, [scanInput, scannedItems, sessionId, updateMutation]);
+  }, [scanInput, scannedItems, sessionId, updateMutation, logAuditMutation, extensivOrderId, clientName]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleScan();
+  };
+
+  /** Mark an item as fully confirmed manually (circle click) */
+  const handleManualConfirm = (i: number) => {
+    const item = scannedItems[i];
+    if (item.scanned >= item.qty) return;
+    const remaining = item.qty - item.scanned;
+    const updated = scannedItems.map((it, idx) =>
+      idx === i ? { ...it, scanned: it.qty } : it
+    );
+    setScannedItems(updated);
+    updateMutation.mutate({ id: sessionId, scannedItems: updated });
+    setManualOverrides((prev) => new Set(prev).add(i));
+    setOverrideBannerDismissed(false);
+    // Log the override
+    logAuditMutation.mutate({
+      sessionId,
+      extensivOrderId,
+      clientName,
+      eventType: "manual_override",
+      sku: item.sku,
+      qty: remaining,
+      notes: `Manually confirmed ${remaining} unit(s) without scanning`,
+    });
+    toast.warning(`${item.sku} — manually confirmed (${remaining} unit${remaining !== 1 ? "s" : ""} not scanned)`);
+    scanInputRef.current?.focus();
+  };
+
+  /** Set a specific qty via the inline number input */
+  const handleManualQtySet = (i: number) => {
+    const raw = qtyInputs[i];
+    if (!raw) return;
+    const newScanned = Math.min(parseInt(raw, 10) || 0, scannedItems[i].qty);
+    const item = scannedItems[i];
+    const prevScanned = item.scanned;
+    if (newScanned === prevScanned) return;
+    const updated = scannedItems.map((it, idx) =>
+      idx === i ? { ...it, scanned: newScanned } : it
+    );
+    setScannedItems(updated);
+    updateMutation.mutate({ id: sessionId, scannedItems: updated });
+    setQtyInputs((prev) => { const n = { ...prev }; delete n[i]; return n; });
+    if (newScanned > prevScanned) {
+      setManualOverrides((prev) => new Set(prev).add(i));
+      setOverrideBannerDismissed(false);
+      logAuditMutation.mutate({
+        sessionId,
+        extensivOrderId,
+        clientName,
+        eventType: "manual_override",
+        sku: item.sku,
+        qty: newScanned - prevScanned,
+        notes: `Manually set qty to ${newScanned}/${item.qty}`,
+      });
+    }
+    scanInputRef.current?.focus();
   };
 
   return (
@@ -347,9 +425,29 @@ function Step3ScanItems({
         </div>
         <div>
           <h2 className="text-xl font-bold">Scan Items</h2>
-          <p className="text-muted-foreground text-sm">Scan each item barcode to verify the contents of the box.</p>
+          <p className="text-muted-foreground text-sm">Scan each item barcode — or click the circle to confirm manually.</p>
         </div>
       </div>
+
+      {/* Manual override warning banner */}
+      {hasManualOverrides && !overrideBannerDismissed && (
+        <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg px-4 py-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800 dark:text-amber-300">Manual overrides are being tracked</p>
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              {manualOverrides.size} item{manualOverrides.size !== 1 ? "s" : ""} confirmed without scanning. These are recorded in the Small Parcel Audit Log.
+            </p>
+          </div>
+          <button
+            className="text-amber-600 hover:text-amber-800 text-lg leading-none ml-2"
+            onClick={() => setOverrideBannerDismissed(true)}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Scan input */}
       <div className="flex gap-2">
@@ -372,6 +470,9 @@ function Step3ScanItems({
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Items — {scannedItems.filter((i) => i.scanned >= i.qty).length}/{scannedItems.length} complete
+            {hasManualOverrides && (
+              <span className="ml-2 text-amber-600 font-normal">(manual overrides: {manualOverrides.size})</span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -379,44 +480,72 @@ function Step3ScanItems({
             {scannedItems.map((item, i) => {
               const done = item.scanned >= item.qty;
               const partial = item.scanned > 0 && !done;
+              const isOverride = manualOverrides.has(i);
+              const editingQty = qtyInputs[i] !== undefined;
               return (
-                <div key={i} className="flex items-center justify-between py-3">
+                <div key={i} className={`flex items-center justify-between py-3 ${isOverride ? "bg-amber-50/50 dark:bg-amber-900/10 -mx-2 px-2 rounded" : ""}`}>
                   <div className="flex items-center gap-3">
-                    {done ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-                    ) : partial ? (
-                      <Circle className="w-5 h-5 text-yellow-500 shrink-0" />
-                    ) : (
-                      <Circle className="w-5 h-5 text-muted-foreground shrink-0" />
-                    )}
-                    <span className={`font-mono text-sm font-semibold ${done ? "text-green-600" : ""}`}>
-                      {item.sku}
-                    </span>
+                    {/* Clickable circle/check — click to manually confirm */}
+                    <button
+                      type="button"
+                      className={`shrink-0 rounded-full transition-colors ${
+                        done
+                          ? "text-green-500 cursor-default"
+                          : "text-muted-foreground hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 p-0.5 -m-0.5"
+                      }`}
+                      onClick={() => !done && handleManualConfirm(i)}
+                      title={done ? "Complete" : "Click to manually confirm all remaining"}
+                      disabled={done}
+                    >
+                      {done ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : partial ? (
+                        <Circle className="w-5 h-5 text-yellow-500" />
+                      ) : (
+                        <Circle className="w-5 h-5" />
+                      )}
+                    </button>
+                    <div>
+                      <span className={`font-mono text-sm font-semibold ${done ? "text-green-600" : ""}`}>
+                        {item.sku}
+                      </span>
+                      {isOverride && (
+                        <span className="ml-2 text-xs text-amber-600 font-medium">manual</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`text-sm font-semibold ${
-                        done ? "text-green-600" : partial ? "text-yellow-600" : "text-muted-foreground"
-                      }`}
-                    >
-                      {item.scanned} / {item.qty}
-                    </span>
-                    {/* Manual increment button for accessibility */}
-                    {!done && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => {
-                          const updated = scannedItems.map((it, idx) =>
-                            idx === i ? { ...it, scanned: it.scanned + 1 } : it
-                          );
-                          setScannedItems(updated);
-                          updateMutation.mutate({ id: sessionId, scannedItems: updated });
-                        }}
+                    {/* Inline qty editor */}
+                    {!done && editingQty ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={item.qty}
+                          className="w-16 h-7 text-sm text-center"
+                          value={qtyInputs[i]}
+                          autoFocus
+                          onChange={(e) => setQtyInputs((prev) => ({ ...prev, [i]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleManualQtySet(i);
+                            if (e.key === "Escape") setQtyInputs((prev) => { const n = { ...prev }; delete n[i]; return n; });
+                          }}
+                          onBlur={() => handleManualQtySet(i)}
+                        />
+                        <span className="text-xs text-muted-foreground">/ {item.qty}</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className={`text-sm font-semibold tabular-nums ${
+                          done ? "text-green-600" : partial ? "text-yellow-600 underline decoration-dotted cursor-pointer" : "text-muted-foreground underline decoration-dotted cursor-pointer"
+                        }`}
+                        onClick={() => !done && setQtyInputs((prev) => ({ ...prev, [i]: String(item.scanned) }))}
+                        title={done ? undefined : "Click to enter qty manually"}
+                        disabled={done}
                       >
-                        +1
-                      </Button>
+                        {item.scanned} / {item.qty}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -430,8 +559,12 @@ function Step3ScanItems({
         <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
           <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
           <div>
-            <p className="font-semibold text-green-800 dark:text-green-300">All items scanned!</p>
-            <p className="text-sm text-green-700 dark:text-green-400">Ready to pack and ship.</p>
+            <p className="font-semibold text-green-800 dark:text-green-300">All items confirmed!</p>
+            <p className="text-sm text-green-700 dark:text-green-400">
+              {hasManualOverrides
+                ? `${manualOverrides.size} item${manualOverrides.size !== 1 ? "s" : ""} manually overridden — recorded in audit log.`
+                : "All items scanned. Ready to pack and ship."}
+            </p>
           </div>
           <Button onClick={() => onComplete(scannedItems)} className="ml-auto bg-green-600 hover:bg-green-700">
             Continue to Pack &amp; Ship
@@ -939,6 +1072,8 @@ export default function SmallParcel() {
           {step === 3 && sessionId !== null && orderData && (
             <Step3ScanItems
               sessionId={sessionId}
+              extensivOrderId={orderData.extensivOrderId}
+              clientName={orderData.clientName}
               items={orderData.orderItems.map((item) => ({ sku: item.sku, qty: item.qty, scanned: 0 }))}
               onComplete={handleScanComplete}
               onBack={() => { setStep(2); setSessionId(null); }}

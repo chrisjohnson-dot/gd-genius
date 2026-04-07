@@ -1123,3 +1123,42 @@ export const smallParcelPackageSizes = mysqlTable("small_parcel_package_sizes", 
 });
 export type SmallParcelPackageSize = typeof smallParcelPackageSizes.$inferSelect;
 export type InsertSmallParcelPackageSize = typeof smallParcelPackageSizes.$inferInsert;
+
+// ─── Small Parcel Audit Log ───────────────────────────────────────────────────
+// Tracks all notable events during the Small Parcel Pack & Ship workflow,
+// including manual item overrides, label purchases, reprints, and carrier changes.
+export const smallParcelAuditLog = mysqlTable("small_parcel_audit_log", {
+  id: int("id").primaryKey().autoincrement(),
+  /** FK to small_parcel_sessions */
+  sessionId: int("sessionId").notNull(),
+  /** Extensiv Transaction ID */
+  extensivOrderId: int("extensivOrderId"),
+  /** Client / customer name for display */
+  clientName: varchar("clientName", { length: 256 }),
+  /**
+   * Event type:
+   *   manual_override  — operator confirmed item without scanning
+   *   label_purchased  — label was purchased (stub or real)
+   *   reprint          — label was reprinted
+   *   carrier_changed  — operator changed carrier/service from the default
+   *   scan_error       — barcode scan returned an unknown SKU
+   */
+  eventType: varchar("eventType", { length: 64 }).notNull(),
+  /** SKU involved (for manual_override, scan_error) */
+  sku: varchar("sku", { length: 128 }),
+  /** Quantity involved */
+  qty: int("qty"),
+  /** Tracking number (for label_purchased, reprint) */
+  trackingNumber: varchar("trackingNumber", { length: 256 }),
+  /** Carrier name (for carrier_changed) */
+  carrier: varchar("carrier", { length: 128 }),
+  /** Manus user ID */
+  userId: varchar("userId", { length: 128 }),
+  /** Display name of the user */
+  userName: varchar("userName", { length: 256 }),
+  /** Optional freeform notes */
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SmallParcelAuditLog = typeof smallParcelAuditLog.$inferSelect;
+export type InsertSmallParcelAuditLog = typeof smallParcelAuditLog.$inferInsert;

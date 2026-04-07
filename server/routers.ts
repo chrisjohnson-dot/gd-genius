@@ -5846,6 +5846,7 @@ const smallParcelRouter = router({
         veeqoTrackingNumber: trackingNumber,
         veeqoCarrierService: `${carrier} ${serviceLevel}`.trim(),
         labelPurchasedAt: new Date(),
+        labelZpl,
       });
 
       // ── Step 3: Mark the order as Packed then Shipped in Extensiv ──
@@ -5917,6 +5918,16 @@ const smallParcelRouter = router({
     }).optional())
     .query(async ({ input }) => {
       return listSmallParcelSessions(input ?? {});
+    }),
+
+  /** Return the stored ZPL for a completed session so the frontend can reprint it */
+  getSessionZpl: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const session = await getSmallParcelSession(input.id);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (!session.labelZpl) throw new TRPCError({ code: "NOT_FOUND", message: "No ZPL label stored for this session" });
+      return { labelZpl: session.labelZpl, trackingNumber: session.veeqoTrackingNumber, carrier: session.veeqoCarrierService };
     }),
 });
 

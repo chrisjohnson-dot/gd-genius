@@ -1075,6 +1075,8 @@ export const smallParcelSessions = mysqlTable("small_parcel_sessions", {
   veeqoLabelUrl: varchar("veeqoLabelUrl", { length: 1024 }),
   veeqoTrackingNumber: varchar("veeqoTrackingNumber", { length: 256 }),
   veeqoLabelCost: decimal("veeqoLabelCost", { precision: 10, scale: 2 }),
+  // ZPL label content for direct Zebra printer reprint
+  labelZpl: text("labelZpl"),
   // Package dimensions (optional, for rate shopping)
   weightKg: decimal("weightKg", { precision: 8, scale: 3 }),
   lengthCm: decimal("lengthCm", { precision: 8, scale: 2 }),

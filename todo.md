@@ -893,3 +893,7 @@
 - [x] Store printer config in localStorage (printerIp, printerName)
 - [x] Auto-send ZPL label to Zebra printer after Pack & Ship label purchase
 - [x] Show print status (printing / success / error) in Pack & Ship confirmation
+- [x] Add Reprint Label button on Pack & Ship confirmation screen (resends stored ZPL to printer)
+- [x] Build Small Parcel Session History page (/small-parcel/history) with Reprint Label button per row
+- [x] Add getSmallParcelSessions DB helper and smallParcel.listSessions tRPC procedure
+- [x] Store labelZpl in small_parcel_sessions table for reprint support

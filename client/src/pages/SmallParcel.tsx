@@ -23,6 +23,7 @@ import {
   ArrowRight,
   Settings,
   WifiOff,
+  RefreshCw,
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
 import { Link } from "wouter";
@@ -520,6 +521,9 @@ function Step4PackShip({
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
+  // Store the ZPL from the last successful purchase for the Reprint button
+  const [lastZpl, setLastZpl] = useState<string | null>(null);
+  const [reprinting, setReprinting] = useState(false);
 
   const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useBrowserPrint();
 
@@ -540,30 +544,14 @@ function Step4PackShip({
       }
 
       // ── Auto-print ZPL label ──
-      if (data.veeqoLabelUrl) {
+      // data.labelZpl is the ZPL generated/returned by the server
+      const zpl = data.labelZpl;
+      if (zpl) {
+        setLastZpl(zpl);
         resetPrintStatus();
         try {
-          // Fetch the ZPL content from the label URL
-          // For stub labels (PDF URL), we generate a simple ZPL receipt instead
-          let zpl: string;
-          if (data.veeqoLabelUrl.startsWith("https://stub-labels.example.com")) {
-            // Stub mode: generate a minimal ZPL label for testing
-            zpl = buildStubZpl({
-              trackingNumber: data.trackingNumber,
-              carrier: data.carrier,
-              serviceLevel: data.serviceLevel,
-              shipTo: order.shipTo,
-              referenceNum: order.referenceNum,
-            });
-          } else {
-            // Real Veeqo label: fetch ZPL from the URL
-            const resp = await fetch(data.veeqoLabelUrl);
-            if (!resp.ok) throw new Error(`Failed to fetch label: ${resp.statusText}`);
-            zpl = await resp.text();
-          }
           await printZpl(zpl);
         } catch (err) {
-          // printZpl already sets printStatus to "error", but catch fetch errors too
           console.error("[SmallParcel] Auto-print error:", err);
         }
       }
@@ -588,6 +576,21 @@ function Step4PackShip({
   };
 
   const isLoading = updateDimsMutation.status === "pending" || purchaseMutation.status === "pending";
+  const labelPurchased = purchaseMutation.status === "success";
+
+  const handleReprint = async () => {
+    if (!lastZpl) return;
+    if (!selectedPrinter) {
+      toast.error("No printer configured", { description: "Go to Printer Settings to set up your Zebra printer." });
+      return;
+    }
+    setReprinting(true);
+    resetPrintStatus();
+    // Add DUPLICATE watermark
+    const zplWithDuplicate = lastZpl.replace(/(\^XA\n?)/, `$1^FO480,30^A0N,28,28^FDDUPLICATE^FS\n`);
+    await printZpl(zplWithDuplicate);
+    setReprinting(false);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -711,6 +714,36 @@ function Step4PackShip({
         printerName={selectedPrinter?.name ?? null}
       />
 
+      {/* ── Confirmation screen after label purchase ── */}
+      {labelPurchased && purchaseMutation.data && (
+        <div className="flex flex-col gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-4">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+            <p className="font-semibold text-green-800 dark:text-green-300">Label purchased successfully</p>
+          </div>
+          <div className="text-sm text-green-700 dark:text-green-400 flex flex-col gap-1">
+            <span><strong>Tracking:</strong> {purchaseMutation.data.trackingNumber}</span>
+            <span><strong>Carrier:</strong> {purchaseMutation.data.carrier} {purchaseMutation.data.serviceLevel}</span>
+          </div>
+          {lastZpl && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReprint}
+              disabled={reprinting || printStatus === "printing"}
+              className="self-start gap-2 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
+            >
+              {reprinting || printStatus === "printing" ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Printer className="w-3.5 h-3.5" />
+              )}
+              Reprint Label (DUPLICATE)
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-3">
         <Button variant="outline" onClick={onReset} className="flex-1">
           <RotateCcw className="w-4 h-4 mr-2" />
@@ -718,7 +751,7 @@ function Step4PackShip({
         </Button>
         <Button
           onClick={handlePackShip}
-          disabled={isLoading || printStatus === "printing"}
+          disabled={isLoading || printStatus === "printing" || labelPurchased}
           className="flex-1 bg-blue-600 hover:bg-blue-700"
         >
           {isLoading || printStatus === "printing" ? (
@@ -726,7 +759,7 @@ function Step4PackShip({
           ) : (
             <Printer className="w-4 h-4 mr-2" />
           )}
-          Pack &amp; Ship — Print Label
+          {labelPurchased ? "Label Purchased" : "Pack & Ship — Print Label"}
         </Button>
       </div>
     </div>

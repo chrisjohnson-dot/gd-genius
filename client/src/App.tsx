@@ -49,6 +49,7 @@ import QcAuditLog from "@/pages/QcAuditLog";
 import SlaPerformance from "@/pages/SlaPerformance";
 import SmallParcel from "@/pages/SmallParcel";
 import SmallParcelPrinterSettings from "@/pages/SmallParcelPrinterSettings";
+import SmallParcelHistory from "@/pages/SmallParcelHistory";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -108,6 +109,7 @@ function AppRoutes() {
         <Route path="/open-orders-d2c" component={OpenOrdersD2C} />
         <Route path="/sla-performance" component={SlaPerformance} />
         <Route path="/small-parcel" component={SmallParcel} />
+        <Route path="/small-parcel/history" component={SmallParcelHistory} />
         <Route path="/small-parcel/printer-settings" component={SmallParcelPrinterSettings} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

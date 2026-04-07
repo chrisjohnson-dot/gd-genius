@@ -1183,3 +1183,108 @@ export async function assignMULabelsToReceiver(
     error: `HTTP ${result.status}: ${JSON.stringify(result.data)}`,
   };
 }
+
+
+// --- Mark Order as Shipped ---
+export interface MarkOrderShippedParams {
+  orderId: number;
+  carrierCode?: string;
+  carrierName?: string;
+  trackingNumber: string;
+  shipVia?: string;
+  shipDate?: string;
+  weightLbs?: number;
+  freightCost?: number;
+}
+
+export async function markOrderShipped(
+  config: ExtensivClientConfig,
+  params: MarkOrderShippedParams
+): Promise<{ success: boolean; error?: string }> {
+  const { getExtensivToken } = await import("./client.js");
+  const axios = (await import("axios")).default;
+  const token = await getExtensivToken(config);
+  const baseUrl = config.baseUrl || "https://secure-wms.com";
+
+  const getResp = await axios.get(baseUrl + "/orders/" + params.orderId, {
+    headers: { Authorization: "Bearer " + token, Accept: "application/hal+json" },
+    validateStatus: () => true,
+  });
+  if (getResp.status !== 200) {
+    return { success: false, error: "Failed to fetch order for ETag: HTTP " + getResp.status };
+  }
+  const etag = (getResp.headers["etag"] || "").replace(/"/g, "");
+
+  const shipDate = params.shipDate ?? new Date().toISOString().split("T")[0] + "T00:00:00";
+  const body: Record<string, unknown> = { trackingNumber: params.trackingNumber, shipDate };
+  if (params.carrierCode) body.carrierCode = params.carrierCode;
+  if (params.carrierName) body.carrierName = params.carrierName;
+  if (params.shipVia) body.shipVia = params.shipVia;
+  if (params.weightLbs !== undefined) body.weightLbs = params.weightLbs;
+  if (params.freightCost !== undefined) body.freightCost = params.freightCost;
+
+  const headers: Record<string, string> = {
+    Authorization: "Bearer " + token,
+    Accept: "application/hal+json",
+    "Content-Type": "application/json",
+  };
+  if (etag) headers["If-Match"] = `"${etag}"`;
+
+  const putResp = await axios.put(baseUrl + "/orders/" + params.orderId + "/shipper", body, {
+    headers,
+    validateStatus: () => true,
+  });
+
+  if (putResp.status === 200 || putResp.status === 204) return { success: true };
+  return { success: false, error: "HTTP " + putResp.status + ": " + JSON.stringify(putResp.data) };
+}
+
+
+// --- Mark Order as Packed ---
+/**
+ * Mark an Extensiv order as packed by calling PUT /orders/{orderId}/status
+ * with status=2 (Packed / Ready to Ship in 3PL Central terminology).
+ *
+ * Extensiv order statuses:
+ *   0 = Open
+ *   1 = Allocated / Pick in Progress
+ *   2 = Packed / Ready to Ship
+ *   3 = Shipped / Closed
+ *   4 = Cancelled
+ */
+export async function markOrderPacked(
+  config: ExtensivClientConfig,
+  orderId: number
+): Promise<{ success: boolean; error?: string }> {
+  const { getExtensivToken } = await import("./client.js");
+  const axios = (await import("axios")).default;
+  const token = await getExtensivToken(config);
+  const baseUrl = config.baseUrl || "https://secure-wms.com";
+
+  // Fetch ETag first
+  const getResp = await axios.get(baseUrl + "/orders/" + orderId, {
+    headers: { Authorization: "Bearer " + token, Accept: "application/hal+json" },
+    validateStatus: () => true,
+  });
+  if (getResp.status !== 200) {
+    return { success: false, error: "Failed to fetch order for ETag: HTTP " + getResp.status };
+  }
+  const etag = (getResp.headers["etag"] || "").replace(/"/g, "");
+
+  const headers: Record<string, string> = {
+    Authorization: "Bearer " + token,
+    Accept: "application/hal+json",
+    "Content-Type": "application/json",
+  };
+  if (etag) headers["If-Match"] = `""`;
+
+  // PUT /orders/{orderId}/status with status=2 (Packed)
+  const putResp = await axios.put(
+    baseUrl + "/orders/" + orderId + "/status",
+    { status: 2 },
+    { headers, validateStatus: () => true }
+  );
+
+  if (putResp.status === 200 || putResp.status === 204) return { success: true };
+  return { success: false, error: "HTTP " + putResp.status + ": " + JSON.stringify(putResp.data) };
+}

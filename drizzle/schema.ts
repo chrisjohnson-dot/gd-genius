@@ -1082,6 +1082,11 @@ export const smallParcelSessions = mysqlTable("small_parcel_sessions", {
   heightCm: decimal("heightCm", { precision: 8, scale: 2 }),
   // Session lifecycle
   status: mysqlEnum("status", ["scanning", "ready", "label_purchased", "cancelled"]).notNull().default("scanning"),
+  packedAt: timestamp("packedAt"),
+  labelPurchasedAt: timestamp("labelPurchasedAt"),
+  // Extensiv write-back status
+  extensivPackedAt: timestamp("extensivPackedAt"),
+  extensivShippedAt: timestamp("extensivShippedAt"),
   createdByUserId: varchar("createdByUserId", { length: 128 }),
   createdByName: varchar("createdByName", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

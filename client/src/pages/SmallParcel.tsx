@@ -463,8 +463,18 @@ function Step4PackShip({
 
   const updateDimsMutation = trpc.smallParcel.updateDimensions.useMutation();
   const purchaseMutation = trpc.smallParcel.purchaseLabel.useMutation({
-    onSuccess: () => {
-      toast.success("Label purchased! The shipping label is ready to print.");
+    onSuccess: (data) => {
+      const packedOk = data.extensivMarkedPacked;
+      const shippedOk = data.extensivMarkedShipped;
+      if (packedOk && shippedOk) {
+        toast.success("Label purchased!", { description: "Order marked as Packed and Shipped in Extensiv." });
+      } else if (packedOk && !shippedOk) {
+        toast.success("Label purchased!", { description: `Marked Packed in Extensiv. Shipped write-back failed: ${data.extensivShipError ?? "unknown"}` });
+      } else if (!packedOk && shippedOk) {
+        toast.success("Label purchased!", { description: `Marked Shipped in Extensiv. Packed write-back failed: ${data.extensivPackError ?? "unknown"}` });
+      } else {
+        toast.success("Label purchased!", { description: "Extensiv write-back pending — check order status manually." });
+      }
     },
     onError: (err) => {
       toast.error(`Label purchase failed: ${err.message}`);

@@ -886,3 +886,5 @@
 - [x] Build SmallParcel.tsx 4-step workflow page (scan pick ticket, view order, scan items, pack & ship)
 - [x] Add small_parcel_sessions DB table and helpers
 - [x] Write vitest tests for smallParcel procedures (379 tests passing)
+- [ ] Auto-mark order as shipped in Extensiv after Small Parcel label purchase (with tracking number and carrier)
+- [x] Auto-mark order as Packed and Shipped in Extensiv after label purchase

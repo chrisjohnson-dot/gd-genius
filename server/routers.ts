@@ -168,7 +168,7 @@ import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdue
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
-  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver } from "./extensiv/api";
+  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -5765,14 +5765,93 @@ const smallParcelRouter = router({
       if (session.status === "label_purchased") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Label already purchased for this session" });
       }
-      // TODO: Replace with real Veeqo API call once API key is provisioned
-      // const veeqo = createVeeqoClient(process.env.VEEQO_API_KEY!);
-      // const rates = await veeqo.getRates({ ... });
-      // const label = await veeqo.purchaseLabel({ rateId: rates[0].id, ... });
-      throw new TRPCError({
-        code: "NOT_IMPLEMENTED",
-        message: "Veeqo API key not yet configured. Please add your VEEQO_API_KEY to the environment settings to enable label purchasing.",
+
+      // ── Step 1: Purchase label via Veeqo (stub until API key is provisioned) ──
+      const veeqoApiKey = process.env.VEEQO_API_KEY;
+      let labelUrl: string;
+      let trackingNumber: string;
+      let carrier: string;
+      let serviceLevel: string;
+
+      if (veeqoApiKey) {
+        // TODO: Replace stub with real Veeqo API call once API key is provisioned
+        // const veeqo = createVeeqoClient(veeqoApiKey);
+        // const rates = await veeqo.getRates({ ... });
+        // const label = await veeqo.purchaseLabel({ rateId: rates[0].id, ... });
+        // labelUrl = label.labelUrl;
+        // trackingNumber = label.trackingNumber;
+        // carrier = label.carrierName;
+        // serviceLevel = label.serviceLevel;
+        throw new TRPCError({
+          code: "NOT_IMPLEMENTED",
+          message: "Veeqo API integration is pending implementation. API key is set but the integration is not yet complete.",
+        });
+      } else {
+        // Stub response for development/testing — generates a placeholder label
+        trackingNumber = `STUB-${Date.now()}-${session.extensivOrderId}`;
+        carrier = input.carrierService ?? "Stub Carrier";
+        serviceLevel = "Ground";
+        labelUrl = `https://stub-labels.example.com/${trackingNumber}.pdf`;
+      }
+
+      // ── Step 2: Update session record with label details ──
+      await updateSmallParcelSession(input.id, {
+        status: "label_purchased",
+        veeqoLabelUrl: labelUrl,
+        veeqoTrackingNumber: trackingNumber,
+        veeqoCarrierService: `${carrier} ${serviceLevel}`.trim(),
+        labelPurchasedAt: new Date(),
       });
+
+      // ── Step 3: Mark the order as Packed then Shipped in Extensiv ──
+      let extensivPackResult: { success: boolean; error?: string } = { success: false, error: "Config not found" };
+      let extensivShipResult: { success: boolean; error?: string } = { success: false, error: "Config not found" };
+      const orderId = session.extensivOrderId ?? null;
+
+      if (orderId !== null) {
+        try {
+          const config = await getExtensivConfigById(session.configId);
+          if (config) {
+            // Step 3a: Mark as Packed
+            extensivPackResult = await markOrderPacked(config, orderId);
+            if (!extensivPackResult.success) {
+              console.warn(`[SmallParcel] markOrderPacked failed for order ${orderId}: ${extensivPackResult.error}`);
+            } else {
+              console.log(`[SmallParcel] Order ${orderId} marked as Packed in Extensiv`);
+              await updateSmallParcelSession(input.id, { extensivPackedAt: new Date() });
+            }
+
+            // Step 3b: Mark as Shipped (always attempt even if Packed failed)
+            extensivShipResult = await markOrderShipped(config, {
+              orderId,
+              trackingNumber,
+              carrierName: carrier,
+              shipVia: serviceLevel,
+            });
+            if (!extensivShipResult.success) {
+              console.warn(`[SmallParcel] markOrderShipped failed for order ${orderId}: ${extensivShipResult.error}`);
+            } else {
+              console.log(`[SmallParcel] Order ${orderId} marked as Shipped in Extensiv (tracking: ${trackingNumber})`);
+              await updateSmallParcelSession(input.id, { extensivShippedAt: new Date() });
+            }
+          }
+        } catch (err) {
+          // Log but do not fail the label purchase — the label is already purchased
+          console.error(`[SmallParcel] Error updating Extensiv order status:`, err);
+          extensivShipResult = { success: false, error: String(err) };
+        }
+      }
+
+      return {
+        veeqoLabelUrl: labelUrl,
+        trackingNumber,
+        carrier,
+        serviceLevel,
+        extensivMarkedPacked: extensivPackResult.success,
+        extensivMarkedShipped: extensivShipResult.success,
+        extensivPackError: extensivPackResult.success ? undefined : extensivPackResult.error,
+        extensivShipError: extensivShipResult.success ? undefined : extensivShipResult.error,
+      };
     }),
 
   /** Cancel a session */

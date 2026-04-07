@@ -14,14 +14,30 @@ import {
   MapPin,
   Save,
   Trash2,
-  ArrowUp,
-  ArrowDown,
+  GripVertical,
   RefreshCw,
   Info,
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ─── Shared types (mirror WhLocationConfig) ────────────────────────────────
 
@@ -85,19 +101,102 @@ function AisleChip({
   );
 }
 
+// ─── Sortable Priority Row ─────────────────────────────────────────────────
+
+function SortablePriorityRow({
+  entry,
+  index,
+  total,
+  onRemove,
+}: {
+  entry: PriorityEntry;
+  index: number;
+  total: number;
+  onRemove: (index: number) => void;
+}) {
+  const id = `${entry.aisle}::${entry.level}`;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  const label = entry.level === "*" ? entry.aisle : `${entry.aisle} / ${entry.level}`;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 rounded-lg border bg-card px-3 py-2 ${
+        isDragging ? "border-primary/40 shadow-lg" : "border-border"
+      }`}
+    >
+      {/* Drag handle */}
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground touch-none shrink-0 p-0.5 -ml-1"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+        {entry.priorityOrder}
+      </span>
+      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      <span className="text-sm font-medium flex-1 font-mono">{label}</span>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0"
+        onClick={() => onRemove(index)}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 // ─── PriorityList ──────────────────────────────────────────────────────────
 
 function PriorityList({
   entries,
-  onMoveUp,
-  onMoveDown,
   onRemove,
+  onReorder,
 }: {
   entries: PriorityEntry[];
-  onMoveUp: (index: number) => void;
-  onMoveDown: (index: number) => void;
   onRemove: (index: number) => void;
+  onReorder: (newEntries: PriorityEntry[]) => void;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = entries.findIndex(e => `${e.aisle}::${e.level}` === active.id);
+    const newIndex = entries.findIndex(e => `${e.aisle}::${e.level}` === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(entries, oldIndex, newIndex).map((e, i) => ({
+      ...e,
+      priorityOrder: i + 1,
+    }));
+    onReorder(reordered);
+  }
+
   if (entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl border border-dashed border-border bg-muted/10">
@@ -110,52 +209,24 @@ function PriorityList({
     );
   }
 
+  const ids = entries.map(e => `${e.aisle}::${e.level}`);
+
   return (
-    <div className="space-y-1.5">
-      {entries.map((entry, idx) => {
-        const label = entry.level === "*" ? entry.aisle : `${entry.aisle} / ${entry.level}`;
-        return (
-          <div
-            key={`${entry.aisle}-${entry.level}`}
-            className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
-          >
-            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-              {entry.priorityOrder}
-            </span>
-            <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-sm font-medium flex-1 font-mono">{label}</span>
-            <div className="flex items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                onClick={() => onMoveUp(idx)}
-                disabled={idx === 0}
-              >
-                <ArrowUp className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                onClick={() => onMoveDown(idx)}
-                disabled={idx === entries.length - 1}
-              >
-                <ArrowDown className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                onClick={() => onRemove(idx)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <div className="space-y-1.5">
+          {entries.map((entry, idx) => (
+            <SortablePriorityRow
+              key={`${entry.aisle}::${entry.level}`}
+              entry={entry}
+              index={idx}
+              total={entries.length}
+              onRemove={onRemove}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -710,15 +781,17 @@ export default function PutAwayPriorityConfig() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Use the arrows to reorder. Priority 1 is suggested first.
+                Drag rows to reorder. Priority 1 is suggested first.
               </p>
             </CardHeader>
             <CardContent>
               <PriorityList
                 entries={priorityEntries}
-                onMoveUp={handleMoveUp}
-                onMoveDown={handleMoveDown}
                 onRemove={handleRemove}
+                onReorder={(newEntries) => {
+                  setIsDirty(true);
+                  setPriorityEntries(newEntries);
+                }}
               />
 
               {/* Save / Clear actions */}

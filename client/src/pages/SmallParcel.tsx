@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -912,6 +912,7 @@ function Step4PackShip({
   // Store the ZPL from the last successful purchase for the Reprint button
   const [lastZpl, setLastZpl] = useState<string | null>(null);
   const [reprinting, setReprinting] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useBrowserPrint();
 
@@ -943,10 +944,8 @@ function Step4PackShip({
         }
       }
 
-      // ── Auto-reset to Step 1 after 2 seconds ──
-      setTimeout(() => {
-        onReset();
-      }, 2000);
+      // ── Start 10-second countdown then auto-reset ──
+      setCountdown(10);
     },
     onError: (err) => {
       toast.error(`Label purchase failed: ${err.message}`);
@@ -969,6 +968,17 @@ function Step4PackShip({
 
   const isLoading = updateDimsMutation.status === "pending" || purchaseMutation.status === "pending";
   const labelPurchased = purchaseMutation.status === "success";
+
+  // Countdown timer — tick every second, reset when it hits 0
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown === 0) {
+      onReset();
+      return;
+    }
+    const t = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
+    return () => clearTimeout(t);
+  }, [countdown, onReset]);
 
   const handleReprint = async () => {
     if (!lastZpl) return;
@@ -1114,33 +1124,55 @@ function Step4PackShip({
         printerName={selectedPrinter?.name ?? null}
       />
 
-      {/* ── Confirmation screen after label purchase ── */}
-      {labelPurchased && purchaseMutation.data && (
+      {/* ── Confirmation + 10-second reprint countdown banner ── */}
+      {labelPurchased && purchaseMutation.data && countdown !== null && (
         <div className="flex flex-col gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-4">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
-            <p className="font-semibold text-green-800 dark:text-green-300">Label purchased successfully</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+              <p className="font-semibold text-green-800 dark:text-green-300">Label purchased successfully</p>
+            </div>
+            <span className="text-xs text-green-600 dark:text-green-400 font-mono tabular-nums">
+              Next order in {countdown}s
+            </span>
           </div>
           <div className="text-sm text-green-700 dark:text-green-400 flex flex-col gap-1">
             <span><strong>Tracking:</strong> {purchaseMutation.data.trackingNumber}</span>
             <span><strong>Carrier:</strong> {purchaseMutation.data.carrier} {purchaseMutation.data.serviceLevel}</span>
           </div>
-          {lastZpl && (
+          {/* Progress bar */}
+          <div className="w-full h-1.5 bg-green-200 dark:bg-green-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-500 dark:bg-green-400 rounded-full transition-all duration-1000 ease-linear"
+              style={{ width: `${(countdown / 10) * 100}%` }}
+            />
+          </div>
+          <div className="flex gap-2">
+            {lastZpl && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setCountdown(null); handleReprint(); }}
+                disabled={reprinting || printStatus === "printing"}
+                className="gap-2 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
+              >
+                {reprinting || printStatus === "printing" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Printer className="w-3.5 h-3.5" />
+                )}
+                Reprint Label (DUPLICATE)
+              </Button>
+            )}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              onClick={handleReprint}
-              disabled={reprinting || printStatus === "printing"}
-              className="self-start gap-2 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
+              onClick={onReset}
+              className="gap-2 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
             >
-              {reprinting || printStatus === "printing" ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Printer className="w-3.5 h-3.5" />
-              )}
-              Reprint Label (DUPLICATE)
+              Next Order Now
             </Button>
-          )}
+          </div>
         </div>
       )}
 

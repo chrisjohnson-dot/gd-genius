@@ -939,3 +939,4 @@
 - [x] Shipping Integration: add shipping_integration_settings DB table to persist active integration per category
 - [x] Shipping Integration: landing overview shows both categories with active integration badge and quick-switch button
 - [x] Small Parcel Scan Items: remove Back and New Shipment buttons; single large Pack & Ship / Print Label button; auto-reset to scan screen after label purchase
+- [x] Small Parcel: show 10-second countdown reprint button after label purchase; auto-resets to Step 1 when countdown expires or operator dismisses

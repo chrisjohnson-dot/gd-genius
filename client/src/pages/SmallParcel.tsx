@@ -21,7 +21,11 @@ import {
   Printer,
   PackageCheck,
   ArrowRight,
+  Settings,
+  WifiOff,
 } from "lucide-react";
+import { useBrowserPrint } from "@/hooks/useBrowserPrint";
+import { Link } from "wouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4;
@@ -294,41 +298,45 @@ function Step3ScanItems({
 }) {
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>(items);
   const [scanInput, setScanInput] = useState("");
-  const [lastScan, setLastScan] = useState<{ sku: string; ok: boolean } | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  const updateMutation = trpc.smallParcel.updateScannedItems.useMutation({
-    onSuccess: (result) => {
-      if (result.allScanned) {
-        onComplete(scannedItems);
-      }
-    },
-  });
+  const updateMutation = trpc.smallParcel.updateScannedItems.useMutation();
+
+  const allDone = scannedItems.every((item) => item.scanned >= item.qty);
 
   const handleScan = useCallback(() => {
     const sku = scanInput.trim().toUpperCase();
     if (!sku) return;
-    setScanInput("");
 
-    const idx = scannedItems.findIndex((item) => item.sku.toUpperCase() === sku);
+    const idx = scannedItems.findIndex(
+      (item) => item.sku.toUpperCase() === sku && item.scanned < item.qty
+    );
+
     if (idx === -1) {
-      setLastScan({ sku, ok: false });
-      toast.error(`"${sku}" is not in this order's item list.`);
-      return;
-    }
-    const item = scannedItems[idx];
-    if (item.scanned >= item.qty) {
-      setLastScan({ sku, ok: false });
-      toast.error(`${sku} is already at ${item.qty}/${item.qty}.`);
+      const knownSku = scannedItems.find((item) => item.sku.toUpperCase() === sku);
+      if (knownSku) {
+        toast.warning(`${sku} already fully scanned (${knownSku.qty}/${knownSku.qty})`);
+      } else {
+        toast.error(`SKU "${sku}" not found on this order`);
+      }
+      setScanInput("");
       return;
     }
 
-    const updated = scannedItems.map((it, i) =>
-      i === idx ? { ...it, scanned: it.scanned + 1 } : it
+    const updated = scannedItems.map((item, i) =>
+      i === idx ? { ...item, scanned: item.scanned + 1 } : item
     );
     setScannedItems(updated);
-    setLastScan({ sku, ok: true });
     updateMutation.mutate({ id: sessionId, scannedItems: updated });
+
+    const item = updated[idx];
+    if (item.scanned >= item.qty) {
+      toast.success(`${sku} — all ${item.qty} scanned ✓`);
+    } else {
+      toast.info(`${sku} — ${item.scanned}/${item.qty}`);
+    }
+
+    setScanInput("");
     scanInputRef.current?.focus();
   }, [scanInput, scannedItems, sessionId, updateMutation]);
 
@@ -336,20 +344,16 @@ function Step3ScanItems({
     if (e.key === "Enter") handleScan();
   };
 
-  const allDone = scannedItems.every((item) => item.scanned >= item.qty);
-  const totalScanned = scannedItems.reduce((s, i) => s + i.scanned, 0);
-  const totalRequired = scannedItems.reduce((s, i) => s + i.qty, 0);
-
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+          <ScanBarcode className="w-5 h-5 text-blue-600" />
+        </div>
         <div>
           <h2 className="text-xl font-bold">Scan Items</h2>
-          <p className="text-muted-foreground text-sm">Scan each item barcode to verify contents.</p>
+          <p className="text-muted-foreground text-sm">Scan each item barcode to verify the contents of the box.</p>
         </div>
-        <Badge variant={allDone ? "default" : "secondary"} className="text-base px-3 py-1">
-          {totalScanned} / {totalRequired}
-        </Badge>
       </div>
 
       {/* Scan input */}
@@ -357,27 +361,25 @@ function Step3ScanItems({
         <Input
           ref={scanInputRef}
           autoFocus
-          placeholder="Scan item barcode (SKU)…"
+          placeholder="Scan item barcode…"
           value={scanInput}
           onChange={(e) => setScanInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          className={`text-lg h-12 font-mono ${
-            lastScan?.ok === true
-              ? "border-green-500 focus-visible:ring-green-500"
-              : lastScan?.ok === false
-              ? "border-destructive focus-visible:ring-destructive"
-              : ""
-          }`}
-          disabled={allDone}
+          className="text-lg h-12"
         />
-        <Button onClick={handleScan} disabled={allDone || !scanInput.trim()} className="h-12 px-6">
-          <ScanBarcode className="w-4 h-4" />
+        <Button onClick={handleScan} disabled={!scanInput.trim()} className="h-12 px-6">
+          <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
 
-      {/* Items list */}
+      {/* Item list */}
       <Card>
-        <CardContent className="pt-4">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Items — {scannedItems.filter((i) => i.scanned >= i.qty).length}/{scannedItems.length} complete
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="divide-y">
             {scannedItems.map((item, i) => {
               const done = item.scanned >= item.qty;
@@ -392,7 +394,7 @@ function Step3ScanItems({
                     ) : (
                       <Circle className="w-5 h-5 text-muted-foreground shrink-0" />
                     )}
-                    <span className={`font-mono font-semibold ${done ? "text-green-600" : ""}`}>
+                    <span className={`font-mono text-sm font-semibold ${done ? "text-green-600" : ""}`}>
                       {item.sku}
                     </span>
                   </div>
@@ -446,6 +448,64 @@ function Step3ScanItems({
   );
 }
 
+// ─── Print Status Banner ──────────────────────────────────────────────────────
+function PrintStatusBanner({
+  status,
+  error,
+  printerName,
+}: {
+  status: "idle" | "printing" | "success" | "error";
+  error: string | null;
+  printerName: string | null;
+}) {
+  if (status === "idle") return null;
+  if (status === "printing") {
+    return (
+      <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3">
+        <Loader2 className="w-5 h-5 text-blue-600 shrink-0 animate-spin" />
+        <div className="text-sm">
+          <p className="font-semibold text-blue-800 dark:text-blue-300">Sending label to printer…</p>
+          {printerName && (
+            <p className="text-blue-700 dark:text-blue-400">Printer: {printerName}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (status === "success") {
+    return (
+      <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
+        <Printer className="w-5 h-5 text-green-600 shrink-0" />
+        <div className="text-sm">
+          <p className="font-semibold text-green-800 dark:text-green-300">Label sent to printer!</p>
+          {printerName && (
+            <p className="text-green-700 dark:text-green-400">Printed on: {printerName}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (status === "error") {
+    return (
+      <div className="flex items-start gap-3 bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-3">
+        <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+        <div className="text-sm">
+          <p className="font-semibold text-destructive">Print failed</p>
+          <p className="text-destructive/80">{error}</p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            You can open the label URL manually or check{" "}
+            <Link href="/small-parcel/printer-settings" className="underline">
+              Printer Settings
+            </Link>
+            .
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 // ─── Step 4: Pack & Ship ──────────────────────────────────────────────────────
 function Step4PackShip({
   sessionId,
@@ -461,9 +521,12 @@ function Step4PackShip({
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
 
+  const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useBrowserPrint();
+
   const updateDimsMutation = trpc.smallParcel.updateDimensions.useMutation();
   const purchaseMutation = trpc.smallParcel.purchaseLabel.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      // ── Extensiv status toast ──
       const packedOk = data.extensivMarkedPacked;
       const shippedOk = data.extensivMarkedShipped;
       if (packedOk && shippedOk) {
@@ -474,6 +537,35 @@ function Step4PackShip({
         toast.success("Label purchased!", { description: `Marked Shipped in Extensiv. Packed write-back failed: ${data.extensivPackError ?? "unknown"}` });
       } else {
         toast.success("Label purchased!", { description: "Extensiv write-back pending — check order status manually." });
+      }
+
+      // ── Auto-print ZPL label ──
+      if (data.veeqoLabelUrl) {
+        resetPrintStatus();
+        try {
+          // Fetch the ZPL content from the label URL
+          // For stub labels (PDF URL), we generate a simple ZPL receipt instead
+          let zpl: string;
+          if (data.veeqoLabelUrl.startsWith("https://stub-labels.example.com")) {
+            // Stub mode: generate a minimal ZPL label for testing
+            zpl = buildStubZpl({
+              trackingNumber: data.trackingNumber,
+              carrier: data.carrier,
+              serviceLevel: data.serviceLevel,
+              shipTo: order.shipTo,
+              referenceNum: order.referenceNum,
+            });
+          } else {
+            // Real Veeqo label: fetch ZPL from the URL
+            const resp = await fetch(data.veeqoLabelUrl);
+            if (!resp.ok) throw new Error(`Failed to fetch label: ${resp.statusText}`);
+            zpl = await resp.text();
+          }
+          await printZpl(zpl);
+        } catch (err) {
+          // printZpl already sets printStatus to "error", but catch fetch errors too
+          console.error("[SmallParcel] Auto-print error:", err);
+        }
       }
     },
     onError: (err) => {
@@ -508,6 +600,26 @@ function Step4PackShip({
           <p className="text-muted-foreground text-sm">Enter package dimensions, then purchase the label.</p>
         </div>
       </div>
+
+      {/* Printer status banner */}
+      {selectedPrinter ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+          <Printer className="w-4 h-4 text-green-600 shrink-0" />
+          <span>Label will print to <strong>{selectedPrinter.name}</strong></span>
+          <Link href="/small-parcel/printer-settings" className="ml-auto text-xs underline text-muted-foreground hover:text-foreground">
+            Change
+          </Link>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+          <WifiOff className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="text-amber-800 dark:text-amber-300">No printer configured — label will not auto-print.</span>
+          <Link href="/small-parcel/printer-settings" className="ml-auto text-xs underline font-medium text-amber-700 dark:text-amber-400">
+            <Settings className="w-3 h-3 inline mr-1" />
+            Set up printer
+          </Link>
+        </div>
+      )}
 
       {/* Ship-to summary */}
       {order.shipTo && (
@@ -592,6 +704,13 @@ function Step4PackShip({
         </div>
       </div>
 
+      {/* Print status */}
+      <PrintStatusBanner
+        status={printStatus}
+        error={printError}
+        printerName={selectedPrinter?.name ?? null}
+      />
+
       <div className="flex gap-3">
         <Button variant="outline" onClick={onReset} className="flex-1">
           <RotateCcw className="w-4 h-4 mr-2" />
@@ -599,10 +718,10 @@ function Step4PackShip({
         </Button>
         <Button
           onClick={handlePackShip}
-          disabled={isLoading}
+          disabled={isLoading || printStatus === "printing"}
           className="flex-1 bg-blue-600 hover:bg-blue-700"
         >
-          {isLoading ? (
+          {isLoading || printStatus === "printing" ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
           ) : (
             <Printer className="w-4 h-4 mr-2" />
@@ -612,6 +731,35 @@ function Step4PackShip({
       </div>
     </div>
   );
+}
+
+// ─── Stub ZPL Builder ─────────────────────────────────────────────────────────
+/**
+ * Generates a minimal ZPL label for stub/development mode.
+ * In production, the real ZPL comes directly from Veeqo.
+ */
+function buildStubZpl(params: {
+  trackingNumber: string;
+  carrier: string;
+  serviceLevel: string;
+  shipTo: OrderData["shipTo"];
+  referenceNum: string;
+}): string {
+  const { trackingNumber, carrier, serviceLevel, shipTo, referenceNum } = params;
+  const name = shipTo?.companyName ?? shipTo?.name ?? "";
+  const addr = shipTo?.address1 ?? "";
+  const city = [shipTo?.city, shipTo?.state, shipTo?.zip].filter(Boolean).join(", ");
+
+  return `^XA
+^FO30,30^A0N,28,28^FDGo Direct Logistics^FS
+^FO30,70^A0N,22,22^FD${carrier} ${serviceLevel}^FS
+^FO30,110^BY2,2,80^BCN,80,Y,N,N^FD${trackingNumber}^FS
+^FO30,210^A0N,20,20^FDShip To:^FS
+^FO30,235^A0N,24,24^FD${name}^FS
+^FO30,265^A0N,20,20^FD${addr}^FS
+^FO30,290^A0N,20,20^FD${city}^FS
+^FO30,330^A0N,18,18^FDRef: ${referenceNum}^FS
+^XZ`;
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────

@@ -5794,6 +5794,51 @@ const smallParcelRouter = router({
         labelUrl = `https://stub-labels.example.com/${trackingNumber}.pdf`;
       }
 
+      // ── Generate ZPL label for direct Zebra printing ──
+      // This stub ZPL produces a 4x6" shipping label.
+      // When Veeqo is integrated, replace this with the ZPL returned by Veeqo.
+      const shipToLine1 = session.shipToName ?? "";
+      const shipToLine2 = session.shipToAddress1 ?? "";
+      const shipToLine3 = [
+        session.shipToCity,
+        session.shipToState,
+        session.shipToZip,
+      ].filter(Boolean).join(", ");
+      const refNum = session.referenceNum ?? "";
+      const clientName = session.clientName ?? "";
+
+      // Sanitize strings for ZPL (remove ^ and ~ which are ZPL control chars)
+      const zplSanitize = (s: string) => s.replace(/[\^~]/g, "");
+
+      const labelZpl = [
+        "^XA",
+        "^MMT",
+        "^PW812",  // 4" wide at 203dpi
+        "^LL1218", // 6" tall at 203dpi
+        "^LS0",
+        // Carrier / service banner
+        `^FO30,30^A0N,45,45^FD${zplSanitize(carrier)} ${zplSanitize(serviceLevel)}^FS`,
+        // Horizontal rule
+        "^FO30,85^GB752,3,3^FS",
+        // Ship To header
+        "^FO30,100^A0N,28,28^FDShip To:^FS",
+        `^FO30,135^A0N,35,35^FD${zplSanitize(shipToLine1)}^FS`,
+        `^FO30,178^A0N,30,30^FD${zplSanitize(shipToLine2)}^FS`,
+        `^FO30,215^A0N,30,30^FD${zplSanitize(shipToLine3)}^FS`,
+        // Horizontal rule
+        "^FO30,260^GB752,3,3^FS",
+        // Order reference
+        `^FO30,275^A0N,26,26^FDOrder: ${zplSanitize(refNum)}  Client: ${zplSanitize(clientName)}^FS`,
+        // Tracking barcode (Code 128)
+        `^FO30,320^BY3,2,100^BCN,100,Y,N,N^FD${zplSanitize(trackingNumber)}^FS`,
+        // Tracking number text
+        `^FO30,440^A0N,28,28^FD${zplSanitize(trackingNumber)}^FS`,
+        // Footer
+        "^FO30,490^GB752,3,3^FS",
+        "^FO30,500^A0N,22,22^FDGo Direct Logistics^FS",
+        "^XZ",
+      ].join("\n");
+
       // ── Step 2: Update session record with label details ──
       await updateSmallParcelSession(input.id, {
         status: "label_purchased",
@@ -5847,6 +5892,7 @@ const smallParcelRouter = router({
         trackingNumber,
         carrier,
         serviceLevel,
+        labelZpl,
         extensivMarkedPacked: extensivPackResult.success,
         extensivMarkedShipped: extensivShipResult.success,
         extensivPackError: extensivPackResult.success ? undefined : extensivPackResult.error,

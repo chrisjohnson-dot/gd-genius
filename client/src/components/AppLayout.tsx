@@ -40,6 +40,7 @@ import {
   QrCode,
   TrendingUp,
   Package,
+  Printer,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -65,6 +66,7 @@ const allocationItems = [
 
 const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
+  { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
 ];
 
 const qcItems = [

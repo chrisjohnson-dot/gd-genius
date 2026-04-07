@@ -888,3 +888,8 @@
 - [x] Write vitest tests for smallParcel procedures (379 tests passing)
 - [ ] Auto-mark order as shipped in Extensiv after Small Parcel label purchase (with tracking number and carrier)
 - [x] Auto-mark order as Packed and Shipped in Extensiv after label purchase
+- [x] Add Zebra BrowserPrint hook (useBrowserPrint) for ZPL printing to network Zebra printers
+- [x] Add Printer Settings page under Small Parcel (configure printer IP/name, test print)
+- [x] Store printer config in localStorage (printerIp, printerName)
+- [x] Auto-send ZPL label to Zebra printer after Pack & Ship label purchase
+- [x] Show print status (printing / success / error) in Pack & Ship confirmation

@@ -402,6 +402,131 @@ function ReceiverDetailSheet({
   );
 }
 
+// ─── Client Group (inside a warehouse) ──────────────────────────────────────
+
+function ClientGroup({
+  clientName,
+  clientId,
+  facilityId,
+  receivers,
+  onSelect,
+}: {
+  clientName: string;
+  clientId: number;
+  facilityId: number;
+  receivers: Receiver[];
+  onSelect: (r: Receiver) => void;
+}) {
+  const storageKey = `receiving-client-expanded-${facilityId}-${clientId}`;
+  const [expanded, setExpandedRaw] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored !== null ? JSON.parse(stored) : true; // default open
+    } catch { return true; }
+  });
+  function setExpanded(v: boolean | ((prev: boolean) => boolean)) {
+    setExpandedRaw((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
+  const openCount = receivers.filter((r) => r.readOnly.status !== 2).length;
+  const inProgressCount = receivers.filter((r) => r.readOnly.status === 1).length;
+
+  return (
+    <div className="border-b border-border/60 last:border-b-0">
+      {/* Client header row */}
+      <button
+        className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-muted/20 transition-colors text-left bg-muted/10"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">{clientName}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {openCount} receipt{openCount !== 1 ? "s" : ""}
+            {inProgressCount > 0 && (
+              <span className="ml-1.5 text-amber-400">{inProgressCount} in progress</span>
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Badge className="bg-muted text-muted-foreground border-border text-[10px] tabular-nums h-4 px-1.5">
+            {openCount}
+          </Badge>
+          {expanded ? (
+            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </div>
+      </button>
+
+      {/* Receipt rows */}
+      {expanded && (
+        <div className="divide-y divide-border/40">
+          {receivers.map((r) => {
+            const skuCount = (r.receiveItems ?? []).length;
+            const discrepancyCount = (r.receiveItems ?? []).filter(
+              (i) => i.expectedQty > 0 && i.receivedQty !== i.expectedQty
+            ).length;
+            const hasDiscrepancy = discrepancyCount > 0;
+            return (
+              <button
+                key={r.readOnly.transactionId}
+                className="w-full flex items-center gap-4 px-6 py-3 hover:bg-muted/30 transition-colors text-left group"
+                onClick={() => onSelect(r)}
+              >
+                {/* Status dot */}
+                <div className={cn(
+                  "h-2 w-2 rounded-full shrink-0 mt-0.5",
+                  r.readOnly.status === 0 ? "bg-blue-400" :
+                  r.readOnly.status === 1 ? "bg-amber-400" : "bg-green-400"
+                )} />
+
+                {/* Main info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm text-foreground">
+                      {r.referenceNum || `Txn #${r.readOnly.transactionId}`}
+                    </span>
+                    {r.poNum && (
+                      <span className="text-xs text-muted-foreground">PO: {r.poNum}</span>
+                    )}
+                    {hasDiscrepancy && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
+                        <AlertTriangle className="h-2.5 w-2.5" />
+                        {discrepancyCount} discrepanc{discrepancyCount === 1 ? "y" : "ies"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                    {r.readOnly.creationDate && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-2.5 w-2.5" />
+                        Set up {fmt(r.readOnly.creationDate)}
+                      </span>
+                    )}
+                    {r.expectedDate && <span>Expected {fmt(r.expectedDate)}</span>}
+                    {skuCount > 0 && <span>{skuCount} SKU{skuCount !== 1 ? "s" : ""}</span>}
+                  </div>
+                </div>
+
+                {/* Status + arrow */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <StatusBadge status={r.readOnly.status} />
+                  <span className="text-muted-foreground group-hover:text-foreground transition-colors text-xs">View →</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Warehouse Card ────────────────────────────────────────────────────────
 
 function WarehouseCard({
@@ -435,16 +560,31 @@ function WarehouseCard({
   const openCount = receivers.filter((r) => r.readOnly.status !== 2).length;
   const inProgressCount = receivers.filter((r) => r.readOnly.status === 1).length;
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return receivers;
-    const q = search.toLowerCase();
-    return receivers.filter(
-      (r) =>
-        (r.referenceNum ?? "").toLowerCase().includes(q) ||
-        (r.poNum ?? "").toLowerCase().includes(q) ||
-        r.readOnly.customerIdentifier.name.toLowerCase().includes(q) ||
-        String(r.readOnly.transactionId).includes(q)
-    );
+  // Group by client
+  const clientGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q
+      ? receivers.filter(
+          (r) =>
+            (r.referenceNum ?? "").toLowerCase().includes(q) ||
+            (r.poNum ?? "").toLowerCase().includes(q) ||
+            r.readOnly.customerIdentifier.name.toLowerCase().includes(q) ||
+            String(r.readOnly.transactionId).includes(q)
+        )
+      : receivers;
+    const map = new Map<number, { clientId: number; clientName: string; receivers: Receiver[] }>();
+    for (const r of list) {
+      const cid = r.readOnly.customerIdentifier.id;
+      if (!map.has(cid)) {
+        map.set(cid, {
+          clientId: cid,
+          clientName: r.readOnly.customerIdentifier.name || `Client ${cid}`,
+          receivers: [],
+        });
+      }
+      map.get(cid)!.receivers.push(r);
+    }
+    return Array.from(map.values()).sort((a, b) => a.clientName.localeCompare(b.clientName));
   }, [receivers, search]);
 
   return (
@@ -480,7 +620,7 @@ function WarehouseCard({
         </div>
       </button>
 
-      {/* Receipt list */}
+      {/* Client groups */}
       {expanded && (
         <div className="border-t border-border">
           {/* Search within warehouse */}
@@ -506,64 +646,22 @@ function WarehouseCard({
             </div>
           )}
 
-          {filtered.length === 0 ? (
+          {clientGroups.length === 0 ? (
             <div className="px-5 py-8 text-center text-sm text-muted-foreground">
               No receipts match your search.
             </div>
           ) : (
-            <div className="divide-y divide-border/60">
-              {filtered.map((r) => {
-                const skuCount = (r.receiveItems ?? []).length;
-                const discrepancyCount = (r.receiveItems ?? []).filter(
-                  (i) => i.expectedQty > 0 && i.receivedQty !== i.expectedQty
-                ).length;
-                const hasDiscrepancy = discrepancyCount > 0;
-                return (
-                  <button
-                    key={r.readOnly.transactionId}
-                    className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors text-left group"
-                    onClick={() => onSelect(r)}
-                  >
-                    {/* Status indicator dot */}
-                    <div className={cn(
-                      "h-2 w-2 rounded-full shrink-0 mt-0.5",
-                      r.readOnly.status === 0 ? "bg-blue-400" :
-                      r.readOnly.status === 1 ? "bg-amber-400" : "bg-green-400"
-                    )} />
-
-                    {/* Main info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm text-foreground">
-                          {r.referenceNum || `Txn #${r.readOnly.transactionId}`}
-                        </span>
-                        {r.poNum && (
-                          <span className="text-xs text-muted-foreground">PO: {r.poNum}</span>
-                        )}
-                        {hasDiscrepancy && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/30">
-                            <AlertTriangle className="h-2.5 w-2.5" />
-                            {discrepancyCount} discrepanc{discrepancyCount === 1 ? "y" : "ies"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                        <span>{r.readOnly.customerIdentifier.name}</span>
-                        {r.expectedDate && <span>Expected {fmt(r.expectedDate)}</span>}
-                        {skuCount > 0 && <span>{skuCount} SKU{skuCount !== 1 ? "s" : ""}</span>}
-                      </div>
-                    </div>
-
-                    {/* Status + arrow */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusBadge status={r.readOnly.status} />
-                      <span className="text-muted-foreground group-hover:text-foreground transition-colors text-xs">
-                        View →
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+            <div>
+              {clientGroups.map((cg) => (
+                <ClientGroup
+                  key={cg.clientId}
+                  clientName={cg.clientName}
+                  clientId={cg.clientId}
+                  facilityId={facilityId}
+                  receivers={cg.receivers}
+                  onSelect={onSelect}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -571,6 +669,8 @@ function WarehouseCard({
     </div>
   );
 }
+
+
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 

@@ -5630,18 +5630,32 @@ const smallParcelRouter = router({
       return fetchAllFacilities(config);
     }),
 
-  /** Look up an Extensiv order by pick ticket / reference number */
+  /** Look up an Extensiv order by Transaction ID (integer order ID) */
   lookupOrder: protectedProcedure
     .input(z.object({
       configId: z.number(),
-      referenceNum: z.string().min(1),
+      transactionId: z.string().min(1),
     }))
     .query(async ({ input }) => {
       const config = await getExtensivConfigById(input.configId);
       if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
-      const orders = await fetchOrdersByReferenceNum(config, input.referenceNum);
-      if (!orders.length) throw new TRPCError({ code: "NOT_FOUND", message: `No order found for reference "${input.referenceNum}"` });
-      const o = orders[0];
+
+      // Parse the transaction ID as an integer
+      const txId = parseInt(input.transactionId.trim(), 10);
+      if (isNaN(txId)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `"${input.transactionId}" is not a valid Transaction ID. Please enter the numeric Extensiv order ID.` });
+      }
+
+      // Fetch directly by Extensiv order ID
+      let o;
+      try {
+        const result = await fetchOrderWithDetail(config, txId);
+        o = result.order;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: "NOT_FOUND", message: `No order found for Transaction ID ${txId}. ${msg}` });
+      }
+
       return {
         extensivOrderId: o.readOnly.orderId,
         referenceNum: o.referenceNum,

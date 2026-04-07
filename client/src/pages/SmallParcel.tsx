@@ -98,13 +98,13 @@ function Step1ScanTicket({
 }) {
   const [input, setInput] = useState("");
   const [enabled, setEnabled] = useState(false);
-  const [refToLookup, setRefToLookup] = useState("");
+  const [txIdToLookup, setTxIdToLookup] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error, isSuccess } = trpc.smallParcel.lookupOrder.useQuery(
-    { configId, referenceNum: refToLookup },
+    { configId, transactionId: txIdToLookup },
     {
-      enabled: enabled && refToLookup.length > 0,
+      enabled: enabled && txIdToLookup.length > 0,
       retry: false,
     }
   );
@@ -117,7 +117,7 @@ function Step1ScanTicket({
   if (isSuccess && data && enabled) {
     setEnabled(false);
     // Use setTimeout to avoid setState during render
-    setTimeout(() => onFound(refToLookup, data as OrderData), 0);
+    setTimeout(() => onFound(txIdToLookup, data as OrderData), 0);
   }
   if (error && enabled) {
     setEnabled(false);
@@ -126,7 +126,7 @@ function Step1ScanTicket({
   const handleScan = useCallback(() => {
     const val = input.trim();
     if (!val) return;
-    setRefToLookup(val);
+    setTxIdToLookup(val);
     setEnabled(true);
   }, [input]);
 
@@ -140,9 +140,9 @@ function Step1ScanTicket({
         <div className="w-20 h-20 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
           <ScanBarcode className="w-10 h-10 text-blue-600" />
         </div>
-        <h2 className="text-2xl font-bold">Scan Pick Ticket</h2>
+        <h2 className="text-2xl font-bold">Scan Transaction ID</h2>
         <p className="text-muted-foreground text-center max-w-sm">
-          Scan or type the pick ticket reference number to pull the order from Extensiv.
+          Scan or type the Extensiv Transaction ID to pull the order.
         </p>
       </div>
 
@@ -150,7 +150,7 @@ function Step1ScanTicket({
         <Input
           ref={inputRef}
           autoFocus
-          placeholder="Pick ticket / reference number…"
+          placeholder="Transaction ID (e.g. 1234567)…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}

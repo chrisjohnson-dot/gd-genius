@@ -898,3 +898,5 @@
 - [x] Add getSmallParcelSessions DB helper and smallParcel.listSessions tRPC procedure
 - [x] Store labelZpl in small_parcel_sessions table for reprint support
 - [x] SLA Performance: rename "Order #" column label to "Transaction ID"
+- [x] Pack & Ship: change scan field to look up by Transaction ID (Extensiv order ID) instead of reference number
+- [x] Pack & Ship: update UI label from "Pick ticket / reference number" to "Transaction ID"

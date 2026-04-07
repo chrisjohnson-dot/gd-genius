@@ -423,7 +423,7 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
           <thead>
             <tr className="border-b border-border bg-muted/40">
               <th className="px-4 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap cursor-pointer select-none" onClick={() => handleSort("slaStatus")}>Status <SortIcon k="slaStatus" /></th>
-              <th className="px-4 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap cursor-pointer select-none" onClick={() => handleSort("referenceNum")}>Order # <SortIcon k="referenceNum" /></th>
+              <th className="px-4 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap cursor-pointer select-none" onClick={() => handleSort("referenceNum")}>Transaction ID <SortIcon k="referenceNum" /></th>
               <th className="px-4 py-2 text-left font-semibold text-muted-foreground">PO #</th>
               <th className="px-4 py-2 text-left font-semibold text-muted-foreground cursor-pointer select-none" onClick={() => handleSort("clientName")}>Client <SortIcon k="clientName" /></th>
               <th className="px-4 py-2 text-left font-semibold text-muted-foreground">Channel</th>

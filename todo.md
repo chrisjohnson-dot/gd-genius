@@ -897,3 +897,4 @@
 - [x] Build Small Parcel Session History page (/small-parcel/history) with Reprint Label button per row
 - [x] Add getSmallParcelSessions DB helper and smallParcel.listSessions tRPC procedure
 - [x] Store labelZpl in small_parcel_sessions table for reprint support
+- [x] SLA Performance: rename "Order #" column label to "Transaction ID"

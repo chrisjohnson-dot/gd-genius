@@ -487,10 +487,16 @@ function ClientGroup({
         </div>
       </button>
 
-      {/* Receipt rows */}
+      {/* Receipt rows — sorted oldest first */}
       {expanded && (
         <div className="divide-y divide-border/40">
-          {receivers.map((r) => {
+          {[...receivers]
+            .sort((a, b) => {
+              const da = a.readOnly.creationDate ? new Date(a.readOnly.creationDate).getTime() : 0;
+              const db = b.readOnly.creationDate ? new Date(b.readOnly.creationDate).getTime() : 0;
+              return da - db; // ascending = oldest first
+            })
+            .map((r) => {
             const skuCount = (r.receiveItems ?? []).length;
             const discrepancyCount = (r.receiveItems ?? []).filter(
               (i) => i.expectedQty > 0 && i.receivedQty !== i.expectedQty

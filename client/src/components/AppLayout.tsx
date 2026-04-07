@@ -73,7 +73,6 @@ const qcItems = [
 
 const shippingItems = [
   { href: "/shipping",              label: "Shipping Dashboard", icon: Ship },
-  { href: "/shipping/orders",       label: "Ship Orders",         icon: PackageCheck },
   { href: "/shipping/pallet-scan",  label: "Pallet Scanner",      icon: ScanBarcode },
   { href: "/shipping/history", label: "Shipping History",    icon: ScrollText },
   { href: "/shipping/carriers",label: "Carriers",            icon: Truck },

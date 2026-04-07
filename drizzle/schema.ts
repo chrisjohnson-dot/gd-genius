@@ -1162,3 +1162,35 @@ export const smallParcelAuditLog = mysqlTable("small_parcel_audit_log", {
 });
 export type SmallParcelAuditLog = typeof smallParcelAuditLog.$inferSelect;
 export type InsertSmallParcelAuditLog = typeof smallParcelAuditLog.$inferInsert;
+
+// ─── Small Parcel: Supervisor PINs ───────────────────────────────────────────
+// Stores bcrypt-hashed PINs for supervisors who can approve manual overrides.
+export const supervisorPins = mysqlTable("supervisor_pins", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Display name of the supervisor */
+  name: varchar("name", { length: 256 }).notNull(),
+  /** bcrypt hash of the 4–8 digit PIN */
+  pinHash: varchar("pinHash", { length: 256 }).notNull(),
+  /** Optional Manus user ID to link to a logged-in user */
+  userId: varchar("userId", { length: 128 }),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SupervisorPin = typeof supervisorPins.$inferSelect;
+export type InsertSupervisorPin = typeof supervisorPins.$inferInsert;
+
+// ─── Small Parcel: High-Value SKUs ───────────────────────────────────────────
+// SKUs that require supervisor PIN approval before a manual override is accepted.
+export const smallParcelHighValueSkus = mysqlTable("small_parcel_high_value_skus", {
+  id: int("id").autoincrement().primaryKey(),
+  /** SKU identifier (uppercase) */
+  sku: varchar("sku", { length: 128 }).notNull(),
+  /** Optional: restrict to a specific client (null = all clients) */
+  clientName: varchar("clientName", { length: 256 }),
+  /** Optional description / reason for flagging */
+  description: text("description"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SmallParcelHighValueSku = typeof smallParcelHighValueSkus.$inferSelect;
+export type InsertSmallParcelHighValueSku = typeof smallParcelHighValueSkus.$inferInsert;

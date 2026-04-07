@@ -91,6 +91,12 @@ import {
   smallParcelAuditLog,
   SmallParcelAuditLog,
   InsertSmallParcelAuditLog,
+  supervisorPins,
+  SupervisorPin,
+  InsertSupervisorPin,
+  smallParcelHighValueSkus,
+  SmallParcelHighValueSku,
+  InsertSmallParcelHighValueSku,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3248,4 +3254,76 @@ export async function countSmallParcelAuditLog(opts: {
     ? await (q.where(conditions.length === 1 ? conditions[0] : and(...conditions)) as ReturnType<typeof q.where>)
     : await q;
   return Number((rows as { count: number }[])[0]?.count ?? 0);
+}
+
+// ─── Supervisor PINs ─────────────────────────────────────────────────────────
+
+export async function listSupervisorPins(): Promise<SupervisorPin[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(supervisorPins).orderBy(supervisorPins.name);
+}
+
+export async function createSupervisorPin(data: InsertSupervisorPin): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(supervisorPins).values(data);
+}
+
+export async function updateSupervisorPin(id: number, data: Partial<InsertSupervisorPin>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(supervisorPins).set(data).where(eq(supervisorPins.id, id));
+}
+
+export async function deleteSupervisorPin(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(supervisorPins).where(eq(supervisorPins.id, id));
+}
+
+/** Returns the supervisor name if the PIN matches any active supervisor, null otherwise */
+export async function verifySupervisorPin(pin: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const bcrypt = await import("bcryptjs");
+  const rows = await db.select().from(supervisorPins).where(eq(supervisorPins.active, true));
+  for (const row of rows) {
+    const match = await bcrypt.compare(pin, row.pinHash);
+    if (match) return row.name;
+  }
+  return null;
+}
+
+// ─── High-Value SKUs ─────────────────────────────────────────────────────────
+
+export async function listHighValueSkus(): Promise<SmallParcelHighValueSku[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(smallParcelHighValueSkus).orderBy(smallParcelHighValueSkus.sku);
+}
+
+export async function addHighValueSku(data: InsertSmallParcelHighValueSku): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(smallParcelHighValueSkus).values(data);
+}
+
+export async function removeHighValueSku(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(smallParcelHighValueSkus).where(eq(smallParcelHighValueSkus.id, id));
+}
+
+/** Returns true if the given SKU (for the given clientName) is flagged as high-value */
+export async function isHighValueSku(sku: string, clientName?: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const upper = sku.toUpperCase();
+  const rows = await db.select().from(smallParcelHighValueSkus);
+  return rows.some(
+    (r) =>
+      r.sku.toUpperCase() === upper &&
+      (r.clientName === null || r.clientName === undefined || r.clientName === clientName)
+  );
 }

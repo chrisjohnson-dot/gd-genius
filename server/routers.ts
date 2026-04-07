@@ -155,6 +155,15 @@ import {
   logSmallParcelAuditEvent,
   getSmallParcelAuditLog,
   countSmallParcelAuditLog,
+  listSupervisorPins,
+  createSupervisorPin,
+  updateSupervisorPin,
+  deleteSupervisorPin,
+  verifySupervisorPin,
+  listHighValueSkus,
+  addHighValueSku,
+  removeHighValueSku,
+  isHighValueSku,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -6065,6 +6074,90 @@ const smallParcelRouter = router({
         countSmallParcelAuditLog(opts),
       ]);
       return { rows, total };
+    }),
+
+  // ── Supervisor PINs ────────────────────────────────────────────────────────
+
+  listSupervisorPins: protectedProcedure.query(async () => {
+    const pins = await listSupervisorPins();
+    // Never return the hash to the frontend
+    return pins.map(({ pinHash: _h, ...rest }) => rest);
+  }),
+
+  createSupervisorPin: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1).max(256),
+      pin: z.string().min(4).max(8).regex(/^\d+$/, "PIN must be digits only"),
+      userId: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const bcrypt = await import("bcryptjs");
+      const pinHash = await bcrypt.hash(input.pin, 10);
+      await createSupervisorPin({ name: input.name, pinHash, userId: input.userId });
+      return { success: true };
+    }),
+
+  updateSupervisorPin: protectedProcedure
+    .input(z.object({
+      id: z.number().int(),
+      name: z.string().min(1).max(256).optional(),
+      pin: z.string().min(4).max(8).regex(/^\d+$/, "PIN must be digits only").optional(),
+      active: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, pin, ...rest } = input;
+      const update: Record<string, unknown> = { ...rest };
+      if (pin) {
+        const bcrypt = await import("bcryptjs");
+        update.pinHash = await bcrypt.hash(pin, 10);
+      }
+      await updateSupervisorPin(id, update);
+      return { success: true };
+    }),
+
+  deleteSupervisorPin: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      await deleteSupervisorPin(input.id);
+      return { success: true };
+    }),
+
+  /** Verify a supervisor PIN — returns supervisor name on success, null on failure */
+  verifySupervisorPin: protectedProcedure
+    .input(z.object({ pin: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const supervisorName = await verifySupervisorPin(input.pin);
+      return { valid: supervisorName !== null, supervisorName };
+    }),
+
+  // ── High-Value SKUs ────────────────────────────────────────────────────────
+
+  listHighValueSkus: protectedProcedure.query(async () => listHighValueSkus()),
+
+  addHighValueSku: protectedProcedure
+    .input(z.object({
+      sku: z.string().min(1).max(128),
+      clientName: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await addHighValueSku({ ...input, sku: input.sku.toUpperCase() });
+      return { success: true };
+    }),
+
+  removeHighValueSku: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      await removeHighValueSku(input.id);
+      return { success: true };
+    }),
+
+  /** Check if a given SKU (optionally scoped to a client) is flagged as high-value */
+  checkHighValueSku: protectedProcedure
+    .input(z.object({ sku: z.string(), clientName: z.string().optional() }))
+    .query(async ({ input }) => {
+      const highValue = await isHighValueSku(input.sku, input.clientName);
+      return { highValue };
     }),
 });
 

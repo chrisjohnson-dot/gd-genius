@@ -325,6 +325,12 @@ function Step3ScanItems({
   const [selectedReason, setSelectedReason] = useState<string>("");
   // Reason dialog for qty-set overrides
   const [pendingQtyConfirm, setPendingQtyConfirm] = useState<{ itemIndex: number; newScanned: number; prevScanned: number; sku: string } | null>(null);
+  // PIN challenge state — set to true when the current pending override is for a high-value SKU
+  const [pinRequired, setPinRequired] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinVerifying, setPinVerifying] = useState(false);
+  const [approvedBySupervisor, setApprovedBySupervisor] = useState<string | null>(null);
 
   const OVERRIDE_REASONS = [
     "Barcode damaged / unreadable",
@@ -337,6 +343,8 @@ function Step3ScanItems({
 
   const updateMutation = trpc.smallParcel.updateScannedItems.useMutation();
   const logAuditMutation = trpc.smallParcel.logAuditEvent.useMutation();
+  const verifySupervisorPinMutation = trpc.smallParcel.verifySupervisorPin.useMutation();
+  const utils = trpc.useUtils();
 
   const allDone = scannedItems.every((item) => item.scanned >= item.qty);
   const hasManualOverrides = manualOverrides.size > 0;
@@ -391,17 +399,46 @@ function Step3ScanItems({
   };
 
   /** Open reason dialog before confirming manually (circle click) */
-  const handleManualConfirm = (i: number) => {
+  const handleManualConfirm = async (i: number) => {
     const item = scannedItems[i];
     if (item.scanned >= item.qty) return;
     const remaining = item.qty - item.scanned;
     setSelectedReason("");
+    setPinInput("");
+    setPinError("");
+    setApprovedBySupervisor(null);
+    // Check if this SKU is flagged as high-value
+    const result = await utils.smallParcel.checkHighValueSku.fetch({ sku: item.sku, clientName });
+    setPinRequired(result.highValue);
     setPendingConfirm({ itemIndex: i, remaining, sku: item.sku });
+  };
+
+  /** Verify supervisor PIN for high-value SKU overrides */
+  const handlePinVerify = async () => {
+    if (!pinInput || pinVerifying) return;
+    setPinVerifying(true);
+    setPinError("");
+    try {
+      const result = await verifySupervisorPinMutation.mutateAsync({ pin: pinInput });
+      if (result.valid && result.supervisorName) {
+        setApprovedBySupervisor(result.supervisorName);
+        setPinInput("");
+        setPinError("");
+      } else {
+        setPinError("Incorrect PIN. Please try again or contact a supervisor.");
+        setPinInput("");
+      }
+    } catch {
+      setPinError("PIN verification failed. Please try again.");
+    } finally {
+      setPinVerifying(false);
+    }
   };
 
   /** Called after operator selects a reason and confirms */
   const commitManualConfirm = () => {
     if (!pendingConfirm || !selectedReason) return;
+    if (pinRequired && !approvedBySupervisor) return;
     const { itemIndex, remaining, sku } = pendingConfirm;
     const updated = scannedItems.map((it, idx) =>
       idx === itemIndex ? { ...it, scanned: it.qty } : it
@@ -410,6 +447,7 @@ function Step3ScanItems({
     updateMutation.mutate({ id: sessionId, scannedItems: updated });
     setManualOverrides((prev) => new Set(prev).add(itemIndex));
     setOverrideBannerDismissed(false);
+    const supervisorNote = approvedBySupervisor ? ` Approved by supervisor: ${approvedBySupervisor}.` : "";
     logAuditMutation.mutate({
       sessionId,
       extensivOrderId,
@@ -417,16 +455,18 @@ function Step3ScanItems({
       eventType: "manual_override",
       sku,
       qty: remaining,
-      notes: `Reason: ${selectedReason}. Manually confirmed ${remaining} unit(s) without scanning.`,
+      notes: `Reason: ${selectedReason}. Manually confirmed ${remaining} unit(s) without scanning.${supervisorNote}`,
     });
     toast.warning(`${sku} — manually confirmed (${remaining} unit${remaining !== 1 ? "s" : ""} not scanned)`);
     setPendingConfirm(null);
     setSelectedReason("");
+    setPinRequired(false);
+    setApprovedBySupervisor(null);
     scanInputRef.current?.focus();
   };
 
   /** Open reason dialog before committing a manual qty set */
-  const handleManualQtySet = (i: number) => {
+  const handleManualQtySet = async (i: number) => {
     const raw = qtyInputs[i];
     if (!raw) return;
     const newScanned = Math.min(parseInt(raw, 10) || 0, scannedItems[i].qty);
@@ -437,8 +477,13 @@ function Step3ScanItems({
       return;
     }
     if (newScanned > prevScanned) {
-      // Requires reason
+      // Requires reason (and possibly PIN)
       setSelectedReason("");
+      setPinInput("");
+      setPinError("");
+      setApprovedBySupervisor(null);
+      const result = await utils.smallParcel.checkHighValueSku.fetch({ sku: item.sku, clientName });
+      setPinRequired(result.highValue);
       setPendingQtyConfirm({ itemIndex: i, newScanned, prevScanned, sku: item.sku });
     } else {
       // Decreasing qty — no reason required
@@ -455,6 +500,7 @@ function Step3ScanItems({
   /** Called after operator selects a reason for a manual qty set */
   const commitManualQtySet = () => {
     if (!pendingQtyConfirm || !selectedReason) return;
+    if (pinRequired && !approvedBySupervisor) return;
     const { itemIndex, newScanned, prevScanned, sku } = pendingQtyConfirm;
     const updated = scannedItems.map((it, idx) =>
       idx === itemIndex ? { ...it, scanned: newScanned } : it
@@ -464,6 +510,7 @@ function Step3ScanItems({
     setQtyInputs((prev) => { const n = { ...prev }; delete n[itemIndex]; return n; });
     setManualOverrides((prev) => new Set(prev).add(itemIndex));
     setOverrideBannerDismissed(false);
+    const supervisorNote = approvedBySupervisor ? ` Approved by supervisor: ${approvedBySupervisor}.` : "";
     logAuditMutation.mutate({
       sessionId,
       extensivOrderId,
@@ -471,10 +518,12 @@ function Step3ScanItems({
       eventType: "manual_override",
       sku,
       qty: newScanned - prevScanned,
-      notes: `Reason: ${selectedReason}. Manually set qty to ${newScanned}/${scannedItems[itemIndex].qty}.`,
+      notes: `Reason: ${selectedReason}. Manually set qty to ${newScanned}/${scannedItems[itemIndex].qty}.${supervisorNote}`,
     });
     setPendingQtyConfirm(null);
     setSelectedReason("");
+    setPinRequired(false);
+    setApprovedBySupervisor(null);
     scanInputRef.current?.focus();
   };
 
@@ -643,19 +692,20 @@ function Step3ScanItems({
         </div>
       )}
 
+      {/* ── Shared PIN section rendered inside both override dialogs ── */}
       {/* ── Manual Override Reason Dialog (circle-click confirm) ── */}
-      <Dialog open={!!pendingConfirm} onOpenChange={(open) => { if (!open) { setPendingConfirm(null); setSelectedReason(""); } }}>
+      <Dialog open={!!pendingConfirm} onOpenChange={(open) => { if (!open) { setPendingConfirm(null); setSelectedReason(""); setPinRequired(false); setPinInput(""); setPinError(""); setApprovedBySupervisor(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Manual Override Required
+              Manual Override{pinRequired ? " — High-Value Item" : " Required"}
             </DialogTitle>
             <DialogDescription>
               You are confirming <span className="font-semibold font-mono">{pendingConfirm?.sku}</span> without scanning{pendingConfirm && pendingConfirm.remaining > 0 ? ` (${pendingConfirm.remaining} unit${pendingConfirm.remaining !== 1 ? "s" : ""} remaining)` : ""}. Please select a reason — this will be recorded in the audit log.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
+          <div className="flex flex-col gap-3 py-2">
             <Select value={selectedReason} onValueChange={setSelectedReason}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a reason…" />
@@ -666,13 +716,46 @@ function Step3ScanItems({
                 ))}
               </SelectContent>
             </Select>
+            {/* PIN challenge for high-value SKUs */}
+            {pinRequired && (
+              <div className="flex flex-col gap-2 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  High-value item — supervisor PIN required
+                </p>
+                {approvedBySupervisor ? (
+                  <p className="text-xs text-green-700 dark:text-green-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Approved by {approvedBySupervisor}
+                  </p>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={8}
+                      placeholder="Enter supervisor PIN"
+                      value={pinInput}
+                      onChange={(e) => { setPinInput(e.target.value); setPinError(""); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") handlePinVerify(); }}
+                      className="flex-1 h-8 text-sm"
+                      autoComplete="off"
+                    />
+                    <Button size="sm" onClick={handlePinVerify} disabled={!pinInput || pinVerifying} className="h-8">
+                      {pinVerifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify"}
+                    </Button>
+                  </div>
+                )}
+                {pinError && <p className="text-xs text-red-600">{pinError}</p>}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setPendingConfirm(null); setSelectedReason(""); }}>
+            <Button variant="outline" onClick={() => { setPendingConfirm(null); setSelectedReason(""); setPinRequired(false); setPinInput(""); setPinError(""); setApprovedBySupervisor(null); }}>
               Cancel
             </Button>
             <Button
-              disabled={!selectedReason}
+              disabled={!selectedReason || (pinRequired && !approvedBySupervisor)}
               onClick={commitManualConfirm}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
@@ -683,18 +766,18 @@ function Step3ScanItems({
       </Dialog>
 
       {/* ── Manual Override Reason Dialog (qty input confirm) ── */}
-      <Dialog open={!!pendingQtyConfirm} onOpenChange={(open) => { if (!open) { setPendingQtyConfirm(null); setSelectedReason(""); } }}>
+      <Dialog open={!!pendingQtyConfirm} onOpenChange={(open) => { if (!open) { setPendingQtyConfirm(null); setSelectedReason(""); setPinRequired(false); setPinInput(""); setPinError(""); setApprovedBySupervisor(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Manual Override Required
+              Manual Override{pinRequired ? " — High-Value Item" : " Required"}
             </DialogTitle>
             <DialogDescription>
               You are manually setting <span className="font-semibold font-mono">{pendingQtyConfirm?.sku}</span> to {pendingQtyConfirm?.newScanned}/{pendingQtyConfirm && scannedItems[pendingQtyConfirm.itemIndex]?.qty} without scanning the additional units. Please select a reason — this will be recorded in the audit log.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
+          <div className="flex flex-col gap-3 py-2">
             <Select value={selectedReason} onValueChange={setSelectedReason}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a reason…" />
@@ -705,13 +788,46 @@ function Step3ScanItems({
                 ))}
               </SelectContent>
             </Select>
+            {/* PIN challenge for high-value SKUs */}
+            {pinRequired && (
+              <div className="flex flex-col gap-2 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  High-value item — supervisor PIN required
+                </p>
+                {approvedBySupervisor ? (
+                  <p className="text-xs text-green-700 dark:text-green-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Approved by {approvedBySupervisor}
+                  </p>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={8}
+                      placeholder="Enter supervisor PIN"
+                      value={pinInput}
+                      onChange={(e) => { setPinInput(e.target.value); setPinError(""); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") handlePinVerify(); }}
+                      className="flex-1 h-8 text-sm"
+                      autoComplete="off"
+                    />
+                    <Button size="sm" onClick={handlePinVerify} disabled={!pinInput || pinVerifying} className="h-8">
+                      {pinVerifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify"}
+                    </Button>
+                  </div>
+                )}
+                {pinError && <p className="text-xs text-red-600">{pinError}</p>}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setPendingQtyConfirm(null); setSelectedReason(""); setQtyInputs((prev) => { if (!pendingQtyConfirm) return prev; const n = { ...prev }; delete n[pendingQtyConfirm.itemIndex]; return n; }); }}>
+            <Button variant="outline" onClick={() => { setPendingQtyConfirm(null); setSelectedReason(""); setPinRequired(false); setPinInput(""); setPinError(""); setApprovedBySupervisor(null); setQtyInputs((prev) => { if (!pendingQtyConfirm) return prev; const n = { ...prev }; delete n[pendingQtyConfirm.itemIndex]; return n; }); }}>
               Cancel
             </Button>
             <Button
-              disabled={!selectedReason}
+              disabled={!selectedReason || (pinRequired && !approvedBySupervisor)}
               onClick={commitManualQtySet}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >

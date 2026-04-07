@@ -917,3 +917,12 @@
 - [x] Small Parcel: add Audit Log to sidebar nav under Small Parcel section
 - [x] Small Parcel: pre-populate carrier/service in Pack & Ship from Extensiv order data
 - [x] Small Parcel: require operator to select a reason from a dropdown before manual item confirmation is accepted
+- [x] Small Parcel: add supervisor_pins DB table (user_id, pin_hash, name, created_at)
+- [x] Small Parcel: add small_parcel_high_value_skus DB table (sku, client_name, description, created_at)
+- [x] Small Parcel: add verifySupervisorPin tRPC procedure (bcrypt hash comparison, returns supervisor name on success)
+- [x] Small Parcel: add listHighValueSkus / addHighValueSku / removeHighValueSku tRPC procedures
+- [x] Small Parcel: update override dialog to add PIN challenge step when item SKU is flagged as high-value
+- [x] Small Parcel: record approving supervisor name in audit log for PIN-approved overrides
+- [x] Small Parcel: build Supervisor PIN management page (/small-parcel/supervisor-pins)
+- [x] Small Parcel: build High-Value SKU config page (/small-parcel/high-value-skus)
+- [x] Small Parcel: add both new pages to sidebar nav

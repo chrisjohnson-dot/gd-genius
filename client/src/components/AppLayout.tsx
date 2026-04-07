@@ -41,6 +41,7 @@ import {
   TrendingUp,
   Package,
   Printer,
+  ShieldAlert,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -69,6 +70,8 @@ const smallParcelItems = [
   { href: "/small-parcel/history", label: "Session History", icon: ScrollText },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
   { href: "/small-parcel/package-sizes", label: "Package Sizes", icon: Package },
+  { href: "/small-parcel/high-value-skus", label: "High-Value SKUs", icon: ShieldAlert },
+  { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs", icon: ShieldCheck },
   { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
 ];
 

@@ -2920,3 +2920,11 @@ export async function updateOutboundDetails(
   if (!db) return;
   await db.update(orderTracking).set(data).where(eq(orderTracking.id, id));
 }
+
+/** Get a single tracked order by its DB primary key. */
+export async function getOrderById(id: number): Promise<OrderTracking | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(orderTracking).where(eq(orderTracking.id, id)).limit(1);
+  return rows[0] ?? null;
+}

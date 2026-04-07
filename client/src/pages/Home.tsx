@@ -53,6 +53,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { FileDown, FileText } from "lucide-react";
+import { OrderDetailDrawer } from "@/components/OrderDetailDrawer";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -697,6 +698,7 @@ function WarehouseCard({
   const [sortDir, setSortDir]           = useState<SortDir>("asc");
   const [expanded, setExpanded]         = useState(drillDown);
   const [groupByClient, setGroupByClient] = useState(true);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(fullScreen);
 
   const clientOptions = useMemo(
@@ -852,6 +854,8 @@ function WarehouseCard({
     return (
       <tr
         key={o.extensivOrderId}
+        onClick={() => setSelectedOrderId(o.id)}
+        className="cursor-pointer hover:bg-muted/40 transition-colors"
         style={
           isUrgent
             ? { background: "rgba(239,68,68,0.04)", borderLeft: "3px solid #ef4444" }
@@ -1520,10 +1524,13 @@ function WarehouseCard({
           )}
         </>
       )}
+      <OrderDetailDrawer
+        orderId={selectedOrderId}
+        onClose={() => setSelectedOrderId(null)}
+      />
     </div>
   );
 }
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { data, isLoading, refetch, isFetching } = trpc.pickSchedule.listByChannel.useQuery({ channel: "b2b" });

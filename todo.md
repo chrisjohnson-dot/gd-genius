@@ -859,3 +859,9 @@
 - [x] Inline edit dialog for outbound location and pallet count
 - [x] No-location warning banner
 - [x] Search filter by order ID, client, ship-to, location
+
+## Order Detail Drawer (Apr 2026)
+- [ ] Add getOrderDetail tRPC procedure (full order info, line items, SLA status, lifecycle history)
+- [ ] Build OrderDetailDrawer component (Overview, Line Items, Lifecycle Timeline, Shipwell tabs)
+- [ ] Wire drawer into Open Orders B2B (Home.tsx) — click any row to open
+- [ ] Wire drawer into Open Orders D2C (OpenOrdersD2C.tsx) — click any row to open

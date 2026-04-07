@@ -58,6 +58,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { FileDown, FileText } from "lucide-react";
+import { OrderDetailDrawer } from "@/components/OrderDetailDrawer";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -881,6 +882,7 @@ function WarehouseCard({
   const [expanded, setExpanded] = useState(drillDown);
   const [groupByClient, setGroupByClient] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(fullScreen);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
   const clientOptions = useMemo(
     () =>
@@ -1214,6 +1216,8 @@ function WarehouseCard({
     return (
       <tr
         key={o.extensivOrderId}
+        onClick={() => setSelectedOrderId(o.id)}
+        className="cursor-pointer hover:bg-muted/40 transition-colors"
         style={
           isUrgent
             ? {
@@ -1849,6 +1853,10 @@ function WarehouseCard({
           <div className="overflow-x-auto">{tableContent}</div>
         </>
       )}
+      <OrderDetailDrawer
+        orderId={selectedOrderId}
+        onClose={() => setSelectedOrderId(null)}
+      />
     </div>
   );
 }

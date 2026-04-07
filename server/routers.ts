@@ -140,6 +140,7 @@ import {
   getLabelScanCartonsBySession,
   getLabelScanCartonById,
   updateLabelScanCarton,
+  getOrderById,
   type VerificationStatus,
   type OrderVerificationResult,
 } from "./db";
@@ -2216,6 +2217,69 @@ const _appRouter = router({
           details: { extensivOrderId: input.extensivOrderId },
         });
         return { success: true };
+      }),
+
+    /** Return full detail for a single tracked order by its DB id */
+    getOrderDetail: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const order = await getOrderById(input.id);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
+
+        // Fetch live line items from Extensiv (best-effort; return empty array on failure)
+        let lineItems: Array<{
+          sku: string;
+          qty: number;
+          lotNumber?: string | null;
+          expirationDate?: string | null;
+        }> = [];
+        let shipTo: Record<string, string | null | undefined> | null = null;
+        let shipFrom: Record<string, string | null | undefined> | null = null;
+        let trackingNumber: string | null = null;
+        let bolNumber: string | null = null;
+        let carrierName: string | null = null;
+        let shipVia: string | null = null;
+        let totalWeight: number | null = null;
+        try {
+          const config = await getExtensivConfigById(order.configId);
+          if (config) {
+            const { order: ext } = await fetchOrderWithDetail(config, order.extensivOrderId);
+            lineItems = (ext.orderItems ?? []).map((item) => ({
+              sku: item.itemIdentifier?.sku ?? "?",
+              qty: item.qty ?? 0,
+              lotNumber: item.lotNumber ?? null,
+              expirationDate: item.expirationDate ?? null,
+            }));
+            if (ext.shipTo) shipTo = ext.shipTo as Record<string, string | null | undefined>;
+            if (ext.shipFrom) shipFrom = ext.shipFrom as Record<string, string | null | undefined>;
+            trackingNumber = ext.readOnly?.trackingNumber ?? null;
+            bolNumber = ext.readOnly?.bolNumber ?? null;
+            carrierName = ext.readOnly?.carrierName ?? null;
+            shipVia = ext.readOnly?.shipVia ?? null;
+            totalWeight = ext.readOnly?.totalWeight ?? null;
+          }
+        } catch (err) {
+          console.warn("[getOrderDetail] Extensiv fetch failed:", err);
+        }
+
+        // Parse savedElements JSON
+        let savedElements: Array<{ name: string; value: string }> = [];
+        if (order.savedElements) {
+          try { savedElements = JSON.parse(order.savedElements); } catch { /* ignore */ }
+        }
+
+        return {
+          order,
+          lineItems,
+          shipTo,
+          shipFrom,
+          savedElements,
+          trackingNumber,
+          bolNumber,
+          carrierName,
+          shipVia,
+          totalWeight,
+        };
       }),
 
     syncNow: protectedProcedure.mutation(async ({ ctx }) => {

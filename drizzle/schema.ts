@@ -1044,3 +1044,48 @@ export const slaOrderActions = mysqlTable("sla_order_actions", {
 });
 export type SlaOrderAction = typeof slaOrderActions.$inferSelect;
 export type InsertSlaOrderAction = typeof slaOrderActions.$inferInsert;
+
+// ── Small Parcel Sessions ─────────────────────────────────────────────────────
+// Tracks each pack-and-ship session in the Small Parcel workflow.
+// A session is created when a pick ticket is scanned and closed when the label
+// is purchased and printed.
+export const smallParcelSessions = mysqlTable("small_parcel_sessions", {
+  id: int("id").primaryKey().autoincrement(),
+  configId: int("configId").notNull(),
+  facilityId: int("facilityId").notNull(),
+  facilityName: varchar("facilityName", { length: 256 }),
+  // Extensiv order fields
+  extensivOrderId: int("extensivOrderId"),
+  referenceNum: varchar("referenceNum", { length: 256 }),
+  pickTicketNum: varchar("pickTicketNum", { length: 256 }),
+  clientId: int("clientId"),
+  clientName: varchar("clientName", { length: 256 }),
+  // Ship-to address (denormalised from Extensiv at scan time)
+  shipToName: varchar("shipToName", { length: 256 }),
+  shipToAddress1: varchar("shipToAddress1", { length: 512 }),
+  shipToCity: varchar("shipToCity", { length: 128 }),
+  shipToState: varchar("shipToState", { length: 64 }),
+  shipToZip: varchar("shipToZip", { length: 32 }),
+  shipToCountry: varchar("shipToCountry", { length: 64 }),
+  // Scanned items (JSON array of { sku, qty, scanned })
+  scannedItems: json("scannedItems"),
+  // Veeqo label result (populated after Pack & Ship)
+  veeqoShipmentId: int("veeqoShipmentId"),
+  veeqoCarrierService: varchar("veeqoCarrierService", { length: 256 }),
+  veeqoLabelUrl: varchar("veeqoLabelUrl", { length: 1024 }),
+  veeqoTrackingNumber: varchar("veeqoTrackingNumber", { length: 256 }),
+  veeqoLabelCost: decimal("veeqoLabelCost", { precision: 10, scale: 2 }),
+  // Package dimensions (optional, for rate shopping)
+  weightKg: decimal("weightKg", { precision: 8, scale: 3 }),
+  lengthCm: decimal("lengthCm", { precision: 8, scale: 2 }),
+  widthCm: decimal("widthCm", { precision: 8, scale: 2 }),
+  heightCm: decimal("heightCm", { precision: 8, scale: 2 }),
+  // Session lifecycle
+  status: mysqlEnum("status", ["scanning", "ready", "label_purchased", "cancelled"]).notNull().default("scanning"),
+  createdByUserId: varchar("createdByUserId", { length: 128 }),
+  createdByName: varchar("createdByName", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type SmallParcelSession = typeof smallParcelSessions.$inferSelect;
+export type InsertSmallParcelSession = typeof smallParcelSessions.$inferInsert;

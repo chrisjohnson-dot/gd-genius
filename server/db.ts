@@ -82,6 +82,9 @@ import {
   slaOrderActions,
   SlaOrderAction,
   InsertSlaOrderAction,
+  smallParcelSessions,
+  SmallParcelSession,
+  InsertSmallParcelSession,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3108,4 +3111,34 @@ export async function getOrderAuditHistory(
     .where(eq(auditLogs.entityId, String(extensivOrderId)))
     .orderBy(desc(auditLogs.createdAt))
     .limit(limit);
+}
+
+// // ── Small Parcel Sessions ─────────────────────────────────────────────────────
+export async function createSmallParcelSession(data: Omit<InsertSmallParcelSession, "id" | "createdAt" | "updatedAt">): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(smallParcelSessions).values(data);
+  return (result[0] as { insertId: number }).insertId;
+}
+export async function getSmallParcelSession(id: number): Promise<SmallParcelSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(smallParcelSessions).where(eq(smallParcelSessions.id, id));
+  return rows[0] ?? null;
+}
+export async function updateSmallParcelSession(id: number, data: Partial<InsertSmallParcelSession>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(smallParcelSessions).set({ ...data, updatedAt: new Date() }).where(eq(smallParcelSessions.id, id));
+}
+export async function listSmallParcelSessions(opts: { facilityId?: number; status?: string; limit?: number } = {}): Promise<SmallParcelSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: SQL[] = [];
+  if (opts.facilityId) conditions.push(eq(smallParcelSessions.facilityId, opts.facilityId));
+  if (opts.status) conditions.push(eq(smallParcelSessions.status, opts.status as SmallParcelSession["status"]));
+  const q = db.select().from(smallParcelSessions).orderBy(desc(smallParcelSessions.createdAt)).limit(opts.limit ?? 100);
+  if (conditions.length === 1) return q.where(conditions[0]);
+  if (conditions.length > 1) return q.where(and(...conditions));
+  return q;
 }

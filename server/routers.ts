@@ -5612,10 +5612,194 @@ const slaPerformanceRouter = router({
     }),
 });
 
+// ── Small Parcel Router ──────────────────────────────────────────────────────
+import {
+  createSmallParcelSession,
+  getSmallParcelSession,
+  updateSmallParcelSession,
+  listSmallParcelSessions,
+} from "./db.js";
+
+const smallParcelRouter = router({
+  /** List available facilities (for facility picker at start of session) */
+  listFacilities: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+      return fetchAllFacilities(config);
+    }),
+
+  /** Look up an Extensiv order by pick ticket / reference number */
+  lookupOrder: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      referenceNum: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+      const orders = await fetchOrdersByReferenceNum(config, input.referenceNum);
+      if (!orders.length) throw new TRPCError({ code: "NOT_FOUND", message: `No order found for reference "${input.referenceNum}"` });
+      const o = orders[0];
+      return {
+        extensivOrderId: o.readOnly.orderId,
+        referenceNum: o.referenceNum,
+        clientId: o.readOnly.customerIdentifier.id,
+        clientName: o.readOnly.customerIdentifier.name,
+        facilityId: o.readOnly.facilityIdentifier.id,
+        facilityName: o.readOnly.facilityIdentifier.name,
+        status: o.readOnly.status,
+        isClosed: o.readOnly.isClosed,
+        shipTo: o.shipTo ?? null,
+        orderItems: (o.orderItems ?? []).map((item) => ({
+          sku: item.itemIdentifier.sku,
+          qty: item.qty,
+          lotNumber: item.lotNumber ?? null,
+        })),
+      };
+    }),
+
+  /** Create a new small parcel session (after pick ticket scan & order confirmation) */
+  createSession: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      facilityId: z.number(),
+      facilityName: z.string().optional(),
+      extensivOrderId: z.number(),
+      referenceNum: z.string(),
+      pickTicketNum: z.string().optional(),
+      clientId: z.number(),
+      clientName: z.string(),
+      shipToName: z.string().optional(),
+      shipToAddress1: z.string().optional(),
+      shipToCity: z.string().optional(),
+      shipToState: z.string().optional(),
+      shipToZip: z.string().optional(),
+      shipToCountry: z.string().optional(),
+      orderItems: z.array(z.object({ sku: z.string(), qty: z.number(), lotNumber: z.string().nullable().optional() })),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const scannedItems = input.orderItems.map((item) => ({ sku: item.sku, qty: item.qty, scanned: 0 }));
+      const id = await createSmallParcelSession({
+        configId: input.configId,
+        facilityId: input.facilityId,
+        facilityName: input.facilityName,
+        extensivOrderId: input.extensivOrderId,
+        referenceNum: input.referenceNum,
+        pickTicketNum: input.pickTicketNum,
+        clientId: input.clientId,
+        clientName: input.clientName,
+        shipToName: input.shipToName,
+        shipToAddress1: input.shipToAddress1,
+        shipToCity: input.shipToCity,
+        shipToState: input.shipToState,
+        shipToZip: input.shipToZip,
+        shipToCountry: input.shipToCountry,
+        scannedItems,
+        status: "scanning",
+        createdByUserId: String(ctx.user.id),
+        createdByName: ctx.user.name ?? ctx.user.email ?? "Unknown",
+      });
+      return { id };
+    }),
+
+  /** Get a single session */
+  getSession: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const session = await getSmallParcelSession(input.id);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      return session;
+    }),
+
+  /** Update scanned items on a session */
+  updateScannedItems: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      scannedItems: z.array(z.object({ sku: z.string(), qty: z.number(), scanned: z.number() })),
+    }))
+    .mutation(async ({ input }) => {
+      const allScanned = input.scannedItems.every((item) => item.scanned >= item.qty);
+      await updateSmallParcelSession(input.id, {
+        scannedItems: input.scannedItems,
+        status: allScanned ? "ready" : "scanning",
+      });
+      return { allScanned };
+    }),
+
+  /** Update package dimensions */
+  updateDimensions: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      weightKg: z.number().positive().optional(),
+      lengthCm: z.number().positive().optional(),
+      widthCm: z.number().positive().optional(),
+      heightCm: z.number().positive().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...dims } = input;
+      await updateSmallParcelSession(id, {
+        weightKg: dims.weightKg?.toString(),
+        lengthCm: dims.lengthCm?.toString(),
+        widthCm: dims.widthCm?.toString(),
+        heightCm: dims.heightCm?.toString(),
+      });
+      return { success: true };
+    }),
+
+  /**
+   * Purchase a label via Veeqo.
+   * NOTE: This is a stub until the Veeqo API key is provisioned.
+   * It marks the session as label_purchased and stores a placeholder.
+   */
+  purchaseLabel: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      // Optional: carrier service selection (for future rate-shopping UI)
+      carrierService: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const session = await getSmallParcelSession(input.id);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.status === "label_purchased") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Label already purchased for this session" });
+      }
+      // TODO: Replace with real Veeqo API call once API key is provisioned
+      // const veeqo = createVeeqoClient(process.env.VEEQO_API_KEY!);
+      // const rates = await veeqo.getRates({ ... });
+      // const label = await veeqo.purchaseLabel({ rateId: rates[0].id, ... });
+      throw new TRPCError({
+        code: "NOT_IMPLEMENTED",
+        message: "Veeqo API key not yet configured. Please add your VEEQO_API_KEY to the environment settings to enable label purchasing.",
+      });
+    }),
+
+  /** Cancel a session */
+  cancelSession: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await updateSmallParcelSession(input.id, { status: "cancelled" });
+      return { success: true };
+    }),
+
+  /** List recent sessions */
+  listSessions: protectedProcedure
+    .input(z.object({
+      facilityId: z.number().optional(),
+      status: z.enum(["scanning", "ready", "label_purchased", "cancelled"]).optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      return listSmallParcelSessions(input ?? {});
+    }),
+});
+
 // Re-export appRouter augmented with all feature routers including SLA
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
   shippingDashboard: shippingDashboardRouter,
+  smallParcel: smallParcelRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

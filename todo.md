@@ -881,3 +881,8 @@
 - [x] Write vitest tests for getOrderDetail slaSnapshot/auditHistory additions
 - [x] Add Send to Shipwell button in Order Detail Drawer Shipwell tab for orders not yet submitted
 - [x] Add Send to Shipwell button in Order Detail Drawer Shipwell tab for orders not yet submitted
+- [x] Add Small Parcel sidebar section (between Allocation and QC) with Pack & Ship workflow
+- [x] Build smallParcel tRPC router (lookupOrder, createSession, updateDimensions, purchaseLabel stub)
+- [x] Build SmallParcel.tsx 4-step workflow page (scan pick ticket, view order, scan items, pack & ship)
+- [x] Add small_parcel_sessions DB table and helpers
+- [x] Write vitest tests for smallParcel procedures (379 tests passing)

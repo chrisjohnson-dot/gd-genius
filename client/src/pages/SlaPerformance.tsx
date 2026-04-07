@@ -541,37 +541,7 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   {slaHealth === "yellow" && <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-200 text-[10px] font-bold"><AlertTriangle className="h-2.5 w-2.5 mr-1" />{Math.round(slaRatePct)}% In SLA</Badge>}
                   {slaHealth === "red" && <Badge className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold"><AlertTriangle className="h-2.5 w-2.5 mr-1" />{Math.round(slaRatePct)}% In SLA</Badge>}
                 </div>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <p className="text-xs text-muted-foreground mr-1">{orders.length} orders</p>
-                  {/* B2B compliance pill */}
-                  {b2bOrders.length > 0 && (
-                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-bold ${
-                      b2bPct >= greenThreshold ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400"
-                      : b2bPct >= yellowThreshold ? "bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/30 dark:border-yellow-800 dark:text-yellow-400"
-                      : "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400"
-                    }`}>
-                      <Truck className="h-2.5 w-2.5" />
-                      <span className="uppercase tracking-wide">B2B</span>
-                      <span className="font-extrabold">{Math.round(b2bPct)}%</span>
-                      <span className="font-normal opacity-75">{b2bOrders.length} orders</span>
-                      {b2bOos > 0 && <span className="ml-0.5 px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] font-bold">{b2bOos} OOS</span>}
-                    </div>
-                  )}
-                  {/* D2C compliance pill */}
-                  {d2cOrders.length > 0 && (
-                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-bold ${
-                      d2cPct >= greenThreshold ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400"
-                      : d2cPct >= yellowThreshold ? "bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/30 dark:border-yellow-800 dark:text-yellow-400"
-                      : "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400"
-                    }`}>
-                      <ShoppingCart className="h-2.5 w-2.5" />
-                      <span className="uppercase tracking-wide">D2C</span>
-                      <span className="font-extrabold">{Math.round(d2cPct)}%</span>
-                      <span className="font-normal opacity-75">{d2cOrders.length} orders</span>
-                      {d2cOos > 0 && <span className="ml-0.5 px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] font-bold">{d2cOos} OOS</span>}
-                    </div>
-                  )}
-                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{orders.length} orders tracked</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -584,39 +554,45 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   ))}
                 </div>
               </div>
-              {/* KPI pills */}
+              {/* Four stat boxes: B2B In SLA, B2B OOS, D2C In SLA, D2C OOS */}
               <div className="hidden md:flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                <button className={`rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-all ${filterStatus === "in_sla" ? "ring-2 ring-green-400" : ""}`} style={{ background: "#dcfce7", border: "1px solid #bbf7d0" }} onClick={() => setFilterStatus(filterStatus === "in_sla" ? "all" : "in_sla")}>
-                  <p className="text-[15px] font-extrabold leading-none text-green-700">{inSlaCount}</p>
-                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
-                </button>
-                <button className={`rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-all ${filterStatus === "out_of_sla" ? "ring-2 ring-red-400" : ""}`} style={{ background: "#fee2e2", border: "1px solid #fecaca" }} onClick={() => setFilterStatus(filterStatus === "out_of_sla" ? "all" : "out_of_sla")}>
-                  <p className="text-[15px] font-extrabold leading-none text-red-700">{outOfSlaCount}</p>
-                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
-                </button>
-                {waivedCount > 0 && (
-                  <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#f3e8ff", border: "1px solid #e9d5ff" }}>
-                    <p className="text-[15px] font-extrabold leading-none text-purple-700">{waivedCount}</p>
-                    <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-purple-600">Waived</p>
+                {/* B2B In SLA */}
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 56 }}>
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <Truck className="h-2 w-2 text-green-600" />
+                    <span className="text-[8px] font-bold uppercase tracking-wide text-green-600">B2B</span>
                   </div>
-                )}
+                  <p className="text-[17px] font-extrabold leading-none text-green-700">{b2bInSla}</p>
+                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
+                </div>
+                {/* B2B Out of SLA */}
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 56 }}>
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <Truck className="h-2 w-2 text-red-600" />
+                    <span className="text-[8px] font-bold uppercase tracking-wide text-red-600">B2B</span>
+                  </div>
+                  <p className="text-[17px] font-extrabold leading-none text-red-700">{b2bOos}</p>
+                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
+                </div>
+                {/* D2C In SLA */}
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 56 }}>
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <ShoppingCart className="h-2 w-2 text-green-600" />
+                    <span className="text-[8px] font-bold uppercase tracking-wide text-green-600">D2C</span>
+                  </div>
+                  <p className="text-[17px] font-extrabold leading-none text-green-700">{d2cInSla}</p>
+                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
+                </div>
+                {/* D2C Out of SLA */}
+                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 56 }}>
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <ShoppingCart className="h-2 w-2 text-red-600" />
+                    <span className="text-[8px] font-bold uppercase tracking-wide text-red-600">D2C</span>
+                  </div>
+                  <p className="text-[17px] font-extrabold leading-none text-red-700">{d2cOos}</p>
+                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
+                </div>
               </div>
-              {/* CSV export */}
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={(e) => {
-                e.stopPropagation();
-                const header = ["SLA Status","Order #","PO #","Client","Channel","Ship To","Create Date","Age","Stage","SLA Days","Overdue","Notes"];
-                const rows = filtered.map((o) => [
-                  o.slaActionStatus !== "active" ? o.slaActionStatus : o.slaStatus === "in_sla" ? "In SLA" : "Out of SLA",
-                  o.referenceNum ?? "", o.poNum ?? "", o.clientName, o.orderChannel.toUpperCase(), o.shipToName ?? "",
-                  o.creationDate ? new Date(o.creationDate).toLocaleDateString() : "",
-                  o.ageCalendarDays === 0 ? "Today" : `${o.ageCalendarDays}d`,
-                  o.lifecycleStatus.replace("_", " "), `${o.slaDays}d`,
-                  o.slaStatus === "out_of_sla" ? `${Math.abs(o.daysRemaining)}d` : "", o.notes ?? "",
-                ]);
-                const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-                downloadCsv(csv, `${facilityName.replace(/[^a-z0-9]/gi, "_")}_sla.csv`);
-                toast.success("CSV exported");
-              }}><FileDown className="h-3.5 w-3.5" />CSV</Button>
               {!onDrillDown && (
                 <button className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground" onClick={(e) => { e.stopPropagation(); setIsFullScreen((f) => !f); }} title={isFullScreen ? "Exit full screen" : "Full screen"}>
                   {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}

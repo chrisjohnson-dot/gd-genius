@@ -1593,10 +1593,10 @@ export default function Home() {
     setPendingClientFilter("all");
   };
 
-  return (
-
-      <div className="p-5 space-y-4 page-enter">
-        {/* Page header */}
+   return (
+      <div className="flex flex-col h-full page-enter">
+        {/* Sticky page header */}
+        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border px-5 py-4 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {selectedFacility && (
@@ -1640,9 +1640,11 @@ export default function Home() {
                 Run Allocation Tool
               </Link>
             </Button>
-          </div>
+           </div>
         </div>
-
+        </div>{/* end sticky header */}
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
         {/* Verification Issues KPI card — only shown when there are unresolved issues */}
         {!selectedFacility && (verifData?.count ?? 0) > 0 && (
           <Link href="/history">
@@ -1731,12 +1733,11 @@ export default function Home() {
             }}
           />
         )}
+        </div>{/* end scrollable content */}
       </div>
-
   );
 }
-
-// ─── SLA Breach Summary ───────────────────────────────────────────────────────
+// ─── SLA Breach Summaryry ───────────────────────────────────────────────────────
 function SlaBreachSummarySection({ onClientClick }: {
   onClientClick: (clientId: number, facilityId: number | null) => void;
 }) {

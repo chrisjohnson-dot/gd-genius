@@ -164,6 +164,10 @@ import {
   addHighValueSku,
   removeHighValueSku,
   isHighValueSku,
+  listTechshipConfigs,
+  getTechshipConfig,
+  upsertTechshipConfig,
+  deleteTechshipConfig,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -6162,10 +6166,70 @@ const smallParcelRouter = router({
 });
 
 // Re-export appRouter augmented with all feature routers including SLA
+const techshipRouter = router({
+  list: protectedProcedure.query(async () => {
+    const configs = await listTechshipConfigs();
+    return configs.map((c) => ({
+      ...c,
+      // mask the secret for display — only show last 4 chars
+      apiSecretMasked: c.apiSecret ? `${'*'.repeat(Math.max(0, c.apiSecret.length - 4))}${c.apiSecret.slice(-4)}` : '',
+    }));
+  }),
+  getById: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      return getTechshipConfig(input.id);
+    }),
+  save: protectedProcedure
+    .input(z.object({
+      id: z.number().int().optional(),
+      locationName: z.string().min(1),
+      baseUrl: z.string().url(),
+      apiKey: z.string().min(1),
+      apiSecret: z.string().min(1),
+      isActive: z.boolean().default(true),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await upsertTechshipConfig(data, id);
+      return { success: true };
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      await deleteTechshipConfig(input.id);
+      return { success: true };
+    }),
+  testConnection: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const cfg = await getTechshipConfig(input.id);
+      if (!cfg) throw new TRPCError({ code: 'NOT_FOUND', message: 'TechShip config not found' });
+      try {
+        const url = `${cfg.baseUrl.replace(/\/$/, '')}/api/v1/ping`;
+        const resp = await fetch(url, {
+          headers: { 'X-API-KEY': cfg.apiKey, 'X-API-SECRET': cfg.apiSecret, 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (resp.ok) {
+          return { success: true, message: `Connected to ${cfg.locationName} (HTTP ${resp.status})` };
+        } else {
+          const body = await resp.text().catch(() => '');
+          return { success: false, message: `HTTP ${resp.status}: ${body.slice(0, 200)}` };
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, message: msg };
+      }
+    }),
+});
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
   shippingDashboard: shippingDashboardRouter,
   smallParcel: smallParcelRouter,
+  techship: techshipRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

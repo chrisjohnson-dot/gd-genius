@@ -926,3 +926,11 @@
 - [x] Small Parcel: build Supervisor PIN management page (/small-parcel/supervisor-pins)
 - [x] Small Parcel: build High-Value SKU config page (/small-parcel/high-value-skus)
 - [x] Small Parcel: add both new pages to sidebar nav
+- [x] Store VEEQO_API_KEY as project secret
+- [ ] Replace stub purchaseLabel with real Veeqo API call (rate-shop, purchase label, return tracking + ZPL)
+- [ ] Wire Veeqo carrier/service list into Pack & Ship carrier dropdown
+- [x] Config: rename "Ship Well Settings" nav item to "Shipping Integration"
+- [x] Config: restructure Shipping Integration page into tabs: Ship Well / Veeqo / TechShip
+- [x] Config: add TechShip DB table (techship_configs) with location name, base URL, API key, API secret
+- [x] Config: seed four TechShip locations (Calgary, Mississauga, Renous, Columbus)
+- [x] Config: build TechShip config UI tab with add/edit/delete per location

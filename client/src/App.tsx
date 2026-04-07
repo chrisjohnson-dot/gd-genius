@@ -24,6 +24,7 @@ import ShipOrders from "@/pages/ShipOrders";
 import ShippingHistory from "@/pages/ShippingHistory";
 import ShippingCarriers from "@/pages/ShippingCarriers";
 import ShipwellSettings from "@/pages/ShipwellSettings";
+import ShippingIntegration from "@/pages/ShippingIntegration";
 import ClientVisibility from "@/pages/ClientVisibility";
 import ReturnsDashboard from "@/pages/ReturnsDashboard";
 import ProcessReturns from "@/pages/ProcessReturns";
@@ -87,6 +88,7 @@ function AppRoutes() {
         <Route path="/shipping/history" component={ShippingHistory} />
         <Route path="/shipping/carriers" component={ShippingCarriers} />
         <Route path="/shipwell-settings" component={ShipwellSettings} />
+        <Route path="/shipping-integration" component={ShippingIntegration} />
         <Route path="/sla-tracker">{() => { window.location.replace("/sla-performance"); return null; }}</Route>
         <Route path="/client-visibility" component={ClientVisibility} />
         <Route path="/returns" component={ReturnsDashboard} />

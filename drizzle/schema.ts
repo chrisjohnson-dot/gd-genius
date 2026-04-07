@@ -1194,3 +1194,18 @@ export const smallParcelHighValueSkus = mysqlTable("small_parcel_high_value_skus
 });
 export type SmallParcelHighValueSku = typeof smallParcelHighValueSkus.$inferSelect;
 export type InsertSmallParcelHighValueSku = typeof smallParcelHighValueSkus.$inferInsert;
+
+// ─── TechShip Integration ────────────────────────────────────────────────────
+export const techshipConfigs = mysqlTable("techship_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  locationName: varchar("location_name", { length: 100 }).notNull(),
+  baseUrl: varchar("base_url", { length: 255 }).notNull(),
+  apiKey: varchar("api_key", { length: 255 }).notNull(),
+  apiSecret: varchar("api_secret", { length: 255 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type TechshipConfig = typeof techshipConfigs.$inferSelect;
+export type InsertTechshipConfig = typeof techshipConfigs.$inferInsert;

@@ -97,6 +97,9 @@ import {
   smallParcelHighValueSkus,
   SmallParcelHighValueSku,
   InsertSmallParcelHighValueSku,
+  techshipConfigs,
+  TechshipConfig,
+  InsertTechshipConfig,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3326,4 +3329,37 @@ export async function isHighValueSku(sku: string, clientName?: string): Promise<
       r.sku.toUpperCase() === upper &&
       (r.clientName === null || r.clientName === undefined || r.clientName === clientName)
   );
+}
+
+// ─── TechShip Integration ────────────────────────────────────────────────────
+export async function listTechshipConfigs(): Promise<TechshipConfig[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(techshipConfigs).orderBy(techshipConfigs.locationName);
+}
+
+export async function getTechshipConfig(id: number): Promise<TechshipConfig | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(techshipConfigs).where(eq(techshipConfigs.id, id));
+  return rows[0] ?? null;
+}
+
+export async function upsertTechshipConfig(
+  data: Omit<InsertTechshipConfig, "id" | "createdAt" | "updatedAt">,
+  id?: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  if (id) {
+    await db.update(techshipConfigs).set({ ...data, updatedAt: new Date() }).where(eq(techshipConfigs.id, id));
+  } else {
+    await db.insert(techshipConfigs).values(data);
+  }
+}
+
+export async function deleteTechshipConfig(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(techshipConfigs).where(eq(techshipConfigs.id, id));
 }

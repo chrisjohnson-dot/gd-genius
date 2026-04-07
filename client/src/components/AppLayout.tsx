@@ -108,7 +108,7 @@ const configItems = [
   { href: "/rules",                      label: "Allocation Rules",   icon: ListChecks },
   { href: "/schedule",                   label: "Auto-Run Schedule",  icon: CalendarClock },
   { href: "/diagnostics",                label: "API Diagnostics",    icon: Stethoscope },
-  { href: "/shipwell-settings",          label: "Shipwell Settings",  icon: Zap },
+  { href: "/shipping-integration",       label: "Shipping Integration", icon: Truck },
   { href: "/client-visibility",          label: "Client Visibility",  icon: Users },
   { href: "/cortex-settings",            label: "Cortex Integration", icon: Network },
   { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },

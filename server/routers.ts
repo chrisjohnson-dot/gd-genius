@@ -147,6 +147,11 @@ import {
   type QcAuditEvent,
   type VerificationStatus,
   type OrderVerificationResult,
+  listPackageSizesForClient,
+  listAllPackageSizes,
+  createPackageSize,
+  deletePackageSize,
+  updatePackageSize,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -5692,6 +5697,8 @@ const smallParcelRouter = router({
       shipToZip: z.string().optional(),
       shipToCountry: z.string().optional(),
       orderItems: z.array(z.object({ sku: z.string(), qty: z.number(), lotNumber: z.string().nullable().optional() })),
+      selectedPackageSizeId: z.number().optional(),
+      selectedPackageSizeName: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const scannedItems = input.orderItems.map((item) => ({ sku: item.sku, qty: item.qty, scanned: 0 }));
@@ -5712,6 +5719,8 @@ const smallParcelRouter = router({
         shipToCountry: input.shipToCountry,
         scannedItems,
         status: "scanning",
+        selectedPackageSizeId: input.selectedPackageSizeId ?? null,
+        selectedPackageSizeName: input.selectedPackageSizeName ?? null,
         createdByUserId: String(ctx.user.id),
         createdByName: ctx.user.name ?? ctx.user.email ?? "Unknown",
       });
@@ -5942,6 +5951,75 @@ const smallParcelRouter = router({
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
       if (!session.labelZpl) throw new TRPCError({ code: "NOT_FOUND", message: "No ZPL label stored for this session" });
       return { labelZpl: session.labelZpl, trackingNumber: session.veeqoTrackingNumber, carrier: session.veeqoCarrierService };
+    }),
+
+  // ── Package Size Config ───────────────────────────────────────────────────────────────────────────
+
+  /** List package sizes for a specific client (includes global defaults) */
+  listPackageSizes: protectedProcedure
+    .input(z.object({ clientId: z.number().optional().default(0) }))
+    .query(async ({ input }) => listPackageSizesForClient(input.clientId)),
+
+  /** List ALL package sizes (for config/admin page) */
+  listAllPackageSizes: protectedProcedure
+    .query(async () => listAllPackageSizes()),
+
+  /** Create a new package size */
+  createPackageSize: protectedProcedure
+    .input(z.object({
+      clientId: z.number().default(0),
+      clientName: z.string().default("All Clients"),
+      name: z.string().min(1).max(128),
+      lengthCm: z.number().positive().optional(),
+      widthCm: z.number().positive().optional(),
+      heightCm: z.number().positive().optional(),
+      weightKg: z.number().positive().optional(),
+      sortOrder: z.number().default(0),
+    }))
+    .mutation(async ({ input }) => {
+      const id = await createPackageSize({
+        clientId: input.clientId,
+        clientName: input.clientName,
+        name: input.name,
+        lengthCm: input.lengthCm?.toString() ?? null,
+        widthCm: input.widthCm?.toString() ?? null,
+        heightCm: input.heightCm?.toString() ?? null,
+        weightKg: input.weightKg?.toString() ?? null,
+        sortOrder: input.sortOrder,
+      });
+      return { id };
+    }),
+
+  /** Update an existing package size */
+  updatePackageSize: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().min(1).max(128).optional(),
+      lengthCm: z.number().positive().nullable().optional(),
+      widthCm: z.number().positive().nullable().optional(),
+      heightCm: z.number().positive().nullable().optional(),
+      weightKg: z.number().positive().nullable().optional(),
+      sortOrder: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...rest } = input;
+      await updatePackageSize(id, {
+        ...(rest.name !== undefined ? { name: rest.name } : {}),
+        ...(rest.lengthCm !== undefined ? { lengthCm: rest.lengthCm?.toString() ?? null } : {}),
+        ...(rest.widthCm !== undefined ? { widthCm: rest.widthCm?.toString() ?? null } : {}),
+        ...(rest.heightCm !== undefined ? { heightCm: rest.heightCm?.toString() ?? null } : {}),
+        ...(rest.weightKg !== undefined ? { weightKg: rest.weightKg?.toString() ?? null } : {}),
+        ...(rest.sortOrder !== undefined ? { sortOrder: rest.sortOrder } : {}),
+      });
+      return { ok: true };
+    }),
+
+  /** Delete a package size */
+  deletePackageSize: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deletePackageSize(input.id);
+      return { ok: true };
     }),
 });
 

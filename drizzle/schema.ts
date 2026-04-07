@@ -1077,6 +1077,9 @@ export const smallParcelSessions = mysqlTable("small_parcel_sessions", {
   veeqoLabelCost: decimal("veeqoLabelCost", { precision: 10, scale: 2 }),
   // ZPL label content for direct Zebra printer reprint
   labelZpl: text("labelZpl"),
+  // Selected package size (from per-client package size config)
+  selectedPackageSizeId: int("selectedPackageSizeId"),
+  selectedPackageSizeName: varchar("selectedPackageSizeName", { length: 128 }),
   // Package dimensions (optional, for rate shopping)
   weightKg: decimal("weightKg", { precision: 8, scale: 3 }),
   lengthCm: decimal("lengthCm", { precision: 8, scale: 2 }),
@@ -1096,3 +1099,27 @@ export const smallParcelSessions = mysqlTable("small_parcel_sessions", {
 });
 export type SmallParcelSession = typeof smallParcelSessions.$inferSelect;
 export type InsertSmallParcelSession = typeof smallParcelSessions.$inferInsert;
+
+// ─── Small Parcel Package Sizes ───────────────────────────────────────────────
+// Per-client configurable package sizes shown as buttons in the Pack & Ship flow.
+// clientId = 0 means "all clients" (global default).
+export const smallParcelPackageSizes = mysqlTable("small_parcel_package_sizes", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Extensiv customer ID — 0 means global default for all clients */
+  clientId: int("clientId").notNull().default(0),
+  clientName: varchar("clientName", { length: 256 }).notNull().default("All Clients"),
+  /** Display label shown on the button */
+  name: varchar("name", { length: 128 }).notNull(),
+  /** Optional: dimensions in cm for auto-fill */
+  lengthCm: decimal("lengthCm", { precision: 8, scale: 2 }),
+  widthCm: decimal("widthCm", { precision: 8, scale: 2 }),
+  heightCm: decimal("heightCm", { precision: 8, scale: 2 }),
+  /** Optional: weight in kg for auto-fill */
+  weightKg: decimal("weightKg", { precision: 8, scale: 3 }),
+  /** Sort order for button display */
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type SmallParcelPackageSize = typeof smallParcelPackageSizes.$inferSelect;
+export type InsertSmallParcelPackageSize = typeof smallParcelPackageSizes.$inferInsert;

@@ -900,3 +900,11 @@
 - [x] SLA Performance: rename "Order #" column label to "Transaction ID"
 - [x] Pack & Ship: change scan field to look up by Transaction ID (Extensiv order ID) instead of reference number
 - [x] Pack & Ship: update UI label from "Pick ticket / reference number" to "Transaction ID"
+- [x] Small Parcel: remove Step 2 "Confirm Order" — go directly from scan to package size selection
+- [x] Small Parcel: add back navigation on all steps
+- [x] Small Parcel: add Step 2 "Select Package Size" with button grid per client
+- [x] Small Parcel: pre-populate Small Envelope and Large Envelope as default package sizes
+- [x] Small Parcel: add DB table for per-client package size config (small_parcel_package_sizes)
+- [x] Small Parcel: add tRPC procedures to list/create/delete package sizes per client
+- [x] Small Parcel: add Package Size Config page under Small Parcel settings
+- [x] Small Parcel: store selected package size on session and pass to Pack & Ship dimensions

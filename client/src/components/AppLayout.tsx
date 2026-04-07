@@ -67,6 +67,7 @@ const allocationItems = [
 const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
   { href: "/small-parcel/history", label: "Session History", icon: ScrollText },
+  { href: "/small-parcel/package-sizes", label: "Package Sizes", icon: Package },
   { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
 ];
 

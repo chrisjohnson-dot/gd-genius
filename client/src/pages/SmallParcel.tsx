@@ -29,7 +29,17 @@ import { useBrowserPrint } from "@/hooks/useBrowserPrint";
 import { Link } from "wouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// Steps: 1=Scan TX ID, 2=Select Package Size, 3=Scan Items, 4=Pack & Ship
 type Step = 1 | 2 | 3 | 4;
+
+interface PackageSize {
+  id: number;
+  name: string;
+  lengthCm: string | null;
+  widthCm: string | null;
+  heightCm: string | null;
+  weightKg: string | null;
+}
 
 interface ScannedItem {
   sku: string;
@@ -60,26 +70,30 @@ interface OrderData {
 }
 
 // ─── Step Indicator ───────────────────────────────────────────────────────────
-function StepIndicator({ current, step, label }: { current: Step; step: Step; label: string }) {
+function StepIndicator({ current, step, label, onClick }: { current: Step; step: Step; label: string; onClick?: () => void }) {
   const done = current > step;
   const active = current === step;
+  const clickable = done && !!onClick;
   return (
     <div className="flex items-center gap-2">
-      <div
+      <button
+        type="button"
+        onClick={clickable ? onClick : undefined}
         className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
           done
-            ? "bg-green-500 text-white"
+            ? `bg-green-500 text-white ${clickable ? "cursor-pointer hover:bg-green-600" : ""}`
             : active
             ? "bg-blue-600 text-white"
             : "bg-muted text-muted-foreground"
         }`}
       >
         {done ? <CheckCircle2 className="w-4 h-4" /> : step}
-      </div>
+      </button>
       <span
         className={`text-sm font-medium ${
-          active ? "text-foreground" : done ? "text-green-600" : "text-muted-foreground"
+          active ? "text-foreground" : done ? `text-green-600 ${clickable ? "cursor-pointer hover:underline" : ""}` : "text-muted-foreground"
         }`}
+        onClick={clickable ? onClick : undefined}
       >
         {label}
       </span>
@@ -172,130 +186,110 @@ function Step1ScanTicket({
   );
 }
 
-// ─── Step 2: Confirm Order ────────────────────────────────────────────────────
-function Step2ConfirmOrder({
+// ─── Step 2: Select Package Size ─────────────────────────────────────────────
+function Step2PackageSize({
   order,
-  onConfirm,
+  onSelect,
   onBack,
 }: {
   order: OrderData;
-  onConfirm: () => void;
+  onSelect: (size: PackageSize) => void;
   onBack: () => void;
 }) {
+  const { data: sizes, isLoading } = trpc.smallParcel.listPackageSizes.useQuery(
+    { clientId: order.clientId },
+    { staleTime: 30_000 }
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-          <CheckCircle2 className="w-5 h-5 text-green-600" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold">Order Found</h2>
-          <p className="text-muted-foreground text-sm">Confirm this is the correct order before scanning items.</p>
+      {/* Order summary banner */}
+      <div className="flex flex-col gap-1 bg-muted/40 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-2 text-sm">
+          <Hash className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-muted-foreground">TX</span>
+          <span className="font-mono font-semibold">{order.extensivOrderId}</span>
+          <span className="mx-1 text-muted-foreground">&bull;</span>
+          <User className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="font-semibold">{order.clientName}</span>
+          {order.shipTo && (
+            <>
+              <span className="mx-1 text-muted-foreground">&bull;</span>
+              <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground truncate max-w-[160px]">
+                {order.shipTo.companyName ?? order.shipTo.name ?? ""}{order.shipTo.city ? `, ${order.shipTo.city}` : ""}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Order info */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Order Details</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Hash className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Reference</span>
-              <span className="font-mono font-semibold ml-auto">{order.referenceNum}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Hash className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">TX #</span>
-              <span className="font-mono font-semibold ml-auto">{order.extensivOrderId}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Client</span>
-              <span className="font-semibold ml-auto">{order.clientName}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Facility</span>
-              <span className="font-semibold ml-auto">{order.facilityName}</span>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <Package className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">Select Package Size</h2>
+            <p className="text-muted-foreground text-sm">Choose the package type for this shipment.</p>
+          </div>
+        </div>
 
-        {/* Ship-to */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Ship To</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {order.shipTo ? (
-              <div className="flex flex-col gap-1 text-sm">
-                {order.shipTo.companyName && <span className="font-semibold">{order.shipTo.companyName}</span>}
-                {order.shipTo.name && <span>{order.shipTo.name}</span>}
-                {order.shipTo.address1 && <span className="text-muted-foreground">{order.shipTo.address1}</span>}
-                <span className="text-muted-foreground">
-                  {[order.shipTo.city, order.shipTo.state, order.shipTo.zip].filter(Boolean).join(", ")}
-                </span>
-                {order.shipTo.country && order.shipTo.country !== "US" && (
-                  <span className="text-muted-foreground">{order.shipTo.country}</span>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !sizes || sizes.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
+            <AlertCircle className="w-8 h-8" />
+            <p className="text-sm">No package sizes configured.</p>
+            <Link href="/small-parcel/package-sizes" className="text-sm underline text-blue-600">
+              Configure package sizes
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {sizes.map((size) => (
+              <button
+                key={size.id}
+                type="button"
+                onClick={() => onSelect(size as PackageSize)}
+                className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all p-5 text-center group"
+              >
+                <Package className="w-8 h-8 text-muted-foreground group-hover:text-blue-600 transition-colors" />
+                <span className="font-semibold text-sm leading-tight">{size.name}</span>
+                {(size.lengthCm || size.widthCm || size.heightCm) && (
+                  <span className="text-xs text-muted-foreground">
+                    {[size.lengthCm, size.widthCm, size.heightCm].filter(Boolean).join(" × ")} cm
+                  </span>
                 )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No ship-to address on file</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Items */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Items ({order.orderItems.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="divide-y">
-            {order.orderItems.map((item, i) => (
-              <div key={i} className="flex items-center justify-between py-2">
-                <div className="flex flex-col">
-                  <span className="font-mono text-sm font-semibold">{item.sku}</span>
-                  {item.lotNumber && (
-                    <span className="text-xs text-muted-foreground">Lot: {item.lotNumber}</span>
-                  )}
-                </div>
-                <Badge variant="secondary">Qty: {item.qty}</Badge>
-              </div>
+              </button>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       <div className="flex gap-3">
-        <Button variant="outline" onClick={onBack} className="flex-1">
+        <Button variant="outline" onClick={onBack}>
           <RotateCcw className="w-4 h-4 mr-2" />
-          Scan Different Ticket
-        </Button>
-        <Button onClick={onConfirm} className="flex-1">
-          <CheckCircle2 className="w-4 h-4 mr-2" />
-          Confirm & Start Scanning
+          Back
         </Button>
       </div>
     </div>
   );
 }
 
-// ─── Step 3: Scan Items ───────────────────────────────────────────────────────
+/// ─── Step 3: Scan Items ────────────────────────────────────────────────────
 function Step3ScanItems({
   sessionId,
   items,
   onComplete,
+  onBack,
 }: {
   sessionId: number;
   items: ScannedItem[];
   onComplete: (items: ScannedItem[]) => void;
+  onBack?: () => void;
 }) {
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>(items);
   const [scanInput, setScanInput] = useState("");
@@ -445,6 +439,15 @@ function Step3ScanItems({
           </Button>
         </div>
       )}
+
+      {onBack && (
+        <div className="flex gap-3 pt-2">
+          <Button variant="outline" size="sm" onClick={onBack}>
+            <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+            Back to Package Size
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -511,11 +514,15 @@ function PrintStatusBanner({
 function Step4PackShip({
   sessionId,
   order,
+  selectedSizeName,
   onReset,
+  onBack,
 }: {
   sessionId: number;
   order: OrderData;
+  selectedSizeName?: string | null;
   onReset: () => void;
+  onBack?: () => void;
 }) {
   const [weight, setWeight] = useState("");
   const [length, setLength] = useState("");
@@ -621,6 +628,14 @@ function Step4PackShip({
             <Settings className="w-3 h-3 inline mr-1" />
             Set up printer
           </Link>
+        </div>
+      )}
+
+      {/* Selected package size badge */}
+      {selectedSizeName && (
+        <div className="flex items-center gap-2 text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+          <Package className="w-4 h-4 text-blue-600 shrink-0" />
+          <span className="text-blue-800 dark:text-blue-300">Package: <strong>{selectedSizeName}</strong></span>
         </div>
       )}
 
@@ -744,7 +759,13 @@ function Step4PackShip({
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
+        {onBack && !labelPurchased && (
+          <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
+            <RotateCcw className="w-3.5 h-3.5" />
+            Back
+          </Button>
+        )}
         <Button variant="outline" onClick={onReset} className="flex-1">
           <RotateCcw className="w-4 h-4 mr-2" />
           New Shipment
@@ -800,6 +821,7 @@ export default function SmallParcel() {
   const { user } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [orderData, setOrderData] = useState<OrderData | null>(null);
+  const [selectedSize, setSelectedSize] = useState<PackageSize | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
 
@@ -817,13 +839,16 @@ export default function SmallParcel() {
     },
   });
 
+  // Step 1 → 2: order found, go straight to package size selection
   const handleOrderFound = (_ref: string, data: OrderData) => {
     setOrderData(data);
     setStep(2);
   };
 
-  const handleConfirmOrder = () => {
+  // Step 2 → 3: package size chosen, create session
+  const handlePackageSizeSelected = (size: PackageSize) => {
     if (!orderData) return;
+    setSelectedSize(size);
     createSessionMutation.mutate({
       configId,
       facilityId: orderData.facilityId,
@@ -839,6 +864,8 @@ export default function SmallParcel() {
       shipToZip: orderData.shipTo?.zip,
       shipToCountry: orderData.shipTo?.country,
       orderItems: orderData.orderItems,
+      selectedPackageSizeId: size.id,
+      selectedPackageSizeName: size.name,
     });
   };
 
@@ -850,6 +877,7 @@ export default function SmallParcel() {
   const handleReset = () => {
     setStep(1);
     setOrderData(null);
+    setSelectedSize(null);
     setSessionId(null);
     setScannedItems([]);
   };
@@ -869,11 +897,17 @@ export default function SmallParcel() {
         </div>
       </div>
 
-      {/* Step indicator */}
+      {/* Step indicator — completed steps are clickable for back navigation */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
-        <StepIndicator current={step} step={1} label="Scan Ticket" />
-        <StepIndicator current={step} step={2} label="Confirm Order" />
-        <StepIndicator current={step} step={3} label="Scan Items" />
+        <StepIndicator current={step} step={1} label="Scan TX ID"
+          onClick={step > 1 ? handleReset : undefined}
+        />
+        <StepIndicator current={step} step={2} label="Package Size"
+          onClick={step > 2 ? () => { setStep(2); setSessionId(null); } : undefined}
+        />
+        <StepIndicator current={step} step={3} label="Scan Items"
+          onClick={step > 3 ? () => setStep(3) : undefined}
+        />
         <StepIndicator current={step} step={4} label="Pack & Ship" />
       </div>
 
@@ -889,25 +923,34 @@ export default function SmallParcel() {
               <p>No Extensiv configuration found. Please set up a connection in Settings first.</p>
             </div>
           )}
-          {step === 2 && orderData && (
-            <Step2ConfirmOrder
+          {step === 2 && orderData && createSessionMutation.status !== "pending" && (
+            <Step2PackageSize
               order={orderData}
-              onConfirm={handleConfirmOrder}
+              onSelect={handlePackageSizeSelected}
               onBack={handleReset}
             />
+          )}
+          {step === 2 && createSessionMutation.status === "pending" && (
+            <div className="flex items-center justify-center gap-3 py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+              <span className="text-muted-foreground">Creating session…</span>
+            </div>
           )}
           {step === 3 && sessionId !== null && orderData && (
             <Step3ScanItems
               sessionId={sessionId}
               items={orderData.orderItems.map((item) => ({ sku: item.sku, qty: item.qty, scanned: 0 }))}
               onComplete={handleScanComplete}
+              onBack={() => { setStep(2); setSessionId(null); }}
             />
           )}
           {step === 4 && sessionId !== null && orderData && (
             <Step4PackShip
               sessionId={sessionId}
               order={orderData}
+              selectedSizeName={selectedSize?.name ?? null}
               onReset={handleReset}
+              onBack={() => setStep(3)}
             />
           )}
         </CardContent>

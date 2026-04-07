@@ -85,6 +85,9 @@ import {
   smallParcelSessions,
   SmallParcelSession,
   InsertSmallParcelSession,
+  smallParcelPackageSizes,
+  SmallParcelPackageSize,
+  InsertSmallParcelPackageSize,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3141,4 +3144,50 @@ export async function listSmallParcelSessions(opts: { facilityId?: number; statu
   if (conditions.length === 1) return q.where(conditions[0]);
   if (conditions.length > 1) return q.where(and(...conditions));
   return q;
+}
+
+// ── Small Parcel Package Sizes ───────────────────────────────────────────────────────────────────
+
+/** Return package sizes visible for a given client (client-specific + global defaults). */
+export async function listPackageSizesForClient(clientId: number): Promise<SmallParcelPackageSize[]> {
+  const db = await getDb();
+  if (!db) return [];
+  // Return sizes specific to this client OR global (clientId=0), sorted by sortOrder
+  const rows = await db
+    .select()
+    .from(smallParcelPackageSizes)
+    .where(
+      or(
+        eq(smallParcelPackageSizes.clientId, clientId),
+        eq(smallParcelPackageSizes.clientId, 0)
+      )
+    )
+    .orderBy(smallParcelPackageSizes.sortOrder, smallParcelPackageSizes.name);
+  return rows;
+}
+
+/** Return ALL package sizes (for config page). */
+export async function listAllPackageSizes(): Promise<SmallParcelPackageSize[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(smallParcelPackageSizes).orderBy(smallParcelPackageSizes.clientId, smallParcelPackageSizes.sortOrder);
+}
+
+export async function createPackageSize(data: Omit<InsertSmallParcelPackageSize, "id" | "createdAt" | "updatedAt">): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(smallParcelPackageSizes).values(data);
+  return (result[0] as { insertId: number }).insertId;
+}
+
+export async function deletePackageSize(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(smallParcelPackageSizes).where(eq(smallParcelPackageSizes.id, id));
+}
+
+export async function updatePackageSize(id: number, data: Partial<Omit<InsertSmallParcelPackageSize, "id" | "createdAt" | "updatedAt">>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(smallParcelPackageSizes).set({ ...data, updatedAt: new Date() }).where(eq(smallParcelPackageSizes.id, id));
 }

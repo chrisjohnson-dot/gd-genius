@@ -551,44 +551,42 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   ))}
                 </div>
               </div>
-              {/* Four stat boxes: B2B In SLA, B2B OOS, D2C In SLA, D2C OOS */}
+              {/* Four stat boxes: B2B In SLA, B2B OOS, D2C In SLA, D2C OOS — clickable filters */}
               <div className="hidden md:flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                {/* B2B In SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 64, width: 64 }}>
-                  <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <Truck className="h-2 w-2 text-green-600" />
-                    <span className="text-[8px] font-bold uppercase tracking-wide text-green-600">B2B</span>
-                  </div>
-                  <p className="text-[17px] font-extrabold leading-none text-green-700">{b2bInSla}</p>
-                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
-                </div>
-                {/* B2B Out of SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 64, width: 64 }}>
-                  <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <Truck className="h-2 w-2 text-red-600" />
-                    <span className="text-[8px] font-bold uppercase tracking-wide text-red-600">B2B</span>
-                  </div>
-                  <p className="text-[17px] font-extrabold leading-none text-red-700">{b2bOos}</p>
-                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
-                </div>
-                {/* D2C In SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#dcfce7", border: "1px solid #bbf7d0", minWidth: 64, width: 64 }}>
-                  <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <ShoppingCart className="h-2 w-2 text-green-600" />
-                    <span className="text-[8px] font-bold uppercase tracking-wide text-green-600">D2C</span>
-                  </div>
-                  <p className="text-[17px] font-extrabold leading-none text-green-700">{d2cInSla}</p>
-                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-green-600">In SLA</p>
-                </div>
-                {/* D2C Out of SLA */}
-                <div className="rounded-lg px-3 py-1.5 text-center border" style={{ background: "#fee2e2", border: "1px solid #fecaca", minWidth: 64, width: 64 }}>
-                  <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <ShoppingCart className="h-2 w-2 text-red-600" />
-                    <span className="text-[8px] font-bold uppercase tracking-wide text-red-600">D2C</span>
-                  </div>
-                  <p className="text-[17px] font-extrabold leading-none text-red-700">{d2cOos}</p>
-                  <p className="text-[8px] mt-0.5 font-semibold uppercase tracking-wide text-red-600">Out of SLA</p>
-                </div>
+                {(() => {
+                  function StatBox({ ch, st, bg, border: bdr, textColor, labelColor, icon, label, count }: {
+                    ch: ChannelFilter; st: "in_sla" | "out_of_sla"; bg: string; border: string;
+                    textColor: string; labelColor: string; icon: React.ReactNode; label: string; count: number;
+                  }) {
+                    const active = channelFilter === ch && filterStatus === st;
+                    function handleClick() {
+                      if (active) { setChannelFilter("all"); setFilterStatus("all"); }
+                      else { setChannelFilter(ch); setFilterStatus(st); setExpanded(true); }
+                    }
+                    return (
+                      <button
+                        className={`rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-all select-none ${
+                          active ? "ring-2 ring-offset-1 ring-blue-400 scale-105" : "hover:scale-105 hover:shadow-md"
+                        }`}
+                        style={{ background: bg, border: `1px solid ${bdr}`, minWidth: 64, width: 64 }}
+                        onClick={handleClick}
+                        title={active ? "Click to clear filter" : `Filter: ${label} ${ch.toUpperCase()}`}
+                      >
+                        <div className="flex items-center justify-center gap-1 mb-0.5">{icon}<span className={`text-[8px] font-bold uppercase tracking-wide ${labelColor}`}>{ch.toUpperCase()}</span></div>
+                        <p className={`text-[17px] font-extrabold leading-none ${textColor}`}>{count}</p>
+                        <p className={`text-[8px] mt-0.5 font-semibold uppercase tracking-wide ${labelColor}`}>{label}</p>
+                      </button>
+                    );
+                  }
+                  return (
+                    <>
+                      <StatBox ch="b2b" st="in_sla"      bg="#dcfce7" border="#bbf7d0" textColor="text-green-700" labelColor="text-green-600" icon={<Truck       className="h-2 w-2 text-green-600" />} label="In SLA"     count={b2bInSla} />
+                      <StatBox ch="b2b" st="out_of_sla"  bg="#fee2e2" border="#fecaca" textColor="text-red-700"   labelColor="text-red-600"   icon={<Truck       className="h-2 w-2 text-red-600" />}   label="Out of SLA" count={b2bOos} />
+                      <StatBox ch="d2c" st="in_sla"      bg="#dcfce7" border="#bbf7d0" textColor="text-green-700" labelColor="text-green-600" icon={<ShoppingCart className="h-2 w-2 text-green-600" />} label="In SLA"     count={d2cInSla} />
+                      <StatBox ch="d2c" st="out_of_sla"  bg="#fee2e2" border="#fecaca" textColor="text-red-700"   labelColor="text-red-600"   icon={<ShoppingCart className="h-2 w-2 text-red-600" />}   label="Out of SLA" count={d2cOos} />
+                    </>
+                  );
+                })()}
               </div>
               {!onDrillDown && (
                 <button className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground" onClick={(e) => { e.stopPropagation(); setIsFullScreen((f) => !f); }} title={isFullScreen ? "Exit full screen" : "Full screen"}>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,62 +12,76 @@ import {
   MapPin,
   Save,
   Trash2,
-  GripVertical,
   ArrowUp,
   ArrowDown,
   RefreshCw,
   Info,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// ─── Shared types (mirror WhLocationConfig) ────────────────────────────────
+
+type AisleRule = {
+  prefix: string;
+  description: string;
+  levels: string[];
+};
+
+type WhConfig = {
+  facilityId: number;
+  facilityName: string;
+  locationFormat: string;
+  aisleRules: AisleRule[];
+  notes: string;
+};
 
 type PriorityEntry = {
   aisle: string;
-  level: string;
+  level: string;          // "*" means "all levels"
   priorityOrder: number;
 };
 
+// ─── localStorage helpers ──────────────────────────────────────────────────
+
+const WH_CONFIG_KEY = "wh_location_configs";
+
+function loadWhConfig(facilityId: number): WhConfig | null {
+  try {
+    const stored = JSON.parse(localStorage.getItem(WH_CONFIG_KEY) ?? "{}");
+    return stored[facilityId] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/**
- * Parse the aisle from a location name.
- * Location names from Extensiv look like "D-017-C" or "A-001" or "STAGING-01".
- * The first dash-delimited segment is the aisle.
- */
 function parseAisle(locationName: string): string {
-  const parts = locationName.split("-");
-  return parts[0].trim().toUpperCase();
+  return locationName.split("-")[0].trim().toUpperCase();
 }
 
-/**
- * Parse the level from a location name.
- * For "D-017-C", the third segment "C" is the level.
- * If no level segment, return "*".
- */
-function parseLevel(locationName: string): string {
-  const parts = locationName.split("-");
-  if (parts.length >= 3) return parts[2].trim().toUpperCase();
-  return "*";
-}
-
-// ─── Aisle Chip ────────────────────────────────────────────────────────────
+// ─── AisleChip ─────────────────────────────────────────────────────────────
 
 function AisleChip({
   aisle,
+  level,
   isSelected,
   priorityOrder,
   onToggle,
 }: {
   aisle: string;
+  level: string;
   isSelected: boolean;
   priorityOrder?: number;
-  onToggle: (aisle: string) => void;
+  onToggle: (aisle: string, level: string) => void;
 }) {
+  const label = level === "*" ? aisle : `${aisle} / ${level}`;
   return (
     <button
       type="button"
-      onClick={() => onToggle(aisle)}
+      onClick={() => onToggle(aisle, level)}
       className={`
         relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
         border transition-all duration-150 select-none
@@ -83,12 +97,12 @@ function AisleChip({
         </span>
       )}
       <MapPin className="h-3.5 w-3.5 shrink-0" />
-      {aisle}
+      {label}
     </button>
   );
 }
 
-// ─── Priority List ─────────────────────────────────────────────────────────
+// ─── PriorityList ──────────────────────────────────────────────────────────
 
 function PriorityList({
   entries,
@@ -115,51 +129,49 @@ function PriorityList({
 
   return (
     <div className="space-y-1.5">
-      {entries.map((entry, idx) => (
-        <div
-          key={entry.aisle}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border bg-card hover:bg-muted/10 transition-colors group"
-        >
-          <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0" />
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-            {idx + 1}
-          </span>
-          <div className="flex-1 min-w-0">
-            <span className="font-medium text-sm text-foreground">Aisle {entry.aisle}</span>
-            {entry.level !== "*" && (
-              <span className="ml-2 text-xs text-muted-foreground">Level {entry.level}</span>
-            )}
+      {entries.map((entry, idx) => {
+        const label = entry.level === "*" ? entry.aisle : `${entry.aisle} / ${entry.level}`;
+        return (
+          <div
+            key={`${entry.aisle}-${entry.level}`}
+            className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
+          >
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+              {entry.priorityOrder}
+            </span>
+            <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-sm font-medium flex-1 font-mono">{label}</span>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={() => onMoveUp(idx)}
+                disabled={idx === 0}
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={() => onMoveDown(idx)}
+                disabled={idx === entries.length - 1}
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                onClick={() => onRemove(idx)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              disabled={idx === 0}
-              onClick={() => onMoveUp(idx)}
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              disabled={idx === entries.length - 1}
-              onClick={() => onMoveDown(idx)}
-            >
-              <ArrowDown className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-destructive hover:text-destructive"
-              onClick={() => onRemove(idx)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -171,13 +183,13 @@ export default function PutAwayPriorityConfig() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [priorityEntries, setPriorityEntries] = useState<PriorityEntry[]>([]);
   const [isDirty, setIsDirty] = useState(false);
+  const [whConfig, setWhConfig] = useState<WhConfig | null>(null);
 
   const utils = trpc.useUtils();
 
   // ── Data queries ──
 
   const configQuery = trpc.config.list.useQuery();
-  // Auto-detect: always use the first available config
   const selectedConfigId = (configQuery.data ?? [])[0]?.id ?? null;
 
   const facilitiesQuery = trpc.extensiv.facilities.useQuery(
@@ -192,9 +204,11 @@ export default function PutAwayPriorityConfig() {
   );
   const customers = customersQuery.data ?? [];
 
+  // Only fetch Extensiv locations if there is NO WH Location Config for this facility
+  const needExtensivLocations = !!selectedFacilityId && !whConfig;
   const locationsQuery = trpc.extensiv.locations.useQuery(
     { configId: selectedConfigId!, facilityId: selectedFacilityId! },
-    { enabled: !!selectedConfigId && !!selectedFacilityId }
+    { enabled: !!selectedConfigId && needExtensivLocations }
   );
   const locations = locationsQuery.data ?? [];
 
@@ -206,6 +220,15 @@ export default function PutAwayPriorityConfig() {
     },
     { enabled: !!selectedConfigId && !!selectedFacilityId && !!selectedCustomerId }
   );
+
+  // ── Load WH config from localStorage when facility changes ──
+  useEffect(() => {
+    if (selectedFacilityId) {
+      setWhConfig(loadWhConfig(selectedFacilityId));
+    } else {
+      setWhConfig(null);
+    }
+  }, [selectedFacilityId]);
 
   // ── Load saved priorities when selection changes ──
   useEffect(() => {
@@ -223,18 +246,41 @@ export default function PutAwayPriorityConfig() {
     }
   }, [priorityQuery.data, priorityQuery.isLoading, selectedCustomerId]);
 
-  // ── Derive unique aisles from locations ──
-  const uniqueAisles = useMemo(() => {
-    const set = new Set<string>();
+  // ── Build the list of aisle+level chips to display ──
+  // If WH Location Config exists: use configured aisles and their levels
+  // Otherwise: fall back to deriving unique aisles from Extensiv locations (level = "*")
+  const availableChips = useMemo<{ aisle: string; level: string; description?: string }[]>(() => {
+    if (whConfig && whConfig.aisleRules.length > 0) {
+      const chips: { aisle: string; level: string; description?: string }[] = [];
+      for (const rule of whConfig.aisleRules) {
+        if (!rule.prefix) continue;
+        if (rule.levels.length === 0) {
+          // No levels defined — show just the aisle
+          chips.push({ aisle: rule.prefix, level: "*", description: rule.description });
+        } else {
+          // Show one chip per level
+          for (const lvl of rule.levels) {
+            chips.push({ aisle: rule.prefix, level: lvl, description: rule.description });
+          }
+        }
+      }
+      return chips;
+    }
+    // Fallback: derive from Extensiv locations
+    const seen = new Set<string>();
+    const chips: { aisle: string; level: string }[] = [];
     for (const loc of locations) {
       const aisle = parseAisle(loc.name);
-      if (aisle && aisle.length > 0) set.add(aisle);
+      if (aisle && !seen.has(aisle)) {
+        seen.add(aisle);
+        chips.push({ aisle, level: "*" });
+      }
     }
-    return Array.from(set).sort();
-  }, [locations]);
+    return chips.sort((a, b) => a.aisle.localeCompare(b.aisle));
+  }, [whConfig, locations]);
 
-  const selectedAisles = useMemo(
-    () => new Set(priorityEntries.map((e) => e.aisle)),
+  const selectedKeys = useMemo(
+    () => new Set(priorityEntries.map((e) => `${e.aisle}::${e.level}`)),
     [priorityEntries]
   );
 
@@ -246,9 +292,7 @@ export default function PutAwayPriorityConfig() {
       setIsDirty(false);
       utils.putAway.getPriority.invalidate();
     },
-    onError: (err) => {
-      toast.error(`Failed to save: ${err.message}`);
-    },
+    onError: (err) => toast.error(`Failed to save: ${err.message}`),
   });
 
   const clearMutation = trpc.putAway.clearPriority.useMutation({
@@ -258,27 +302,24 @@ export default function PutAwayPriorityConfig() {
       setIsDirty(false);
       utils.putAway.getPriority.invalidate();
     },
-    onError: (err) => {
-      toast.error(`Failed to clear: ${err.message}`);
-    },
+    onError: (err) => toast.error(`Failed to clear: ${err.message}`),
   });
 
   // ── Handlers ──
 
-  function handleToggleAisle(aisle: string) {
+  function handleToggleChip(aisle: string, level: string) {
     if (!selectedCustomerId) return;
     setIsDirty(true);
-    if (selectedAisles.has(aisle)) {
-      // Remove
+    const key = `${aisle}::${level}`;
+    if (selectedKeys.has(key)) {
       setPriorityEntries((prev) => {
-        const filtered = prev.filter((e) => e.aisle !== aisle);
+        const filtered = prev.filter((e) => !(e.aisle === aisle && e.level === level));
         return filtered.map((e, i) => ({ ...e, priorityOrder: i + 1 }));
       });
     } else {
-      // Add to end
       setPriorityEntries((prev) => [
         ...prev,
-        { aisle, level: "*", priorityOrder: prev.length + 1 },
+        { aisle, level, priorityOrder: prev.length + 1 },
       ]);
     }
   }
@@ -312,7 +353,7 @@ export default function PutAwayPriorityConfig() {
   }
 
   function handleSave() {
-    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return; // selectedConfigId auto-detected
+    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return;
     saveMutation.mutate({
       configId: selectedConfigId,
       facilityId: selectedFacilityId,
@@ -322,7 +363,7 @@ export default function PutAwayPriorityConfig() {
   }
 
   function handleClear() {
-    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return; // selectedConfigId auto-detected
+    if (!selectedConfigId || !selectedFacilityId || !selectedCustomerId) return;
     clearMutation.mutate({
       configId: selectedConfigId,
       facilityId: selectedFacilityId,
@@ -343,9 +384,9 @@ export default function PutAwayPriorityConfig() {
     setIsDirty(false);
   }
 
-  const canInteract = !!selectedConfigId && !!selectedFacilityId && !!selectedCustomerId; // selectedConfigId auto-detected
+  const canInteract = !!selectedConfigId && !!selectedFacilityId && !!selectedCustomerId;
   const canSave = canInteract && isDirty && !saveMutation.isPending;
-  const isLoadingLocations = locationsQuery.isLoading || priorityQuery.isLoading;
+  const isLoadingData = (needExtensivLocations && locationsQuery.isLoading) || priorityQuery.isLoading;
 
   return (
     <div className="p-5 space-y-5 page-enter max-w-4xl">
@@ -354,8 +395,8 @@ export default function PutAwayPriorityConfig() {
         <p className="page-breadcrumb">Receiving / Put Away Wizard</p>
         <h1 className="page-title">Location Priority Config</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Set which aisles should be prioritised for put-away per warehouse and customer.
-          The Put Away Wizard will suggest these aisles first when directing associates.
+          Set which aisles (and levels) should be prioritised for put-away per warehouse and customer.
+          The Put Away Wizard will suggest these first when directing associates.
         </p>
       </div>
 
@@ -436,7 +477,47 @@ export default function PutAwayPriorityConfig() {
         </div>
       )}
 
-      {/* Aisle selection + priority list */}
+      {/* WH Location Config status banner */}
+      {selectedFacilityId && (
+        whConfig && whConfig.aisleRules.length > 0 ? (
+          <div className="rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 flex items-center gap-3">
+            <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-green-300 font-medium">
+                Using WH Location Config for {whConfig.facilityName}
+              </p>
+              <p className="text-xs text-green-400/70 mt-0.5">
+                {whConfig.aisleRules.length} aisle{whConfig.aisleRules.length !== 1 ? "s" : ""} configured
+                ({availableChips.length} aisle/level combination{availableChips.length !== 1 ? "s" : ""}).
+                Only these aisles and levels are shown below.
+              </p>
+            </div>
+            <Link href="/config/wh-location">
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-green-400 hover:text-green-300 shrink-0">
+                <ExternalLink className="h-3.5 w-3.5" /> Edit Config
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex items-center gap-3">
+            <Info className="h-4 w-4 text-amber-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-amber-300 font-medium">No WH Location Config for this warehouse</p>
+              <p className="text-xs text-amber-400/70 mt-0.5">
+                Aisles are being derived from all Extensiv locations. For a cleaner list, configure this warehouse's
+                aisle structure in WH Location Config.
+              </p>
+            </div>
+            <Link href="/config/wh-location">
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-amber-400 hover:text-amber-300 shrink-0">
+                <ExternalLink className="h-3.5 w-3.5" /> Configure
+              </Button>
+            </Link>
+          </div>
+        )
+      )}
+
+      {/* Aisle/level selection + priority list */}
       {canInteract && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Left: Available aisles */}
@@ -444,66 +525,106 @@ export default function PutAwayPriorityConfig() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  Available Aisles
+                  {whConfig && whConfig.aisleRules.length > 0 ? "Configured Aisles & Levels" : "Available Aisles"}
                 </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1.5 text-xs"
-                  onClick={() => locationsQuery.refetch()}
-                  disabled={locationsQuery.isFetching}
-                >
-                  {locationsQuery.isFetching ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3 w-3" />
-                  )}
-                  Refresh
-                </Button>
+                {!whConfig && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => locationsQuery.refetch()}
+                    disabled={locationsQuery.isFetching}
+                  >
+                    {locationsQuery.isFetching ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" />
+                    )}
+                    Refresh
+                  </Button>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Click an aisle to add it to the priority list. Click again to remove it.
+                Click an aisle{whConfig && whConfig.aisleRules.length > 0 ? "/level" : ""} to add it to the priority list. Click again to remove it.
               </p>
             </CardHeader>
             <CardContent>
-              {isLoadingLocations ? (
+              {isLoadingData ? (
                 <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Loading locations…</span>
+                  <span className="text-sm">Loading…</span>
                 </div>
-              ) : uniqueAisles.length === 0 ? (
+              ) : availableChips.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <MapPin className="h-7 w-7 text-muted-foreground/30 mb-2" />
-                  <p className="text-sm text-muted-foreground">No locations found</p>
+                  <p className="text-sm text-muted-foreground">No aisles found</p>
                   <p className="text-xs text-muted-foreground/70 mt-1">
-                    No locations are configured for this warehouse in Extensiv.
+                    {whConfig
+                      ? "Add aisles to this warehouse in WH Location Config."
+                      : "No locations are configured for this warehouse in Extensiv."}
                   </p>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {uniqueAisles.map((aisle) => {
-                    const idx = priorityEntries.findIndex((e) => e.aisle === aisle);
-                    return (
-                      <AisleChip
-                        key={aisle}
-                        aisle={aisle}
-                        isSelected={selectedAisles.has(aisle)}
-                        priorityOrder={idx >= 0 ? idx + 1 : undefined}
-                        onToggle={handleToggleAisle}
-                      />
-                    );
-                  })}
-                </div>
-              )}
+                <>
+                  {/* Group chips by aisle when using WH config with levels */}
+                  {whConfig && whConfig.aisleRules.length > 0 ? (
+                    <div className="space-y-3">
+                      {whConfig.aisleRules.filter(r => r.prefix).map((rule) => {
+                        const chips = availableChips.filter(c => c.aisle === rule.prefix);
+                        if (chips.length === 0) return null;
+                        return (
+                          <div key={rule.prefix}>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                              Aisle {rule.prefix}{rule.description ? ` — ${rule.description}` : ""}
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {chips.map((chip) => {
+                                const key = `${chip.aisle}::${chip.level}`;
+                                const idx = priorityEntries.findIndex(e => `${e.aisle}::${e.level}` === key);
+                                return (
+                                  <AisleChip
+                                    key={key}
+                                    aisle={chip.aisle}
+                                    level={chip.level}
+                                    isSelected={selectedKeys.has(key)}
+                                    priorityOrder={idx >= 0 ? idx + 1 : undefined}
+                                    onToggle={handleToggleChip}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {availableChips.map((chip) => {
+                        const key = `${chip.aisle}::${chip.level}`;
+                        const idx = priorityEntries.findIndex(e => `${e.aisle}::${e.level}` === key);
+                        return (
+                          <AisleChip
+                            key={key}
+                            aisle={chip.aisle}
+                            level={chip.level}
+                            isSelected={selectedKeys.has(key)}
+                            priorityOrder={idx >= 0 ? idx + 1 : undefined}
+                            onToggle={handleToggleChip}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
 
-              {uniqueAisles.length > 0 && (
-                <div className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-muted/20 border border-border">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">
-                    Aisles are derived from location names (e.g. <code className="font-mono">D-017-C</code> → aisle <code className="font-mono">D</code>).
-                    {" "}Selected aisles show their priority number.
-                  </p>
-                </div>
+                  <div className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-muted/20 border border-border">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                      {whConfig && whConfig.aisleRules.length > 0
+                        ? `Aisles and levels come from the WH Location Config for ${whConfig.facilityName}. Edit that config to add or remove options.`
+                        : "Aisles are derived from Extensiv location names. Configure this warehouse in WH Location Config for a curated list."}
+                    </p>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -517,7 +638,7 @@ export default function PutAwayPriorityConfig() {
                 </CardTitle>
                 {priorityEntries.length > 0 && (
                   <Badge variant="secondary" className="text-xs">
-                    {priorityEntries.length} aisle{priorityEntries.length !== 1 ? "s" : ""}
+                    {priorityEntries.length} slot{priorityEntries.length !== 1 ? "s" : ""}
                   </Badge>
                 )}
               </div>
@@ -590,9 +711,12 @@ export default function PutAwayPriorityConfig() {
                 <p className="text-sm font-medium text-foreground">How priorities work</p>
                 <p className="text-xs text-muted-foreground">
                   When the Put Away Wizard suggests a location for a scanned SKU, it will first look for
-                  empty slots in your prioritised aisles (in order), before falling back to consolidation
-                  candidates and then any available warehouse slot. This helps direct associates to
-                  preferred storage zones for each customer.
+                  empty slots in your prioritised aisles and levels (in order), before falling back to
+                  consolidation candidates and then any available warehouse slot.
+                  {whConfig && whConfig.aisleRules.length > 0 && (
+                    <> Level-specific priorities (e.g. <span className="font-mono">D / A</span>) let you direct
+                    associates to a specific shelf height within an aisle.</>
+                  )}
                 </p>
               </div>
             </div>

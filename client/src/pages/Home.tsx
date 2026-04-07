@@ -444,7 +444,7 @@ function AdvanceButton({
 }
 
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
-type SortKey = "clientName" | "referenceNum" | "ageDays" | "lifecycleStatus" | "totalPieces" | "shipToName" | "shipToCity" | "poNum" | "requiredShipDate";
+type SortKey = "clientName" | "extensivOrderId" | "ageDays" | "lifecycleStatus" | "totalPieces" | "shipToName" | "shipToCity" | "poNum" | "requiredShipDate";
 type SortDir = "asc" | "desc";
 const STATUS_RANK: Record<LifecycleStatus, number> = {
   unallocated: 0, allocated: 1, picking: 2, qc: 3, qc_complete: 4, ship_ready: 5,
@@ -812,8 +812,8 @@ function WarehouseCard({
             Status <SortIcon col="lifecycleStatus" sortKey={sortKey} sortDir={sortDir} />
           </button>
         </th>
-        <th onClick={() => toggleSort("referenceNum")} className="cursor-pointer select-none">
-          TX # <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
+        <th onClick={() => toggleSort("extensivOrderId")} className="cursor-pointer select-none">
+          TX # <SortIcon col="extensivOrderId" sortKey={sortKey} sortDir={sortDir} />
         </th>
         <th onClick={() => toggleSort("poNum")} className="cursor-pointer select-none">
           PO # <SortIcon col="poNum" sortKey={sortKey} sortDir={sortDir} />
@@ -868,7 +868,7 @@ function WarehouseCard({
           <LifecyclePill status={o.lifecycleStatus} />
         </td>
         <td className="font-semibold text-foreground text-xs">
-          {o.referenceNum || `#${o.extensivOrderId}`}
+          {o.extensivOrderId}
         </td>
         <td className="text-muted-foreground text-xs font-mono">
           {o.poNum ?? "—"}

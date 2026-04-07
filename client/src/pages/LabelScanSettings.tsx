@@ -208,7 +208,7 @@ export default function LabelScanSettings() {
 
   const agentScript = `#!/usr/bin/env node
 // GD Label Sync Agent
-// Watches a local folder and uploads new .zpl label files to the GD Allocation app.
+// Watches a local folder and uploads new .zpl label files to the Go Direct app.
 // Run: node gd-label-sync.mjs
 // Requires: Node.js 18+
 

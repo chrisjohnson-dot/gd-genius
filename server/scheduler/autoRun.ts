@@ -263,7 +263,7 @@ async function runAutoAllocation(configId: number): Promise<void> {
     ].join("\n");
 
     await notifyOwner({
-      title: `GD Allocation Auto-Run: ${totalAllocated} orders allocated`,
+      title: `Go Direct Auto-Run: ${totalAllocated} orders allocated`,
       content: notifContent,
     });
   } catch (err) {

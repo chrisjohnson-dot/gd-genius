@@ -51,7 +51,7 @@ function drawChrome(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number
   doc.moveTo(0, footerY).lineTo(PAGE_W, footerY).stroke(GD_BORDER);
   doc
     .fillColor(GD_GRAY).fontSize(7).font("Helvetica")
-    .text("GD Allocation Wizard — Audit", 0, footerY + 8, { width: PAGE_W, align: "center", lineBreak: false });
+    .text("Go Direct Wizard — Audit", 0, footerY + 8, { width: PAGE_W, align: "center", lineBreak: false });
   doc
     .fillColor(GD_GRAY).fontSize(7).font("Helvetica")
     .text(`${pageNum} of ${totalPages}`, MARGIN, footerY + 8, { width: PAGE_W - MARGIN * 2, align: "right", lineBreak: false });

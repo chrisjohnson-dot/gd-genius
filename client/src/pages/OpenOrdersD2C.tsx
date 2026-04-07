@@ -570,7 +570,7 @@ function AdvanceButton({
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
 type SortKey =
   | "clientName"
-  | "referenceNum"
+  | "extensivOrderId"
   | "ageDays"
   | "lifecycleStatus"
   | "totalPieces"
@@ -1139,11 +1139,11 @@ function WarehouseCard({
           </button>
         </th>
         <th
-          onClick={() => toggleSort("referenceNum")}
+          onClick={() => toggleSort("extensivOrderId")}
           className="cursor-pointer select-none"
         >
           TX #{" "}
-          <SortIcon col="referenceNum" sortKey={sortKey} sortDir={sortDir} />
+          <SortIcon col="extensivOrderId" sortKey={sortKey} sortDir={sortDir} />
         </th>
         <th
           onClick={() => toggleSort("poNum")}
@@ -1236,7 +1236,7 @@ function WarehouseCard({
           <LifecyclePill status={o.lifecycleStatus} />
         </td>
         <td className="font-semibold text-foreground text-xs">
-          {o.referenceNum || `#${o.extensivOrderId}`}
+          {o.extensivOrderId}
         </td>
         <td className="text-muted-foreground text-xs font-mono">
           {o.poNum ?? "—"}

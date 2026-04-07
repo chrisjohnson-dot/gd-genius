@@ -2959,6 +2959,8 @@ const returnsRouter = router({
     .input(z.object({
       configId: z.number(),
       warehouseName: z.string(),
+      facilityId: z.number().optional(),
+      facilityName: z.string().optional(),
       clientId: z.number(),
       clientName: z.string(),
       referenceNumber: z.string().optional(),
@@ -3120,6 +3122,14 @@ const returnsRouter = router({
         });
       }
       return { success: true, sent, itemCount: items.length, pushAttempts: newAttempts };
+    }),
+  // List facilities for a given config (used in Process Returns step 1)
+  listFacilities: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+      return fetchAllFacilities(config);
     }),
 });
 // ─── Cortex Integration Router ────────────────────────────────────────────────

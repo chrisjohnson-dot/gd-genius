@@ -865,3 +865,12 @@
 - [ ] Build OrderDetailDrawer component (Overview, Line Items, Lifecycle Timeline, Shipwell tabs)
 - [ ] Wire drawer into Open Orders B2B (Home.tsx) — click any row to open
 - [ ] Wire drawer into Open Orders D2C (OpenOrdersD2C.tsx) — click any row to open
+## UI & Naming Fixes (Apr 2026)
+- [x] Rename "GD Allocation" config to "Go Direct" in database and all code references
+- [x] Process Returns Step 1: show actual Extensiv facility names instead of config name
+- [x] Add facilityId/facilityName columns to returns_sessions table
+- [x] Add returns.listFacilities tRPC procedure
+- [x] TX # column in Open Orders B2B and D2C now shows extensivOrderId
+- [x] Sidebar: rename "Production Line" to "Production Line Scans"
+- [x] Sidebar: rename "QR Scan History" to "K18 QR Scan History"
+- [x] QrScanHistory page title updated to "K18 QR Scan History"

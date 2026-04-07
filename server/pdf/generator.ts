@@ -137,7 +137,7 @@ function drawChrome(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number
     .fillColor(GD_GRAY)
     .fontSize(7)
     .font("Helvetica")
-    .text("GD Allocation Wizard", 0, footerY + 8, { width: PAGE_W, align: "center", lineBreak: false });
+    .text("Go Direct Wizard", 0, footerY + 8, { width: PAGE_W, align: "center", lineBreak: false });
   doc
     .fillColor(GD_GRAY)
     .fontSize(7)

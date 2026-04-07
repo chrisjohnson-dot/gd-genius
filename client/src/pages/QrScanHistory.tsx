@@ -329,7 +329,7 @@ export default function QrScanHistory() {
             <QrCode className="h-6 w-6 text-green-400" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">QR Scan History</h1>
+            <h1 className="text-xl font-semibold">K18 QR Scan History</h1>
             <p className="text-sm text-muted-foreground">
               All QR scanning sessions across production runs, with per-scan forwarding audit trail.
             </p>

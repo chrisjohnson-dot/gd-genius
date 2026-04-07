@@ -360,6 +360,9 @@ export const returnsSessions = mysqlTable("returns_sessions", {
   // FK to extensiv_configs (warehouse)
   configId: int("configId").notNull(),
   warehouseName: varchar("warehouseName", { length: 256 }).notNull(),
+  // Extensiv facility (physical warehouse location)
+  facilityId: int("facilityId"),
+  facilityName: varchar("facilityName", { length: 256 }),
   // Extensiv client ID
   clientId: int("clientId").notNull(),
   clientName: varchar("clientName", { length: 256 }).notNull(),

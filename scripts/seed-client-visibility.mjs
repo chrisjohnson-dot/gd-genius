@@ -1,6 +1,6 @@
 /**
  * Seed client_visibility from the selected-customers TSV.
- * Upserts all customers under configId=3 (the single GD Allocation config).
+ * Upserts all customers under configId=3 (the single Go Direct config).
  * Preserves existing isVisible values — only inserts rows that don't exist yet.
  * Run with: node scripts/seed-client-visibility.mjs
  */

@@ -66,8 +66,8 @@ const qcItems = [
   { href: "/qc/scanner",     label: "QC Scanner",      icon: ScanBarcode },
   { href: "/qc/scan-label",  label: "QC Scan & Label", icon: Tag },
   { href: "/qc/label-files",       label: "Label Files",      icon: FileText },
-  { href: "/qc/production-line",   label: "Production Line",  icon: Activity },
-  { href: "/qc/qr-scan-history",   label: "QR Scan History",  icon: QrCode },
+  { href: "/qc/production-line",   label: "Production Line Scans",  icon: Activity },
+  { href: "/qc/qr-scan-history",   label: "K18 QR Scan History",  icon: QrCode },
   { href: "/qc/audit",             label: "Audit Log",        icon: ClipboardList },
 ];
 

@@ -149,9 +149,15 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
 function StepWarehouse({
   onSelect,
 }: {
-  onSelect: (configId: number, name: string) => void;
+  onSelect: (configId: number, facilityId: number, facilityName: string) => void;
 }) {
-  const { data: configs = [], isLoading } = trpc.config.list.useQuery();
+  const { data: configs = [], isLoading: configsLoading } = trpc.config.list.useQuery();
+  const primaryConfig = configs[0];
+  const { data: facilities = [], isLoading: facilitiesLoading } = trpc.returns.listFacilities.useQuery(
+    { configId: primaryConfig?.id ?? 0 },
+    { enabled: !!primaryConfig }
+  );
+  const isLoading = configsLoading || (!!primaryConfig && facilitiesLoading);
 
   return (
     <div>
@@ -164,16 +170,20 @@ function StepWarehouse({
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm">Loading warehouses…</span>
         </div>
-      ) : configs.length === 0 ? (
+      ) : !primaryConfig ? (
         <div className="text-sm text-muted-foreground py-8 text-center">
           No warehouses configured. Add one in Settings first.
         </div>
+      ) : facilities.length === 0 ? (
+        <div className="text-sm text-muted-foreground py-8 text-center">
+          No facilities found. Please check your Extensiv connection in Settings.
+        </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {configs.map((c) => (
+          {facilities.map((f) => (
             <button
-              key={c.id}
-              onClick={() => onSelect(c.id, c.name)}
+              key={f.id}
+              onClick={() => onSelect(primaryConfig.id, f.id, f.name)}
               className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:border-blue-400 hover:shadow-md transition-all text-left group"
             >
               <div className="p-2.5 rounded-lg bg-blue-50 group-hover:bg-blue-100 transition-colors">
@@ -181,7 +191,7 @@ function StepWarehouse({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-foreground truncate">
-                  {c.name}
+                  {f.name}
                 </p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" />
@@ -752,6 +762,7 @@ export default function ProcessReturns() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [configId, setConfigId] = useState<number | null>(null);
   const [warehouseName, setWarehouseName] = useState("");
+  const [facilityId, setFacilityId] = useState<number | null>(null);
   const [clientId, setClientId] = useState<number | null>(null);
   const [clientName, setClientName] = useState("");
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -777,9 +788,10 @@ export default function ProcessReturns() {
     onError: (err) => toast.error(err.message),
   });
 
-  function handleWarehouseSelect(id: number, name: string) {
-    setConfigId(id);
-    setWarehouseName(name);
+  function handleWarehouseSelect(cId: number, fId: number, fName: string) {
+    setConfigId(cId);
+    setFacilityId(fId);
+    setWarehouseName(fName);
     setStep(2);
   }
 
@@ -796,6 +808,8 @@ export default function ProcessReturns() {
     createSession.mutate({
       configId,
       warehouseName,
+      facilityId: facilityId ?? undefined,
+      facilityName: warehouseName || undefined,
       clientId: pendingClientId,
       clientName: pendingClientName,
       referenceNumber: refNumber.trim() || undefined,

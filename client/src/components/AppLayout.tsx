@@ -63,13 +63,12 @@ const allocationItems = [
 ];
 
 const qcItems = [
-  { href: "/qc",              label: "QC Dashboard",  icon: BarChart3 },
-  { href: "/qc/reports",     label: "QC Reports",    icon: FileBarChart2 },
   { href: "/qc/scanner",     label: "QC Scanner",      icon: ScanBarcode },
   { href: "/qc/scan-label",  label: "QC Scan & Label", icon: Tag },
   { href: "/qc/label-files",       label: "Label Files",      icon: FileText },
   { href: "/qc/production-line",   label: "Production Line",  icon: Activity },
   { href: "/qc/qr-scan-history",   label: "QR Scan History",  icon: QrCode },
+  { href: "/qc/audit",             label: "Audit Log",        icon: ClipboardList },
 ];
 
 const shippingItems = [

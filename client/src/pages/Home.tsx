@@ -1813,7 +1813,7 @@ function SlaBreachSummarySection({ onClientClick }: {
             {totalBreached} order{totalBreached !== 1 ? "s" : ""}
           </span>
         </div>
-        <Link href="/sla-tracker">
+        <Link href="/sla-performance">
           <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs font-medium">
             View SLA Tracker →
           </Button>

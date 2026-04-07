@@ -1959,7 +1959,7 @@ function SlaBreachSummarySection({
             {totalBreached} order{totalBreached !== 1 ? "s" : ""}
           </span>
         </div>
-        <Link href="/sla-tracker">
+        <Link href="/sla-performance">
           <Button
             variant="ghost"
             size="sm"

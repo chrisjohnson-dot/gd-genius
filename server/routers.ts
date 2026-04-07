@@ -141,6 +141,8 @@ import {
   getLabelScanCartonById,
   updateLabelScanCarton,
   getOrderById,
+  getLatestSlaSnapshotForOrder,
+  getOrderAuditHistory,
   listQcAuditLog,
   type QcAuditEvent,
   type VerificationStatus,
@@ -2269,7 +2271,11 @@ const _appRouter = router({
         if (order.savedElements) {
           try { savedElements = JSON.parse(order.savedElements); } catch { /* ignore */ }
         }
-
+        // Fetch SLA snapshot and audit history in parallel
+        const [slaSnapshot, auditHistory] = await Promise.all([
+          getLatestSlaSnapshotForOrder(order.extensivOrderId),
+          getOrderAuditHistory(order.extensivOrderId, 50),
+        ]);
         return {
           order,
           lineItems,
@@ -2281,6 +2287,8 @@ const _appRouter = router({
           carrierName,
           shipVia,
           totalWeight,
+          slaSnapshot,
+          auditHistory,
         };
       }),
 

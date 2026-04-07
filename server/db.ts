@@ -3060,3 +3060,52 @@ export async function listQcAuditLog(opts: {
   const events = filtered.slice(offset, offset + limit);
   return { events, total };
 }
+
+// ─── Order Detail Helpers ─────────────────────────────────────────────────────
+
+import { slaSnapshots, SlaSnapshot } from "../drizzle/schema";
+
+/** Return the most-recent SLA snapshot row for a given Extensiv order ID. */
+export async function getLatestSlaSnapshotForOrder(
+  extensivOrderId: number
+): Promise<SlaSnapshot | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(slaSnapshots)
+    .where(eq(slaSnapshots.orderId, extensivOrderId))
+    .orderBy(desc(slaSnapshots.snapshotDate))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Return audit log entries for a single order (by extensivOrderId string). */
+export async function getOrderAuditHistory(
+  extensivOrderId: number,
+  limit = 50
+): Promise<Array<{
+  id: number;
+  action: string;
+  details: unknown;
+  createdAt: Date;
+  userName: string | null;
+  userEmail: string | null;
+}>> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      details: auditLogs.details,
+      createdAt: auditLogs.createdAt,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(auditLogs)
+    .leftJoin(users, eq(auditLogs.userId, users.id))
+    .where(eq(auditLogs.entityId, String(extensivOrderId)))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
+}

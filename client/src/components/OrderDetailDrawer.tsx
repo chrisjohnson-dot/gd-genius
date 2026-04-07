@@ -1,7 +1,20 @@
 /**
  * OrderDetailDrawer
  * Slide-in right panel showing full details for a single tracked order.
- * Tabs: Overview · Line Items · Lifecycle Timeline · Shipwell
+ * Tabs: Overview · Line Items · Timeline · Shipwell
+ *
+ * Overview includes:
+ *   - Order identifiers (TX ID, ref, PO, dates)
+ *   - Client & facility
+ *   - Ship-to address
+ *   - Quantities
+ *   - SLA Status (from latest snapshot)
+ *   - SLA extension (if any)
+ *   - Notes & custom fields
+ *
+ * Timeline includes:
+ *   - Lifecycle stage progress (with timestamps)
+ *   - Audit History (who changed what and when)
  */
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -24,6 +37,10 @@ import {
   Clock,
   Layers,
   Info,
+  ShieldAlert,
+  ShieldCheck,
+  Eye,
+  History,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -54,6 +71,17 @@ const LIFECYCLE_STEPS: Array<{
 
 const LIFECYCLE_INDEX: Record<LifecycleStatus, number> = {
   unallocated: 0, allocated: 1, picking: 2, qc: 3, qc_complete: 4, ship_ready: 5,
+};
+
+// Human-readable labels for audit log action names
+const ACTION_LABELS: Record<string, string> = {
+  "pickSchedule.updateStatus": "Status updated",
+  "pickSchedule.undoStatus": "Status rolled back",
+  "pickSchedule.dismissZeroBidWarning": "Zero-bid warning dismissed",
+  "pickSchedule.syncNow": "Manual sync triggered",
+  "sla.waiveOrder": "SLA waived",
+  "sla.removeOrder": "Order removed from SLA",
+  "sla.restoreOrder": "SLA action restored",
 };
 
 function fmtDate(val: string | Date | null | undefined): string {
@@ -94,6 +122,63 @@ function Row({ label, value, mono = false }: { label: string; value: React.React
   );
 }
 
+// ─── SLA status badge ─────────────────────────────────────────────────────────
+function SlaBadge({ outOfSla, alwaysFlag, bizDaysLate }: { outOfSla: boolean; alwaysFlag: boolean; bizDaysLate?: number | null }) {
+  if (outOfSla) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+        <ShieldAlert className="h-3 w-3" />
+        Out of SLA{bizDaysLate ? ` · ${bizDaysLate}d late` : ""}
+      </span>
+    );
+  }
+  if (alwaysFlag) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+        <Eye className="h-3 w-3" />
+        Watch
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 border border-green-200">
+      <ShieldCheck className="h-3 w-3" />
+      In SLA
+    </span>
+  );
+}
+
+// ─── Audit entry ─────────────────────────────────────────────────────────────
+type AuditEntry = {
+  id: number;
+  action: string;
+  details: unknown;
+  createdAt: Date | string;
+  userName: string | null;
+  userEmail: string | null;
+};
+
+function AuditRow({ entry }: { entry: AuditEntry }) {
+  const label = ACTION_LABELS[entry.action] ?? entry.action;
+  const details = entry.details as Record<string, unknown> | null;
+  let detail = "";
+  if (details?.newStatus) detail = `→ ${String(details.newStatus).replace(/_/g, " ")}`;
+  else if (details?.prevStatus && details?.newStatus === undefined) detail = `from ${String(details.prevStatus).replace(/_/g, " ")}`;
+  const who = entry.userName ?? entry.userEmail ?? "System";
+  return (
+    <div className="flex gap-3 py-2 border-b border-border last:border-0">
+      <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs font-medium">{label}{detail ? <span className="text-muted-foreground font-normal ml-1">{detail}</span> : null}</span>
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{fmtDate(entry.createdAt)}</span>
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-0.5">{who}</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main drawer ──────────────────────────────────────────────────────────────
 interface Props {
   orderId: number | null;
@@ -115,6 +200,8 @@ export function OrderDetailDrawer({ orderId, onClose }: Props) {
   const shipTo = data?.shipTo;
   const shipFrom = data?.shipFrom;
   const savedElements = data?.savedElements ?? [];
+  const slaSnapshot = data?.slaSnapshot ?? null;
+  const auditHistory = (data?.auditHistory ?? []) as AuditEntry[];
   const currentIdx = order ? LIFECYCLE_INDEX[order.lifecycleStatus] : -1;
 
   return (
@@ -205,6 +292,11 @@ export function OrderDetailDrawer({ orderId, onClose }: Props) {
               {t === "Line Items" && lineItems.length > 0 && (
                 <span className="ml-1.5 bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[9px] font-bold">
                   {lineItems.length}
+                </span>
+              )}
+              {t === "Timeline" && auditHistory.length > 0 && (
+                <span className="ml-1.5 bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                  {auditHistory.length}
                 </span>
               )}
             </button>
@@ -309,6 +401,48 @@ export function OrderDetailDrawer({ orderId, onClose }: Props) {
                 </div>
               </section>
 
+              {/* SLA Status */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <ShieldAlert className="h-3 w-3" /> SLA Status
+                </h3>
+                {slaSnapshot ? (
+                  <div className={`rounded-xl px-4 py-1 border ${
+                    slaSnapshot.outOfSla
+                      ? "bg-red-50 border-red-200"
+                      : slaSnapshot.alwaysFlag
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-green-50 border-green-200"
+                  }`}>
+                    <div className="flex items-center justify-between py-2 border-b border-border/50">
+                      <span className="text-xs text-muted-foreground shrink-0 w-36">Status</span>
+                      <SlaBadge
+                        outOfSla={slaSnapshot.outOfSla}
+                        alwaysFlag={slaSnapshot.alwaysFlag}
+                        bizDaysLate={slaSnapshot.bizDaysLate}
+                      />
+                    </div>
+                    <Row label="SLA Rule" value={slaSnapshot.rule} />
+                    <Row label="SLA Due Date" value={fmtDateShort(slaSnapshot.slaDate)} />
+                    {slaSnapshot.bizDaysLate != null && slaSnapshot.bizDaysLate > 0 && (
+                      <Row label="Business Days Late" value={
+                        <span className="text-red-600 font-semibold">{slaSnapshot.bizDaysLate}d</span>
+                      } />
+                    )}
+                    {slaSnapshot.flagNote && (
+                      <Row label="Flag Note" value={slaSnapshot.flagNote} />
+                    )}
+                    <Row label="Snapshot Date" value={slaSnapshot.snapshotDate} />
+                    <Row label="Fully Allocated" value={slaSnapshot.fullyAllocated ? "Yes" : "No"} />
+                  </div>
+                ) : (
+                  <div className="bg-muted/30 rounded-xl px-4 py-3 text-center">
+                    <p className="text-xs text-muted-foreground">No SLA snapshot available for this order.</p>
+                    <p className="text-[10px] text-muted-foreground mt-1 opacity-70">SLA snapshots are generated nightly. Check back after the next run.</p>
+                  </div>
+                )}
+              </section>
+
               {/* SLA extension */}
               {(order.slaExtensionDays ?? 0) > 0 && (
                 <section>
@@ -397,66 +531,87 @@ export function OrderDetailDrawer({ orderId, onClose }: Props) {
 
           {/* ── TIMELINE TAB ── */}
           {!isLoading && !error && order && tab === "Timeline" && (
-            <div className="space-y-1">
-              {LIFECYCLE_STEPS.map((step, i) => {
-                const ts = (order as Record<string, unknown>)[step.tsField] as string | Date | null | undefined;
-                const done = i <= currentIdx;
-                const active = i === currentIdx;
-                return (
-                  <div key={step.key} className="flex gap-3">
-                    {/* Connector line */}
-                    <div className="flex flex-col items-center">
-                      <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2"
-                        style={{
-                          background: done ? step.bg : "transparent",
-                          borderColor: done ? step.color : "#e2e8f0",
-                          color: done ? step.color : "#94a3b8",
-                        }}
-                      >
-                        {step.icon}
-                      </div>
-                      {i < LIFECYCLE_STEPS.length - 1 && (
+            <div className="space-y-6">
+              {/* Lifecycle progress */}
+              <div className="space-y-1">
+                {LIFECYCLE_STEPS.map((step, i) => {
+                  const ts = (order as Record<string, unknown>)[step.tsField] as string | Date | null | undefined;
+                  const done = i <= currentIdx;
+                  const active = i === currentIdx;
+                  return (
+                    <div key={step.key} className="flex gap-3">
+                      {/* Connector line */}
+                      <div className="flex flex-col items-center">
                         <div
-                          className="w-0.5 flex-1 my-1 min-h-[20px]"
-                          style={{ background: i < currentIdx ? step.color + "60" : "#e2e8f0" }}
-                        />
-                      )}
-                    </div>
-                    {/* Content */}
-                    <div className="pb-4 min-w-0">
-                      <p
-                        className="text-sm font-semibold"
-                        style={{ color: done ? (active ? step.color : "#1e293b") : "#94a3b8" }}
-                      >
-                        {step.label}
-                        {active && (
-                          <span
-                            className="ml-2 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                            style={{ background: step.bg, color: step.color }}
-                          >
-                            Current
-                          </span>
+                          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2"
+                          style={{
+                            background: done ? step.bg : "transparent",
+                            borderColor: done ? step.color : "#e2e8f0",
+                            color: done ? step.color : "#94a3b8",
+                          }}
+                        >
+                          {step.icon}
+                        </div>
+                        {i < LIFECYCLE_STEPS.length - 1 && (
+                          <div
+                            className="w-0.5 flex-1 my-1 min-h-[20px]"
+                            style={{ background: i < currentIdx ? step.color + "60" : "#e2e8f0" }}
+                          />
                         )}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {ts ? `${fmtDate(ts)} · ${daysAgo(ts)}` : (done ? "—" : "Not reached yet")}
-                      </p>
-                      {step.key === "picking" && order.assignedAssociate && (
-                        <p className="text-xs mt-0.5 flex items-center gap-1 text-muted-foreground">
-                          <User className="h-3 w-3" /> {order.assignedAssociate}
+                      </div>
+                      {/* Content */}
+                      <div className="pb-4 min-w-0">
+                        <p
+                          className="text-sm font-semibold"
+                          style={{ color: done ? (active ? step.color : "#1e293b") : "#94a3b8" }}
+                        >
+                          {step.label}
+                          {active && (
+                            <span
+                              className="ml-2 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                              style={{ background: step.bg, color: step.color }}
+                            >
+                              Current
+                            </span>
+                          )}
                         </p>
-                      )}
-                      {step.key === "ship_ready" && order.outboundLocation && (
-                        <p className="text-xs mt-0.5 flex items-center gap-1 text-muted-foreground">
-                          <MapPin className="h-3 w-3" /> {order.outboundLocation}
-                          {order.palletCount ? ` · ${order.palletCount} pallets` : ""}
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {ts ? `${fmtDate(ts)} · ${daysAgo(ts)}` : (done ? "—" : "Not reached yet")}
                         </p>
-                      )}
+                        {step.key === "picking" && order.assignedAssociate && (
+                          <p className="text-xs mt-0.5 flex items-center gap-1 text-muted-foreground">
+                            <User className="h-3 w-3" /> {order.assignedAssociate}
+                          </p>
+                        )}
+                        {step.key === "ship_ready" && order.outboundLocation && (
+                          <p className="text-xs mt-0.5 flex items-center gap-1 text-muted-foreground">
+                            <MapPin className="h-3 w-3" /> {order.outboundLocation}
+                            {order.palletCount ? ` · ${order.palletCount} pallets` : ""}
+                          </p>
+                        )}
+                      </div>
                     </div>
+                  );
+                })}
+              </div>
+
+              {/* Audit history */}
+              <section>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <History className="h-3 w-3" /> Audit History
+                </h3>
+                {auditHistory.length === 0 ? (
+                  <div className="bg-muted/30 rounded-xl px-4 py-3 text-center">
+                    <p className="text-xs text-muted-foreground">No audit events recorded for this order.</p>
                   </div>
-                );
-              })}
+                ) : (
+                  <div className="bg-muted/30 rounded-xl px-4 py-1">
+                    {auditHistory.map((entry) => (
+                      <AuditRow key={entry.id} entry={entry} />
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
           )}
 

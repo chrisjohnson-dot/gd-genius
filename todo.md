@@ -874,3 +874,8 @@
 - [x] Sidebar: rename "Production Line" to "Production Line Scans"
 - [x] Sidebar: rename "QR Scan History" to "K18 QR Scan History"
 - [x] QrScanHistory page title updated to "K18 QR Scan History"
+- [x] Add SLA Status section to Order Detail Drawer Overview tab
+- [x] Add Audit History section to Order Detail Drawer Timeline tab
+- [x] Extend getOrderDetail backend with slaSnapshot and auditHistory
+- [x] Add getLatestSlaSnapshotForOrder and getOrderAuditHistory helpers to db.ts
+- [x] Write vitest tests for getOrderDetail slaSnapshot/auditHistory additions

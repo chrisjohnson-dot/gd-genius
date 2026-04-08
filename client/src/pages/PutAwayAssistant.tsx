@@ -577,6 +577,58 @@ function RecommendationSession({
     utils.putAway.sessionScans.invalidate({ sessionId });
   }, [rows, rowStates, selectedLocations, configId, facilityId, customerId, customerName, sessionId, commitPutAwaysMutation, utils]);
 
+  // ── Retry failed rows ────────────────────────────────────────────────────────
+  const retryFailedRows = useCallback(async () => {
+    const failedSkus = Object.entries(commitProgress)
+      .filter(([, status]) => status === "error")
+      .map(([sku]) => sku);
+    if (failedSkus.length === 0) return;
+    // Reset failed rows back to pending
+    setCommitProgress((p) => {
+      const next = { ...p };
+      for (const sku of failedSkus) next[sku] = "pending";
+      return next;
+    });
+    setCommitting(true);
+    let success = 0, failed = 0;
+    for (const sku of failedSkus) {
+      const row = rows.find((r) => r.sku === sku);
+      if (!row) { failed++; continue; }
+      const locName = selectedLocations[sku] ?? row.topSuggestion?.locationName;
+      const suggestion = row.allSuggestions.find((s) => s.locationName === locName) ?? row.topSuggestion;
+      if (!suggestion) {
+        setCommitProgress((p) => ({ ...p, [sku]: "error" }));
+        failed++; continue;
+      }
+      try {
+        await commitPutAwaysMutation.mutateAsync({
+          configId, facilityId, customerId,
+          items: [{
+            sku: row.sku,
+            description: row.description,
+            qty: row.receivedQty,
+            locationName: suggestion.locationName,
+            locationId: suggestion.locationId ?? undefined,
+            receiveItemIds: row.receiveItemIds ?? [],
+            lotNumber: row.lotNumber,
+            expirationDate: row.expirationDate,
+          }],
+          sessionId,
+          customerName: customerName || undefined,
+        });
+        setCommitProgress((p) => ({ ...p, [sku]: "done" }));
+        success++;
+      } catch {
+        setCommitProgress((p) => ({ ...p, [sku]: "error" }));
+        failed++;
+      }
+    }
+    setCommitting(false);
+    if (success > 0) toast.success(`Retried ${success} location${success !== 1 ? "s" : ""} — Extensiv updated.`);
+    if (failed > 0) toast.error(`${failed} item${failed !== 1 ? "s" : ""} still failed after retry.`);
+    utils.putAway.sessionScans.invalidate({ sessionId });
+  }, [commitProgress, rows, selectedLocations, configId, facilityId, customerId, customerName, sessionId, commitPutAwaysMutation, utils]);
+
   const pendingCount = rows.filter((r) => getRowState(r.sku) === "pending" && r.topSuggestion).length;
   const acceptedCount = rows.filter((r) => getRowState(r.sku) === "accepted").length;
   const rejectedCount = rows.filter((r) => getRowState(r.sku) === "rejected").length;
@@ -804,6 +856,19 @@ function RecommendationSession({
                 style={{ width: `${pct}%` }}
               />
             </div>
+            {errors > 0 && inProgress === 0 && (
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs bg-amber-500 hover:bg-amber-400 text-white"
+                  onClick={retryFailedRows}
+                  disabled={committing}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Retry {errors} failed row{errors !== 1 ? "s" : ""}
+                </Button>
+              </div>
+            )}
           </div>
         );
       })()}

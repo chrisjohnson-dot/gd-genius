@@ -971,3 +971,10 @@
 - [x] Add "Put Away List" to sidebar nav under Receiving
 - [x] Add /receiving/put-away/list route in App.tsx
 - [x] Pass transactionId and facilityName from batchSuggest into commitPutAways and retryFailedRows
+
+## Package Sizes Tab Redesign
+- [x] Add getExtensivPackaging tRPC procedure to fetch PackageUnit + Pallet types per customer from Extensiv API
+- [x] Rebuild SmallParcelPackageSizes page with two-panel layout (client list left, packaging detail right)
+- [x] Client list sorted alphabetically with search filter and custom size count badge
+- [x] Detail panel shows Package Units (name, units/pkg, dimensions, SKU count) and Pallet Types from Extensiv
+- [x] Custom Pack & Ship sizes section below Extensiv data with add/edit/delete

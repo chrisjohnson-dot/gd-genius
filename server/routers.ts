@@ -6424,6 +6424,124 @@ const smallParcelRouter = router({
   listAllPackageSizes: protectedProcedure
     .query(async () => listAllPackageSizes()),
 
+  /**
+   * Fetch packaging options for a specific customer from Extensiv.
+   * Returns unique PackageUnit types and Pallet types aggregated from all items.
+   */
+  getExtensivPackaging: protectedProcedure
+    .input(z.object({ configId: z.number(), clientId: z.number() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+
+      const { createExtensivClient } = await import("./extensiv/client.js");
+      const client = createExtensivClient(config);
+
+      // Fetch all items for this customer using plain JSON Accept header
+      const { getExtensivToken } = await import("./extensiv/client.js");
+      const token = await getExtensivToken(config);
+      const baseUrl = config.baseUrl || "https://secure-wms.com";
+
+      interface ItemOptions {
+        PackageUnit?: {
+          UnitIdentifier?: { Name?: string; Id?: number };
+          InventoryUnitsPerUnit?: number;
+          IsPrepackaged?: boolean;
+          Imperial?: { Length?: number; Width?: number; Height?: number; Weight?: number };
+          Metric?: { Length?: number; Width?: number; Height?: number; Weight?: number };
+        };
+        Pallets?: {
+          TypeIdentifier?: { Name?: string; Id?: number };
+          Qty?: number;
+          Imperial?: { Length?: number; Width?: number; Height?: number; Weight?: number };
+        };
+        InventoryUnit?: { UnitIdentifier?: { Name?: string; Id?: number } };
+      }
+      interface RawItem { Sku?: string; Description?: string; Options?: ItemOptions; }
+
+      let allItems: RawItem[] = [];
+      let pg = 1;
+      while (true) {
+        const res = await fetch(`${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        });
+        if (!res.ok) break;
+        const data = await res.json() as { TotalResults?: number; ResourceList?: RawItem[] };
+        const list = data.ResourceList ?? [];
+        allItems = allItems.concat(list);
+        if (allItems.length >= (data.TotalResults ?? 0) || list.length === 0) break;
+        pg++;
+      }
+
+      // Aggregate unique PackageUnit types
+      const pkgMap = new Map<string, {
+        unitId: number;
+        unitName: string;
+        inventoryUnitsPerUnit: number | null;
+        isPrepackaged: boolean;
+        imperial: { length: number | null; width: number | null; height: number | null; weight: number | null };
+        skuCount: number;
+      }>();
+
+      const palletMap = new Map<string, {
+        palletId: number;
+        palletName: string;
+        qtyPerPallet: number | null;
+        imperial: { length: number | null; width: number | null; height: number | null; weight: number | null };
+        skuCount: number;
+      }>();
+
+      for (const item of allItems) {
+        const pkg = item.Options?.PackageUnit;
+        const pallet = item.Options?.Pallets;
+
+        if (pkg?.UnitIdentifier?.Name) {
+          const name = pkg.UnitIdentifier.Name;
+          if (!pkgMap.has(name)) {
+            pkgMap.set(name, {
+              unitId: pkg.UnitIdentifier.Id ?? 0,
+              unitName: name,
+              inventoryUnitsPerUnit: pkg.InventoryUnitsPerUnit ?? null,
+              isPrepackaged: pkg.IsPrepackaged ?? false,
+              imperial: {
+                length: pkg.Imperial?.Length ?? null,
+                width: pkg.Imperial?.Width ?? null,
+                height: pkg.Imperial?.Height ?? null,
+                weight: pkg.Imperial?.Weight ?? null,
+              },
+              skuCount: 0,
+            });
+          }
+          pkgMap.get(name)!.skuCount++;
+        }
+
+        if (pallet?.TypeIdentifier?.Name) {
+          const name = pallet.TypeIdentifier.Name;
+          if (!palletMap.has(name)) {
+            palletMap.set(name, {
+              palletId: pallet.TypeIdentifier.Id ?? 0,
+              palletName: name,
+              qtyPerPallet: pallet.Qty ?? null,
+              imperial: {
+                length: pallet.Imperial?.Length ?? null,
+                width: pallet.Imperial?.Width ?? null,
+                height: pallet.Imperial?.Height ?? null,
+                weight: pallet.Imperial?.Weight ?? null,
+              },
+              skuCount: 0,
+            });
+          }
+          palletMap.get(name)!.skuCount++;
+        }
+      }
+
+      // Sort by skuCount desc, then name
+      const packageUnits = Array.from(pkgMap.values()).sort((a, b) => b.skuCount - a.skuCount || a.unitName.localeCompare(b.unitName));
+      const palletTypes = Array.from(palletMap.values()).sort((a, b) => b.skuCount - a.skuCount || a.palletName.localeCompare(b.palletName));
+
+      return { totalItems: allItems.length, packageUnits, palletTypes };
+    }),
+
   /** Create a new package size */
   createPackageSize: protectedProcedure
     .input(z.object({

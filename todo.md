@@ -1002,3 +1002,11 @@
 
 ## QC Audit Log — Pallet Count
 - [x] Show total pallet count per session next to pallet type badges in the audit log
+
+## Small Parcel Sidebar Rename
+- [x] Rename "Small Parcel" sidebar item to "Labels Printed"
+
+## Package Sizes — Three-Category Redesign
+- [x] Redesign Package Sizes detail panel to show Envelopes / Boxes / Pallets categories
+- [x] Populate each category from all historically-used packaging across all clients
+- [x] Click-to-activate selection per client feeds the pack-out screen

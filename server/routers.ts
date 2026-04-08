@@ -6815,6 +6815,14 @@ const smallParcelRouter = router({
       const rows = await getClientPackagingEnabled(input.configId, input.clientId);
       return rows.filter((r) => r.enabled);
     }),
+
+  /** Return all distinct packaging type names ever used across all clients (for the global catalogue) */
+  getAllPackagingTypeNames: protectedProcedure
+    .input(z.object({ configId: z.number().int() }))
+    .query(async ({ input }) => {
+      const { getAllDistinctPackagingTypeNames } = await import('./db.js');
+      return getAllDistinctPackagingTypeNames(input.configId);
+    }),
 });
 
 // Re-export appRouter augmented with all feature routers including SLA

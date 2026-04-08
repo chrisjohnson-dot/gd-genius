@@ -3675,3 +3675,23 @@ export async function getLastOrderDatePerClient(
   }
   return map;
 }
+
+/** Return all distinct packaging type names ever stored in client_packaging_enabled for a config.
+ *  Groups by category and typeName, returning a catalogue for the Package Sizes page. */
+export async function getAllDistinctPackagingTypeNames(
+  configId: number
+): Promise<{ category: string; typeName: string; clientCount: number }[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      category: clientPackagingEnabled.category,
+      typeName: clientPackagingEnabled.typeName,
+      clientCount: sql<number>`COUNT(DISTINCT ${clientPackagingEnabled.clientId})`,
+    })
+    .from(clientPackagingEnabled)
+    .where(eq(clientPackagingEnabled.configId, configId))
+    .groupBy(clientPackagingEnabled.category, clientPackagingEnabled.typeName)
+    .orderBy(clientPackagingEnabled.category, clientPackagingEnabled.typeName);
+  return rows;
+}

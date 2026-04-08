@@ -466,6 +466,10 @@ export default function QcScanner() {
   const [pendingPalletType, setPendingPalletType] = useState<string | null>(null);
   // When true, the dialog is for the first pallet (auto-created on session start)
   const [palletTypeForFirst, setPalletTypeForFirst] = useState(false);
+  // Label paper size — persisted in localStorage
+  const [labelPaperSize, setLabelPaperSize] = useState<'thermal' | 'letter'>(
+    () => (localStorage.getItem('qc_label_paper_size') as 'thermal' | 'letter') ?? 'thermal'
+  );
 
   const updatePalletType = trpc.qcScanner.updatePalletType.useMutation({
     onSuccess: (data) => {
@@ -1368,7 +1372,27 @@ export default function QcScanner() {
             {pallets.length > 0 && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pallet Labels</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pallet Labels</p>
+                    <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+                      {(['thermal', 'letter'] as const).map((size) => (
+                        <button
+                          key={size}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                            labelPaperSize === size
+                              ? 'bg-background text-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          onClick={() => {
+                            setLabelPaperSize(size);
+                            localStorage.setItem('qc_label_paper_size', size);
+                          }}
+                        >
+                          {size === 'thermal' ? '4×6 Thermal' : 'Letter'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   {pallets.length > 0 && (
                     <Button
                       size="sm"
@@ -1399,7 +1423,11 @@ export default function QcScanner() {
                           `<div class='label'><div class='header'><div class='title'>GD Pallet Label</div><div class='sub'>${session?.referenceNumber ?? ''} &bull; ${session?.customerName ?? ''}</div></div><div class='row'><span>Pallet</span><span><b>#${p.palletNumber}</b></span></div><div class='row'><span>Type</span><span><span class='badge' style='background:${p.palletType==='chep'?'#f59e0b':p.palletType==='gd_owned'?'#8b5cf6':'#3b82f6'}'>` +
                           palletTypeLabel(p.palletType) +
                           `</span></span></div>${p.palletUpc ? `<div class='upc'>${p.palletUpc}</div>` : ''}<div class='row' style='margin-top:8px'><span>Items</span><span>${p.items?.length ?? 0} SKU(s)</span></div>${(p.items ?? []).map((i: { sku: string; qty: number }) => `<div class='row'><span style='font-size:11px'>${i.sku}</span><span>&times;${i.qty}</span></div>`).join('')}</div>`;
-                        const allHtml = `<!DOCTYPE html><html><head><title>Pallet Labels</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;} .label{padding:16px;width:4in;page-break-after:always;} .label:last-child{page-break-after:auto;} .header{background:#1e3a5f;color:white;padding:8px 12px;border-radius:4px;margin-bottom:8px;} .title{font-size:18px;font-weight:bold;} .sub{font-size:12px;opacity:0.8;} .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee;font-size:13px;} .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;color:white;} .upc{font-family:monospace;font-size:14px;font-weight:bold;margin-top:8px;text-align:center;} @media print{button{display:none}}</style></head><body>${latestPallets.map(buildLabel).join('')}</body></html>`;
+                        const isThermal = labelPaperSize === 'thermal';
+                        const pageCss = isThermal
+                          ? '@page{size:4in 6in;margin:0;} .label{padding:12px;width:4in;min-height:6in;page-break-after:always;box-sizing:border-box;}'
+                          : '@page{size:letter;margin:0.5in;} .label{padding:16px;page-break-after:always;}';
+                        const allHtml = `<!DOCTYPE html><html><head><title>Pallet Labels</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;} ${pageCss} .label:last-child{page-break-after:auto;} .header{background:#1e3a5f;color:white;padding:8px 12px;border-radius:4px;margin-bottom:8px;} .title{font-size:${isThermal?'20':'18'}px;font-weight:bold;} .sub{font-size:${isThermal?'13':'12'}px;opacity:0.8;} .row{display:flex;justify-content:space-between;padding:${isThermal?'5':'4'}px 0;border-bottom:1px solid #eee;font-size:${isThermal?'14':'13'}px;} .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;color:white;} .upc{font-family:monospace;font-size:${isThermal?'16':'14'}px;font-weight:bold;margin-top:8px;text-align:center;} @media print{button{display:none}}</style></head><body>${latestPallets.map(buildLabel).join('')}</body></html>`;
                         const w = window.open('', '_blank', 'width=600,height=800');
                         if (w) { w.document.write(allHtml); w.document.close(); w.print(); }
                       }}

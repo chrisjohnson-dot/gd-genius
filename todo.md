@@ -993,3 +993,6 @@
 
 ## QC Scanner — Print All Labels Always Visible
 - [ ] Show Print All Labels button for single-pallet sessions (remove pallets.length > 1 guard)
+
+## QC Scanner — Label Paper Size Setting
+- [x] Add paper size selector (4x6 thermal / letter) persisted in localStorage, applied to pallet label print layout

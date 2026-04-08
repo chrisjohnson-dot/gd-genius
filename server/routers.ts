@@ -6880,25 +6880,57 @@ const smallParcelRouter = router({
       notes: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const { createPackagingReorderRequest, listPackagingInventory } = await import('./db.js');
+      const { createPackagingReorderRequest, listPackagingInventory, getSmallParcelSetting } = await import('./db.js');
       const { notifyOwner } = await import('./_core/notification.js');
+      const { sendEmail, buildReorderEmailHtml } = await import('./email.js');
+
       const items = await listPackagingInventory(input.configId);
       const item = items.find((i) => i.id === input.inventoryItemId);
       const itemName = item?.name ?? `Item #${input.inventoryItemId}`;
+      const requesterName = ctx.user.name ?? ctx.user.email ?? 'Unknown';
+
       const request = await createPackagingReorderRequest({
         inventoryItemId: input.inventoryItemId,
         configId: input.configId,
         requestedQty: input.requestedQty,
         notes: input.notes ?? null,
         requestedByUserId: ctx.user.id,
-        requestedByName: ctx.user.name ?? ctx.user.email ?? 'Unknown',
+        requestedByName: requesterName,
         status: 'pending',
       });
-      // Notify accounting (owner)
+
+      // 1. Notify owner (in-app notification)
       await notifyOwner({
         title: `📦 Packaging Reorder Request — ${itemName}`,
-        content: `${ctx.user.name ?? ctx.user.email} has requested a reorder of **${input.requestedQty}** units of **${itemName}**.\n\n${input.notes ? `Notes: ${input.notes}` : 'No additional notes.'}`,
+        content: `${requesterName} has requested a reorder of **${input.requestedQty}** units of **${itemName}**.\n\n${input.notes ? `Notes: ${input.notes}` : 'No additional notes.'}`,
       });
+
+      // 2. Send formatted email to accounting address if configured
+      const accountingEmail = await getSmallParcelSetting('packaging_accounting_email');
+      if (accountingEmail) {
+        // Calculate suggested qty using the 4-week formula (same as frontend)
+        const onHand = item?.onHandQty ?? 0;
+        const weekly = item?.weeklyConsumption ?? 0;
+        const minStock = item?.minStockLevel ?? 0;
+        const suggestedQty = weekly > 0
+          ? Math.max(1, Math.ceil(weekly * 4) - onHand)
+          : Math.max(1, minStock * 2 - onHand);
+
+        const { subject, text, html } = buildReorderEmailHtml({
+          itemName,
+          category: item?.category ?? 'box',
+          requestedQty: input.requestedQty,
+          onHandQty: onHand,
+          minStockLevel: minStock,
+          weeklyConsumption: weekly > 0 ? weekly : null,
+          suggestedQty,
+          requesterName,
+          notes: input.notes,
+        });
+
+        await sendEmail({ to: accountingEmail, subject, text, html });
+      }
+
       return request;
     }),
 

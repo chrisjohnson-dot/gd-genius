@@ -1,43 +1,71 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Settings, Timer, Save } from "lucide-react";
+import { Settings, Timer, Save, Mail, CheckCircle2 } from "lucide-react";
 
 export default function SmallParcelSettings() {
   const utils = trpc.useUtils();
 
+  // ── Reprint countdown ──────────────────────────────────────────────────────
   const { data: settings, isLoading } = trpc.smallParcel.getAllSettings.useQuery();
-
   const [countdownSeconds, setCountdownSeconds] = useState<string>("");
-
-  // Populate the input once the data loads
-  const [initialized, setInitialized] = useState(false);
-  if (settings && !initialized) {
+  const [countdownInitialized, setCountdownInitialized] = useState(false);
+  if (settings && !countdownInitialized) {
     setCountdownSeconds(String(settings.reprintCountdownSeconds));
-    setInitialized(true);
+    setCountdownInitialized(true);
   }
 
+  // ── Packaging accounting email ─────────────────────────────────────────────
+  const { data: accountingEmailData, isLoading: emailLoading } =
+    trpc.smallParcel.getSetting.useQuery({ key: "packaging_accounting_email" });
+  const [accountingEmail, setAccountingEmail] = useState<string>("");
+  const [emailInitialized, setEmailInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!emailLoading && !emailInitialized) {
+      setAccountingEmail(accountingEmailData?.value ?? "");
+      setEmailInitialized(true);
+    }
+  }, [accountingEmailData, emailLoading, emailInitialized]);
+
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const setSetting = trpc.smallParcel.setSetting.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       utils.smallParcel.getAllSettings.invalidate();
-      toast.success("Settings saved — Small Parcel settings updated.");
+      utils.smallParcel.getSetting.invalidate({ key: variables.key });
+      if (variables.key === "reprint_countdown_seconds") {
+        toast.success("Reprint countdown updated.");
+      } else if (variables.key === "packaging_accounting_email") {
+        toast.success("Accounting email address saved.");
+      } else {
+        toast.success("Settings saved.");
+      }
     },
     onError: (err) => {
       toast.error(`Save failed: ${err.message}`);
     },
   });
 
-  function handleSave() {
+  function handleSaveCountdown() {
     const val = parseInt(countdownSeconds, 10);
     if (isNaN(val) || val < 3 || val > 120) {
       toast.error("Countdown must be between 3 and 120 seconds.");
       return;
     }
     setSetting.mutate({ key: "reprint_countdown_seconds", value: String(val) });
+  }
+
+  function handleSaveEmail() {
+    const trimmed = accountingEmail.trim();
+    if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+    setSetting.mutate({ key: "packaging_accounting_email", value: trimmed });
   }
 
   return (
@@ -47,7 +75,9 @@ export default function SmallParcelSettings() {
         <Settings className="h-6 w-6 text-muted-foreground" />
         <div>
           <h1 className="text-2xl font-bold">Small Parcel Settings</h1>
-          <p className="text-muted-foreground text-sm">Configure workflow behaviour for the Pack &amp; Ship screen.</p>
+          <p className="text-muted-foreground text-sm">
+            Configure workflow behaviour for the Pack &amp; Ship screen and Packaging module.
+          </p>
         </div>
       </div>
 
@@ -59,8 +89,8 @@ export default function SmallParcelSettings() {
             Reprint Countdown Duration
           </CardTitle>
           <CardDescription>
-            After a label is purchased, a reprint window appears before the screen automatically resets to the next
-            order. Set how many seconds that window stays open.
+            After a label is purchased, a reprint window appears before the screen automatically
+            resets to the next order. Set how many seconds that window stays open.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -83,7 +113,7 @@ export default function SmallParcelSettings() {
                 <p className="text-xs text-muted-foreground">Min: 3 &nbsp;·&nbsp; Max: 120</p>
               </div>
               <Button
-                onClick={handleSave}
+                onClick={handleSaveCountdown}
                 disabled={setSetting.isPending}
                 className="flex items-center gap-2"
               >
@@ -92,12 +122,96 @@ export default function SmallParcelSettings() {
               </Button>
             </div>
           )}
-
           {settings && (
             <p className="text-sm text-muted-foreground">
-              Current setting: <span className="font-medium text-foreground">{settings.reprintCountdownSeconds} seconds</span>
+              Current setting:{" "}
+              <span className="font-medium text-foreground">
+                {settings.reprintCountdownSeconds} seconds
+              </span>
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Packaging — Accounting Email */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Mail className="h-4 w-4" />
+            Packaging Reorder — Accounting Email
+          </CardTitle>
+          <CardDescription>
+            When production submits a packaging reorder request, a formatted email will be sent to
+            this address so accounting can place the purchase order immediately. Leave blank to
+            disable email notifications (in-app notifications are always sent).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {emailLoading ? (
+            <div className="h-10 w-64 bg-muted animate-pulse rounded" />
+          ) : (
+            <div className="flex items-end gap-4">
+              <div className="space-y-1.5 flex-1">
+                <Label htmlFor="accounting-email">Accounting Email Address</Label>
+                <Input
+                  id="accounting-email"
+                  type="email"
+                  placeholder="accounting@example.com"
+                  value={accountingEmail}
+                  onChange={(e) => setAccountingEmail(e.target.value)}
+                  className="max-w-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  The email will include the item name, requested qty, burn rate, days of stock
+                  remaining, and who submitted the request.
+                </p>
+              </div>
+              <Button
+                onClick={handleSaveEmail}
+                disabled={setSetting.isPending}
+                className="flex items-center gap-2 shrink-0"
+              >
+                <Save className="h-4 w-4" />
+                {setSetting.isPending ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          )}
+          {accountingEmailData?.value && (
+            <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>
+                Reorder emails will be sent to{" "}
+                <span className="font-medium">{accountingEmailData.value}</span>
+              </span>
+            </div>
+          )}
+          {!accountingEmailData?.value && !emailLoading && (
+            <p className="text-sm text-muted-foreground italic">
+              No accounting email configured — only in-app notifications will be sent.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* SMTP notice */}
+      <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            SMTP Configuration Required
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            Email delivery requires SMTP credentials to be set as environment variables on the
+            server:{" "}
+            <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded text-xs">SMTP_HOST</code>,{" "}
+            <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded text-xs">SMTP_USER</code>,{" "}
+            <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded text-xs">SMTP_PASS</code>,{" "}
+            <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded text-xs">SMTP_FROM</code>.
+            Contact your system administrator to configure these. Until then, in-app notifications
+            will continue to work normally.
+          </p>
         </CardContent>
       </Card>
     </div>

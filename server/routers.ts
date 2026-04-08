@@ -4445,6 +4445,183 @@ const putAwayRouter = router({
       await deletePutAwayPriorities(input.configId, input.facilityId, input.customerId);
       return { success: true };
     }),
+
+  /**
+   * Generate a full recommended location list for every SKU in a receipt.
+   * Fetches all receive items from Extensiv, runs the suggestion engine for
+   * each SKU in parallel, and returns the top suggestion per SKU.
+   */
+  batchSuggest: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      facilityId: z.number(),
+      customerId: z.number(),
+      transactionId: z.number(),
+    }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+      // Fetch receipt items, inventory, location configs, extensiv locations, and priorities in parallel
+      const [receiver, inventory, locationCfgs, extensivLocations, priorityConfig] = await Promise.all([
+        fetchReceiverDetail(config, input.transactionId),
+        fetchInventory(config, input.customerId, input.facilityId),
+        getLocationConfigsByCustomer(input.configId, input.customerId),
+        fetchExtensivLocations(config, input.facilityId),
+        getPutAwayPriorities(input.configId, input.facilityId, input.customerId),
+      ]);
+
+      if (!receiver) throw new TRPCError({ code: "NOT_FOUND", message: "Receipt not found" });
+      const receiveItems = receiver.receiveItems ?? [];
+
+      // Build priority maps
+      const exactPriorityMap = new Map<string, number>();
+      const aislePriorityMap = new Map<string, number>();
+      for (const p of priorityConfig) {
+        const aisleKey = p.aisle.toUpperCase();
+        if (!p.level || p.level === "*") {
+          if (!aislePriorityMap.has(aisleKey)) aislePriorityMap.set(aisleKey, p.priorityOrder);
+        } else {
+          const exactKey = `${aisleKey}|${p.level.toUpperCase()}`;
+          if (!exactPriorityMap.has(exactKey)) exactPriorityMap.set(exactKey, p.priorityOrder);
+        }
+      }
+      const hasPriorityConfig = aislePriorityMap.size > 0 || exactPriorityMap.size > 0;
+
+      function getLocPriority(locationName: string): { order: number; level: string } | null {
+        const parts = locationName.split("-");
+        const aisle = (parts[0] ?? "").toUpperCase();
+        const level = parts.length >= 3 ? (parts[parts.length - 1] ?? "").toUpperCase() : "";
+        if (level) {
+          const exactKey = `${aisle}|${level}`;
+          if (exactPriorityMap.has(exactKey)) return { order: exactPriorityMap.get(exactKey)!, level };
+        }
+        if (aislePriorityMap.has(aisle)) return { order: aislePriorityMap.get(aisle)!, level: "*" };
+        return null;
+      }
+
+      // Build location type map
+      const locationTypeMap = new Map<number, "pick_face" | "warehouse" | "staging">();
+      for (const lc of locationCfgs) locationTypeMap.set(lc.locationId, lc.locationType);
+      const locationNameTypeMap = new Map<string, "pick_face" | "warehouse">();
+      for (const loc of extensivLocations) {
+        const isPickFace = loc.name.toLowerCase().includes("pick face") || locationTypeMap.get(loc.locationId) === "pick_face";
+        locationNameTypeMap.set(loc.name, isPickFace ? "pick_face" : "warehouse");
+      }
+
+      // Group all inventory by location
+      const locationStockMap = new Map<string, typeof inventory>();
+      for (const rec of inventory) {
+        const locName = rec.locationIdentifier?.nameKey?.name ?? "Unknown";
+        if (!locationStockMap.has(locName)) locationStockMap.set(locName, []);
+        locationStockMap.get(locName)!.push(rec);
+      }
+
+      type BatchSuggestion = {
+        locationName: string;
+        locationType: "pick_face" | "warehouse";
+        reason: "consolidate" | "empty_pick_face" | "empty_warehouse";
+        currentQty: number;
+        expirationDate?: string;
+        lotNumber?: string;
+        priority: number;
+        isPriorityAisle: boolean;
+        aislePriorityOrder: number | null;
+        matchedLevel: string | null;
+      };
+
+      type SkuRow = {
+        sku: string;
+        description?: string;
+        receivedQty: number;
+        lotNumber?: string;
+        expirationDate?: string;
+        topSuggestion: BatchSuggestion | null;
+        allSuggestions: BatchSuggestion[];
+      };
+
+      // Generate suggestions for each SKU
+      const rows: SkuRow[] = receiveItems.map((item) => {
+        const sku = item.itemIdentifier.sku;
+        const skuInventory = inventory.filter(
+          (rec) => rec.itemIdentifier.sku.toLowerCase() === sku.toLowerCase()
+        );
+        const skuLocationMap = new Map<string, typeof skuInventory>();
+        for (const rec of skuInventory) {
+          const locName = rec.locationIdentifier?.nameKey?.name ?? "Unknown";
+          if (!skuLocationMap.has(locName)) skuLocationMap.set(locName, []);
+          skuLocationMap.get(locName)!.push(rec);
+        }
+
+        const suggestions: BatchSuggestion[] = [];
+
+        // Consolidation candidates
+        for (const [locName, recs] of Array.from(skuLocationMap.entries())) {
+          const locType = locationNameTypeMap.get(locName) ?? "warehouse";
+          const sorted = [...recs].sort((a, b) => {
+            if (a.expirationDate && b.expirationDate) return new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime();
+            if (a.expirationDate) return -1;
+            if (b.expirationDate) return 1;
+            return a.receiveItemId - b.receiveItemId;
+          });
+          const totalQty = recs.reduce((s: number, r: { available: number }) => s + r.available, 0);
+          const locPri = getLocPriority(locName);
+          const isPrioritised = locPri !== null;
+          let priority: number;
+          if (hasPriorityConfig) {
+            priority = locType === "pick_face" ? (isPrioritised ? 1 : 3) : (isPrioritised ? 2 : 4);
+          } else {
+            priority = locType === "pick_face" ? 1 : 2;
+          }
+          suggestions.push({ locationName: locName, locationType: locType, reason: "consolidate", currentQty: totalQty, expirationDate: sorted[0]?.expirationDate, lotNumber: sorted[0]?.lotNumber, priority, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null });
+        }
+
+        // Empty pick_face locations
+        for (const loc of extensivLocations) {
+          if (locationStockMap.has(loc.name)) continue;
+          const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
+          if (locType !== "pick_face") continue;
+          const locPri = getLocPriority(loc.name);
+          const isPrioritised = locPri !== null;
+          suggestions.push({ locationName: loc.name, locationType: "pick_face", reason: "empty_pick_face", currentQty: 0, priority: hasPriorityConfig ? (isPrioritised ? 5 : 7) : 3, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null });
+        }
+
+        // Empty warehouse locations
+        for (const loc of extensivLocations) {
+          if (locationStockMap.has(loc.name)) continue;
+          const locType = locationNameTypeMap.get(loc.name) ?? "warehouse";
+          if (locType !== "warehouse") continue;
+          const locPri = getLocPriority(loc.name);
+          const isPrioritised = locPri !== null;
+          suggestions.push({ locationName: loc.name, locationType: "warehouse", reason: "empty_warehouse", currentQty: 0, priority: hasPriorityConfig ? (isPrioritised ? 6 : 8) : 4, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null });
+        }
+
+        suggestions.sort((a, b) => {
+          if (a.priority !== b.priority) return a.priority - b.priority;
+          const aPri = getLocPriority(a.locationName)?.order ?? 9999;
+          const bPri = getLocPriority(b.locationName)?.order ?? 9999;
+          if (aPri !== bPri) return aPri - bPri;
+          return a.locationName.localeCompare(b.locationName);
+        });
+
+        return {
+          sku,
+          description: item.description,
+          receivedQty: item.receivedQty,
+          lotNumber: item.lotNumber,
+          expirationDate: item.expirationDate,
+          topSuggestion: suggestions[0] ?? null,
+          allSuggestions: suggestions.slice(0, 10),
+        };
+      });
+
+      return {
+        transactionId: input.transactionId,
+        referenceNum: receiver.referenceNum,
+        rows,
+        hasPriorityConfig,
+      };
+    }),
 });
 
 // ─── Audit Documents Router ──────────────────────────────────────────────────

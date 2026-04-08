@@ -990,3 +990,6 @@
 
 ## QC Scanner — Auto-UPC Before Print All
 - [x] Auto-generate UPCs for pallets missing one before opening the Print All Labels window
+
+## QC Scanner — Print All Labels Always Visible
+- [ ] Show Print All Labels button for single-pallet sessions (remove pallets.length > 1 guard)

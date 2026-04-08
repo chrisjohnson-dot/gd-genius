@@ -49,6 +49,7 @@ type AuditEvent = {
   scannedAt: Date;
   sessionCreatedAt: Date;
   palletTypes: string | null;
+  palletCount: number | null;
 };
 
 type SortKey = "scannedAt" | "eventType" | "createdBy" | "customerName" | "referenceNumber";
@@ -484,6 +485,11 @@ export default function QcAuditLog() {
                                     {pt}
                                   </span>
                                 ))}
+                                {event.palletCount != null && (
+                                  <span className="text-muted-foreground font-medium ml-0.5">
+                                    ×{event.palletCount}
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               <span className="text-muted-foreground text-xs">—</span>

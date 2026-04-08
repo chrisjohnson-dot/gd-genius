@@ -999,3 +999,6 @@
 
 ## QC Audit Log — Pallet Type Column
 - [x] Add pallet type column to QC Audit Log showing pallet types used per completed order
+
+## QC Audit Log — Pallet Count
+- [x] Show total pallet count per session next to pallet type badges in the audit log

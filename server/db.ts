@@ -3072,6 +3072,8 @@ export type QcAuditEvent = {
   sessionCreatedAt: Date;
   /** Comma-separated pallet types used in this session (qc_scan events only) */
   palletTypes: string | null;
+  /** Total number of pallets in this session (qc_scan events only) */
+  palletCount: number | null;
 };
 
 export async function listQcAuditLog(opts: {
@@ -3130,7 +3132,7 @@ export async function listQcAuditLog(opts: {
     })
     .from(qcPallets);
 
-  // Build a map: sessionId → sorted unique pallet type labels
+  // Build a map: sessionId → sorted unique pallet type labels + count
   const palletTypeLabel = (t: string | null) => {
     if (t === 'chep') return 'CHEP';
     if (t === 'gd_owned') return 'GD';
@@ -3138,6 +3140,7 @@ export async function listQcAuditLog(opts: {
     return t ?? 'Unknown';
   };
   const palletTypesBySession = new Map<number, string>();
+  const palletCountBySession = new Map<number, number>();
   for (const row of palletRows) {
     const label = palletTypeLabel(row.palletType);
     const existing = palletTypesBySession.get(row.sessionId);
@@ -3146,6 +3149,7 @@ export async function listQcAuditLog(opts: {
     } else if (!existing.split(', ').includes(label)) {
       palletTypesBySession.set(row.sessionId, existing + ', ' + label);
     }
+    palletCountBySession.set(row.sessionId, (palletCountBySession.get(row.sessionId) ?? 0) + 1);
   }
 
   const [qcRows, labelRows] = await Promise.all([qcQuery, labelQuery]);
@@ -3167,6 +3171,7 @@ export async function listQcAuditLog(opts: {
       scannedAt: r.itemUpdatedAt,
       sessionCreatedAt: r.sessionCreatedAt,
       palletTypes: palletTypesBySession.get(r.sessionId) ?? null,
+      palletCount: palletCountBySession.get(r.sessionId) ?? null,
     })),
     ...labelRows.map((r) => ({
       id: `label-${r.sessionId}-${r.cartonId}`,
@@ -3183,6 +3188,7 @@ export async function listQcAuditLog(opts: {
       scannedAt: r.scannedAt,
       sessionCreatedAt: r.sessionCreatedAt,
       palletTypes: null,
+      palletCount: null,
     })),
   ];
 

@@ -30,8 +30,22 @@ type Pallet = {
   id: number;
   palletNumber: number;
   palletUpc?: string | null;
+  palletType?: string | null;
   items: Array<{ sku: string; upc?: string; qty: number }> | null;
 };
+
+const PALLET_TYPES = [
+  { value: "customer_owned", label: "Customer-Owned Pallet", color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" },
+  { value: "gd_owned", label: "GD-Owned Pallet", color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
+  { value: "chep", label: "CHEP Pallet", color: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
+];
+
+function palletTypeLabel(type?: string | null) {
+  return PALLET_TYPES.find((t) => t.value === type)?.label ?? type ?? "Unknown";
+}
+function palletTypeBadgeClass(type?: string | null) {
+  return PALLET_TYPES.find((t) => t.value === type)?.color ?? "bg-muted text-muted-foreground";
+}
 
 type Session = {
   id: number;
@@ -374,6 +388,10 @@ export default function QcScanner() {
         setTimeout(() => barcodeRef.current?.focus(), 100);
       } else {
         toast.success(`Session started for ${sess?.referenceNumber}`);
+        // Show pallet type selection for the first pallet
+        setPalletTypeForFirst(true);
+        setPendingPalletType(null);
+        setPalletTypeDialog(true);
         // Auto-load items and lot numbers from Extensiv for new sessions
         if (sess?.id && sess?.referenceNumber) {
           fetchFromExtensiv.mutate({ sessionId: sess.id, referenceNumber: sess.referenceNumber });
@@ -429,8 +447,12 @@ export default function QcScanner() {
 
   const addPallet = trpc.qcScanner.addPallet.useMutation({
     onSuccess: (data) => {
-      setPallets((prev) => [...prev, { id: data.id, palletNumber: data.palletNumber, palletUpc: null, items: [] }]);
-      setActivePalletTab(String(pallets.length));
+      const newPallet: Pallet = { id: data.id, palletNumber: data.palletNumber, palletUpc: null, palletType: data.palletType ?? null, items: [] };
+      setPallets((prev) => {
+        const updated = [...prev, newPallet];
+        setActivePalletTab(String(updated.length - 1));
+        return updated;
+      });
       toast.success(`Pallet ${data.palletNumber} added`);
     },
   });
@@ -438,6 +460,21 @@ export default function QcScanner() {
   // UPC assignment state
   const [upcInputs, setUpcInputs] = useState<Record<number, string>>({});
   const [editingUpc, setEditingUpc] = useState<number | null>(null);
+
+  // Pallet type selection dialog
+  const [palletTypeDialog, setPalletTypeDialog] = useState(false);
+  const [pendingPalletType, setPendingPalletType] = useState<string | null>(null);
+  // When true, the dialog is for the first pallet (auto-created on session start)
+  const [palletTypeForFirst, setPalletTypeForFirst] = useState(false);
+
+  const updatePalletType = trpc.qcScanner.updatePalletType.useMutation({
+    onSuccess: (data) => {
+      setPallets((prev) =>
+        prev.map((p) => p.id === data.palletId ? { ...p, palletType: data.palletType } : p)
+      );
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const assignPalletUpc = trpc.qcScanner.assignPalletUpc.useMutation({
     onSuccess: (data) => {
@@ -1028,7 +1065,7 @@ export default function QcScanner() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => addPallet.mutate({ sessionId: session!.id })}
+                  onClick={() => { setPalletTypeForFirst(false); setPendingPalletType(null); setPalletTypeDialog(true); }}
                   disabled={addPallet.isPending}
                 >
                   <Plus className="w-4 h-4 mr-1" /> Add Pallet
@@ -1044,6 +1081,11 @@ export default function QcScanner() {
                 {pallets.map((p, idx) => (
                   <TabsTrigger key={p.id} value={String(idx)}>
                     Pallet {p.palletNumber}
+                    {p.palletType && (
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${palletTypeBadgeClass(p.palletType)}`}>
+                        {p.palletType === "customer_owned" ? "CUST" : p.palletType === "gd_owned" ? "GD" : "CHEP"}
+                      </span>
+                    )}
                     {p.items && p.items.length > 0 && (
                       <Badge variant="secondary" className="ml-1 text-xs">{p.items.length}</Badge>
                     )}
@@ -1055,7 +1097,19 @@ export default function QcScanner() {
                   <Card>
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
+                          {pallet.palletType ? (
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${palletTypeBadgeClass(pallet.palletType)}`}>
+                              {palletTypeLabel(pallet.palletType)}
+                            </span>
+                          ) : (
+                            <button
+                              className="text-xs text-amber-600 underline hover:text-amber-700"
+                              onClick={() => { setPalletTypeForFirst(false); setPendingPalletType(null); setPalletTypeDialog(true); }}
+                            >Set type</button>
+                          )}
+                        </div>
                         {/* UPC assignment section */}
                         <div className="flex flex-col items-end gap-1 min-w-0">
                           {pallet.palletUpc && editingUpc !== pallet.id ? (
@@ -1174,6 +1228,62 @@ export default function QcScanner() {
         </TabsContent>
       </Tabs>
 
+      {/* Pallet Type Selection Dialog */}
+      <Dialog open={palletTypeDialog} onOpenChange={(open) => { if (!open) { setPalletTypeDialog(false); setPendingPalletType(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-primary" />
+              {palletTypeForFirst ? "Select Pallet Type — Pallet 1" : "Select Pallet Type"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <p className="text-sm text-muted-foreground mb-3">What type of pallet is being used?</p>
+            {PALLET_TYPES.map((pt) => (
+              <button
+                key={pt.value}
+                className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
+                  pendingPalletType === pt.value
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                }`}
+                onClick={() => setPendingPalletType(pt.value)}
+              >
+                <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold mr-2 ${pt.color}`}>
+                  {pt.value === "customer_owned" ? "CUST" : pt.value === "gd_owned" ? "GD" : "CHEP"}
+                </span>
+                <span className="font-medium text-sm">{pt.label}</span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPalletTypeDialog(false); setPendingPalletType(null); }}>Cancel</Button>
+            <Button
+              disabled={!pendingPalletType || addPallet.isPending || updatePalletType.isPending}
+              onClick={() => {
+                if (!pendingPalletType || !session) return;
+                if (palletTypeForFirst) {
+                  // Update the first pallet that was auto-created
+                  const firstPallet = pallets[0];
+                  if (firstPallet) {
+                    updatePalletType.mutate({ palletId: firstPallet.id, palletType: pendingPalletType });
+                  }
+                  setPalletTypeDialog(false);
+                  setPendingPalletType(null);
+                } else {
+                  // Create a new pallet with the selected type
+                  addPallet.mutate({ sessionId: session.id, palletType: pendingPalletType });
+                  setPalletTypeDialog(false);
+                  setPendingPalletType(null);
+                }
+              }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Flag Dialog */}
       <Dialog open={flagDialog} onOpenChange={setFlagDialog}>
         <DialogContent>
@@ -1253,6 +1363,40 @@ export default function QcScanner() {
                 </span>
               </div>
             </div>
+
+            {/* Pallet Labels */}
+            {pallets.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pallet Labels</p>
+                {pallets.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 bg-muted/50 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">Pallet {p.palletNumber}</span>
+                      {p.palletType && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${palletTypeBadgeClass(p.palletType)}`}>
+                          {palletTypeLabel(p.palletType)}
+                        </span>
+                      )}
+                      {p.palletUpc && (
+                        <span className="font-mono text-xs text-muted-foreground">{p.palletUpc}</span>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const labelHtml = `<!DOCTYPE html><html><head><title>Pallet Label</title><style>body{font-family:Arial,sans-serif;margin:0;padding:16px;width:4in;} .header{background:#1e3a5f;color:white;padding:8px 12px;border-radius:4px;margin-bottom:8px;} .title{font-size:18px;font-weight:bold;} .sub{font-size:12px;opacity:0.8;} .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee;font-size:13px;} .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;background:${p.palletType==='chep'?'#f59e0b':p.palletType==='gd_owned'?'#8b5cf6':'#3b82f6'};color:white;} .upc{font-family:monospace;font-size:14px;font-weight:bold;margin-top:8px;text-align:center;} @media print{button{display:none}}</style></head><body><div class='header'><div class='title'>GD Pallet Label</div><div class='sub'>${session?.referenceNumber ?? ''} &bull; ${session?.customerName ?? ''}</div></div><div class='row'><span>Pallet</span><span><b>#${p.palletNumber}</b></span></div><div class='row'><span>Type</span><span><span class='badge'>${palletTypeLabel(p.palletType)}</span></span></div>${p.palletUpc?`<div class='upc'>${p.palletUpc}</div>`:''}<div class='row' style='margin-top:8px'><span>Items</span><span>${p.items?.length ?? 0} SKU(s)</span></div>${(p.items??[]).map(i=>`<div class='row'><span style='font-size:11px'>${i.sku}</span><span>&times;${i.qty}</span></div>`).join('')}</body></html>`;
+                        const w = window.open('', '_blank', 'width=500,height=700');
+                        if (w) { w.document.write(labelHtml); w.document.close(); w.print(); }
+                      }}
+                    >
+                      <Barcode className="w-3 h-3 mr-1" /> Print Label
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Warnings */}
             {!allComplete && (

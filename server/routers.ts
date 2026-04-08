@@ -178,6 +178,9 @@ import {
   setActiveShippingIntegration,
   getSmallParcelSetting,
   setSmallParcelSetting,
+  getClientPackagingEnabled,
+  upsertClientPackagingEnabled,
+  getLastOrderDatePerClient,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -3504,12 +3507,12 @@ const qcScannerRouter = router({
 
   // Add a new pallet to the session
   addPallet: protectedProcedure
-    .input(z.object({ sessionId: z.number() }))
+    .input(z.object({ sessionId: z.number(), palletType: z.string().optional() }))
     .mutation(async ({ input }) => {
       const existing = await getQcPallets(input.sessionId);
       const palletNumber = existing.length + 1;
-      const id = await createQcPallet({ sessionId: input.sessionId, palletNumber, items: [] });
-      return { id, palletNumber };
+      const id = await createQcPallet({ sessionId: input.sessionId, palletNumber, palletType: input.palletType ?? null, items: [] });
+      return { id, palletNumber, palletType: input.palletType ?? null };
     }),
 
   // Assign a scan to a pallet
@@ -3644,6 +3647,17 @@ const qcScannerRouter = router({
         results.push({ palletId: pallet.id, palletNumber: pallet.palletNumber, upc });
       }
       return { assigned: results, skipped: pallets.length - unassigned.length };
+    }),
+
+  // Update pallet type (customer_owned | gd_owned | chep)
+  updatePalletType: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      palletType: z.string().min(1).max(32),
+    }))
+    .mutation(async ({ input }) => {
+      await updateQcPallet(input.palletId, { palletType: input.palletType });
+      return { success: true, palletId: input.palletId, palletType: input.palletType };
     }),
 
   // Unified QC Audit Log — merges QC Scanner and Label Scanner events
@@ -6749,6 +6763,58 @@ const smallParcelRouter = router({
       reprintCountdownSeconds: countdown ? parseInt(countdown, 10) : 10,
     };
   }),
+
+  // ── Client Packaging Enabled ────────────────────────────────────────────────
+  /** Get all packaging type rows (enabled/disabled) for a given config+client */
+  getClientPackagingEnabled: protectedProcedure
+    .input(z.object({ configId: z.number().int(), clientId: z.number().int() }))
+    .query(async ({ input }) => {
+      return getClientPackagingEnabled(input.configId, input.clientId);
+    }),
+
+  /** Enable or disable a packaging type for a client */
+  setClientPackagingEnabled: protectedProcedure
+    .input(z.object({
+      configId: z.number().int(),
+      clientId: z.number().int(),
+      clientName: z.string(),
+      category: z.enum(['package_unit', 'pallet']),
+      typeName: z.string().min(1),
+      enabled: z.boolean(),
+      sortOrder: z.number().int().optional().default(0),
+    }))
+    .mutation(async ({ input }) => {
+      await upsertClientPackagingEnabled({
+        configId: input.configId,
+        clientId: input.clientId,
+        clientName: input.clientName,
+        category: input.category,
+        typeName: input.typeName,
+        enabled: input.enabled,
+        sortOrder: input.sortOrder ?? 0,
+      });
+      return { success: true };
+    }),
+
+  /** Return the most recent order date per clientId for a given configId (for graying out inactive clients) */
+  getLastOrderDatesPerClient: protectedProcedure
+    .input(z.object({ configId: z.number().int() }))
+    .query(async ({ input }) => {
+      const map = await getLastOrderDatePerClient(input.configId);
+      // Convert Map to array of { clientId, lastOrderDate } for JSON serialisation
+      return Array.from(map.entries()).map(([clientId, lastOrderDate]) => ({
+        clientId,
+        lastOrderDate,
+      }));
+    }),
+
+  /** Return enabled packaging types for a client — used by Pack & Ship and QC */
+  getEnabledPackagingForClient: protectedProcedure
+    .input(z.object({ configId: z.number().int(), clientId: z.number().int() }))
+    .query(async ({ input }) => {
+      const rows = await getClientPackagingEnabled(input.configId, input.clientId);
+      return rows.filter((r) => r.enabled);
+    }),
 });
 
 // Re-export appRouter augmented with all feature routers including SLA

@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -17,6 +16,8 @@ import {
   Layers,
   BoxIcon,
   RefreshCw,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ function EditRow({
 }
 
 // ─── Add Row ──────────────────────────────────────────────────────────────────
-function AddRow({ clientId, clientName, onAdded }: { clientId: number; clientName: string; onAdded: () => void }) {
+function AddRow({ clientId, clientName }: { clientId: number; clientName: string }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [lengthCm, setLengthCm] = useState("");
@@ -76,14 +77,18 @@ function AddRow({ clientId, clientName, onAdded }: { clientId: number; clientNam
   const [weightKg, setWeightKg] = useState("");
   const utils = trpc.useUtils();
   const createMutation = trpc.smallParcel.createPackageSize.useMutation({
-    onSuccess: () => { toast.success("Package size added"); setName(""); setLengthCm(""); setWidthCm(""); setHeightCm(""); setWeightKg(""); setOpen(false); utils.smallParcel.listAllPackageSizes.invalidate(); },
+    onSuccess: () => {
+      toast.success("Package size added");
+      setName(""); setLengthCm(""); setWidthCm(""); setHeightCm(""); setWeightKg(""); setOpen(false);
+      utils.smallParcel.listAllPackageSizes.invalidate();
+    },
     onError: (err) => toast.error(`Failed: ${err.message}`),
   });
 
   if (!open) {
     return (
       <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => setOpen(true)}>
-        <Plus className="w-3.5 h-3.5" /> Add size
+        <Plus className="w-3.5 h-3.5" /> Add custom size
       </Button>
     );
   }
@@ -98,7 +103,13 @@ function AddRow({ clientId, clientName, onAdded }: { clientId: number; clientNam
       <div className="flex gap-1 ml-auto">
         <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700"
           disabled={!name.trim() || createMutation.status === "pending"}
-          onClick={() => createMutation.mutate({ clientId, clientName, name: name.trim(), lengthCm: lengthCm ? parseFloat(lengthCm) : undefined, widthCm: widthCm ? parseFloat(widthCm) : undefined, heightCm: heightCm ? parseFloat(heightCm) : undefined, weightKg: weightKg ? parseFloat(weightKg) : undefined })}>
+          onClick={() => createMutation.mutate({
+            clientId, clientName, name: name.trim(),
+            lengthCm: lengthCm ? parseFloat(lengthCm) : undefined,
+            widthCm: widthCm ? parseFloat(widthCm) : undefined,
+            heightCm: heightCm ? parseFloat(heightCm) : undefined,
+            weightKg: weightKg ? parseFloat(weightKg) : undefined,
+          })}>
           <Plus className="w-3.5 h-3.5 mr-1" /> Add
         </Button>
         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setOpen(false)}><X className="w-4 h-4" /></Button>
@@ -107,34 +118,134 @@ function AddRow({ clientId, clientName, onAdded }: { clientId: number; clientNam
   );
 }
 
-// ─── Extensiv Packaging Detail Panel ─────────────────────────────────────────
-function ExtensivPackagingDetail({ configId, clientId, clientName }: { configId: number; clientId: number; clientName: string }) {
-  const { data, isLoading, error, refetch, isFetching } = trpc.smallParcel.getExtensivPackaging.useQuery(
-    { configId, clientId },
-    { enabled: configId > 0 && clientId > 0, staleTime: 5 * 60 * 1000 }
+// ─── Packaging Type Toggle Card ───────────────────────────────────────────────
+function PackagingTypeCard({
+  label,
+  subtext,
+  enabled,
+  onToggle,
+  pending,
+  icon,
+}: {
+  label: string;
+  subtext?: string;
+  enabled: boolean;
+  onToggle: () => void;
+  pending: boolean;
+  icon: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={pending}
+      className={`relative flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all w-full
+        ${enabled
+          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+          : "border-border bg-background hover:bg-muted/40 opacity-60 hover:opacity-80"
+        }
+        ${pending ? "opacity-50 cursor-wait" : "cursor-pointer"}
+      `}
+    >
+      <div className={`shrink-0 ${enabled ? "text-blue-600" : "text-muted-foreground"}`}>{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm">{label}</div>
+        {subtext && <div className="text-xs text-muted-foreground truncate">{subtext}</div>}
+      </div>
+      <div className="shrink-0">
+        {enabled
+          ? <CheckCircle2 className="w-5 h-5 text-blue-600" />
+          : <Circle className="w-5 h-5 text-muted-foreground/40" />
+        }
+      </div>
+    </button>
   );
+}
 
-  if (isLoading || isFetching) {
+// ─── Extensiv Packaging + Toggle Section ─────────────────────────────────────
+function ExtensivPackagingSection({
+  configId,
+  clientId,
+  clientName,
+}: {
+  configId: number;
+  clientId: number;
+  clientName: string;
+}) {
+  const utils = trpc.useUtils();
+
+  // Fetch Extensiv packaging types
+  const { data: extData, isLoading: extLoading, error: extError, refetch, isFetching } =
+    trpc.smallParcel.getExtensivPackaging.useQuery(
+      { configId, clientId },
+      { enabled: configId > 0 && clientId > 0, staleTime: 5 * 60 * 1000 }
+    );
+
+  // Fetch enabled state from DB
+  const { data: enabledRows = [], isLoading: enabledLoading } =
+    trpc.smallParcel.getClientPackagingEnabled.useQuery(
+      { configId, clientId },
+      { enabled: configId > 0 && clientId > 0 }
+    );
+
+  // Build a lookup: "category:typeName" → enabled
+  const enabledMap = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const row of enabledRows) {
+      m.set(`${row.category}:${row.typeName}`, row.enabled);
+    }
+    return m;
+  }, [enabledRows]);
+
+  // Track pending toggles
+  const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
+
+  const toggleMutation = trpc.smallParcel.setClientPackagingEnabled.useMutation({
+    onSuccess: () => {
+      utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
+    },
+    onError: (err) => toast.error(`Failed to update: ${err.message}`),
+    onSettled: (_data, _err, variables) => {
+      const key = `${variables.category}:${variables.typeName}`;
+      setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+    },
+  });
+
+  const handleToggle = (category: "package_unit" | "pallet", typeName: string, currentEnabled: boolean) => {
+    const key = `${category}:${typeName}`;
+    setPendingKeys((prev) => new Set(prev).add(key));
+    toggleMutation.mutate({
+      configId,
+      clientId,
+      clientName,
+      category,
+      typeName,
+      enabled: !currentEnabled,
+    });
+  };
+
+  if (extLoading || enabledLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
-        <RefreshCw className="w-6 h-6 animate-spin" />
+      <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+        <RefreshCw className="w-5 h-5 animate-spin" />
         <span className="text-sm">Loading packaging from Extensiv…</span>
       </div>
     );
   }
 
-  if (error) {
+  if (extError) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-destructive">
-        <p className="text-sm">Failed to load packaging: {error.message}</p>
+      <div className="flex flex-col items-center justify-center py-10 gap-3 text-destructive">
+        <p className="text-sm">Failed to load: {extError.message}</p>
         <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
       </div>
     );
   }
 
-  if (!data) return null;
+  if (!extData) return null;
 
-  const { packageUnits, palletTypes, totalItems } = data;
+  const { packageUnits, palletTypes, totalItems } = extData;
+  const enabledCount = enabledRows.filter((r) => r.enabled).length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -142,7 +253,9 @@ function ExtensivPackagingDetail({ configId, clientId, clientName }: { configId:
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">{clientName}</h2>
-          <p className="text-xs text-muted-foreground">{totalItems.toLocaleString()} SKUs in Extensiv</p>
+          <p className="text-xs text-muted-foreground">
+            {totalItems.toLocaleString()} SKUs · {enabledCount} packaging type{enabledCount !== 1 ? "s" : ""} enabled
+          </p>
         </div>
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
@@ -150,84 +263,84 @@ function ExtensivPackagingDetail({ configId, clientId, clientName }: { configId:
         </Button>
       </div>
 
-      {/* Package Units */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <BoxIcon className="w-4 h-4 text-blue-600" />
-          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Package Units</h3>
-          <Badge variant="secondary">{packageUnits.length}</Badge>
-        </div>
-        {packageUnits.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2 pl-6">No package units configured.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2">
-            {packageUnits.map((pkg) => (
-              <div key={pkg.unitName} className="flex items-center gap-3 px-4 py-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                <Package className="w-4 h-4 text-blue-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm">{pkg.unitName}</span>
-                    {pkg.isPrepackaged && (
-                      <Badge variant="outline" className="text-xs py-0">Pre-packed</Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-3 mt-0.5">
-                    {pkg.inventoryUnitsPerUnit != null && pkg.inventoryUnitsPerUnit > 0 && (
-                      <span className="text-xs text-muted-foreground">{pkg.inventoryUnitsPerUnit} units/pkg</span>
-                    )}
-                    {(pkg.imperial.length || pkg.imperial.width || pkg.imperial.height) && (
-                      <span className="text-xs text-muted-foreground">
-                        {[pkg.imperial.length, pkg.imperial.width, pkg.imperial.height].filter(Boolean).join(" × ")} in
-                      </span>
-                    )}
-                    {pkg.imperial.weight && (
-                      <span className="text-xs text-muted-foreground">{pkg.imperial.weight} lbs</span>
-                    )}
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">{pkg.skuCount} SKU{pkg.skuCount !== 1 ? "s" : ""}</span>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Instruction banner */}
+      <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+        <strong>Click to enable/disable</strong> — enabled types appear as buttons in Pack &amp; Ship and QC.
       </div>
 
-      {/* Pallet Types */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Layers className="w-4 h-4 text-amber-600" />
-          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Pallet Types</h3>
-          <Badge variant="secondary">{palletTypes.length}</Badge>
-        </div>
-        {palletTypes.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2 pl-6">No pallet types configured.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2">
-            {palletTypes.map((pallet) => (
-              <div key={pallet.palletName} className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 hover:bg-amber-100 dark:hover:bg-amber-900/20 transition-colors">
-                <Layers className="w-4 h-4 text-amber-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium text-sm">{pallet.palletName}</span>
-                  <div className="flex flex-wrap gap-3 mt-0.5">
-                    {pallet.qtyPerPallet != null && pallet.qtyPerPallet > 0 && (
-                      <span className="text-xs text-muted-foreground">{pallet.qtyPerPallet} units/pallet</span>
-                    )}
-                    {(pallet.imperial.length || pallet.imperial.width || pallet.imperial.height) && (
-                      <span className="text-xs text-muted-foreground">
-                        {[pallet.imperial.length, pallet.imperial.width, pallet.imperial.height].filter(Boolean).join(" × ")} in
-                      </span>
-                    )}
-                    {pallet.imperial.weight && (
-                      <span className="text-xs text-muted-foreground">{pallet.imperial.weight} lbs</span>
-                    )}
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">{pallet.skuCount} SKU{pallet.skuCount !== 1 ? "s" : ""}</span>
-              </div>
-            ))}
+      {/* Package Units */}
+      {packageUnits.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <BoxIcon className="w-4 h-4 text-blue-600" />
+            <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Package Units</h3>
+            <Badge variant="secondary">{packageUnits.length}</Badge>
           </div>
-        )}
-      </div>
+          <div className="flex flex-col gap-2">
+            {packageUnits.map((pkg) => {
+              const key = `package_unit:${pkg.unitName}`;
+              const isEnabled = enabledMap.get(key) ?? false;
+              const isPending = pendingKeys.has(key);
+              const dimStr = [pkg.imperial.length, pkg.imperial.width, pkg.imperial.height].filter(Boolean).join(" × ");
+              const subParts = [];
+              if (pkg.inventoryUnitsPerUnit && pkg.inventoryUnitsPerUnit > 0) subParts.push(`${pkg.inventoryUnitsPerUnit} units/pkg`);
+              if (dimStr) subParts.push(`${dimStr} in`);
+              if (pkg.imperial.weight) subParts.push(`${pkg.imperial.weight} lbs`);
+              subParts.push(`${pkg.skuCount} SKU${pkg.skuCount !== 1 ? "s" : ""}`);
+              return (
+                <PackagingTypeCard
+                  key={pkg.unitName}
+                  label={pkg.unitName}
+                  subtext={subParts.join(" · ")}
+                  enabled={isEnabled}
+                  onToggle={() => handleToggle("package_unit", pkg.unitName, isEnabled)}
+                  pending={isPending}
+                  icon={<Package className="w-4 h-4" />}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Pallet Types */}
+      {palletTypes.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="w-4 h-4 text-amber-600" />
+            <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Pallet Types</h3>
+            <Badge variant="secondary">{palletTypes.length}</Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {palletTypes.map((pallet) => {
+              const key = `pallet:${pallet.palletName}`;
+              const isEnabled = enabledMap.get(key) ?? false;
+              const isPending = pendingKeys.has(key);
+              const dimStr = [pallet.imperial.length, pallet.imperial.width, pallet.imperial.height].filter(Boolean).join(" × ");
+              const subParts = [];
+              if (pallet.qtyPerPallet && pallet.qtyPerPallet > 0) subParts.push(`${pallet.qtyPerPallet} units/pallet`);
+              if (dimStr) subParts.push(`${dimStr} in`);
+              if (pallet.imperial.weight) subParts.push(`${pallet.imperial.weight} lbs`);
+              subParts.push(`${pallet.skuCount} SKU${pallet.skuCount !== 1 ? "s" : ""}`);
+              return (
+                <PackagingTypeCard
+                  key={pallet.palletName}
+                  label={pallet.palletName}
+                  subtext={subParts.join(" · ")}
+                  enabled={isEnabled}
+                  onToggle={() => handleToggle("pallet", pallet.palletName, isEnabled)}
+                  pending={isPending}
+                  icon={<Layers className="w-4 h-4" />}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {packageUnits.length === 0 && palletTypes.length === 0 && (
+        <p className="text-sm text-muted-foreground py-4 text-center">No packaging types found in Extensiv for this client.</p>
+      )}
     </div>
   );
 }
@@ -255,7 +368,7 @@ function CustomPackageSizesSection({ clientId, clientName, sizes }: { clientId: 
       </div>
       <div className="flex flex-col gap-2">
         {sizes.length === 0 && (
-          <p className="text-sm text-muted-foreground py-1 pl-6">No custom sizes configured for this client.</p>
+          <p className="text-sm text-muted-foreground py-1 pl-1">No custom sizes for this client.</p>
         )}
         {sizes.map((size) =>
           editingId === size.id ? (
@@ -281,7 +394,7 @@ function CustomPackageSizesSection({ clientId, clientName, sizes }: { clientId: 
             </div>
           )
         )}
-        <AddRow clientId={clientId} clientName={clientName} onAdded={() => {}} />
+        <AddRow clientId={clientId} clientName={clientName} />
       </div>
     </div>
   );
@@ -301,13 +414,40 @@ export default function SmallParcelPackageSizes() {
     { enabled: configId > 0 }
   );
 
+  // Fetch last-order-date per client (for graying out inactive)
+  const { data: lastOrderDates = [] } = trpc.smallParcel.getLastOrderDatesPerClient.useQuery(
+    { configId },
+    { enabled: configId > 0, staleTime: 5 * 60 * 1000 }
+  );
+
+  // Build a lookup: clientId → Date
+  const lastOrderMap = useMemo(() => {
+    const m = new Map<number, Date>();
+    for (const row of lastOrderDates) {
+      m.set(row.clientId, new Date(row.lastOrderDate));
+    }
+    return m;
+  }, [lastOrderDates]);
+
+  // 60-day cutoff
+  const cutoff = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 60);
+    return d;
+  }, []);
+
   // Fetch custom package sizes from DB
   const { data: allSizes = [] } = trpc.smallParcel.listAllPackageSizes.useQuery();
 
-  // Build sorted customer list (alphabetical)
+  // Sort customers alphabetically, active first then inactive
   const sortedCustomers = useMemo(() => {
-    return [...customers].sort((a, b) => a.name.localeCompare(b.name));
-  }, [customers]);
+    return [...customers].sort((a, b) => {
+      const aActive = (lastOrderMap.get(a.id) ?? new Date(0)) >= cutoff;
+      const bActive = (lastOrderMap.get(b.id) ?? new Date(0)) >= cutoff;
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [customers, lastOrderMap, cutoff]);
 
   // Filter by search
   const filteredCustomers = useMemo(() => {
@@ -362,11 +502,17 @@ export default function SmallParcelPackageSizes() {
           ) : (
             filteredCustomers.map((customer) => {
               const isSelected = customer.id === selectedClientId;
+              const lastOrder = lastOrderMap.get(customer.id);
+              const isActive = lastOrder != null && lastOrder >= cutoff;
               const customCount = allSizes.filter((s) => s.clientId === customer.id).length;
+
               return (
                 <button
                   key={customer.id}
-                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/60 ${isSelected ? "bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-600" : ""}`}
+                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/60
+                    ${isSelected ? "bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-600" : ""}
+                    ${!isActive ? "opacity-40" : ""}
+                  `}
                   onClick={() => setSelectedClientId(customer.id)}
                 >
                   <span className={`flex-1 text-sm truncate ${isSelected ? "font-semibold text-blue-700 dark:text-blue-400" : ""}`}>
@@ -382,9 +528,11 @@ export default function SmallParcelPackageSizes() {
           )}
         </div>
 
-        {/* Footer: total count */}
+        {/* Footer */}
         <div className="p-3 border-t text-xs text-muted-foreground text-center">
           {filteredCustomers.length} of {sortedCustomers.length} clients
+          {" · "}
+          <span className="opacity-50">faded = no orders in 60d</span>
         </div>
       </div>
 
@@ -393,13 +541,13 @@ export default function SmallParcelPackageSizes() {
         {!selectedCustomer ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
             <Package className="w-12 h-12 opacity-20" />
-            <p className="text-sm">Select a client to view their packaging options</p>
+            <p className="text-sm">Select a client to view and configure their packaging types</p>
           </div>
         ) : (
           <div className="p-6 max-w-2xl flex flex-col gap-6">
-            {/* Extensiv packaging from API */}
+            {/* Extensiv packaging with toggle */}
             {configId > 0 ? (
-              <ExtensivPackagingDetail
+              <ExtensivPackagingSection
                 configId={configId}
                 clientId={selectedCustomer.id}
                 clientName={selectedCustomer.name}

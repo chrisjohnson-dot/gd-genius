@@ -104,6 +104,9 @@ import {
   ShippingIntegrationSetting,
   smallParcelSettings,
   SmallParcelSetting,
+  clientPackagingEnabled,
+  ClientPackagingEnabled,
+  InsertClientPackagingEnabled,
 } from "../drizzle/schema";
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
@@ -3580,4 +3583,59 @@ export async function listPutAwayList(params: {
       ? (muIndex.get(`${scan.transactionId}:${scan.sku}`) ?? [])
       : [],
   }));
+}
+
+// ─── Client Packaging Enabled ─────────────────────────────────────────────────
+
+/** Return all enabled packaging type rows for a given config+client. */
+export async function getClientPackagingEnabled(
+  configId: number,
+  clientId: number
+): Promise<ClientPackagingEnabled[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(clientPackagingEnabled)
+    .where(
+      and(
+        eq(clientPackagingEnabled.configId, configId),
+        eq(clientPackagingEnabled.clientId, clientId)
+      )
+    )
+    .orderBy(clientPackagingEnabled.sortOrder, clientPackagingEnabled.typeName);
+}
+
+/** Upsert a packaging type row (insert or update enabled flag). */
+export async function upsertClientPackagingEnabled(
+  row: InsertClientPackagingEnabled
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(clientPackagingEnabled)
+    .values(row)
+    .onDuplicateKeyUpdate({ set: { enabled: row.enabled, updatedAt: new Date() } });
+}
+
+/** Return the most recent firstSeenAt timestamp per clientId for a given configId.
+ *  Returns a map of clientId → Date (or undefined if never seen). */
+export async function getLastOrderDatePerClient(
+  configId: number
+): Promise<Map<number, Date>> {
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({
+      clientId: orderTracking.clientId,
+      lastSeen: sql<Date>`MAX(${orderTracking.firstSeenAt})`,
+    })
+    .from(orderTracking)
+    .where(eq(orderTracking.configId, configId))
+    .groupBy(orderTracking.clientId);
+  const map = new Map<number, Date>();
+  for (const r of rows) {
+    if (r.lastSeen) map.set(r.clientId, new Date(r.lastSeen));
+  }
+  return map;
 }

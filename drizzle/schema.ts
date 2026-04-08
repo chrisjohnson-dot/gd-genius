@@ -530,6 +530,8 @@ export const qcPallets = mysqlTable("qc_pallets", {
   sessionId: int("sessionId").notNull(),
   palletUpc: varchar("palletUpc", { length: 128 }),
   palletNumber: int("palletNumber").notNull().default(1),
+  // Pallet ownership type: customer_owned | gd_owned | chep
+  palletType: varchar("palletType", { length: 32 }),
   // JSON array of { sku, upc, qty } items on this pallet
   items: json("items"),
   builtAt: timestamp("builtAt").defaultNow(),
@@ -1261,3 +1263,39 @@ export const smallParcelSettings = mysqlTable("small_parcel_settings", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 export type SmallParcelSetting = typeof smallParcelSettings.$inferSelect;
+
+// ─── Client Packaging Enabled Types ──────────────────────────────────────────
+// Stores which Extensiv packaging types (PackageUnit / Pallet) are enabled per
+// client for use in Pack & Ship and QC workflows.
+export const clientPackagingEnabled = mysqlTable(
+  "client_packaging_enabled",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    /** Extensiv config ID */
+    configId: int("configId").notNull(),
+    /** Extensiv customer ID */
+    clientId: int("clientId").notNull(),
+    /** Customer display name (denormalised for convenience) */
+    clientName: varchar("clientName", { length: 256 }).notNull(),
+    /** 'package_unit' or 'pallet' */
+    category: varchar("category", { length: 32 }).notNull(),
+    /** Extensiv type name, e.g. "Carton", "Master carton", "Pallet" */
+    typeName: varchar("typeName", { length: 128 }).notNull(),
+    /** Whether this type is enabled (shown as a button) */
+    enabled: boolean("enabled").notNull().default(true),
+    /** Sort order for button display */
+    sortOrder: int("sortOrder").notNull().default(0),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (t) => ({
+    uniqConfigClientType: uniqueIndex("cpe_config_client_cat_type_idx").on(
+      t.configId,
+      t.clientId,
+      t.category,
+      t.typeName
+    ),
+  })
+);
+export type ClientPackagingEnabled = typeof clientPackagingEnabled.$inferSelect;
+export type InsertClientPackagingEnabled = typeof clientPackagingEnabled.$inferInsert;

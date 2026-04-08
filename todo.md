@@ -978,3 +978,9 @@
 - [x] Client list sorted alphabetically with search filter and custom size count badge
 - [x] Detail panel shows Package Units (name, units/pkg, dimensions, SKU count) and Pallet Types from Extensiv
 - [x] Custom Pack & Ship sizes section below Extensiv data with add/edit/delete
+
+## QC Scanner — Pallet Type Selection
+- [x] Add palletType field to qc_pallets schema (customer_owned / gd_owned / chep)
+- [x] Prompt operator to select pallet type before scanning each new pallet
+- [x] Allow adding additional pallets mid-session (each with its own type selection)
+- [x] Include pallet type on generated pallet labels (compatible with pallet scanning app)

@@ -205,17 +205,43 @@ function Step1ScanTicket({
 // ─── Step 2: Select Package Size ─────────────────────────────────────────────
 function Step2PackageSize({
   order,
+  configId,
   onSelect,
   onBack,
 }: {
   order: OrderData;
+  configId: number;
   onSelect: (size: PackageSize) => void;
   onBack: () => void;
 }) {
-  const { data: sizes, isLoading } = trpc.smallParcel.listPackageSizes.useQuery(
-    { clientId: order.clientId },
-    { staleTime: 30_000 }
-  );
+  // Primary: enabled Extensiv packaging types configured in Package Sizes
+  const { data: enabledTypes = [], isLoading: enabledLoading } =
+    trpc.smallParcel.getEnabledPackagingForClient.useQuery(
+      { configId, clientId: order.clientId },
+      { enabled: configId > 0, staleTime: 30_000 }
+    );
+
+  // Fallback: custom DB sizes (legacy)
+  const { data: customSizes = [], isLoading: customLoading } =
+    trpc.smallParcel.listPackageSizes.useQuery(
+      { clientId: order.clientId },
+      { staleTime: 30_000 }
+    );
+
+  const isLoading = enabledLoading || customLoading;
+
+  // Build unified button list: enabled Extensiv types first, then custom DB sizes
+  const allButtons: PackageSize[] = [
+    ...enabledTypes.map((t, i) => ({
+      id: -(i + 1), // synthetic negative IDs for Extensiv types
+      name: t.typeName,
+      lengthCm: null,
+      widthCm: null,
+      heightCm: null,
+      weightKg: null,
+    })),
+    ...customSizes.map((s) => ({ ...s, lengthCm: s.lengthCm ?? null, widthCm: s.widthCm ?? null, heightCm: s.heightCm ?? null, weightKg: s.weightKg ?? null })),
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -255,21 +281,21 @@ function Step2PackageSize({
           <div className="flex items-center justify-center py-10">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : !sizes || sizes.length === 0 ? (
+        ) : allButtons.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
             <AlertCircle className="w-8 h-8" />
-            <p className="text-sm">No package sizes configured.</p>
+            <p className="text-sm">No package types enabled for this client.</p>
             <Link href="/small-parcel/package-sizes" className="text-sm underline text-blue-600">
-              Configure package sizes
+              Configure in Package Sizes
             </Link>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {sizes.map((size) => (
+            {allButtons.map((size) => (
               <button
-                key={size.id}
+                key={`${size.id}-${size.name}`}
                 type="button"
-                onClick={() => onSelect(size as PackageSize)}
+                onClick={() => onSelect(size)}
                 className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all p-5 text-center group"
               >
                 <Package className="w-8 h-8 text-muted-foreground group-hover:text-blue-600 transition-colors" />
@@ -1337,6 +1363,7 @@ export default function SmallParcel() {
           {step === 2 && orderData && createSessionMutation.status !== "pending" && (
             <Step2PackageSize
               order={orderData}
+              configId={configId}
               onSelect={handlePackageSizeSelected}
               onBack={handleReset}
             />

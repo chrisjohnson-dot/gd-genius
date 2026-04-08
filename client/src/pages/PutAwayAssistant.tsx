@@ -211,6 +211,7 @@ function SkuRecommendationRow({
   onReset,
   onLocationChange,
   isCommitting,
+  commitStatus,
 }: {
   row: SkuRow;
   rowState: RowState;
@@ -220,13 +221,20 @@ function SkuRecommendationRow({
   onReset: () => void;
   onLocationChange: (loc: string) => void;
   isCommitting: boolean;
+  commitStatus?: "pending" | "done" | "error" | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const top = row.allSuggestions.find((s) => s.locationName === selectedLocation) ?? row.topSuggestion;
 
   const stateColors: Record<RowState, string> = {
     pending: "border-border bg-card",
-    accepted: "border-green-500/40 bg-green-500/5",
+    accepted: commitStatus === "done"
+      ? "border-green-500/60 bg-green-500/10"
+      : commitStatus === "error"
+      ? "border-red-500/40 bg-red-500/8"
+      : commitStatus === "pending"
+      ? "border-blue-500/30 bg-blue-500/5"
+      : "border-green-500/40 bg-green-500/5",
     rejected: "border-red-500/30 bg-red-500/5 opacity-60",
   };
 
@@ -234,11 +242,20 @@ function SkuRecommendationRow({
     <div className={`rounded-xl border transition-all ${stateColors[rowState]}`}>
       {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-3">
-        {/* Status icon */}
+        {/* Status icon — shows commit progress when Extensiv mode is active */}
         <div className="shrink-0">
-          {rowState === "accepted" && <CheckCircle2 className="h-5 w-5 text-green-400" />}
-          {rowState === "rejected" && <XCircle className="h-5 w-5 text-red-400" />}
-          {rowState === "pending" && <Package className="h-5 w-5 text-muted-foreground" />}
+          {commitStatus === "pending" && rowState === "accepted" && (
+            <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
+          )}
+          {commitStatus === "done" && (
+            <CheckCircle2 className="h-5 w-5 text-green-400" />
+          )}
+          {commitStatus === "error" && (
+            <XCircle className="h-5 w-5 text-red-400" />
+          )}
+          {!commitStatus && rowState === "accepted" && <CheckCircle2 className="h-5 w-5 text-green-400" />}
+          {!commitStatus && rowState === "rejected" && <XCircle className="h-5 w-5 text-red-400" />}
+          {!commitStatus && rowState === "pending" && <Package className="h-5 w-5 text-muted-foreground" />}
         </div>
 
         {/* SKU info */}
@@ -753,6 +770,44 @@ function RecommendationSession({
         </div>
       )}
 
+      {/* Extensiv commit progress summary */}
+      {Object.keys(commitProgress).length > 0 && (() => {
+        const total = Object.keys(commitProgress).length;
+        const done = Object.values(commitProgress).filter((s) => s === "done").length;
+        const errors = Object.values(commitProgress).filter((s) => s === "error").length;
+        const inProgress = Object.values(commitProgress).filter((s) => s === "pending").length;
+        const pct = Math.round((done + errors) / total * 100);
+        return (
+          <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                {inProgress > 0 ? (
+                  <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />
+                ) : errors > 0 ? (
+                  <AlertCircle className="h-4 w-4 text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 text-green-400" />
+                )}
+                <span className="font-medium text-foreground">
+                  {inProgress > 0 ? "Updating Extensiv…" : errors > 0 ? "Completed with errors" : "All locations updated"}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {done} / {total} done{errors > 0 ? ` · ${errors} failed` : ""}
+              </span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  errors > 0 && inProgress === 0 ? "bg-amber-400" : "bg-blue-400"
+                }`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Recommendation list */}
       {rows.length > 0 && !batchQuery.isLoading && (
         <div className="space-y-2">
@@ -767,6 +822,7 @@ function RecommendationSession({
               onReset={() => resetRow(row.sku)}
               onLocationChange={(loc) => setSelectedLocations((prev) => ({ ...prev, [row.sku]: loc }))}
               isCommitting={committing}
+              commitStatus={commitProgress[row.sku] ?? null}
             />
           ))}
         </div>

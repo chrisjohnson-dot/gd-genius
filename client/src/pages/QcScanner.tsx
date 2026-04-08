@@ -1367,7 +1367,27 @@ export default function QcScanner() {
             {/* Pallet Labels */}
             {pallets.length > 0 && (
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pallet Labels</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pallet Labels</p>
+                  {pallets.length > 1 && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const buildLabel = (p: Pallet) =>
+                          `<div class='label'><div class='header'><div class='title'>GD Pallet Label</div><div class='sub'>${session?.referenceNumber ?? ''} &bull; ${session?.customerName ?? ''}</div></div><div class='row'><span>Pallet</span><span><b>#${p.palletNumber}</b></span></div><div class='row'><span>Type</span><span><span class='badge' style='background:${p.palletType==='chep'?'#f59e0b':p.palletType==='gd_owned'?'#8b5cf6':'#3b82f6'}'>` +
+                          palletTypeLabel(p.palletType) +
+                          `</span></span></div>${p.palletUpc ? `<div class='upc'>${p.palletUpc}</div>` : ''}<div class='row' style='margin-top:8px'><span>Items</span><span>${p.items?.length ?? 0} SKU(s)</span></div>${(p.items ?? []).map(i => `<div class='row'><span style='font-size:11px'>${i.sku}</span><span>&times;${i.qty}</span></div>`).join('')}</div>`;
+                        const allHtml = `<!DOCTYPE html><html><head><title>All Pallet Labels</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;} .label{padding:16px;width:4in;page-break-after:always;} .label:last-child{page-break-after:auto;} .header{background:#1e3a5f;color:white;padding:8px 12px;border-radius:4px;margin-bottom:8px;} .title{font-size:18px;font-weight:bold;} .sub{font-size:12px;opacity:0.8;} .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee;font-size:13px;} .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;color:white;} .upc{font-family:monospace;font-size:14px;font-weight:bold;margin-top:8px;text-align:center;} @media print{button{display:none}}</style></head><body>${pallets.map(buildLabel).join('')}</body></html>`;
+                        const w = window.open('', '_blank', 'width=600,height=800');
+                        if (w) { w.document.write(allHtml); w.document.close(); w.print(); }
+                      }}
+                    >
+                      <Barcode className="w-3 h-3 mr-1" /> Print All Labels
+                    </Button>
+                  )}
+                </div>
                 {pallets.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 bg-muted/50 rounded-lg px-3 py-2">
                     <div className="flex items-center gap-2">

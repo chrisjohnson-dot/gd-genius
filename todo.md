@@ -984,3 +984,6 @@
 - [x] Prompt operator to select pallet type before scanning each new pallet
 - [x] Allow adding additional pallets mid-session (each with its own type selection)
 - [x] Include pallet type on generated pallet labels (compatible with pallet scanning app)
+
+## QC Scanner — Print All Labels
+- [x] Add "Print All Labels" button to Complete Order dialog that prints all pallet labels in one window

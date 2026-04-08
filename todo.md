@@ -987,3 +987,6 @@
 
 ## QC Scanner — Print All Labels
 - [x] Add "Print All Labels" button to Complete Order dialog that prints all pallet labels in one window
+
+## QC Scanner — Auto-UPC Before Print All
+- [x] Auto-generate UPCs for pallets missing one before opening the Print All Labels window

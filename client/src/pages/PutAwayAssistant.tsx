@@ -10,6 +10,7 @@ import {
   History, Trash2, AlertCircle, Loader2,
   ArrowRight, RefreshCw, ChevronDown, ChevronRight,
   PackageCheck, ArrowLeft, CalendarDays, Flame, ListOrdered,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -548,6 +549,26 @@ function ScanSession({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── No Priority Config Banner ── */}
+          {!priorityQuery.isLoading && priorityRows.length === 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+              <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-300">No priority config for this customer</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Suggestions will use default FEFO ranking. Set up aisle/level priorities to guide location recommendations.
+                </p>
+              </div>
+              <a
+                href="/config/put-away-priority"
+                className="shrink-0 flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-medium transition-colors border border-amber-500/30 rounded-lg px-2.5 py-1.5 hover:bg-amber-500/10"
+              >
+                <Settings className="h-3.5 w-3.5" />
+                Set up priorities
+              </a>
             </div>
           )}
 

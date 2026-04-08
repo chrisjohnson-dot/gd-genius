@@ -48,6 +48,7 @@ type AuditEvent = {
   status: string | null;
   scannedAt: Date;
   sessionCreatedAt: Date;
+  palletTypes: string | null;
 };
 
 type SortKey = "scannedAt" | "eventType" | "createdBy" | "customerName" | "referenceNumber";
@@ -411,6 +412,7 @@ export default function QcAuditLog() {
                         <TableHead>Item / Barcode</TableHead>
                         <TableHead>Qty</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Pallets</TableHead>
                         <TableHead>Session</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -466,6 +468,26 @@ export default function QcAuditLog() {
                           </TableCell>
                           <TableCell>
                             <StatusBadge status={event.status} />
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {event.palletTypes ? (
+                              <div className="flex flex-wrap gap-1">
+                                {event.palletTypes.split(', ').map((pt) => (
+                                  <span
+                                    key={pt}
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
+                                      pt === 'CHEP' ? 'bg-amber-500' :
+                                      pt === 'GD' ? 'bg-violet-500' :
+                                      pt === 'CUST' ? 'bg-blue-500' : 'bg-gray-400'
+                                    }`}
+                                  >
+                                    {pt}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             #{event.sessionId}

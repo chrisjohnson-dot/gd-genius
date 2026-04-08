@@ -996,3 +996,6 @@
 
 ## QC Scanner — Label Paper Size Setting
 - [x] Add paper size selector (4x6 thermal / letter) persisted in localStorage, applied to pallet label print layout
+
+## QC Audit Log — Pallet Type Column
+- [x] Add pallet type column to QC Audit Log showing pallet types used per completed order

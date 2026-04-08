@@ -3070,6 +3070,8 @@ export type QcAuditEvent = {
   status: string | null;
   scannedAt: Date;
   sessionCreatedAt: Date;
+  /** Comma-separated pallet types used in this session (qc_scan events only) */
+  palletTypes: string | null;
 };
 
 export async function listQcAuditLog(opts: {
@@ -3120,6 +3122,32 @@ export async function listQcAuditLog(opts: {
     .from(labelScanCartons)
     .innerJoin(labelScanSessions, eq(labelScanCartons.sessionId, labelScanSessions.id));
 
+  // ── Pallet types per QC session ───────────────────────────────────────────
+  const palletRows = await db
+    .select({
+      sessionId: qcPallets.sessionId,
+      palletType: qcPallets.palletType,
+    })
+    .from(qcPallets);
+
+  // Build a map: sessionId → sorted unique pallet type labels
+  const palletTypeLabel = (t: string | null) => {
+    if (t === 'chep') return 'CHEP';
+    if (t === 'gd_owned') return 'GD';
+    if (t === 'customer_owned') return 'CUST';
+    return t ?? 'Unknown';
+  };
+  const palletTypesBySession = new Map<number, string>();
+  for (const row of palletRows) {
+    const label = palletTypeLabel(row.palletType);
+    const existing = palletTypesBySession.get(row.sessionId);
+    if (!existing) {
+      palletTypesBySession.set(row.sessionId, label);
+    } else if (!existing.split(', ').includes(label)) {
+      palletTypesBySession.set(row.sessionId, existing + ', ' + label);
+    }
+  }
+
   const [qcRows, labelRows] = await Promise.all([qcQuery, labelQuery]);
 
   // Merge into unified events
@@ -3138,6 +3166,7 @@ export async function listQcAuditLog(opts: {
       status: r.status,
       scannedAt: r.itemUpdatedAt,
       sessionCreatedAt: r.sessionCreatedAt,
+      palletTypes: palletTypesBySession.get(r.sessionId) ?? null,
     })),
     ...labelRows.map((r) => ({
       id: `label-${r.sessionId}-${r.cartonId}`,
@@ -3153,6 +3182,7 @@ export async function listQcAuditLog(opts: {
       status: r.status,
       scannedAt: r.scannedAt,
       sessionCreatedAt: r.sessionCreatedAt,
+      palletTypes: null,
     })),
   ];
 

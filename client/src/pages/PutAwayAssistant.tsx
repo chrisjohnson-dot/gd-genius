@@ -9,7 +9,7 @@ import {
   AlertCircle, Loader2, RefreshCw, ChevronDown, ChevronRight,
   PackageCheck, ArrowLeft, CalendarDays, Flame, ListOrdered,
   Settings, XCircle, CheckCheck, RotateCcw, ThumbsUp, ThumbsDown,
-  ChevronUp, ArrowRight,
+  ChevronUp, ArrowRight, ScanLine, CloudUpload,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -19,11 +19,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type BatchSuggestion = {
   locationName: string;
+  locationId?: number | null;
   locationType: "pick_face" | "warehouse";
   reason: "consolidate" | "empty_pick_face" | "empty_warehouse";
   currentQty: number;
@@ -39,6 +47,8 @@ type SkuRow = {
   sku: string;
   description?: string;
   receivedQty: number;
+  receiverItemId?: number | null;
+  receiveItemIds?: number[];
   lotNumber?: string;
   expirationDate?: string;
   topSuggestion: BatchSuggestion | null;
@@ -426,7 +436,11 @@ function RecommendationSession({
   }, [rows]);
 
   const logScanMutation = trpc.putAway.logScan.useMutation();
+  const commitPutAwaysMutation = trpc.putAway.commitPutAways.useMutation();
   const [committing, setCommitting] = useState(false);
+  const [showCommitDialog, setShowCommitDialog] = useState(false);
+  // Per-row commit progress when using auto-Extensiv mode
+  const [commitProgress, setCommitProgress] = useState<Record<string, "pending" | "done" | "error">>({}); 
 
   const getRowState = (sku: string): RowState => rowStates[sku] ?? "pending";
 
@@ -464,25 +478,20 @@ function RecommendationSession({
     setRowStates({});
   }, []);
 
-  // Commit all accepted rows to the session log
-  const commitAccepted = useCallback(async () => {
+  // ── Commit: log-only (operator scans) ──────────────────────────────────────
+  const commitWithScan = useCallback(async () => {
     const toCommit = rows.filter((row) => getRowState(row.sku) === "accepted");
-    if (toCommit.length === 0) {
-      toast.info("No accepted rows to commit.");
-      return;
-    }
+    if (toCommit.length === 0) { toast.info("No accepted rows to commit."); return; }
+    setShowCommitDialog(false);
     setCommitting(true);
-    let success = 0;
-    let failed = 0;
+    let success = 0, failed = 0;
     for (const row of toCommit) {
       const locName = selectedLocations[row.sku] ?? row.topSuggestion?.locationName;
       const suggestion = row.allSuggestions.find((s) => s.locationName === locName) ?? row.topSuggestion;
       if (!suggestion) { failed++; continue; }
       try {
         await logScanMutation.mutateAsync({
-          configId,
-          facilityId,
-          customerId,
+          configId, facilityId, customerId,
           customerName: customerName || undefined,
           sku: row.sku,
           description: row.description,
@@ -496,15 +505,60 @@ function RecommendationSession({
           expirationDate: row.expirationDate,
         });
         success++;
+      } catch { failed++; }
+    }
+    setCommitting(false);
+    if (success > 0) toast.success(`Logged ${success} put-away${success !== 1 ? "s" : ""}. Operator will scan locations.`);
+    if (failed > 0) toast.error(`${failed} item${failed !== 1 ? "s" : ""} failed to log.`);
+    utils.putAway.sessionScans.invalidate({ sessionId });
+  }, [rows, rowStates, selectedLocations, configId, facilityId, customerId, customerName, sessionId, logScanMutation, utils]);
+
+  // ── Commit: auto-update Extensiv ────────────────────────────────────────────
+  const commitWithExtensiv = useCallback(async () => {
+    const toCommit = rows.filter((row) => getRowState(row.sku) === "accepted");
+    if (toCommit.length === 0) { toast.info("No accepted rows to commit."); return; }
+    setShowCommitDialog(false);
+    setCommitting(true);
+    // Initialise progress map
+    const initProgress: Record<string, "pending" | "done" | "error"> = {};
+    for (const row of toCommit) initProgress[row.sku] = "pending";
+    setCommitProgress(initProgress);
+    let success = 0, failed = 0;
+    for (const row of toCommit) {
+      const locName = selectedLocations[row.sku] ?? row.topSuggestion?.locationName;
+      const suggestion = row.allSuggestions.find((s) => s.locationName === locName) ?? row.topSuggestion;
+      if (!suggestion) {
+        setCommitProgress((p) => ({ ...p, [row.sku]: "error" }));
+        failed++; continue;
+      }
+      try {
+        await commitPutAwaysMutation.mutateAsync({
+          configId, facilityId, customerId,
+          items: [{
+            sku: row.sku,
+            description: row.description,
+            qty: row.receivedQty,
+            locationName: suggestion.locationName,
+            locationId: suggestion.locationId ?? undefined,
+            receiveItemIds: row.receiveItemIds ?? [],
+            lotNumber: row.lotNumber,
+            expirationDate: row.expirationDate,
+          }],
+          sessionId,
+          customerName: customerName || undefined,
+        });
+        setCommitProgress((p) => ({ ...p, [row.sku]: "done" }));
+        success++;
       } catch {
+        setCommitProgress((p) => ({ ...p, [row.sku]: "error" }));
         failed++;
       }
     }
     setCommitting(false);
-    if (success > 0) toast.success(`Committed ${success} put-away${success !== 1 ? "s" : ""} to session log.`);
-    if (failed > 0) toast.error(`${failed} item${failed !== 1 ? "s" : ""} failed to log.`);
+    if (success > 0) toast.success(`Genius updated ${success} location${success !== 1 ? "s" : ""} in Extensiv.`);
+    if (failed > 0) toast.error(`${failed} item${failed !== 1 ? "s" : ""} failed to update in Extensiv.`);
     utils.putAway.sessionScans.invalidate({ sessionId });
-  }, [rows, rowStates, selectedLocations, configId, facilityId, customerId, customerName, sessionId, logScanMutation, utils]);
+  }, [rows, rowStates, selectedLocations, configId, facilityId, customerId, customerName, sessionId, commitPutAwaysMutation, utils]);
 
   const pendingCount = rows.filter((r) => getRowState(r.sku) === "pending" && r.topSuggestion).length;
   const acceptedCount = rows.filter((r) => getRowState(r.sku) === "accepted").length;
@@ -619,7 +673,7 @@ function RecommendationSession({
               <Button
                 size="sm"
                 className="h-8 gap-1.5 text-xs bg-primary hover:bg-primary/90"
-                onClick={commitAccepted}
+                onClick={() => setShowCommitDialog(true)}
                 disabled={committing}
               >
                 {committing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
@@ -728,6 +782,68 @@ function RecommendationSession({
           </p>
         </div>
       )}
+
+      {/* ── Commit Mode Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showCommitDialog} onOpenChange={setShowCommitDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              Commit {acceptedCount} Put-Away{acceptedCount !== 1 ? "s" : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Choose how to record these put-aways.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-1">
+            {/* Option A — Genius updates Extensiv */}
+            <button
+              className="w-full text-left rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-colors p-4 group"
+              onClick={commitWithExtensiv}
+              disabled={committing}
+            >
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <CloudUpload className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Genius updates Extensiv</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Genius will automatically move each item to its confirmed location in Extensiv right now.
+                    No scanning required.
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Option B — Operator scans */}
+            <button
+              className="w-full text-left rounded-xl border border-border bg-card hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors p-4 group"
+              onClick={commitWithScan}
+              disabled={committing}
+            >
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex-shrink-0 w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
+                  <ScanLine className="h-5 w-5 text-emerald-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Operator will scan locations</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Log the put-away plan now. The operator will scan each location barcode as they
+                    physically place the items in the warehouse.
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <p className="text-xs text-muted-foreground text-center pt-1">
+            {acceptedCount} item{acceptedCount !== 1 ? "s" : ""} accepted
+            {rejectedCount > 0 && ` · ${rejectedCount} rejected (will not be committed)`}
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

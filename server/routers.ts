@@ -4528,17 +4528,27 @@ const putAwayRouter = router({
         isPriorityAisle: boolean;
         aislePriorityOrder: number | null;
         matchedLevel: string | null;
+        locationId: number | null;
       };
+
+      type BatchSuggestionWithId = BatchSuggestion;
 
       type SkuRow = {
         sku: string;
         description?: string;
         receivedQty: number;
+        receiverItemId: number | null;
+        /** Pallet-level IDs from inventory records for this SKU — used by moveInventory */
+        receiveItemIds: number[];
         lotNumber?: string;
         expirationDate?: string;
-        topSuggestion: BatchSuggestion | null;
-        allSuggestions: BatchSuggestion[];
+        topSuggestion: BatchSuggestionWithId | null;
+        allSuggestions: BatchSuggestionWithId[];
       };
+
+      // Build a map of locationName -> locationId from extensivLocations
+      const locationIdMap = new Map<string, number>();
+      for (const loc of extensivLocations) locationIdMap.set(loc.name, loc.locationId);
 
       // Generate suggestions for each SKU
       const rows: SkuRow[] = receiveItems.map((item) => {
@@ -4573,7 +4583,7 @@ const putAwayRouter = router({
           } else {
             priority = locType === "pick_face" ? 1 : 2;
           }
-          suggestions.push({ locationName: locName, locationType: locType, reason: "consolidate", currentQty: totalQty, expirationDate: sorted[0]?.expirationDate, lotNumber: sorted[0]?.lotNumber, priority, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null });
+          suggestions.push({ locationName: locName, locationType: locType, reason: "consolidate", currentQty: totalQty, expirationDate: sorted[0]?.expirationDate, lotNumber: sorted[0]?.lotNumber, priority, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null, locationId: locationIdMap.get(locName) ?? null });
         }
 
         // Empty pick_face locations
@@ -4583,7 +4593,7 @@ const putAwayRouter = router({
           if (locType !== "pick_face") continue;
           const locPri = getLocPriority(loc.name);
           const isPrioritised = locPri !== null;
-          suggestions.push({ locationName: loc.name, locationType: "pick_face", reason: "empty_pick_face", currentQty: 0, priority: hasPriorityConfig ? (isPrioritised ? 5 : 7) : 3, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null });
+          suggestions.push({ locationName: loc.name, locationType: "pick_face", reason: "empty_pick_face", currentQty: 0, priority: hasPriorityConfig ? (isPrioritised ? 5 : 7) : 3, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null, locationId: loc.locationId });
         }
 
         // Empty warehouse locations
@@ -4593,7 +4603,7 @@ const putAwayRouter = router({
           if (locType !== "warehouse") continue;
           const locPri = getLocPriority(loc.name);
           const isPrioritised = locPri !== null;
-          suggestions.push({ locationName: loc.name, locationType: "warehouse", reason: "empty_warehouse", currentQty: 0, priority: hasPriorityConfig ? (isPrioritised ? 6 : 8) : 4, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null });
+          suggestions.push({ locationName: loc.name, locationType: "warehouse", reason: "empty_warehouse", currentQty: 0, priority: hasPriorityConfig ? (isPrioritised ? 6 : 8) : 4, isPriorityAisle: isPrioritised, aislePriorityOrder: locPri?.order ?? null, matchedLevel: locPri?.level ?? null, locationId: loc.locationId });
         }
 
         suggestions.sort((a, b) => {
@@ -4604,10 +4614,15 @@ const putAwayRouter = router({
           return a.locationName.localeCompare(b.locationName);
         });
 
+        // Collect all pallet-level receiveItemIds from inventory for this SKU (for moveInventory)
+        const receiveItemIds = skuInventory.map((r) => r.receiveItemId).filter((id): id is number => typeof id === "number");
+
         return {
           sku,
           description: item.description,
           receivedQty: item.receivedQty,
+          receiverItemId: item.receiverItemId ?? null,
+          receiveItemIds,
           lotNumber: item.lotNumber,
           expirationDate: item.expirationDate,
           topSuggestion: suggestions[0] ?? null,
@@ -4621,6 +4636,62 @@ const putAwayRouter = router({
         rows,
         hasPriorityConfig,
       };
+    }),
+
+  /**
+   * Commit accepted put-aways to Extensiv by calling moveInventory for each row.
+   * Returns per-row results so the UI can show success/failure per SKU.
+   */
+  commitPutAways: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      facilityId: z.number(),
+      items: z.array(z.object({
+        sku: z.string(),
+        /** Pallet-level receiveItemIds from inventory — each gets its own move entry */
+        receiveItemIds: z.array(z.number()),
+        qty: z.number(),
+        locationId: z.number().optional(),
+        locationName: z.string(),
+        description: z.string().optional(),
+        lotNumber: z.string().optional(),
+        expirationDate: z.string().optional(),
+      })),
+      customerId: z.number().optional(),
+      customerName: z.string().optional(),
+      sessionId: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+      // Group items by destination locationId (skip items without a locationId — they can't be moved)
+      const byDest = new Map<number, { locationName: string; items: Array<{ receiveItemId: number; quantity: number }>; skus: string[] }>();
+      const skippedSkus: string[] = [];
+      for (const item of input.items) {
+        if (!item.locationId) { skippedSkus.push(item.sku); continue; }
+        if (!byDest.has(item.locationId)) {
+          byDest.set(item.locationId, { locationName: item.locationName, items: [], skus: [] });
+        }
+        // Each pallet gets its own move entry; split qty evenly across pallets
+        const qtyPerPallet = item.receiveItemIds.length > 0 ? Math.ceil(item.qty / item.receiveItemIds.length) : item.qty;
+        for (const rid of item.receiveItemIds) {
+          byDest.get(item.locationId)!.items.push({ receiveItemId: rid, quantity: qtyPerPallet });
+        }
+        byDest.get(item.locationId)!.skus.push(item.sku);
+      }
+
+      const results: Array<{ sku: string; locationName: string; success: boolean; error?: string }> = [];
+      for (const sku of skippedSkus) results.push({ sku, locationName: "", success: false, error: "No location ID — cannot move in Extensiv" });
+
+      for (const [locationId, dest] of Array.from(byDest.entries())) {
+        const moveResult = await moveInventory(config, locationId, dest.locationName, dest.items, input.facilityId);
+        for (const sku of dest.skus) {
+          results.push({ sku, locationName: dest.locationName, success: moveResult.success, error: moveResult.error });
+        }
+      }
+
+      return { results };
     }),
 });
 

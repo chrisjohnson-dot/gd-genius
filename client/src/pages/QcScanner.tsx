@@ -1069,10 +1069,24 @@ export default function QcScanner() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => { setPalletTypeForFirst(false); setPendingPalletType(null); setPalletTypeDialog(true); }}
+                  onClick={() => {
+                    if (!session) return;
+                    // Auto-reuse the last pallet's type — no dialog needed
+                    const lastPallet = pallets[pallets.length - 1];
+                    const reuseType = lastPallet?.palletType ?? null;
+                    if (reuseType) {
+                      addPallet.mutate({ sessionId: session.id, palletType: reuseType });
+                    } else {
+                      // No type set yet — fall back to dialog
+                      setPalletTypeForFirst(false);
+                      setPendingPalletType(null);
+                      setPalletTypeDialog(true);
+                    }
+                  }}
                   disabled={addPallet.isPending}
                 >
-                  <Plus className="w-4 h-4 mr-1" /> Add Pallet
+                  {addPallet.isPending ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+                  Add Pallet
                 </Button>
               </div>
             )}

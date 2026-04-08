@@ -1010,3 +1010,16 @@
 - [x] Redesign Package Sizes detail panel to show Envelopes / Boxes / Pallets categories
 - [x] Populate each category from all historically-used packaging across all clients
 - [x] Click-to-activate selection per client feeds the pack-out screen
+
+## Package Sizes — Custom Type per Category
+- [ ] Add inline "Add custom type" form at the bottom of each category drill-down (Envelopes / Boxes / Pallets)
+- [ ] Custom types are saved to client_packaging_enabled and immediately enabled for that client
+- [ ] Custom types appear in the global catalogue for other clients too
+
+## UX Fixes — Settings + Pack Slip + QC Pallet
+- [ ] Move High-Value SKUs supervisor pins and printer settings into Configuration section
+- [ ] Add inline reprint countdown duration setting on the Pack Slip screen
+- [ ] QC Scanner: auto-reuse last pallet type when adding additional pallets (skip type dialog)
+
+## Sidebar Reorganisation
+- [ ] Move Package Sizes, High-Value SKUs, Supervisor PINs, Printer Settings from Small Parcel into Configuration

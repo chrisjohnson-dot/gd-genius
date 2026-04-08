@@ -432,6 +432,101 @@ function CategoryDetailPanel({
           })}
         </div>
       )}
+
+      {/* Add custom type */}
+      <AddCustomTypeForm
+        configId={configId}
+        clientId={clientId}
+        clientName={clientName}
+        dbCategory={category === "pallet" ? "pallet" : "package_unit"}
+        categoryLabel={categoryLabel}
+        onAdded={(newName) => {
+          // Optimistically add to the enabled map so the new card shows immediately
+          const key = `${category === "pallet" ? "pallet" : "package_unit"}:${newName}`;
+          setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Add Custom Type Form ────────────────────────────────────────────────────
+function AddCustomTypeForm({
+  configId,
+  clientId,
+  clientName,
+  dbCategory,
+  categoryLabel,
+  onAdded,
+}: {
+  configId: number;
+  clientId: number;
+  clientName: string;
+  dbCategory: "package_unit" | "pallet";
+  categoryLabel: string;
+  onAdded: (typeName: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [typeName, setTypeName] = useState("");
+  const utils = trpc.useUtils();
+
+  const addMutation = trpc.smallParcel.setClientPackagingEnabled.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success(`"${variables.typeName}" added and enabled`);
+      onAdded(variables.typeName);
+      setTypeName("");
+      setOpen(false);
+      utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
+      utils.smallParcel.getAllPackagingTypeNames.invalidate({ configId });
+    },
+    onError: (err) => toast.error(`Failed: ${err.message}`),
+  });
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground py-3 px-4 rounded-xl border-2 border-dashed border-border hover:border-blue-400 hover:bg-muted/30 transition-all w-full"
+      >
+        <Plus className="w-4 h-4" />
+        Add custom {categoryLabel.toLowerCase().replace(/s$/, "")} type…
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-blue-400 bg-blue-50 dark:bg-blue-900/20">
+      <Plus className="w-4 h-4 text-blue-600 shrink-0" />
+      <Input
+        className="h-8 text-sm flex-1"
+        placeholder={`e.g. "Custom 12×10×8 Box"`}
+        value={typeName}
+        onChange={(e) => setTypeName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (!typeName.trim()) return;
+            addMutation.mutate({ configId, clientId, clientName, category: dbCategory, typeName: typeName.trim(), enabled: true });
+          }
+          if (e.key === "Escape") { setOpen(false); setTypeName(""); }
+        }}
+        autoFocus
+      />
+      <Button
+        size="sm"
+        className="h-8 shrink-0"
+        onClick={() => {
+          if (!typeName.trim()) { toast.error("Type name is required"); return; }
+          addMutation.mutate({ configId, clientId, clientName, category: dbCategory, typeName: typeName.trim(), enabled: true });
+        }}
+        disabled={addMutation.isPending || !typeName.trim()}
+      >
+        {addMutation.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+      </Button>
+      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setOpen(false); setTypeName(""); }}>
+        <X className="w-4 h-4" />
+      </Button>
     </div>
   );
 }

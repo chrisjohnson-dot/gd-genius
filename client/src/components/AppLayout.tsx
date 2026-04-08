@@ -71,10 +71,6 @@ const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
   { href: "/small-parcel/history", label: "Labels Printed", icon: ScrollText },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
-  { href: "/small-parcel/package-sizes", label: "Package Sizes", icon: Package },
-  { href: "/small-parcel/high-value-skus", label: "High-Value SKUs", icon: ShieldAlert },
-  { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs", icon: ShieldCheck },
-  { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
   { href: "/small-parcel/settings", label: "Settings", icon: Settings },
 ];
 
@@ -116,6 +112,10 @@ const configItems = [
   { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },
   { href: "/config/wh-location",          label: "WH Location Config",  icon: MapPin },
   { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
+  { href: "/small-parcel/package-sizes",  label: "Package Sizes",      icon: Package },
+  { href: "/small-parcel/high-value-skus", label: "High-Value SKUs",   icon: ShieldAlert },
+  { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs",   icon: ShieldCheck },
+  { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

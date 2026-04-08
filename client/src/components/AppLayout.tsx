@@ -71,9 +71,13 @@ const allocationItems = [
 const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
   { href: "/small-parcel/history", label: "Labels Printed", icon: ScrollText },
-  { href: "/small-parcel/packaging", label: "Packaging", icon: Boxes },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
   { href: "/small-parcel/settings", label: "Settings", icon: Settings },
+];
+
+const packagingItems = [
+  { href: "/small-parcel/package-sizes", label: "Package Sizes", icon: Package },
+  { href: "/small-parcel/packaging",     label: "Inventory",     icon: Boxes },
 ];
 
 const qcItems = [
@@ -114,7 +118,6 @@ const configItems = [
   { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },
   { href: "/config/wh-location",          label: "WH Location Config",  icon: MapPin },
   { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
-  { href: "/small-parcel/package-sizes",  label: "Package Sizes",      icon: Package },
   { href: "/small-parcel/high-value-skus", label: "High-Value SKUs",   icon: ShieldAlert },
   { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs",   icon: ShieldCheck },
   { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
@@ -415,6 +418,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Returns</p>
             <div className="space-y-0.5">
               {returnsItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
+              ))}
+            </div>
+          </div>
+
+          {/* Packaging section — between Returns and Audit */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Packaging</p>
+            <div className="space-y-0.5">
+              {packagingItems.map(item => (
                 <NavItem key={item.href} {...item} active={location === item.href} />
               ))}
             </div>

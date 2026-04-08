@@ -6914,6 +6914,97 @@ const smallParcelRouter = router({
       await updatePackagingReorderRequestStatus(input.id, input.configId, input.status, fulfilledAt);
       return { success: true };
     }),
+
+  /**
+   * Import packaging types from Extensiv across all clients and seed the
+   * packaging_inventory table (skipping items that already exist by name).
+   * Returns counts of inserted vs skipped items.
+   */
+  importPackagingFromExtensiv: protectedProcedure
+    .input(z.object({ configId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
+
+      const { getExtensivToken } = await import('./extensiv/client.js');
+      const { upsertPackagingInventoryItem, listPackagingInventory } = await import('./db.js');
+      const token = await getExtensivToken(config);
+      const baseUrl = config.baseUrl || 'https://secure-wms.com';
+
+      // Classify a package unit name into envelope / box / pallet
+      function classifyName(name: string): 'envelope' | 'box' | 'pallet' {
+        const l = name.toLowerCase();
+        if (l.includes('pallet') || l.includes('skid')) return 'pallet';
+        if (
+          l.includes('envelope') || l.includes('mailer') ||
+          l.includes('poly') || l.includes('flat') ||
+          l.includes('padded') || l.includes('bubble')
+        ) return 'envelope';
+        return 'box';
+      }
+
+      // Collect all customers first
+      interface RawCustomer { Id?: number; Name?: string; }
+      const custRes = await fetch(`${baseUrl}/customers?pgsiz=200&pgnum=1`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      const custData = custRes.ok ? (await custRes.json() as { ResourceList?: RawCustomer[] }) : { ResourceList: [] };
+      const customers: Array<{ id: number; name: string }> = (custData.ResourceList ?? [])
+        .filter((c) => c.Id)
+        .map((c) => ({ id: c.Id!, name: c.Name ?? String(c.Id) }));
+
+      // For each customer, fetch items and collect unique package unit / pallet names
+      const nameSet = new Map<string, 'envelope' | 'box' | 'pallet'>(); // name → category
+
+      interface ItemOptions {
+        PackageUnit?: { UnitIdentifier?: { Name?: string } };
+        Pallets?: { TypeIdentifier?: { Name?: string } };
+      }
+      interface RawItem { Options?: ItemOptions; }
+
+      for (const cust of customers) {
+        let pg = 1;
+        while (true) {
+          const res = await fetch(`${baseUrl}/customers/${cust.id}/items?pgsiz=200&pgnum=${pg}`, {
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+          });
+          if (!res.ok) break;
+          const data = await res.json() as { TotalResults?: number; ResourceList?: RawItem[] };
+          const list = data.ResourceList ?? [];
+          for (const item of list) {
+            const pkgName = item.Options?.PackageUnit?.UnitIdentifier?.Name;
+            if (pkgName && !nameSet.has(pkgName)) nameSet.set(pkgName, classifyName(pkgName));
+            const palName = item.Options?.Pallets?.TypeIdentifier?.Name;
+            if (palName && !nameSet.has(palName)) nameSet.set(palName, 'pallet');
+          }
+          if (list.length === 0 || list.length >= (data.TotalResults ?? 0)) break;
+          pg++;
+        }
+      }
+
+      // Load existing items to avoid duplicates
+      const existing = await listPackagingInventory(input.configId);
+      const existingNames = new Set(existing.map((e) => e.name.toLowerCase()));
+
+      let inserted = 0;
+      let skipped = 0;
+      for (const [name, category] of Array.from(nameSet.entries())) {
+        if (existingNames.has(name.toLowerCase())) { skipped++; continue; }
+        await upsertPackagingInventoryItem({
+          configId: input.configId,
+          name,
+          category,
+          unit: 'each',
+          onHandQty: 0,
+          minStockLevel: 0,
+          weeklyConsumption: 0,
+          notes: null,
+        } as any);
+        inserted++;
+      }
+
+      return { inserted, skipped, total: nameSet.size };
+    }),
 });
 
 // Re-export appRouter augmented with all feature routers including SLA

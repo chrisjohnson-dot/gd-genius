@@ -45,6 +45,7 @@ import {
   Info,
   Lightbulb,
   RefreshCw,
+  Download,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -877,6 +878,19 @@ export default function PackagingInventory() {
   );
 
   const utils = trpc.useUtils();
+
+  const importMutation = trpc.smallParcel.importPackagingFromExtensiv.useMutation({
+    onSuccess: (result) => {
+      utils.smallParcel.listPackagingInventory.invalidate({ configId });
+      if (result.inserted > 0) {
+        toast.success(`Imported ${result.inserted} packaging type${result.inserted !== 1 ? 's' : ''} from Extensiv${result.skipped > 0 ? ` (${result.skipped} already existed)` : ''}`);
+      } else {
+        toast.info(`All ${result.total} Extensiv packaging types already exist in inventory — nothing new to import.`);
+      }
+    },
+    onError: (e) => toast.error(`Import failed: ${e.message}`),
+  });
+
   const deleteItem_ = trpc.smallParcel.deletePackagingInventoryItem.useMutation({
     onSuccess: () => {
       utils.smallParcel.listPackagingInventory.invalidate({ configId });
@@ -909,9 +923,23 @@ export default function PackagingInventory() {
           <h1 className="text-xl font-semibold text-slate-100">Packaging Inventory</h1>
           <p className="text-sm text-slate-400 mt-0.5">Track on-hand stock, burn rate, and submit reorder requests</p>
         </div>
-        <Button onClick={() => setAddOpen(true)} size="sm" className="gap-1.5">
-          <Plus className="w-4 h-4" /> Add Item
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 bg-transparent border-white/20 text-slate-300 hover:bg-white/5"
+            onClick={() => configId > 0 && importMutation.mutate({ configId })}
+            disabled={importMutation.isPending || configId === 0}
+          >
+            {importMutation.isPending
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Download className="w-4 h-4" />}
+            {importMutation.isPending ? "Importing…" : "Import from Extensiv"}
+          </Button>
+          <Button onClick={() => setAddOpen(true)} size="sm" className="gap-1.5">
+            <Plus className="w-4 h-4" /> Add Item
+          </Button>
+        </div>
       </div>
 
       {/* Summary cards */}

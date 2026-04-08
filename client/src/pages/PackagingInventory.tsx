@@ -43,6 +43,8 @@ import {
   TrendingDown,
   Flame,
   Info,
+  Lightbulb,
+  RefreshCw,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -403,10 +405,34 @@ function OnHandCell({ item, configId }: { item: InventoryItem; configId: number 
 
 // ─── Reorder Request Dialog ───────────────────────────────────────────────────
 
+/**
+ * Calculates the suggested reorder quantity for a 4-week replenishment cycle.
+ * Formula: max(1, weeklyConsumption × 4 − onHandQty)
+ * If weeklyConsumption is unknown, falls back to max(1, minStockLevel − onHandQty).
+ */
+export function suggestedReorderQty(item: {
+  onHandQty: number;
+  weeklyConsumption: number;
+  minStockLevel: number;
+}): { qty: number; hasBurnRate: boolean } {
+  if (item.weeklyConsumption > 0) {
+    const target = item.weeklyConsumption * 4;
+    const needed = target - item.onHandQty;
+    return { qty: Math.max(1, needed), hasBurnRate: true };
+  }
+  // Fallback: top up to min stock level
+  const needed = item.minStockLevel - item.onHandQty;
+  return { qty: Math.max(1, needed), hasBurnRate: false };
+}
+
 function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; configId: number; onClose: () => void }) {
   const utils = trpc.useUtils();
-  const [qty, setQty] = useState(String(Math.max(item.minStockLevel - item.onHandQty, 1)));
+
+  // Compute suggestion once on mount
+  const suggestion = suggestedReorderQty(item);
+  const [qty, setQty] = useState(String(suggestion.qty));
   const [notes, setNotes] = useState("");
+  const [qtyEdited, setQtyEdited] = useState(false);
 
   const create = trpc.smallParcel.createPackagingReorderRequest.useMutation({
     onSuccess: () => {
@@ -418,6 +444,13 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
   });
 
   const days = daysRemaining(item);
+  const parsedQty = parseInt(qty) || 1;
+  const isSuggested = !qtyEdited || parsedQty === suggestion.qty;
+
+  function resetToSuggested() {
+    setQty(String(suggestion.qty));
+    setQtyEdited(false);
+  }
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -426,6 +459,7 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
           <DialogTitle>Request Reorder</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {/* Item summary */}
           <div className="rounded-lg bg-[#1e2130] border border-white/10 px-4 py-3 space-y-1.5">
             <p className="text-sm font-medium text-slate-200">{item.name}</p>
             <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -438,16 +472,55 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
               )}
             </div>
           </div>
+
+          {/* Auto-suggest callout */}
+          <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-4 py-3 space-y-1">
+            <div className="flex items-center gap-1.5 text-indigo-400 text-xs font-semibold">
+              <Lightbulb className="w-3.5 h-3.5" />
+              {suggestion.hasBurnRate ? "4-Week Replenishment Suggestion" : "Min-Stock Suggestion"}
+            </div>
+            {suggestion.hasBurnRate ? (
+              <p className="text-xs text-slate-400">
+                <span className="font-mono text-slate-300">{item.weeklyConsumption}</span> {item.unit}/wk × 4 weeks
+                {" = "}<span className="font-mono text-slate-300">{item.weeklyConsumption * 4}</span> target
+                {" − "}<span className="font-mono text-slate-300">{item.onHandQty}</span> on hand
+                {" = "}<span className="font-mono text-indigo-300 font-semibold">{suggestion.qty}</span> to order
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                No weekly consumption set — suggesting enough to reach min stock level
+                {" ("}<span className="font-mono text-indigo-300 font-semibold">{suggestion.qty}</span>{" units)"}
+              </p>
+            )}
+          </div>
+
+          {/* Quantity input */}
           <div>
-            <label className="text-sm font-medium text-slate-300 mb-1 block">Quantity to Order</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium text-slate-300">Quantity to Order</label>
+              {qtyEdited && parsedQty !== suggestion.qty && (
+                <button
+                  onClick={resetToSuggested}
+                  className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> Reset to suggested ({suggestion.qty})
+                </button>
+              )}
+            </div>
             <Input
               type="number"
               min={1}
               value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              className="bg-[#1e2130] border-white/10"
+              onChange={(e) => { setQty(e.target.value); setQtyEdited(true); }}
+              className={`bg-[#1e2130] border-white/10 ${isSuggested ? "ring-1 ring-indigo-500/30" : ""}`}
             />
+            {parsedQty !== suggestion.qty && qtyEdited && (
+              <p className="text-[11px] text-slate-500 mt-1">
+                Suggested: {suggestion.qty} — you entered {parsedQty}
+              </p>
+            )}
           </div>
+
           <div>
             <label className="text-sm font-medium text-slate-300 mb-1 block">Notes (optional)</label>
             <Input
@@ -462,7 +535,7 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={create.isPending}>Cancel</Button>
           <Button
-            onClick={() => create.mutate({ inventoryItemId: item.id, configId, requestedQty: parseInt(qty) || 1, notes: notes.trim() || undefined })}
+            onClick={() => create.mutate({ inventoryItemId: item.id, configId, requestedQty: parsedQty, notes: notes.trim() || undefined })}
             disabled={create.isPending}
           >
             {create.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-1" />}

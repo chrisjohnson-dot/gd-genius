@@ -4420,12 +4420,14 @@ const putAwayRouter = router({
         priorityOrder: z.number().int().min(1),
       })),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const updatedBy = ctx.user?.name ?? undefined;
       await savePutAwayPriorities(
         input.configId,
         input.facilityId,
         input.customerId,
-        input.entries
+        input.entries,
+        updatedBy
       );
       return { success: true };
     }),

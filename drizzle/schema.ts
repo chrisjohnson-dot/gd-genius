@@ -690,6 +690,8 @@ export const putAwayPriority = mysqlTable("put_away_priority", {
   /** Lower number = higher priority (1 = first pick) */
   priorityOrder: int("priority_order").notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  /** Name of the supervisor who last saved this priority config */
+  updatedBy: varchar("updated_by", { length: 255 }),
 });
 export type PutAwayPriority = typeof putAwayPriority.$inferSelect;
 export type InsertPutAwayPriority = typeof putAwayPriority.$inferInsert;

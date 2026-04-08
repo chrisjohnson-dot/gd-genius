@@ -237,6 +237,7 @@ export default function PutAwayPriorityConfig() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [priorityEntries, setPriorityEntries] = useState<PriorityEntry[]>([]);
   const [isDirty, setIsDirty] = useState(false);
+  const [lastSavedMeta, setLastSavedMeta] = useState<{ by: string | null; at: number } | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -291,8 +292,16 @@ export default function PutAwayPriorityConfig() {
       }));
       setPriorityEntries(loaded);
       setIsDirty(false);
+      // Extract last-saved metadata from the first row (all rows share the same save event)
+      const first = priorityQuery.data[0];
+      if (first) {
+        setLastSavedMeta({ by: first.updatedBy ?? null, at: first.updatedAt });
+      } else {
+        setLastSavedMeta(null);
+      }
     } else if (!priorityQuery.isLoading && selectedCustomerId) {
       setPriorityEntries([]);
+      setLastSavedMeta(null);
       setIsDirty(false);
     }
   }, [priorityQuery.data, priorityQuery.isLoading, selectedCustomerId]);
@@ -783,6 +792,18 @@ export default function PutAwayPriorityConfig() {
               <p className="text-xs text-muted-foreground mt-1">
                 Drag rows to reorder. Priority 1 is suggested first.
               </p>
+              {lastSavedMeta && !isDirty && (
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <span className="text-[11px] text-muted-foreground/70">
+                    Last saved{lastSavedMeta.by ? ` by ${lastSavedMeta.by}` : ""}
+                    {" · "}
+                    {new Date(lastSavedMeta.at).toLocaleString([], {
+                      month: "short", day: "numeric", year: "numeric",
+                      hour: "2-digit", minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <PriorityList

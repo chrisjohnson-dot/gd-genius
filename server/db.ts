@@ -2322,7 +2322,8 @@ export async function savePutAwayPriorities(
   configId: number,
   facilityId: number,
   customerId: number,
-  entries: Array<{ aisle: string; level: string; priorityOrder: number }>
+  entries: Array<{ aisle: string; level: string; priorityOrder: number }>,
+  updatedBy?: string
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -2346,6 +2347,7 @@ export async function savePutAwayPriorities(
     level: e.level,
     priorityOrder: e.priorityOrder,
     updatedAt: now,
+    updatedBy: updatedBy ?? null,
   }));
   await db.insert(putAwayPriority).values(rows);
 }

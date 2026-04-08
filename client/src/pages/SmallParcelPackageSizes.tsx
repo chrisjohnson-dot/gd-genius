@@ -357,6 +357,13 @@ function CategoryDetailPanel({
   const categoryIcon = category === "envelope" ? <Mail className="w-4 h-4" /> : category === "box" ? <BoxIcon className="w-4 h-4" /> : <Layers className="w-4 h-4" />;
   const enabledCount = items.filter((i) => enabledMap.get(`${i.dbCategory}:${i.typeName}`) ?? false).length;
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((i) => i.typeName.toLowerCase().includes(q) || i.subtext.toLowerCase().includes(q));
+  }, [items, searchQuery]);
+
   if (extLoading || enabledLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
@@ -402,14 +409,35 @@ function CategoryDetailPanel({
         <strong>Click to enable/disable</strong> — enabled types appear as buttons in Pack &amp; Ship and QC.
       </div>
 
+      {/* Search bar — shown for all categories, most useful for Boxes */}
+      {items.length > 5 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-9 h-9 text-sm"
+            placeholder={`Search ${categoryLabel.toLowerCase()}…`}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => setSearchQuery("")}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Items */}
-      {items.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <p className="text-sm text-muted-foreground py-6 text-center">
-          No {categoryLabel.toLowerCase()} found for this client or in the global catalogue.
+          {searchQuery ? `No results for "${searchQuery}"` : `No ${categoryLabel.toLowerCase()} found for this client or in the global catalogue.`}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {items.map((item) => {
+          {filteredItems.map((item) => {
             const key = `${item.dbCategory}:${item.typeName}`;
             const isEnabled = enabledMap.get(key) ?? false;
             const isPending = pendingKeys.has(key);

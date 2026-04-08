@@ -1026,3 +1026,6 @@
 
 ## QC Scanner — Pallet Type Switcher
 - [ ] One-click pallet type switcher on the type badge to correct wrong pallet type mid-session
+
+## Package Sizes — Boxes Search Bar
+- [x] Add search bar inside Boxes category drill-down to filter carton types by name

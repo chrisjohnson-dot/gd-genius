@@ -1029,3 +1029,10 @@
 
 ## Package Sizes — Boxes Search Bar
 - [x] Add search bar inside Boxes category drill-down to filter carton types by name
+
+## Packaging Inventory Module
+- [ ] DB schema: packaging_inventory (item name, category, on_hand qty, unit, min_stock_level, last_updated) + packaging_reorder_requests (item_id, requested_qty, notes, requested_by, status, created_at)
+- [ ] tRPC procedures: list/update inventory, weekly consumption calc, submit reorder request, list requests
+- [ ] Packaging Inventory page: stock table with low-stock badges, weekly burn rate, weeks-on-hand
+- [ ] Reorder request form: production staff submit qty + notes, notification sent to accounting
+- [ ] Sidebar nav entry between Returns and Audit Log

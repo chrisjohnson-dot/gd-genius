@@ -6823,6 +6823,96 @@ const smallParcelRouter = router({
       const { getAllDistinctPackagingTypeNames } = await import('./db.js');
       return getAllDistinctPackagingTypeNames(input.configId);
     }),
+
+  // ─── Packaging Inventory ─────────────────────────────────────────────────
+  listPackagingInventory: protectedProcedure
+    .input(z.object({ configId: z.number().int() }))
+    .query(async ({ input }) => {
+      const { listPackagingInventory } = await import('./db.js');
+      return listPackagingInventory(input.configId);
+    }),
+
+  upsertPackagingInventoryItem: protectedProcedure
+    .input(z.object({
+      id: z.number().int().optional(),
+      configId: z.number().int(),
+      name: z.string().min(1),
+      category: z.enum(['envelope', 'box', 'pallet']),
+      unit: z.string().default('each'),
+      onHandQty: z.number().int().min(0),
+      minStockLevel: z.number().int().min(0),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { upsertPackagingInventoryItem } = await import('./db.js');
+      return upsertPackagingInventoryItem(input as any);
+    }),
+
+  deletePackagingInventoryItem: protectedProcedure
+    .input(z.object({ id: z.number().int(), configId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const { deletePackagingInventoryItem } = await import('./db.js');
+      await deletePackagingInventoryItem(input.id, input.configId);
+      return { success: true };
+    }),
+
+  updatePackagingOnHand: protectedProcedure
+    .input(z.object({ id: z.number().int(), configId: z.number().int(), onHandQty: z.number().int().min(0) }))
+    .mutation(async ({ input }) => {
+      const { updatePackagingOnHand } = await import('./db.js');
+      await updatePackagingOnHand(input.id, input.configId, input.onHandQty);
+      return { success: true };
+    }),
+
+  listPackagingReorderRequests: protectedProcedure
+    .input(z.object({ configId: z.number().int() }))
+    .query(async ({ input }) => {
+      const { listPackagingReorderRequests } = await import('./db.js');
+      return listPackagingReorderRequests(input.configId);
+    }),
+
+  createPackagingReorderRequest: protectedProcedure
+    .input(z.object({
+      inventoryItemId: z.number().int(),
+      configId: z.number().int(),
+      requestedQty: z.number().int().min(1),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const { createPackagingReorderRequest, listPackagingInventory } = await import('./db.js');
+      const { notifyOwner } = await import('./_core/notification.js');
+      const items = await listPackagingInventory(input.configId);
+      const item = items.find((i) => i.id === input.inventoryItemId);
+      const itemName = item?.name ?? `Item #${input.inventoryItemId}`;
+      const request = await createPackagingReorderRequest({
+        inventoryItemId: input.inventoryItemId,
+        configId: input.configId,
+        requestedQty: input.requestedQty,
+        notes: input.notes ?? null,
+        requestedByUserId: ctx.user.id,
+        requestedByName: ctx.user.name ?? ctx.user.email ?? 'Unknown',
+        status: 'pending',
+      });
+      // Notify accounting (owner)
+      await notifyOwner({
+        title: `📦 Packaging Reorder Request — ${itemName}`,
+        content: `${ctx.user.name ?? ctx.user.email} has requested a reorder of **${input.requestedQty}** units of **${itemName}**.\n\n${input.notes ? `Notes: ${input.notes}` : 'No additional notes.'}`,
+      });
+      return request;
+    }),
+
+  updatePackagingReorderRequestStatus: protectedProcedure
+    .input(z.object({
+      id: z.number().int(),
+      configId: z.number().int(),
+      status: z.enum(['pending', 'ordered', 'received', 'cancelled']),
+    }))
+    .mutation(async ({ input }) => {
+      const { updatePackagingReorderRequestStatus } = await import('./db.js');
+      const fulfilledAt = input.status === 'received' ? new Date() : undefined;
+      await updatePackagingReorderRequestStatus(input.id, input.configId, input.status, fulfilledAt);
+      return { success: true };
+    }),
 });
 
 // Re-export appRouter augmented with all feature routers including SLA

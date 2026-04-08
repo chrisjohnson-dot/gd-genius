@@ -111,6 +111,8 @@ import {
 import type { PutAwayScan, InsertPutAwayScan } from "../drizzle/schema";
 import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItemConfirmation } from "../drizzle/schema";
 import type { PutAwayPriority, InsertPutAwayPriority } from "../drizzle/schema";
+import type { PackagingInventoryItem, InsertPackagingInventoryItem, PackagingReorderRequest, InsertPackagingReorderRequest } from "../drizzle/schema";
+import { packagingInventory, packagingReorderRequests } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -3694,4 +3696,108 @@ export async function getAllDistinctPackagingTypeNames(
     .groupBy(clientPackagingEnabled.category, clientPackagingEnabled.typeName)
     .orderBy(clientPackagingEnabled.category, clientPackagingEnabled.typeName);
   return rows;
+}
+
+// ─── Packaging Inventory ──────────────────────────────────────────────────────
+
+export async function listPackagingInventory(configId: number): Promise<PackagingInventoryItem[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(packagingInventory)
+    .where(eq(packagingInventory.configId, configId))
+    .orderBy(packagingInventory.category, packagingInventory.name);
+}
+
+export async function upsertPackagingInventoryItem(
+  data: InsertPackagingInventoryItem
+): Promise<PackagingInventoryItem> {
+  const db = await getDb();
+  if (data.id) {
+    await db!
+      .update(packagingInventory)
+      .set({
+        name: data.name,
+        category: data.category,
+        unit: data.unit,
+        onHandQty: data.onHandQty,
+        minStockLevel: data.minStockLevel,
+        notes: data.notes,
+      })
+      .where(and(eq(packagingInventory.id, data.id), eq(packagingInventory.configId, data.configId)));
+    const [updated] = await db!
+      .select()
+      .from(packagingInventory)
+      .where(eq(packagingInventory.id, data.id));
+    return updated;
+  } else {
+    const [result] = await db!.insert(packagingInventory).values(data);
+    const [inserted] = await db!
+      .select()
+      .from(packagingInventory)
+      .where(eq(packagingInventory.id, (result as { insertId: number }).insertId));
+    return inserted;
+  }
+}
+
+export async function deletePackagingInventoryItem(id: number, configId: number): Promise<void> {
+  const db = await getDb();
+  await db!
+    .delete(packagingInventory)
+    .where(and(eq(packagingInventory.id, id), eq(packagingInventory.configId, configId)));
+}
+
+export async function updatePackagingOnHand(id: number, configId: number, onHandQty: number): Promise<void> {
+  const db = await getDb();
+  await db!
+    .update(packagingInventory)
+    .set({ onHandQty })
+    .where(and(eq(packagingInventory.id, id), eq(packagingInventory.configId, configId)));
+}
+
+// ─── Packaging Reorder Requests ───────────────────────────────────────────────
+
+export async function listPackagingReorderRequests(configId: number): Promise<PackagingReorderRequest[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(packagingReorderRequests)
+    .where(eq(packagingReorderRequests.configId, configId))
+    .orderBy(desc(packagingReorderRequests.createdAt));
+}
+
+export async function createPackagingReorderRequest(
+  data: InsertPackagingReorderRequest
+): Promise<PackagingReorderRequest> {
+  const db = await getDb();
+  const [result] = await db!.insert(packagingReorderRequests).values(data);
+  const [inserted] = await db!
+    .select()
+    .from(packagingReorderRequests)
+    .where(eq(packagingReorderRequests.id, (result as { insertId: number }).insertId));
+  return inserted;
+}
+
+export async function updatePackagingReorderRequestStatus(
+  id: number,
+  configId: number,
+  status: "pending" | "ordered" | "received" | "cancelled",
+  fulfilledAt?: Date
+): Promise<void> {
+  const db = await getDb();
+  await db!
+    .update(packagingReorderRequests)
+    .set({ status, fulfilledAt: fulfilledAt ?? null })
+    .where(and(eq(packagingReorderRequests.id, id), eq(packagingReorderRequests.configId, configId)));
+}
+
+// Weekly consumption: count how many pack-ship sessions used each packaging type in the last 4 weeks
+// We approximate from small_parcel_audit_log entries (one per shipment) weighted by package type
+// Since we don't track per-shipment box usage yet, we return a placeholder burn rate from manual input
+export async function getPackagingWeeklyUsage(
+  configId: number,
+  itemId: number
+): Promise<{ weeksAgo: number; usedQty: number }[]> {
+  // Placeholder: return empty — burn rate will be manually set or derived from future usage tracking
+  return [];
 }

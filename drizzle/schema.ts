@@ -1299,3 +1299,35 @@ export const clientPackagingEnabled = mysqlTable(
 );
 export type ClientPackagingEnabled = typeof clientPackagingEnabled.$inferSelect;
 export type InsertClientPackagingEnabled = typeof clientPackagingEnabled.$inferInsert;
+
+// ─── Packaging Inventory ──────────────────────────────────────────────────────
+export const packagingInventory = mysqlTable("packaging_inventory", {
+  id: int("id").autoincrement().primaryKey(),
+  configId: int("configId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  category: mysqlEnum("category", ["envelope", "box", "pallet"]).notNull(),
+  unit: varchar("unit", { length: 64 }).notNull().default("each"),
+  onHandQty: int("onHandQty").notNull().default(0),
+  minStockLevel: int("minStockLevel").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PackagingInventoryItem = typeof packagingInventory.$inferSelect;
+export type InsertPackagingInventoryItem = typeof packagingInventory.$inferInsert;
+
+export const packagingReorderRequests = mysqlTable("packaging_reorder_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  inventoryItemId: int("inventoryItemId").notNull(),
+  configId: int("configId").notNull(),
+  requestedQty: int("requestedQty").notNull(),
+  notes: text("notes"),
+  requestedByUserId: int("requestedByUserId").notNull(),
+  requestedByName: varchar("requestedByName", { length: 255 }).notNull(),
+  status: mysqlEnum("status", ["pending", "ordered", "received", "cancelled"]).notNull().default("pending"),
+  fulfilledAt: timestamp("fulfilledAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PackagingReorderRequest = typeof packagingReorderRequests.$inferSelect;
+export type InsertPackagingReorderRequest = typeof packagingReorderRequests.$inferInsert;

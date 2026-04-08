@@ -43,6 +43,7 @@ import {
   Printer,
   ShieldAlert,
   Settings,
+  Boxes,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -70,6 +71,7 @@ const allocationItems = [
 const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
   { href: "/small-parcel/history", label: "Labels Printed", icon: ScrollText },
+  { href: "/small-parcel/packaging", label: "Packaging", icon: Boxes },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
   { href: "/small-parcel/settings", label: "Settings", icon: Settings },
 ];

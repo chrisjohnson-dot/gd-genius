@@ -115,6 +115,7 @@ import {
   createPutAwayScan,
   listPutAwayScans,
   listPutAwayScansByConfig,
+  listPutAwayList,
   clearPutAwaySession,
   upsertReceiptItemConfirmation,
   getReceiptItemConfirmations,
@@ -4633,9 +4634,36 @@ const putAwayRouter = router({
       return {
         transactionId: input.transactionId,
         referenceNum: receiver.referenceNum,
+        facilityName: receiver.readOnly?.facilityIdentifier?.name ?? "",
         rows,
         hasPriorityConfig,
       };
+    }),
+
+  /**
+   * Return the put-away list: all SKUs moved (via Genius or operator scan),
+   * joined with their MU labels for display.
+   */
+  putAwayList: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      facilityId: z.number().optional(),
+      customerId: z.number().optional(),
+      dateFrom: z.string().optional(), // ISO date string
+      dateTo: z.string().optional(),   // ISO date string
+      commitMode: z.enum(["extensiv", "scan", "all"]).default("all"),
+      limit: z.number().min(1).max(1000).default(500),
+    }))
+    .query(async ({ input }) => {
+      return listPutAwayList({
+        configId: input.configId,
+        facilityId: input.facilityId,
+        customerId: input.customerId,
+        dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
+        dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
+        commitMode: input.commitMode,
+        limit: input.limit,
+      });
     }),
 
   /**
@@ -4646,6 +4674,10 @@ const putAwayRouter = router({
     .input(z.object({
       configId: z.number(),
       facilityId: z.number(),
+      /** Extensiv receiver transactionId — used to link to MU labels */
+      transactionId: z.number().optional(),
+      /** Human-readable warehouse name (cached for display) */
+      facilityName: z.string().optional(),
       items: z.array(z.object({
         sku: z.string(),
         /** Pallet-level receiveItemIds from inventory — each gets its own move entry */
@@ -4664,6 +4696,12 @@ const putAwayRouter = router({
     .mutation(async ({ input }) => {
       const config = await getExtensivConfigById(input.configId);
       if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+      // Build a lookup map from sku -> item metadata for scan logging
+      const itemMeta = new Map<string, { description?: string; lotNumber?: string; expirationDate?: string; qty: number }>();
+      for (const item of input.items) {
+        itemMeta.set(item.sku, { description: item.description, lotNumber: item.lotNumber, expirationDate: item.expirationDate, qty: item.qty });
+      }
 
       // Group items by destination locationId (skip items without a locationId — they can't be moved)
       const byDest = new Map<number, { locationName: string; items: Array<{ receiveItemId: number; quantity: number }>; skus: string[] }>();
@@ -4688,6 +4726,26 @@ const putAwayRouter = router({
         const moveResult = await moveInventory(config, locationId, dest.locationName, dest.items, input.facilityId);
         for (const sku of dest.skus) {
           results.push({ sku, locationName: dest.locationName, success: moveResult.success, error: moveResult.error });
+          // Log successful moves to put_away_scans for the Put Away List
+          if (moveResult.success && input.sessionId) {
+            const meta = itemMeta.get(sku);
+            await createPutAwayScan({
+              configId: input.configId,
+              facilityId: input.facilityId,
+              facilityName: input.facilityName ?? undefined,
+              customerId: input.customerId ?? 0,
+              customerName: input.customerName ?? undefined,
+              sku,
+              description: meta?.description ?? undefined,
+              lotNumber: meta?.lotNumber ?? undefined,
+              expirationDate: meta?.expirationDate ?? undefined,
+              confirmedLocation: dest.locationName,
+              qty: meta?.qty ?? 1,
+              sessionId: input.sessionId,
+              transactionId: input.transactionId ?? undefined,
+              commitMode: "extensiv",
+            } as Parameters<typeof createPutAwayScan>[0]);
+          }
         }
       }
 

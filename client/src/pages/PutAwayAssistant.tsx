@@ -551,6 +551,8 @@ function RecommendationSession({
       try {
         await commitPutAwaysMutation.mutateAsync({
           configId, facilityId, customerId,
+          transactionId,
+          facilityName: batchQuery.data?.facilityName || undefined,
           items: [{
             sku: row.sku,
             description: row.description,
@@ -575,7 +577,7 @@ function RecommendationSession({
     if (success > 0) toast.success(`Genius updated ${success} location${success !== 1 ? "s" : ""} in Extensiv.`);
     if (failed > 0) toast.error(`${failed} item${failed !== 1 ? "s" : ""} failed to update in Extensiv.`);
     utils.putAway.sessionScans.invalidate({ sessionId });
-  }, [rows, rowStates, selectedLocations, configId, facilityId, customerId, customerName, sessionId, commitPutAwaysMutation, utils]);
+  }, [rows, rowStates, selectedLocations, configId, facilityId, customerId, customerName, sessionId, transactionId, batchQuery.data, commitPutAwaysMutation, utils]);
 
   // ── Retry failed rows ────────────────────────────────────────────────────────
   const retryFailedRows = useCallback(async () => {
@@ -603,6 +605,8 @@ function RecommendationSession({
       try {
         await commitPutAwaysMutation.mutateAsync({
           configId, facilityId, customerId,
+          transactionId,
+          facilityName: batchQuery.data?.facilityName || undefined,
           items: [{
             sku: row.sku,
             description: row.description,
@@ -627,7 +631,7 @@ function RecommendationSession({
     if (success > 0) toast.success(`Retried ${success} location${success !== 1 ? "s" : ""} — Extensiv updated.`);
     if (failed > 0) toast.error(`${failed} item${failed !== 1 ? "s" : ""} still failed after retry.`);
     utils.putAway.sessionScans.invalidate({ sessionId });
-  }, [commitProgress, rows, selectedLocations, configId, facilityId, customerId, customerName, sessionId, commitPutAwaysMutation, utils]);
+  }, [commitProgress, rows, selectedLocations, configId, facilityId, customerId, customerName, sessionId, transactionId, batchQuery.data, commitPutAwaysMutation, utils]);
 
   const pendingCount = rows.filter((r) => getRowState(r.sku) === "pending" && r.topSuggestion).length;
   const acceptedCount = rows.filter((r) => getRowState(r.sku) === "accepted").length;

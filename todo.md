@@ -961,3 +961,13 @@
 - [ ] 15. Location Config: remove API configuration selector; go straight to customer details; add location config functionality to individual customers under Allocation Rules
 - [ ] 16. Put Away Config / Location Priority Config: filter customers by selected warehouse; show only aisles+levels (not all locations); add new WH Location Config for warehouse numbering setup
 - [ ] 17. Rename "Auto-Run Schedule" to "Auto-Run Allocation" (nav + page title)
+
+## Put Away List
+- [x] Add transactionId, facilityName, commitMode columns to put_away_scans table
+- [x] Update commitPutAways to log successful Extensiv moves to put_away_scans
+- [x] Add listPutAwayList DB helper (joins put_away_scans with mu_labels)
+- [x] Add putAwayList tRPC procedure with date/mode/facility/customer filters
+- [x] Build PutAwayList page with search, date range, mode filter, print button
+- [x] Add "Put Away List" to sidebar nav under Receiving
+- [x] Add /receiving/put-away/list route in App.tsx
+- [x] Pass transactionId and facilityName from batchSuggest into commitPutAways and retryFailedRows

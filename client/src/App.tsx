@@ -34,6 +34,7 @@ import FlaggedScans from "@/pages/FlaggedScans";
 import PalletScanner from "@/pages/PalletScanner";
 import ReceivingDashboard from "@/pages/ReceivingDashboard";
 import PutAwayAssistant from "@/pages/PutAwayAssistant";
+import PutAwayList from "@/pages/PutAwayList";
 import ReceiptConfirmation from "@/pages/ReceiptConfirmation";
 import PutAwayPriorityConfig from "@/pages/PutAwayPriorityConfig";
 import AuditProductionDocuments from "@/pages/AuditProductionDocuments";
@@ -103,6 +104,7 @@ function AppRoutes() {
         <Route path="/receiving" component={ReceivingDashboard} />
         <Route path="/receiving/confirm" component={ReceiptConfirmation} />
         <Route path="/receiving/put-away" component={PutAwayAssistant} />
+        <Route path="/receiving/put-away/list" component={PutAwayList} />
         <Route path="/receiving/put-away/priority" component={PutAwayPriorityConfig} />
         <Route path="/audit/production-documents" component={AuditProductionDocuments} />
         <Route path="/audit/images" component={AuditImages} />

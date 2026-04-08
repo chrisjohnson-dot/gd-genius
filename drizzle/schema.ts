@@ -637,6 +637,12 @@ export const putAwayScans = mysqlTable("put_away_scans", {
   suggestedLocationType: mysqlEnum("suggestedLocationType", ["pick_face", "warehouse", "staging"]),
   qty: int("qty").default(1).notNull(),
   sessionId: varchar("sessionId", { length: 64 }).notNull(), // client-generated UUID
+  /** Extensiv receiver transactionId — used to join with mu_labels */
+  transactionId: int("transactionId"),
+  /** Human-readable warehouse name (cached) */
+  facilityName: varchar("facilityName", { length: 256 }),
+  /** How the put-away was committed: 'extensiv' = Genius moved it, 'scan' = operator will scan */
+  commitMode: mysqlEnum("commitMode", ["extensiv", "scan"]).default("scan"),
   scannedAt: timestamp("scannedAt").defaultNow().notNull(),
 });
 

@@ -3506,3 +3506,78 @@ export async function setSmallParcelSetting(key: string, value: string): Promise
     .values({ settingKey: key, settingValue: value })
     .onDuplicateKeyUpdate({ set: { settingValue: value } });
 }
+
+// ─── Put Away List ─────────────────────────────────────────────────────────────
+// Returns put-away records joined with their MU labels for the Put Away List page.
+
+export type PutAwayListRow = PutAwayScan & {
+  muLabels: Array<{ muLabel: string; muType: string; qty: number }>;
+};
+
+export async function listPutAwayList(params: {
+  configId: number;
+  facilityId?: number;
+  customerId?: number;
+  dateFrom?: Date;
+  dateTo?: Date;
+  commitMode?: "extensiv" | "scan" | "all";
+  limit?: number;
+}): Promise<PutAwayListRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions: SQL[] = [eq(putAwayScans.configId, params.configId)];
+  if (params.facilityId) conditions.push(eq(putAwayScans.facilityId, params.facilityId));
+  if (params.customerId) conditions.push(eq(putAwayScans.customerId, params.customerId));
+  if (params.dateFrom) conditions.push(gte(putAwayScans.scannedAt, params.dateFrom));
+  if (params.dateTo) conditions.push(lte(putAwayScans.scannedAt, params.dateTo));
+  if (params.commitMode && params.commitMode !== "all") {
+    conditions.push(eq(putAwayScans.commitMode, params.commitMode));
+  }
+
+  const scans = await db
+    .select()
+    .from(putAwayScans)
+    .where(and(...conditions))
+    .orderBy(desc(putAwayScans.scannedAt))
+    .limit(params.limit ?? 500);
+
+  if (scans.length === 0) return [];
+
+  // Fetch MU labels for all transactionIds present in the scans
+  const txIds = Array.from(new Set(scans.map((s) => s.transactionId).filter((id): id is number => id != null)));
+  let muRows: Array<{ transactionId: number; receiverItemId: number; sku: string; muLabel: string; muType: string; qty: number }> = [];
+  if (txIds.length > 0) {
+    muRows = await db
+      .select({
+        transactionId: muLabels.transactionId,
+        receiverItemId: muLabels.receiverItemId,
+        sku: muLabels.sku,
+        muLabel: muLabels.muLabel,
+        muType: muLabels.muType,
+        qty: muLabels.qty,
+      })
+      .from(muLabels)
+      .where(
+        and(
+          eq(muLabels.configId, params.configId),
+          inArray(muLabels.transactionId, txIds)
+        )
+      );
+  }
+
+  // Index MU rows by transactionId+sku for fast lookup
+  const muIndex = new Map<string, Array<{ muLabel: string; muType: string; qty: number }>>();
+  for (const mu of muRows) {
+    const key = `${mu.transactionId}:${mu.sku}`;
+    if (!muIndex.has(key)) muIndex.set(key, []);
+    muIndex.get(key)!.push({ muLabel: mu.muLabel, muType: mu.muType, qty: mu.qty });
+  }
+
+  return scans.map((scan) => ({
+    ...scan,
+    muLabels: scan.transactionId != null
+      ? (muIndex.get(`${scan.transactionId}:${scan.sku}`) ?? [])
+      : [],
+  }));
+}

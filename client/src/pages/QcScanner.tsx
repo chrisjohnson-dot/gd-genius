@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
@@ -1117,16 +1118,47 @@ export default function QcScanner() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
-                          {pallet.palletType ? (
-                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${palletTypeBadgeClass(pallet.palletType)}`}>
-                              {palletTypeLabel(pallet.palletType)}
-                            </span>
-                          ) : (
-                            <button
-                              className="text-xs text-amber-600 underline hover:text-amber-700"
-                              onClick={() => { setPalletTypeForFirst(false); setPendingPalletType(null); setPalletTypeDialog(true); }}
-                            >Set type</button>
-                          )}
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              {pallet.palletType ? (
+                                <button
+                                  className={`px-2 py-0.5 rounded text-xs font-semibold cursor-pointer hover:opacity-80 transition-opacity ${palletTypeBadgeClass(pallet.palletType)}`}
+                                  title="Click to change pallet type"
+                                >
+                                  {palletTypeLabel(pallet.palletType)} ✎
+                                </button>
+                              ) : (
+                                <button className="text-xs text-amber-600 underline hover:text-amber-700">
+                                  Set type
+                                </button>
+                              )}
+                            </PopoverTrigger>
+                            <PopoverContent className="w-52 p-2" align="start">
+                              <p className="text-xs text-muted-foreground mb-2 font-medium">Change pallet type</p>
+                              <div className="flex flex-col gap-1">
+                                {PALLET_TYPES.map((pt) => (
+                                  <button
+                                    key={pt.value}
+                                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs font-medium w-full text-left hover:opacity-90 transition-opacity ${
+                                      pallet.palletType === pt.value ? pt.color + " ring-1 ring-current" : "hover:bg-muted"
+                                    }`}
+                                    onClick={() => {
+                                      if (pallet.palletType !== pt.value) {
+                                        updatePalletType.mutate({ palletId: pallet.id, palletType: pt.value });
+                                        toast.success(`Pallet ${pallet.palletNumber} → ${pt.label}`);
+                                      }
+                                    }}
+                                    disabled={updatePalletType.isPending}
+                                  >
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.color}`}>
+                                      {pt.value === "customer_owned" ? "CUST" : pt.value === "gd_owned" ? "GD" : "CHEP"}
+                                    </span>
+                                    {pt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         {/* UPC assignment section */}
                         <div className="flex flex-col items-end gap-1 min-w-0">

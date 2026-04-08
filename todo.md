@@ -1023,3 +1023,6 @@
 
 ## Sidebar Reorganisation
 - [ ] Move Package Sizes, High-Value SKUs, Supervisor PINs, Printer Settings from Small Parcel into Configuration
+
+## QC Scanner — Pallet Type Switcher
+- [ ] One-click pallet type switcher on the type badge to correct wrong pallet type mid-session

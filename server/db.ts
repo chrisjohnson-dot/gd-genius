@@ -3722,6 +3722,7 @@ export async function upsertPackagingInventoryItem(
         unit: data.unit,
         onHandQty: data.onHandQty,
         minStockLevel: data.minStockLevel,
+        weeklyConsumption: data.weeklyConsumption ?? 0,
         notes: data.notes,
       })
       .where(and(eq(packagingInventory.id, data.id), eq(packagingInventory.configId, data.configId)));

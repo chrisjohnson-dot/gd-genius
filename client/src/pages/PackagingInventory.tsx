@@ -25,6 +25,11 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Plus,
   Pencil,
   Trash2,
@@ -36,6 +41,8 @@ import {
   Clock,
   XCircle,
   TrendingDown,
+  Flame,
+  Info,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -48,6 +55,7 @@ type InventoryItem = {
   unit: string;
   onHandQty: number;
   minStockLevel: number;
+  weeklyConsumption: number;
   notes?: string | null;
   updatedAt: Date;
   createdAt: Date;
@@ -67,7 +75,81 @@ type ReorderRequest = {
   updatedAt: Date;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Burn Rate Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Returns days of stock remaining based on weekly consumption.
+ * Returns null if weeklyConsumption is 0 (unknown burn rate).
+ */
+function daysRemaining(item: InventoryItem): number | null {
+  if (!item.weeklyConsumption || item.weeklyConsumption === 0) return null;
+  return Math.round((item.onHandQty / item.weeklyConsumption) * 7);
+}
+
+/**
+ * Urgency level based on days remaining:
+ *   critical  < 7 days  (less than 1 week)
+ *   warning   < 14 days (less than 2 weeks)
+ *   ok        >= 14 days
+ */
+function burnUrgency(days: number | null): "unknown" | "critical" | "warning" | "ok" {
+  if (days === null) return "unknown";
+  if (days < 7) return "critical";
+  if (days < 14) return "warning";
+  return "ok";
+}
+
+function DaysRemainingBadge({ item }: { item: InventoryItem }) {
+  const days = daysRemaining(item);
+  const urgency = burnUrgency(days);
+
+  if (urgency === "unknown") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-slate-600 text-xs flex items-center gap-1 cursor-default">
+            <Info className="w-3 h-3" /> —
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Set weekly consumption to calculate days remaining</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  const label = days === 0 ? "0 days" : days === 1 ? "1 day" : `${days} days`;
+
+  if (urgency === "critical") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-0.5 cursor-default">
+            <Flame className="w-3 h-3" /> {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Critical: less than 1 week of stock remaining</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (urgency === "warning") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5 cursor-default">
+            <AlertTriangle className="w-3 h-3" /> {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Low: less than 2 weeks of stock remaining</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <span className="text-xs text-emerald-400 font-mono">{label}</span>
+  );
+}
+
+// ─── General Helpers ──────────────────────────────────────────────────────────
 
 function categoryLabel(cat: string) {
   if (cat === "envelope") return "Envelope";
@@ -83,7 +165,6 @@ function categoryColor(cat: string) {
 
 function stockStatus(item: InventoryItem): "ok" | "low" | "critical" {
   if (item.onHandQty < item.minStockLevel) return "critical";
-  // Warn when on-hand is less than 2× min stock (a rough "low" proxy)
   if (item.minStockLevel > 0 && item.onHandQty < item.minStockLevel * 2) return "low";
   return "ok";
 }
@@ -123,6 +204,7 @@ function ItemDialog({
   const [unit, setUnit] = useState(item?.unit ?? "each");
   const [onHandQty, setOnHandQty] = useState(String(item?.onHandQty ?? 0));
   const [minStockLevel, setMinStockLevel] = useState(String(item?.minStockLevel ?? 0));
+  const [weeklyConsumption, setWeeklyConsumption] = useState(String(item?.weeklyConsumption ?? 0));
   const [notes, setNotes] = useState(item?.notes ?? "");
 
   const upsert = trpc.smallParcel.upsertPackagingInventoryItem.useMutation({
@@ -144,9 +226,18 @@ function ItemDialog({
       unit: unit.trim() || "each",
       onHandQty: parseInt(onHandQty) || 0,
       minStockLevel: parseInt(minStockLevel) || 0,
+      weeklyConsumption: parseInt(weeklyConsumption) || 0,
       notes: notes.trim() || undefined,
     });
   }
+
+  // Live preview of days remaining
+  const previewDays = useMemo(() => {
+    const wc = parseInt(weeklyConsumption) || 0;
+    const oh = parseInt(onHandQty) || 0;
+    if (!wc) return null;
+    return Math.round((oh / wc) * 7);
+  }, [onHandQty, weeklyConsumption]);
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -210,6 +301,33 @@ function ItemDialog({
               />
             </div>
           </div>
+
+          {/* Burn rate section */}
+          <div className="rounded-lg border border-white/10 bg-[#1e2130] px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-slate-300 block">Weekly Consumption</label>
+                <p className="text-[11px] text-slate-500 mt-0.5">How many {unit || "units"} used per week on average</p>
+              </div>
+              {previewDays !== null && (
+                <div className="text-right">
+                  <p className="text-[11px] text-slate-500">Est. days remaining</p>
+                  <p className={`text-sm font-bold ${previewDays < 7 ? "text-red-400" : previewDays < 14 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {previewDays} days
+                  </p>
+                </div>
+              )}
+            </div>
+            <Input
+              type="number"
+              min={0}
+              value={weeklyConsumption}
+              onChange={(e) => setWeeklyConsumption(e.target.value)}
+              placeholder="0 = unknown"
+              className="bg-[#161925] border-white/10"
+            />
+          </div>
+
           <div>
             <label className="text-sm font-medium text-slate-300 mb-1 block">Notes (optional)</label>
             <Input
@@ -234,13 +352,7 @@ function ItemDialog({
 
 // ─── Inline On-Hand Editor ────────────────────────────────────────────────────
 
-function OnHandCell({
-  item,
-  configId,
-}: {
-  item: InventoryItem;
-  configId: number;
-}) {
+function OnHandCell({ item, configId }: { item: InventoryItem; configId: number }) {
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(item.onHandQty));
@@ -291,15 +403,7 @@ function OnHandCell({
 
 // ─── Reorder Request Dialog ───────────────────────────────────────────────────
 
-function ReorderDialog({
-  item,
-  configId,
-  onClose,
-}: {
-  item: InventoryItem;
-  configId: number;
-  onClose: () => void;
-}) {
+function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; configId: number; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [qty, setQty] = useState(String(Math.max(item.minStockLevel - item.onHandQty, 1)));
   const [notes, setNotes] = useState("");
@@ -313,6 +417,8 @@ function ReorderDialog({
     onError: (e) => toast.error(e.message),
   });
 
+  const days = daysRemaining(item);
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-sm">
@@ -320,12 +426,17 @@ function ReorderDialog({
           <DialogTitle>Request Reorder</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="rounded-lg bg-[#1e2130] border border-white/10 px-4 py-3">
+          <div className="rounded-lg bg-[#1e2130] border border-white/10 px-4 py-3 space-y-1.5">
             <p className="text-sm font-medium text-slate-200">{item.name}</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              On hand: <span className="text-slate-300 font-mono">{item.onHandQty}</span> {item.unit} &nbsp;·&nbsp;
-              Min: <span className="text-slate-300 font-mono">{item.minStockLevel}</span> {item.unit}
-            </p>
+            <div className="flex items-center gap-3 text-xs text-slate-400">
+              <span>On hand: <span className="text-slate-300 font-mono">{item.onHandQty}</span> {item.unit}</span>
+              <span>Min: <span className="text-slate-300 font-mono">{item.minStockLevel}</span></span>
+              {days !== null && (
+                <span className={days < 7 ? "text-red-400 font-semibold" : days < 14 ? "text-amber-400" : "text-emerald-400"}>
+                  ~{days}d left
+                </span>
+              )}
+            </div>
           </div>
           <div>
             <label className="text-sm font-medium text-slate-300 mb-1 block">Quantity to Order</label>
@@ -346,13 +457,14 @@ function ReorderDialog({
               className="bg-[#1e2130] border-white/10"
             />
           </div>
-          <p className="text-xs text-slate-500">
-            Submitting this request will notify accounting to place the order.
-          </p>
+          <p className="text-xs text-slate-500">Submitting this request will notify accounting to place the order.</p>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={create.isPending}>Cancel</Button>
-          <Button onClick={() => create.mutate({ inventoryItemId: item.id, configId, requestedQty: parseInt(qty) || 1, notes: notes.trim() || undefined })} disabled={create.isPending}>
+          <Button
+            onClick={() => create.mutate({ inventoryItemId: item.id, configId, requestedQty: parseInt(qty) || 1, notes: notes.trim() || undefined })}
+            disabled={create.isPending}
+          >
             {create.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-1" />}
             Submit Request
           </Button>
@@ -394,8 +506,27 @@ function StockTable({
             <th className="text-left py-2 px-3 font-medium">Name</th>
             <th className="text-left py-2 px-3 font-medium">Category</th>
             <th className="text-right py-2 px-3 font-medium">On Hand</th>
-            <th className="text-right py-2 px-3 font-medium">Unit</th>
             <th className="text-right py-2 px-3 font-medium">Min Stock</th>
+            <th className="text-right py-2 px-3 font-medium">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default inline-flex items-center gap-1">
+                    Wkly Use <Info className="w-3 h-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Average units consumed per week</TooltipContent>
+              </Tooltip>
+            </th>
+            <th className="text-left py-2 px-3 font-medium">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default inline-flex items-center gap-1">
+                    Days Left <Info className="w-3 h-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Estimated days of stock remaining at current burn rate</TooltipContent>
+              </Tooltip>
+            </th>
             <th className="text-left py-2 px-3 font-medium">Status</th>
             <th className="text-right py-2 px-3 font-medium">Actions</th>
           </tr>
@@ -403,17 +534,28 @@ function StockTable({
         <tbody>
           {items.map((item) => {
             const status = stockStatus(item);
+            const days = daysRemaining(item);
+            const urgency = burnUrgency(days);
+            const rowHighlight =
+              urgency === "critical" || status === "critical"
+                ? "bg-red-500/5"
+                : urgency === "warning" || status === "low"
+                ? "bg-amber-500/5"
+                : "";
+
             return (
               <tr
                 key={item.id}
-                className={`border-b border-white/5 hover:bg-white/[0.02] transition-colors ${
-                  status === "critical" ? "bg-red-500/5" : status === "low" ? "bg-amber-500/5" : ""
-                }`}
+                className={`border-b border-white/5 hover:bg-white/[0.02] transition-colors ${rowHighlight}`}
               >
                 <td className="py-2.5 px-3">
                   <div className="flex items-center gap-2">
-                    {status === "critical" && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-                    {status === "low" && <TrendingDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                    {(urgency === "critical" || status === "critical") && (
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    )}
+                    {(urgency === "warning" || status === "low") && urgency !== "critical" && status !== "critical" && (
+                      <TrendingDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    )}
                     <span className="text-slate-200 font-medium">{item.name}</span>
                   </div>
                   {item.notes && <p className="text-[11px] text-slate-500 mt-0.5 pl-5">{item.notes}</p>}
@@ -424,10 +566,27 @@ function StockTable({
                   </Badge>
                 </td>
                 <td className="py-2.5 px-3 text-right">
-                  <OnHandCell item={item} configId={configId} />
+                  <div className="flex items-center justify-end gap-1">
+                    <OnHandCell item={item} configId={configId} />
+                    <span className="text-slate-500 text-xs">{item.unit}</span>
+                  </div>
                 </td>
-                <td className="py-2.5 px-3 text-right text-slate-400 text-xs">{item.unit}</td>
                 <td className="py-2.5 px-3 text-right font-mono text-slate-400">{item.minStockLevel}</td>
+                <td className="py-2.5 px-3 text-right">
+                  {item.weeklyConsumption > 0 ? (
+                    <span className="font-mono text-slate-300 text-sm">{item.weeklyConsumption}</span>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-slate-600 text-xs cursor-default">not set</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit item to set weekly consumption</TooltipContent>
+                    </Tooltip>
+                  )}
+                </td>
+                <td className="py-2.5 px-3">
+                  <DaysRemainingBadge item={item} />
+                </td>
                 <td className="py-2.5 px-3">{statusBadge(status)}</td>
                 <td className="py-2.5 px-3">
                   <div className="flex items-center justify-end gap-1">
@@ -664,13 +823,18 @@ export default function PackagingInventory() {
   const lowCount = items.filter((i) => stockStatus(i) === "low").length;
   const openRequests = requests.filter((r) => r.status === "pending" || r.status === "ordered").length;
 
+  // Burn-rate urgency counts
+  const burnCritical = items.filter((i) => burnUrgency(daysRemaining(i)) === "critical").length;
+  const burnWarning = items.filter((i) => burnUrgency(daysRemaining(i)) === "warning").length;
+  const totalAlerts = Math.max(criticalCount, burnCritical) + Math.max(lowCount, burnWarning);
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-100">Packaging Inventory</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Track on-hand stock and submit reorder requests</p>
+          <p className="text-sm text-slate-400 mt-0.5">Track on-hand stock, burn rate, and submit reorder requests</p>
         </div>
         <Button onClick={() => setAddOpen(true)} size="sm" className="gap-1.5">
           <Plus className="w-4 h-4" /> Add Item
@@ -678,7 +842,7 @@ export default function PackagingInventory() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="rounded-xl bg-[#1a1d2e] border border-white/10 px-5 py-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Items</p>
           <p className="text-2xl font-bold text-slate-100">{items.length}</p>
@@ -686,6 +850,19 @@ export default function PackagingInventory() {
         <div className={`rounded-xl border px-5 py-4 ${criticalCount > 0 ? "bg-red-500/10 border-red-500/20" : "bg-[#1a1d2e] border-white/10"}`}>
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Below Min Stock</p>
           <p className={`text-2xl font-bold ${criticalCount > 0 ? "text-red-400" : "text-slate-100"}`}>{criticalCount}</p>
+        </div>
+        <div className={`rounded-xl border px-5 py-4 ${burnCritical > 0 ? "bg-red-500/10 border-red-500/20" : burnWarning > 0 ? "bg-amber-500/10 border-amber-500/20" : "bg-[#1a1d2e] border-white/10"}`}>
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Burn Rate Alerts</p>
+          <p className={`text-2xl font-bold ${burnCritical > 0 ? "text-red-400" : burnWarning > 0 ? "text-amber-400" : "text-slate-100"}`}>
+            {burnCritical + burnWarning}
+          </p>
+          {(burnCritical > 0 || burnWarning > 0) && (
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {burnCritical > 0 && `${burnCritical} critical`}
+              {burnCritical > 0 && burnWarning > 0 && " · "}
+              {burnWarning > 0 && `${burnWarning} low`}
+            </p>
+          )}
         </div>
         <div className={`rounded-xl border px-5 py-4 ${openRequests > 0 ? "bg-amber-500/10 border-amber-500/20" : "bg-[#1a1d2e] border-white/10"}`}>
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Open Reorder Requests</p>
@@ -699,9 +876,9 @@ export default function PackagingInventory() {
           <TabsList className="bg-[#1a1d2e] border border-white/10">
             <TabsTrigger value="stock" className="data-[state=active]:bg-white/10">
               Stock
-              {(criticalCount > 0 || lowCount > 0) && (
+              {totalAlerts > 0 && (
                 <span className="ml-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
-                  {criticalCount + lowCount}
+                  {totalAlerts}
                 </span>
               )}
             </TabsTrigger>
@@ -743,7 +920,7 @@ export default function PackagingInventory() {
               </div>
             ) : (
               <StockTable
-                items={filteredItems}
+                items={filteredItems as InventoryItem[]}
                 configId={configId}
                 onEdit={setEditItem}
                 onDelete={setDeleteItem}
@@ -767,15 +944,9 @@ export default function PackagingInventory() {
       </Tabs>
 
       {/* Dialogs */}
-      {addOpen && (
-        <ItemDialog configId={configId} onClose={() => setAddOpen(false)} />
-      )}
-      {editItem && (
-        <ItemDialog configId={configId} item={editItem} onClose={() => setEditItem(null)} />
-      )}
-      {reorderItem && (
-        <ReorderDialog item={reorderItem} configId={configId} onClose={() => setReorderItem(null)} />
-      )}
+      {addOpen && <ItemDialog configId={configId} onClose={() => setAddOpen(false)} />}
+      {editItem && <ItemDialog configId={configId} item={editItem} onClose={() => setEditItem(null)} />}
+      {reorderItem && <ReorderDialog item={reorderItem} configId={configId} onClose={() => setReorderItem(null)} />}
 
       {/* Delete confirmation */}
       {deleteItem && (

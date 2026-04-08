@@ -1309,6 +1309,7 @@ export const packagingInventory = mysqlTable("packaging_inventory", {
   unit: varchar("unit", { length: 64 }).notNull().default("each"),
   onHandQty: int("onHandQty").notNull().default(0),
   minStockLevel: int("minStockLevel").notNull().default(0),
+  weeklyConsumption: int("weeklyConsumption").notNull().default(0),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

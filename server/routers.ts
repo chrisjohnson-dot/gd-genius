@@ -6841,6 +6841,7 @@ const smallParcelRouter = router({
       unit: z.string().default('each'),
       onHandQty: z.number().int().min(0),
       minStockLevel: z.number().int().min(0),
+      weeklyConsumption: z.number().int().min(0).default(0),
       notes: z.string().optional(),
     }))
     .mutation(async ({ input }) => {

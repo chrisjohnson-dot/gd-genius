@@ -294,6 +294,12 @@ function RateWizardCarrierPanel() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<AccountFormState>(EMPTY_ACCT);
   const [showCreds, setShowCreds] = useState(false);
+  const [seedLocationId, setSeedLocationId] = useState("COL");
+
+  const seed = trpc.rateWizard.seedDefaultCarrierAccounts.useMutation({
+    onSuccess: (res) => { toast.success(res.message); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
 
   const upsert = trpc.rateWizard.upsertCarrierAccount.useMutation({
     onSuccess: () => { toast.success("Carrier account saved."); setDialogOpen(false); refetch(); },
@@ -370,11 +376,33 @@ function RateWizardCarrierPanel() {
         <Button size="sm" onClick={openCreate} className="gap-1.5"><Plus className="h-3.5 w-3.5" /> Add Carrier Account</Button>
       </div>
 
+      {/* Seed from environment banner */}
+      <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 p-3">
+        <Zap className="h-4 w-4 text-amber-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Auto-seed from environment credentials</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400">Creates one account per carrier using the API keys already configured in the system. You only need to add the origin address afterwards.</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Select value={seedLocationId} onValueChange={setSeedLocationId}>
+            <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {LOCATIONS.filter((l) => l.id !== "OTHER").map((l) => (
+                <SelectItem key={l.id} value={l.id} className="text-xs">{l.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300" onClick={() => seed.mutate({ locationId: seedLocationId })} disabled={seed.isPending}>
+            {seed.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />} Seed Accounts
+          </Button>
+        </div>
+      </div>
+
       {(accounts as CarrierAccount[]).length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Wand2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
           <p className="text-sm font-medium">No carrier accounts configured</p>
-          <p className="text-xs mt-1">Add carrier API credentials from your transportation office to get started.</p>
+          <p className="text-xs mt-1">Select a location above and click <strong>Seed Accounts</strong> to auto-configure all 5 carriers from environment credentials.</p>
         </div>
       ) : (
         <div className="space-y-4">

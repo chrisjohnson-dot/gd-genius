@@ -7793,7 +7793,85 @@ const rateWizardRouter = router({
       return { success: true };
     }),
 
-  // ── Customer Shipping Rules ───────────────────────────────────────────────
+  // ── Seed default carrier accounts from environment credentials ────────────
+  seedDefaultCarrierAccounts: protectedProcedure
+    .input(z.object({ locationId: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      type CarrierSeed = { carrierCode: string; name: string; credentialJson: string };
+      const seeds: CarrierSeed[] = [];
+
+      if (process.env.USPS_EHUB_API_KEY) {
+        seeds.push({
+          carrierCode: "usps",
+          name: "USPS (eHub)",
+          credentialJson: JSON.stringify({ apiKey: process.env.USPS_EHUB_API_KEY }),
+        });
+      }
+      if (process.env.FEDEX_USER_KEY && process.env.FEDEX_PASSWORD) {
+        seeds.push({
+          carrierCode: "fedex",
+          name: "FedEx",
+          credentialJson: JSON.stringify({ userKey: process.env.FEDEX_USER_KEY, password: process.env.FEDEX_PASSWORD }),
+        });
+      }
+      if (process.env.UPS_REST_TOKEN) {
+        seeds.push({
+          carrierCode: "ups",
+          name: "UPS",
+          credentialJson: JSON.stringify({ accessToken: process.env.UPS_REST_TOKEN }),
+        });
+      }
+      if (process.env.ONTRAC_ACCOUNT && process.env.ONTRAC_PASSWORD) {
+        seeds.push({
+          carrierCode: "ontrac",
+          name: "OnTrac",
+          credentialJson: JSON.stringify({ account: process.env.ONTRAC_ACCOUNT, password: process.env.ONTRAC_PASSWORD }),
+        });
+      }
+      if (process.env.DHL_USER_KEY && process.env.DHL_PASSWORD) {
+        seeds.push({
+          carrierCode: "dhl",
+          name: "DHL",
+          credentialJson: JSON.stringify({ userKey: process.env.DHL_USER_KEY, password: process.env.DHL_PASSWORD }),
+        });
+      }
+
+      if (seeds.length === 0) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No carrier credentials found in environment" });
+      }
+
+      // Only insert carriers that don't already exist for this location
+      const existing = await listCarrierAccounts(input.locationId);
+      const existingCodes = new Set(existing.map((a) => a.carrierCode));
+      const toInsert = seeds.filter((s) => !existingCodes.has(s.carrierCode));
+
+      const created: string[] = [];
+      for (const seed of toInsert) {
+        await upsertCarrierAccount({
+          carrierCode: seed.carrierCode,
+          name: seed.name,
+          locationId: input.locationId,
+          country: "US",
+          credentials: seed.credentialJson,
+          isActive: true,
+          notes: "Auto-seeded from environment credentials. Please update the origin address.",
+        });
+        created.push(seed.name);
+      }
+
+      return {
+        created,
+        skipped: seeds.filter((s) => existingCodes.has(s.carrierCode)).map((s) => s.name),
+        message: created.length > 0
+          ? `Created ${created.length} carrier account(s): ${created.join(", ")}. Please update the origin address for each.`
+          : "All carrier accounts already exist for this location.",
+      };
+    }),
+
+  // ── Customer Shipping Rules ────────────────────────────────────────────────
   listCustomerShippingRules: protectedProcedure
     .input(z.object({ configId: z.number() }))
     .query(async ({ input }) => listCustomerShippingRules(input.configId)),

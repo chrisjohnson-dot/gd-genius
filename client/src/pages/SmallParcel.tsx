@@ -32,6 +32,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { RateCard, type RateCardInput, type RateRow } from "@/components/RateCard";
 import { Link } from "wouter";
 import {
@@ -1500,9 +1501,9 @@ export default function SmallParcel() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
 
-  // ── Autobagger mode: lock a package size across orders ─────────────────────
-  const [autobaggerActive, setAutobaggerActive] = useState(false);
-  const [lockedSize, setLockedSize] = useState<PackageSize | null>(null);
+  // ── Autobagger mode: lock a package size across orders (persisted to localStorage)
+  const [autobaggerActive, setAutobaggerActive] = useLocalStorage<boolean>("sp_autobagger_active", false);
+  const [lockedSize, setLockedSize] = useLocalStorage<PackageSize | null>("sp_autobagger_locked_size", null);
 
   // Get the first available config
   const { data: configs } = trpc.config.list.useQuery();

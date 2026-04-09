@@ -8160,7 +8160,18 @@ const rateWizardRouter = router({
         return a.totalCost - b.totalCost;
       });
 
-      const autoSelected = rates.find((r) => r.isPreferred) ?? rates.find((r) => r.isCheapest) ?? null;
+      // Auto-select: preferred carrier first, then cheapest SLA-compliant rate, then absolute cheapest
+      const autoSelected = (() => {
+        const preferred = rates.find((r) => r.isPreferred);
+        if (preferred) return preferred;
+        if (maxTransitDays !== null) {
+          const slaCompliant = rates.filter((r) => r.transitDays <= maxTransitDays);
+          if (slaCompliant.length > 0) {
+            return slaCompliant.reduce((a, b) => a.totalCost <= b.totalCost ? a : b);
+          }
+        }
+        return rates.find((r) => r.isCheapest) ?? null;
+      })();
 
       return {
         rates,

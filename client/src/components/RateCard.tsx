@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Zap, DollarSign, Clock, Star, AlertTriangle, CheckCircle2,
   RefreshCw, ChevronUp, ChevronDown, Loader2, Info, Package,
-  Truck, ArrowRight, RotateCcw,
+  Truck, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -109,6 +109,34 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
     }
   );
 
+  const data = ratesQuery.data;
+  const rates: RateRow[] = data?.rates ?? [];
+  const maxTransitDays = data?.customerRule?.maxTransitDays ?? null;
+
+  // Auto-select: preferred carrier first, then cheapest rate that meets SLA, then absolute cheapest
+  const autoSelectedRateId = useMemo(() => {
+    if (!data?.autoSelectedRateId) return null;
+    // If there's a preferred carrier, use the server's auto-selected rate
+    if (data.customerRule?.preferredCarrier) return data.autoSelectedRateId;
+    // Otherwise pick cheapest rate that meets maxTransitDays SLA
+    if (maxTransitDays !== null) {
+      const slaCompliant = rates.filter((r) => r.transitDays <= maxTransitDays);
+      if (slaCompliant.length > 0) {
+        const cheapestCompliant = slaCompliant.reduce((a, b) => a.totalCost <= b.totalCost ? a : b);
+        return cheapestCompliant.rateId;
+      }
+    }
+    return data.autoSelectedRateId;
+  }, [data, rates, maxTransitDays]);
+
+  // Auto-select the best SLA-compliant rate when data first loads
+  useEffect(() => {
+    if (ratesQuery.data && autoSelectedRateId && !selectedRateId) {
+      setSelectedRateId(autoSelectedRateId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSelectedRateId]);
+
   // Snapshot the input whenever fresh data arrives
   useEffect(() => {
     if (ratesQuery.data) {
@@ -143,9 +171,6 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
       toast.error(`Error confirming rate: ${err.message}`);
     },
   });
-
-  const data = ratesQuery.data;
-  const rates: RateRow[] = data?.rates ?? [];
 
   // Unique carriers in results
   const carriers = useMemo(() => Array.from(new Set(rates.map((r) => r.carrierCode))), [rates]);
@@ -307,13 +332,24 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
           </div>
         )}
 
-        {/* Customer rule notice */}
-        {data.customerRule?.preferredCarrier && (
+        {/* SLA requirement banner */}
+        {maxTransitDays !== null && (
+          <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs">
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              <strong>SLA: max {maxTransitDays}-day transit</strong> — only services meeting this requirement are shown.
+              {data.customerRule?.preferredCarrier && (
+                <> Preferred carrier: <strong>{data.customerRule.preferredCarrier.toUpperCase()}</strong>.</>
+              )}
+            </span>
+          </div>
+        )}
+
+        {/* Customer preferred carrier notice (no SLA set) */}
+        {!maxTransitDays && data.customerRule?.preferredCarrier && (
           <div className="flex items-center gap-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs">
             <Star className="w-3.5 h-3.5 shrink-0" />
-            <span>Preferred carrier for this customer: <strong>{data.customerRule.preferredCarrier.toUpperCase()}</strong>
-              {data.customerRule.maxTransitDays ? ` · max ${data.customerRule.maxTransitDays}d transit` : ""}
-            </span>
+            <span>Preferred carrier for this customer: <strong>{data.customerRule.preferredCarrier.toUpperCase()}</strong></span>
           </div>
         )}
 
@@ -460,6 +496,24 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
                     {/* Badges */}
                     <td className="px-2 py-2.5 text-center">
                       <div className="flex items-center justify-center gap-1">
+                        {/* SLA compliance badge */}
+                        {maxTransitDays !== null && (
+                          rate.transitDays <= maxTransitDays ? (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              </TooltipTrigger>
+                              <TooltipContent>Meets {maxTransitDays}-day SLA</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                              </TooltipTrigger>
+                              <TooltipContent>Exceeds {maxTransitDays}-day SLA requirement</TooltipContent>
+                            </Tooltip>
+                          )
+                        )}
                         {rate.isCheapest && (
                           <Tooltip>
                             <TooltipTrigger>

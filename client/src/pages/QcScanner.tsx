@@ -1072,17 +1072,13 @@ export default function QcScanner() {
                   variant="outline"
                   onClick={() => {
                     if (!session) return;
-                    // Auto-reuse the last pallet's type — no dialog needed
-                    const lastPallet = pallets[pallets.length - 1];
-                    const reuseType = lastPallet?.palletType ?? null;
-                    if (reuseType) {
-                      addPallet.mutate({ sessionId: session.id, palletType: reuseType });
-                    } else {
-                      // No type set yet — fall back to dialog
-                      setPalletTypeForFirst(false);
-                      setPendingPalletType(null);
-                      setPalletTypeDialog(true);
-                    }
+                    // Reuse the pallet type from any existing pallet in this session.
+                    // Search all pallets (not just the last) in case some are untyped.
+                    const reuseType =
+                      pallets.find((p) => p.palletType)?.palletType ??
+                      pallets[pallets.length - 1]?.palletType ??
+                      "gd_owned"; // safe default — never show the type dialog for subsequent pallets
+                    addPallet.mutate({ sessionId: session.id, palletType: reuseType });
                   }}
                   disabled={addPallet.isPending}
                 >

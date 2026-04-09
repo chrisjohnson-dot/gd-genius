@@ -42,7 +42,6 @@ import {
   Package,
   Printer,
   ShieldAlert,
-  Settings,
   Boxes,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
@@ -72,7 +71,6 @@ const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
   { href: "/small-parcel/history", label: "Labels Printed", icon: ScrollText },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
-  { href: "/small-parcel/settings", label: "Settings", icon: Settings },
 ];
 
 const packagingItems = [

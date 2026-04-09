@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -407,17 +407,16 @@ function OnHandCell({ item, configId }: { item: InventoryItem; configId: number 
 // ─── Reorder Request Dialog ───────────────────────────────────────────────────
 
 /**
- * Calculates the suggested reorder quantity for a 4-week replenishment cycle.
- * Formula: max(1, weeklyConsumption × 4 − onHandQty)
+ * Calculates the suggested reorder quantity for a configurable replenishment window.
+ * Formula: max(1, weeklyConsumption × weeks − onHandQty)
  * If weeklyConsumption is unknown, falls back to max(1, minStockLevel − onHandQty).
  */
-export function suggestedReorderQty(item: {
-  onHandQty: number;
-  weeklyConsumption: number;
-  minStockLevel: number;
-}): { qty: number; hasBurnRate: boolean } {
+export function suggestedReorderQty(
+  item: { onHandQty: number; weeklyConsumption: number; minStockLevel: number },
+  weeks = 4
+): { qty: number; hasBurnRate: boolean } {
   if (item.weeklyConsumption > 0) {
-    const target = item.weeklyConsumption * 4;
+    const target = item.weeklyConsumption * weeks;
     const needed = target - item.onHandQty;
     return { qty: Math.max(1, needed), hasBurnRate: true };
   }
@@ -429,11 +428,24 @@ export function suggestedReorderQty(item: {
 function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; configId: number; onClose: () => void }) {
   const utils = trpc.useUtils();
 
-  // Compute suggestion once on mount
-  const suggestion = suggestedReorderQty(item);
+  // Fetch the global replenishment window setting
+  const { data: allSettings } = trpc.smallParcel.getAllSettings.useQuery();
+  const replenishmentWeeks = allSettings?.packagingReplenishmentWeeks ?? 4;
+
+  // Compute suggestion (re-derived when weeks setting loads)
+  const suggestion = suggestedReorderQty(item, replenishmentWeeks);
   const [qty, setQty] = useState(String(suggestion.qty));
   const [notes, setNotes] = useState("");
   const [qtyEdited, setQtyEdited] = useState(false);
+
+  // Sync qty when the setting loads for the first time
+  const [settingLoaded, setSettingLoaded] = useState(false);
+  useEffect(() => {
+    if (allSettings && !settingLoaded) {
+      setQty(String(suggestedReorderQty(item, allSettings.packagingReplenishmentWeeks).qty));
+      setSettingLoaded(true);
+    }
+  }, [allSettings, settingLoaded, item]);
 
   const create = trpc.smallParcel.createPackagingReorderRequest.useMutation({
     onSuccess: () => {
@@ -478,12 +490,12 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
           <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-4 py-3 space-y-1">
             <div className="flex items-center gap-1.5 text-indigo-400 text-xs font-semibold">
               <Lightbulb className="w-3.5 h-3.5" />
-              {suggestion.hasBurnRate ? "4-Week Replenishment Suggestion" : "Min-Stock Suggestion"}
+              {suggestion.hasBurnRate ? `${replenishmentWeeks}-Week Replenishment Suggestion` : "Min-Stock Suggestion"}
             </div>
             {suggestion.hasBurnRate ? (
               <p className="text-xs text-slate-400">
-                <span className="font-mono text-slate-300">{item.weeklyConsumption}</span> {item.unit}/wk × 4 weeks
-                {" = "}<span className="font-mono text-slate-300">{item.weeklyConsumption * 4}</span> target
+                <span className="font-mono text-slate-300">{item.weeklyConsumption}</span> {item.unit}/wk × {replenishmentWeeks} weeks
+                {" = "}<span className="font-mono text-slate-300">{item.weeklyConsumption * replenishmentWeeks}</span> target
                 {" − "}<span className="font-mono text-slate-300">{item.onHandQty}</span> on hand
                 {" = "}<span className="font-mono text-indigo-300 font-semibold">{suggestion.qty}</span> to order
               </p>

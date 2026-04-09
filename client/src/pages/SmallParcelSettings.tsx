@@ -5,13 +5,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Settings, Timer, Save, Mail, CheckCircle2 } from "lucide-react";
+import { Settings, Timer, Save, Mail, CheckCircle2, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const REPLENISHMENT_OPTIONS = [
+  { weeks: 2, label: "2 weeks", description: "Fast-moving items or short supplier lead times" },
+  { weeks: 4, label: "4 weeks", description: "Standard monthly replenishment cycle" },
+  { weeks: 6, label: "6 weeks", description: "Slow-moving items or long supplier lead times" },
+];
 
 export default function SmallParcelSettings() {
   const utils = trpc.useUtils();
 
-  // ── Reprint countdown ──────────────────────────────────────────────────────
+  // ── All settings (reprint countdown + replenishment weeks) ─────────────────
   const { data: settings, isLoading } = trpc.smallParcel.getAllSettings.useQuery();
+
   const [countdownSeconds, setCountdownSeconds] = useState<string>("");
   const [countdownInitialized, setCountdownInitialized] = useState(false);
   if (settings && !countdownInitialized) {
@@ -19,12 +27,20 @@ export default function SmallParcelSettings() {
     setCountdownInitialized(true);
   }
 
+  const [replenishmentWeeks, setReplenishmentWeeks] = useState<number>(4);
+  const [replenishmentInitialized, setReplenishmentInitialized] = useState(false);
+  useEffect(() => {
+    if (settings && !replenishmentInitialized) {
+      setReplenishmentWeeks(settings.packagingReplenishmentWeeks);
+      setReplenishmentInitialized(true);
+    }
+  }, [settings, replenishmentInitialized]);
+
   // ── Packaging accounting email ─────────────────────────────────────────────
   const { data: accountingEmailData, isLoading: emailLoading } =
     trpc.smallParcel.getSetting.useQuery({ key: "packaging_accounting_email" });
   const [accountingEmail, setAccountingEmail] = useState<string>("");
   const [emailInitialized, setEmailInitialized] = useState(false);
-
   useEffect(() => {
     if (!emailLoading && !emailInitialized) {
       setAccountingEmail(accountingEmailData?.value ?? "");
@@ -41,6 +57,8 @@ export default function SmallParcelSettings() {
         toast.success("Reprint countdown updated.");
       } else if (variables.key === "packaging_accounting_email") {
         toast.success("Accounting email address saved.");
+      } else if (variables.key === "packaging_replenishment_weeks") {
+        toast.success(`Replenishment window set to ${variables.value} weeks.`);
       } else {
         toast.success("Settings saved.");
       }
@@ -66,6 +84,10 @@ export default function SmallParcelSettings() {
       return;
     }
     setSetting.mutate({ key: "packaging_accounting_email", value: trimmed });
+  }
+
+  function handleSaveReplenishment() {
+    setSetting.mutate({ key: "packaging_replenishment_weeks", value: String(replenishmentWeeks) });
   }
 
   return (
@@ -129,6 +151,91 @@ export default function SmallParcelSettings() {
                 {settings.reprintCountdownSeconds} seconds
               </span>
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Packaging — Replenishment Window */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <RefreshCw className="h-4 w-4" />
+            Packaging Reorder — Replenishment Window
+          </CardTitle>
+          <CardDescription>
+            Controls how many weeks of stock the auto-suggest formula targets when calculating
+            reorder quantities. The formula is:{" "}
+            <span className="font-mono text-xs bg-muted px-1 rounded">
+              max(1, weeklyUse × weeks − onHand)
+            </span>
+            . Choose a window that matches your typical supplier lead time.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="flex gap-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-20 w-40 bg-muted animate-pulse rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-3 flex-wrap">
+                {REPLENISHMENT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.weeks}
+                    type="button"
+                    onClick={() => setReplenishmentWeeks(opt.weeks)}
+                    className={cn(
+                      "flex-1 min-w-[120px] rounded-lg border-2 p-4 text-left transition-colors",
+                      replenishmentWeeks === opt.weeks
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/40"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-lg font-bold">{opt.label}</span>
+                      {replenishmentWeeks === opt.weeks && (
+                        <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-snug">{opt.description}</p>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-sm text-muted-foreground">
+                  Currently saved:{" "}
+                  <span className="font-medium text-foreground">
+                    {settings?.packagingReplenishmentWeeks ?? 4} weeks
+                  </span>
+                </p>
+                <Button
+                  onClick={handleSaveReplenishment}
+                  disabled={
+                    setSetting.isPending ||
+                    replenishmentWeeks === (settings?.packagingReplenishmentWeeks ?? 4)
+                  }
+                  className="flex items-center gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  {setSetting.isPending ? "Saving…" : "Save"}
+                </Button>
+              </div>
+
+              {/* Live formula preview */}
+              <div className="rounded-md bg-muted/50 border px-4 py-3 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Example: </span>
+                If weekly use is <span className="font-medium text-foreground">40 units</span> and
+                on-hand is <span className="font-medium text-foreground">50</span>, the suggested
+                reorder qty will be{" "}
+                <span className="font-semibold text-primary">
+                  {Math.max(1, 40 * replenishmentWeeks - 50)} units
+                </span>{" "}
+                ({replenishmentWeeks}-week target of {40 * replenishmentWeeks} − 50 on hand).
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

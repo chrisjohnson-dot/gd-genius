@@ -6758,9 +6758,15 @@ const smallParcelRouter = router({
 
   /** Get all small parcel settings as a key/value map */
   getAllSettings: protectedProcedure.query(async () => {
-    const countdown = await getSmallParcelSetting('reprint_countdown_seconds');
+    const [countdown, replenishmentWeeks] = await Promise.all([
+      getSmallParcelSetting('reprint_countdown_seconds'),
+      getSmallParcelSetting('packaging_replenishment_weeks'),
+    ]);
+    const parsedWeeks = replenishmentWeeks ? parseInt(replenishmentWeeks, 10) : 4;
+    const validWeeks = [2, 4, 6].includes(parsedWeeks) ? parsedWeeks : 4;
     return {
       reprintCountdownSeconds: countdown ? parseInt(countdown, 10) : 10,
+      packagingReplenishmentWeeks: validWeeks,
     };
   }),
 

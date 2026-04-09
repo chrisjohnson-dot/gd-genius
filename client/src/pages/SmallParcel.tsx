@@ -340,6 +340,16 @@ function Step3ScanItems({
 }) {
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>(items);
   const [scanInput, setScanInput] = useState("");
+
+  // ── Reprint countdown config (side panel) ──────────────────────────────────
+  const { data: spSettings, refetch: refetchStepSettings } = trpc.smallParcel.getAllSettings.useQuery();
+  const countdownDurationStep3 = spSettings?.reprintCountdownSeconds ?? 10;
+  const [editingCountdownStep3, setEditingCountdownStep3] = useState(false);
+  const [countdownInputStep3, setCountdownInputStep3] = useState("");
+  const setSettingStep3 = trpc.smallParcel.setSetting.useMutation({
+    onSuccess: () => { refetchStepSettings(); setEditingCountdownStep3(false); toast.success("Reprint countdown updated"); },
+    onError: (err) => toast.error(`Failed: ${err.message}`),
+  });
   const scanInputRef = useRef<HTMLInputElement>(null);
   // Track which items were manually overridden (by index)
   const [manualOverrides, setManualOverrides] = useState<Set<number>>(new Set());
@@ -556,13 +566,73 @@ function Step3ScanItems({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-          <ScanBarcode className="w-5 h-5 text-blue-600" />
+      {/* Header + countdown side panel */}
+      <div className="flex items-start gap-4">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+            <ScanBarcode className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">Scan Items</h2>
+            <p className="text-muted-foreground text-sm">Scan each item barcode — or click the circle to confirm manually.</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold">Scan Items</h2>
-          <p className="text-muted-foreground text-sm">Scan each item barcode — or click the circle to confirm manually.</p>
+        {/* ── Reprint countdown mini-config panel ── */}
+        <div className="shrink-0 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground flex flex-col gap-1.5 min-w-[140px]">
+          <div className="flex items-center gap-1 font-semibold text-foreground/70">
+            <Timer className="w-3.5 h-3.5" />
+            Reprint Window
+          </div>
+          {editingCountdownStep3 ? (
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                className="h-6 w-14 text-xs px-1.5"
+                value={countdownInputStep3}
+                min={3}
+                max={120}
+                autoFocus
+                onChange={(e) => setCountdownInputStep3(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const v = parseInt(countdownInputStep3, 10);
+                    if (!isNaN(v) && v >= 3 && v <= 120) setSettingStep3.mutate({ key: "reprint_countdown_seconds", value: String(v) });
+                    else toast.error("Enter 3–120");
+                  }
+                  if (e.key === "Escape") setEditingCountdownStep3(false);
+                }}
+              />
+              <span className="text-muted-foreground">s</span>
+              <button
+                className="text-green-600 hover:text-green-500 ml-0.5"
+                onClick={() => {
+                  const v = parseInt(countdownInputStep3, 10);
+                  if (!isNaN(v) && v >= 3 && v <= 120) setSettingStep3.mutate({ key: "reprint_countdown_seconds", value: String(v) });
+                  else toast.error("Enter 3–120");
+                }}
+                disabled={setSettingStep3.isPending}
+                title="Save"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setEditingCountdownStep3(false)}
+                title="Cancel"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="text-left underline decoration-dotted hover:text-foreground transition-colors"
+              onClick={() => { setCountdownInputStep3(String(countdownDurationStep3)); setEditingCountdownStep3(true); }}
+              title="Click to change reprint countdown duration"
+            >
+              {countdownDurationStep3}s after label prints
+            </button>
+          )}
         </div>
       </div>
 
@@ -1043,50 +1113,7 @@ function Step4PackShip({
           <h2 className="text-xl font-bold">Pack &amp; Ship</h2>
           <p className="text-muted-foreground text-sm">Enter package dimensions, then purchase the label.</p>
         </div>
-        {/* Inline reprint countdown duration setting */}
-        <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
-          <Timer className="w-3.5 h-3.5" />
-          {editingCountdown ? (
-            <>
-              <Input
-                type="number"
-                className="h-7 w-16 text-xs px-2"
-                value={countdownInput}
-                min={3}
-                max={60}
-                autoFocus
-                onChange={(e) => setCountdownInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const v = parseInt(countdownInput, 10);
-                    if (!isNaN(v) && v >= 3 && v <= 60) setSettingMutation.mutate({ key: "reprint_countdown_seconds", value: String(v) });
-                    else toast.error("Enter a value between 3 and 60");
-                  }
-                  if (e.key === "Escape") setEditingCountdown(false);
-                }}
-              />
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => {
-                const v = parseInt(countdownInput, 10);
-                if (!isNaN(v) && v >= 3 && v <= 60) setSettingMutation.mutate({ key: "reprint_countdown_seconds", value: String(v) });
-                else toast.error("Enter a value between 3 and 60");
-              }} disabled={setSettingMutation.isPending}>
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
-              </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingCountdown(false)}>
-                <RotateCcw className="w-3.5 h-3.5" />
-              </Button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="underline decoration-dotted hover:text-foreground transition-colors"
-              onClick={() => { setCountdownInput(String(countdownDuration)); setEditingCountdown(true); }}
-              title="Click to change reprint countdown duration"
-            >
-              Reprint: {countdownDuration}s
-            </button>
-          )}
-        </div>
+
       </div>
 
       {/* Printer status banner */}

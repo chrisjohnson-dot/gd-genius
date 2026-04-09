@@ -1095,3 +1095,6 @@
 - [x] Bug: Extensiv packaging types not showing in Step 2 package size selector in Small Parcel workflow
 - [x] Bug: SKU scan fails when barcode encodes UPC -- UPC->SKU alias lookup from Extensiv item master added
 - [x] Feature: UPC->SKU barcode lookup -- resolveUpcToSku server procedure fetches Extensiv item master Primary UPC field, Step3ScanItems falls back to UPC lookup when direct SKU match fails
+- [ ] Feature: Metric/imperial toggle on all packaging size displays — shared useUnitSystem hook (persisted to localStorage), toggle button shown wherever package dimensions appear (Step 2 selector, Package Sizes settings, SmallParcelPackageSizes page)
+- [x] Bug: Package Sizes settings page does not show all ~200 Extensiv packaging types for a client -- fixed getExtensivPackaging to use HAL+JSON with detail=all and correct namespaced _embedded key so Options (PackageUnit, Pallets) are returned; also fixed resolveUpcToSku to use same approach
+- [ ] Feature: Metric/imperial toggle on Package Sizes settings page and Step 2 package selector

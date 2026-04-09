@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useUnitSystem } from "@/hooks/useUnitSystem";
 import { RateCard, type RateCardInput, type RateRow } from "@/components/RateCard";
 import { Link } from "wouter";
 import {

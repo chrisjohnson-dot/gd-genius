@@ -7084,14 +7084,23 @@ const smallParcelRouter = router({
       let allItems: RawItem[] = [];
       let pg = 1;
       while (true) {
-        const res = await fetch(`${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        });
+        // Use HAL+JSON with detail=all to get full Options (PackageUnit, Pallets, UOM) per item
+        const res = await fetch(
+          `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}&detail=all`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: "application/hal+json" } }
+        );
         if (!res.ok) break;
-        const data = await res.json() as { TotalResults?: number; ResourceList?: RawItem[] };
-        const list = data.ResourceList ?? [];
+        const data = await res.json() as {
+          TotalResults?: number;
+          ResourceList?: RawItem[];
+          _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawItem[] };
+        };
+        // HAL+JSON returns items under the namespaced rel key; plain JSON fallback uses ResourceList
+        const list = data._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? data.ResourceList ?? [];
         allItems = allItems.concat(list);
-        if (allItems.length >= (data.TotalResults ?? 0) || list.length === 0) break;
+        // Stop when page is not full (last page) or empty, or when we've hit TotalResults
+        const total = data.TotalResults;
+        if (list.length === 0 || list.length < 200 || (total !== undefined && allItems.length >= total)) break;
         pg++;
       }
 
@@ -7381,11 +7390,15 @@ const smallParcelRouter = router({
       while (true) {
         const res = await fetch(
           `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}&detail=all`,
-          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/hal+json' } }
         );
         if (!res.ok) break;
-        const data = await res.json() as { TotalResults?: number; ResourceList?: RawItemForUpc[] };
-        const list = data.ResourceList ?? [];
+        const data = await res.json() as {
+          TotalResults?: number;
+          ResourceList?: RawItemForUpc[];
+          _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawItemForUpc[] };
+        };
+        const list = data._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? data.ResourceList ?? [];
         for (const item of list) {
           if (!item.Sku) continue;
           // Check top-level UPC fields
@@ -7399,7 +7412,9 @@ const smallParcelRouter = router({
             }
           }
         }
-        if (list.length === 0 || list.length >= (data.TotalResults ?? 0)) break;
+        // Stop when page is not full (last page), or TotalResults reached
+        const total = data.TotalResults;
+        if (list.length === 0 || list.length < 200 || (total !== undefined && pg * 200 >= total)) break;
         pg++;
       }
       return { sku: null };

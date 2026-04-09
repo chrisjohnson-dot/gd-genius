@@ -6928,7 +6928,13 @@ const smallParcelRouter = router({
           notes: input.notes,
         });
 
-        await sendEmail({ to: accountingEmail, subject, text, html });
+        // CC the requester if they have an email address on their account
+        const requesterEmail = ctx.user.email ?? null;
+        const cc = requesterEmail && requesterEmail !== accountingEmail
+          ? requesterEmail
+          : undefined;
+
+        await sendEmail({ to: accountingEmail, cc, subject, text, html });
       }
 
       return request;

@@ -16,6 +16,8 @@ import nodemailer from "nodemailer";
 
 export interface EmailPayload {
   to: string;
+  /** Optional CC recipients (comma-separated string or array) */
+  cc?: string | string[];
   subject: string;
   /** Plain-text fallback */
   text: string;
@@ -60,6 +62,7 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
     await transport.sendMail({
       from,
       to: payload.to,
+      ...(payload.cc ? { cc: payload.cc } : {}),
       subject: payload.subject,
       text: payload.text,
       html: payload.html,

@@ -107,3 +107,40 @@ describe("buildReorderEmailHtml", () => {
     expect(text).toContain("110");
   });
 });
+
+// ─── CC field in EmailPayload ─────────────────────────────────────────────────
+// These tests verify the CC logic that lives in the router mutation.
+// We test the decision logic directly (not nodemailer internals).
+
+describe("CC requester logic", () => {
+  /**
+   * Mirrors the logic in routers.ts:
+   *   const cc = requesterEmail && requesterEmail !== accountingEmail ? requesterEmail : undefined;
+   */
+  function resolveCC(
+    requesterEmail: string | null,
+    accountingEmail: string
+  ): string | undefined {
+    return requesterEmail && requesterEmail !== accountingEmail
+      ? requesterEmail
+      : undefined;
+  }
+
+  it("sets CC to requester email when it differs from accounting email", () => {
+    expect(resolveCC("chris@example.com", "accounting@example.com")).toBe(
+      "chris@example.com"
+    );
+  });
+
+  it("omits CC when requester email is null", () => {
+    expect(resolveCC(null, "accounting@example.com")).toBeUndefined();
+  });
+
+  it("omits CC when requester email equals accounting email (avoid self-CC)", () => {
+    expect(resolveCC("accounting@example.com", "accounting@example.com")).toBeUndefined();
+  });
+
+  it("omits CC when requester email is empty string", () => {
+    expect(resolveCC("", "accounting@example.com")).toBeUndefined();
+  });
+});

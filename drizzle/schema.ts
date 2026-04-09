@@ -1449,3 +1449,130 @@ export const rateWizardShipments = mysqlTable("rate_wizard_shipments", {
 });
 export type RateWizardShipment = typeof rateWizardShipments.$inferSelect;
 export type InsertRateWizardShipment = typeof rateWizardShipments.$inferInsert;
+
+// ─── Unified Shipments ────────────────────────────────────────────────────────
+/**
+ * Central tracking number registry for all GD shipping platforms.
+ *
+ * Every label purchase — regardless of platform — writes one row here so that
+ * Shipping History, OpFi reconciliation, and customer service all have a single
+ * source of truth.
+ *
+ * Platform values:
+ *   "veeqo"       — Veeqo Rate Shopping API (small parcel)
+ *   "techship"    — TechShip carrier API (small parcel)
+ *   "shipwell"    — Shipwell LTL (freight)
+ *   "manual"      — Manually entered tracking number
+ */
+export const shipmentPlatformEnum = mysqlEnum("shipment_platform", [
+  "veeqo",
+  "techship",
+  "shipwell",
+  "manual",
+]);
+
+export const shipmentModeEnum = mysqlEnum("shipment_mode", [
+  "small_parcel",
+  "ltl",
+  "ftl",
+  "other",
+]);
+
+export const shipments = mysqlTable("shipments", {
+  id: int("id").primaryKey().autoincrement(),
+
+  // ── Platform source ──────────────────────────────────────────────────────
+  /** Which shipping platform generated this shipment */
+  platform: shipmentPlatformEnum.notNull(),
+  /** Shipping mode */
+  mode: shipmentModeEnum.notNull().default("small_parcel"),
+
+  // ── Order / customer context ─────────────────────────────────────────────
+  /** Extensiv config ID (which GD warehouse account) */
+  configId: int("config_id"),
+  /** Extensiv Transaction ID (readOnly.orderId) */
+  extensivOrderId: int("extensiv_order_id"),
+  /** Customer-facing order reference number */
+  orderNumber: varchar("order_number", { length: 128 }),
+  /** GD customer/client ID */
+  customerId: int("customer_id"),
+  /** GD customer/client name */
+  customerName: varchar("customer_name", { length: 255 }),
+  /** Warehouse / facility name */
+  facilityName: varchar("facility_name", { length: 128 }),
+
+  // ── Recipient ────────────────────────────────────────────────────────────
+  shipToName: varchar("ship_to_name", { length: 255 }),
+  shipToAddress1: varchar("ship_to_address1", { length: 255 }),
+  shipToCity: varchar("ship_to_city", { length: 128 }),
+  shipToState: varchar("ship_to_state", { length: 64 }),
+  shipToZip: varchar("ship_to_zip", { length: 20 }),
+  shipToCountry: varchar("ship_to_country", { length: 4 }).default("US"),
+
+  // ── Carrier & service ────────────────────────────────────────────────────
+  carrier: varchar("carrier", { length: 128 }),
+  serviceLevel: varchar("service_level", { length: 256 }),
+  /** Carrier SCAC code for LTL (e.g. "ODFL", "FXFE") */
+  carrierScac: varchar("carrier_scac", { length: 10 }),
+
+  // ── Tracking identifiers ─────────────────────────────────────────────────
+  /** Primary tracking number (parcel) or PRO number (LTL) */
+  trackingNumber: varchar("tracking_number", { length: 256 }),
+  /** BOL number (LTL) */
+  bolNumber: varchar("bol_number", { length: 128 }),
+  /** PRO number (LTL — assigned by carrier after pickup) */
+  proNumber: varchar("pro_number", { length: 128 }),
+  /** Shipwell PO / order ID */
+  shipwellOrderId: varchar("shipwell_order_id", { length: 128 }),
+  /** Shipwell Shipment ID */
+  shipwellShipmentId: varchar("shipwell_shipment_id", { length: 128 }),
+  /** Veeqo shipment ID (from bookShipment response) */
+  veeqoShipmentId: varchar("veeqo_shipment_id", { length: 128 }),
+  /** Rate Wizard shipment row ID (FK to rate_wizard_shipments) */
+  rateWizardShipmentId: int("rate_wizard_shipment_id"),
+  /** Small parcel session ID (FK to small_parcel_sessions) */
+  smallParcelSessionId: int("small_parcel_session_id"),
+
+  // ── Package / cost ───────────────────────────────────────────────────────
+  /** Charged weight in lbs (parcel) or total weight in lbs (LTL) */
+  weightLbs: decimal("weight_lbs", { precision: 8, scale: 2 }),
+  /** Marked-up label cost in cents (what GD charges) */
+  labelCostCents: int("label_cost_cents"),
+  /** Raw carrier cost in cents (what GD pays) */
+  rawCostCents: int("raw_cost_cents"),
+  /** Currency code */
+  currency: varchar("currency", { length: 4 }).default("USD"),
+
+  // ── Label ────────────────────────────────────────────────────────────────
+  labelUrl: text("label_url"),
+  /** ZPL label content (small parcel) */
+  labelZpl: text("label_zpl"),
+
+  // ── Status ───────────────────────────────────────────────────────────────
+  /**
+   * Lifecycle status:
+   *   "booked"      — label purchased, not yet picked up
+   *   "in_transit"  — carrier has scanned / picked up
+   *   "delivered"   — delivered to recipient
+   *   "exception"   — carrier exception / delay
+   *   "voided"      — label voided / cancelled
+   */
+  status: varchar("status", { length: 32 }).default("booked"),
+  /** Shipwell status string (quoting, tendered, carrier_confirmed, in_transit, delivered) */
+  shipwellStatus: varchar("shipwell_status", { length: 64 }),
+  /** Estimated delivery date (UTC) */
+  estimatedDeliveryAt: timestamp("estimated_delivery_at"),
+  /** Actual delivery date (UTC) */
+  deliveredAt: timestamp("delivered_at"),
+
+  // ── Audit ────────────────────────────────────────────────────────────────
+  bookedByUserId: varchar("booked_by_user_id", { length: 128 }),
+  bookedByName: varchar("booked_by_name", { length: 255 }),
+  /** Free-text notes (manual entry reason, exception notes, etc.) */
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Shipment = typeof shipments.$inferSelect;
+export type InsertShipment = typeof shipments.$inferInsert;

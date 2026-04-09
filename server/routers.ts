@@ -196,6 +196,11 @@ import {
   createRateWizardShipment,
   updateRateWizardShipment,
   getLatestRatedShipmentForOrder,
+  createShipment,
+  updateShipment,
+  listShipmentsUnified,
+  countShipmentsUnified,
+  getShipmentById,
 } from "./db";
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook } from "./cortex/webhook";
@@ -2472,6 +2477,27 @@ const _appRouter = router({
 
         const poUrl = client.getPoUrl(po.id);
         await markOrderSentToShipwell(input.extensivOrderId, po.id, poUrl);
+
+        // Write a pending unified shipment record for Shipwell LTL
+        try {
+          await createShipment({
+            platform: "shipwell",
+            mode: "ltl",
+            extensivOrderId: input.extensivOrderId,
+            orderNumber: order.referenceNum ?? undefined,
+            customerId: order.clientId ?? undefined,
+            customerName: order.clientName ?? undefined,
+            facilityName: order.facilityName ?? undefined,
+            shipToName: order.shipToName ?? undefined,
+            shipToCity: order.shipToCity ?? undefined,
+            shipwellOrderId: po.id,
+            status: "booked",
+            bookedByUserId: String(ctx.user.id),
+            bookedByName: ctx.user.name ?? undefined,
+          });
+        } catch (err) {
+          console.error("[Shipwell] Failed to write unified shipment record:", err);
+        }
 
         await createAuditLog({
           userId: ctx.user.id,
@@ -6407,6 +6433,38 @@ const smallParcelRouter = router({
         labelZpl,
       });
 
+      // ── Step 2b: Write to unified shipments registry ──────────────────────────
+      try {
+        await createShipment({
+          platform: hasVeeqoTokens ? "veeqo" : "manual",
+          mode: "small_parcel",
+          configId: session.configId ?? undefined,
+          extensivOrderId: session.extensivOrderId ?? undefined,
+          orderNumber: session.referenceNum ?? undefined,
+          customerId: session.clientId ?? undefined,
+          customerName: session.clientName ?? undefined,
+          facilityName: session.facilityName ?? undefined,
+          shipToName: session.shipToName ?? undefined,
+          shipToCity: session.shipToCity ?? undefined,
+          shipToState: session.shipToState ?? undefined,
+          shipToZip: session.shipToZip ?? undefined,
+          carrier,
+          serviceLevel,
+          trackingNumber,
+          veeqoShipmentId: hasVeeqoTokens && confirmedShipment ? String(confirmedShipment.id) : undefined,
+          rateWizardShipmentId: confirmedShipment?.id ?? undefined,
+          smallParcelSessionId: input.id,
+          labelCostCents: confirmedShipment?.rateAmountCents ?? undefined,
+          rawCostCents: confirmedShipment?.rateAmountCents ?? undefined,
+          labelUrl,
+          labelZpl,
+          status: "booked",
+        });
+      } catch (err) {
+        // Non-fatal: log but don't fail the label purchase
+        console.error("[SmallParcel] Failed to write unified shipment record:", err);
+      }
+
       // ── Step 3: Mark the order as Packed then Shipped in Extensiv ──
       let extensivPackResult: { success: boolean; error?: string } = { success: false, error: "Config not found" };
       let extensivShipResult: { success: boolean; error?: string } = { success: false, error: "Config not found" };
@@ -7639,6 +7697,84 @@ const rateWizardRouter = router({
 });
 
 
+// ─── Shipping History Router ─────────────────────────────────────────────────
+const shippingHistoryRouter = router({
+  /** List unified shipments with optional filters and pagination */
+  list: protectedProcedure
+    .input(z.object({
+      platform: z.enum(["veeqo", "techship", "shipwell", "manual"]).optional(),
+      facilityName: z.string().optional(),
+      customerId: z.number().optional(),
+      orderNumber: z.string().optional(),
+      trackingNumber: z.string().optional(),
+      limit: z.number().min(1).max(200).default(50),
+      offset: z.number().min(0).default(0),
+    }))
+    .query(async ({ input }) => {
+      const [rows, total] = await Promise.all([
+        listShipmentsUnified(input),
+        countShipmentsUnified(input),
+      ]);
+      return { rows, total };
+    }),
+
+  /** Get a single shipment by ID */
+  get: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const row = await getShipmentById(input.id);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+      return row;
+    }),
+
+  /** Manually record a tracking number from any platform */
+  recordManual: protectedProcedure
+    .input(z.object({
+      platform: z.enum(["veeqo", "techship", "shipwell", "manual"]).default("manual"),
+      mode: z.enum(["small_parcel", "ltl", "ftl", "other"]).default("small_parcel"),
+      orderNumber: z.string().optional(),
+      customerName: z.string().optional(),
+      facilityName: z.string().optional(),
+      shipToName: z.string().optional(),
+      shipToCity: z.string().optional(),
+      shipToState: z.string().optional(),
+      shipToZip: z.string().optional(),
+      carrier: z.string().optional(),
+      serviceLevel: z.string().optional(),
+      trackingNumber: z.string().min(1),
+      bolNumber: z.string().optional(),
+      proNumber: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const id = await createShipment({
+        ...input,
+        status: "booked",
+        bookedByUserId: String(ctx.user.id),
+        bookedByName: ctx.user.name ?? undefined,
+      });
+      return { id };
+    }),
+
+  /** Update tracking info on an existing shipment (e.g. add PRO number, update status) */
+  updateTracking: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      trackingNumber: z.string().optional(),
+      bolNumber: z.string().optional(),
+      proNumber: z.string().optional(),
+      status: z.string().optional(),
+      carrierScac: z.string().optional(),
+      estimatedDeliveryAt: z.date().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateShipment(id, data);
+      return { success: true };
+    }),
+});
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -7647,5 +7783,6 @@ export const appRouterV4 = router({
   techship: techshipRouter,
   shippingIntegration: shippingIntegrationRouter,
   rateWizard: rateWizardRouter,
+  shippingHistory: shippingHistoryRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

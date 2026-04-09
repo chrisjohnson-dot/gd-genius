@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, lte, isNotNull, isNull, sql, inArray, or, count, SQL } from "drizzle-orm";
+import { eq, desc, and, gte, lte, isNotNull, isNull, sql, inArray, or, count, like, SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -3997,4 +3997,98 @@ export async function getLatestRatedShipmentForOrder(orderId: string): Promise<R
     .orderBy(desc(rateWizardShipments.createdAt))
     .limit(1);
   return row ?? null;
+}
+
+// ─── Unified Shipments ────────────────────────────────────────────────────────
+
+import { shipments, type InsertShipment, type Shipment } from "../drizzle/schema";
+
+/** Insert a new unified shipment record. Returns the inserted row's ID. */
+export async function createShipment(data: InsertShipment): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(shipments).values(data);
+  const raw = result as unknown;
+  if (Array.isArray(raw) && raw[0] && typeof (raw[0] as Record<string, unknown>).insertId === "number") {
+    return (raw[0] as Record<string, unknown>).insertId as number;
+  }
+  if (raw && typeof (raw as Record<string, unknown>).insertId === "number") {
+    return (raw as Record<string, unknown>).insertId as number;
+  }
+  throw new Error("createShipment: could not get insertId");
+}
+
+/** Update an existing shipment (e.g. add PRO number, update status). */
+export async function updateShipment(
+  id: number,
+  data: Partial<InsertShipment>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(shipments).set(data).where(eq(shipments.id, id));
+}
+
+/** List shipments with optional filters. Returns newest-first. */
+export async function listShipmentsUnified(opts: {
+  platform?: "veeqo" | "techship" | "shipwell" | "manual";
+  facilityName?: string;
+  customerId?: number;
+  orderNumber?: string;
+  trackingNumber?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<Shipment[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: SQL[] = [];
+  if (opts.platform) conditions.push(eq(shipments.platform, opts.platform));
+  if (opts.facilityName) conditions.push(eq(shipments.facilityName, opts.facilityName));
+  if (opts.customerId) conditions.push(eq(shipments.customerId, opts.customerId));
+  if (opts.orderNumber) conditions.push(eq(shipments.orderNumber, opts.orderNumber));
+  if (opts.trackingNumber) conditions.push(like(shipments.trackingNumber, `%${opts.trackingNumber}%`));
+
+  return db
+    .select()
+    .from(shipments)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(shipments.createdAt))
+    .limit(opts.limit ?? 50)
+    .offset(opts.offset ?? 0);
+}
+
+/** Count shipments matching the same filters (for pagination). */
+export async function countShipmentsUnified(opts: {
+  platform?: "veeqo" | "techship" | "shipwell" | "manual";
+  facilityName?: string;
+  customerId?: number;
+  orderNumber?: string;
+  trackingNumber?: string;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions: SQL[] = [];
+  if (opts.platform) conditions.push(eq(shipments.platform, opts.platform));
+  if (opts.facilityName) conditions.push(eq(shipments.facilityName, opts.facilityName));
+  if (opts.customerId) conditions.push(eq(shipments.customerId, opts.customerId));
+  if (opts.orderNumber) conditions.push(eq(shipments.orderNumber, opts.orderNumber));
+  if (opts.trackingNumber) conditions.push(like(shipments.trackingNumber, `%${opts.trackingNumber}%`));
+
+  const [row] = await db
+    .select({ count: count() })
+    .from(shipments)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  return row?.count ?? 0;
+}
+
+/** Get a single shipment by ID. */
+export async function getShipmentById(id: number): Promise<Shipment | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(shipments).where(eq(shipments.id, id)).limit(1);
+  return row ?? null;
+}
+
+/** Record a manual tracking number entry. */
+export async function createManualShipment(data: InsertShipment): Promise<number> {
+  return createShipment({ ...data, platform: "manual" });
 }

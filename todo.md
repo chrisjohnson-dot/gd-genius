@@ -1047,3 +1047,14 @@
 - [ ] Add CLEARSIGHT_API_URL and CLEARSIGHT_API_KEY to environment secrets
 - [ ] Write ClearSight Banish intake script for the developer screen
 - [ ] Add ClearSight push status column to Shipping History UI (pushed/failed/pending)
+
+## Rate Wizard — Direct Carrier API Integration
+- [x] Store carrier API credentials as Manus secrets (USPS_EHUB_API_KEY, FEDEX_USER_KEY, FEDEX_PASSWORD, UPS_REST_TOKEN, ONTRAC_ACCOUNT, ONTRAC_PASSWORD, DHL_USER_KEY, DHL_PASSWORD)
+- [x] Build USPS eHub rate fetcher (server/carriers/usps.ts) — REST API using JWT token
+- [x] Build FedEx rate fetcher (server/carriers/fedex.ts) — Legacy SOAP RateService
+- [x] Build UPS rate fetcher (server/carriers/ups.ts) — REST Rating API v2
+- [x] Build OnTrac rate fetcher (server/carriers/ontrac.ts) — REST API
+- [x] Build DHL eCommerce rate fetcher (server/carriers/dhl.ts) — REST API
+- [x] Wire all carrier fetchers into getRates procedure — run in parallel, replace mock fallback when credentials present
+- [x] Update Rate Wizard overview page — show live API status per carrier (connected / not configured)
+- [x] Write vitest tests for carrier rate fetcher modules

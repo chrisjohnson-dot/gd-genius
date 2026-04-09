@@ -204,6 +204,7 @@ import {
 } from "./db";
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
+import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, type CarrierRateInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
   createProductionRun,
@@ -7522,7 +7523,78 @@ const rateWizardRouter = router({
         }
       }
 
-      // ── Mock fallback (used when no Veeqo credentials or API unavailable) ───
+      // ── Direct Carrier Rate Fetchers (GD Rate Wizard — live negotiated rates) ──
+      // Run all configured carrier APIs in parallel. Results supplement or replace
+      // Veeqo rates. If Veeqo already returned rates for a carrier, direct rates
+      // for that same carrier are skipped to avoid duplicates.
+      if (input.destPostal) {
+        const originAccount = activeAccounts.find((a) => a.originAddress1 && a.originPostal);
+        const carrierInput: CarrierRateInput = {
+          originName: originAccount?.originName ?? "Go Direct Logistics",
+          originAddress1: originAccount?.originAddress1 ?? "",
+          originCity: originAccount?.originCity ?? "",
+          originState: originAccount?.originState ?? "",
+          originPostal: originAccount?.originPostal ?? "",
+          originCountry: originAccount?.originCountry ?? "US",
+          destName: input.destName,
+          destAddress1: input.destAddress1,
+          destCity: input.destCity,
+          destState: input.destState,
+          destPostal: input.destPostal,
+          destCountry: input.destCountry,
+          isResidential: input.isResidential,
+          weightLbs: input.weightLbs,
+          lengthIn: input.lengthIn,
+          widthIn: input.widthIn,
+          heightIn: input.heightIn,
+          declaredValue: input.declaredValue,
+          requireSignature: input.requireSignature,
+        };
+
+        try {
+          const directRates = await fetchAllCarrierRates(carrierInput);
+          // Track which carrier codes already have Veeqo rates
+          const veeqoCarrierCodes = new Set(rates.map((r) => r.carrierCode));
+
+          for (const dr of directRates) {
+            // Skip if excluded by customer rule
+            if (excludedCarriers.includes(dr.carrierCode)) continue;
+            // Skip if transit days exceed customer rule
+            if (maxTransitDays !== null && dr.transitDays > maxTransitDays) continue;
+            // Skip if Veeqo already returned rates for this carrier (avoid duplicates)
+            if (veeqoCarrierCodes.has(dr.carrierCode)) continue;
+
+            const totalCost = parseFloat((dr.totalCost * markupMultiplier).toFixed(2));
+
+            rates.push({
+              rateId: dr.rateId,
+              carrierCode: dr.carrierCode,
+              carrierName: dr.carrierName,
+              service: dr.service,
+              transitDays: dr.transitDays,
+              totalCost,
+              currency: dr.currency,
+              isPreferred: preferredCarrier === dr.carrierCode,
+              isCheapest: false,
+              isFastest: false,
+              surcharges: dr.surcharges,
+              isMock: false,
+              hasCredentials: true,
+              // Direct carrier rates don't use Veeqo booking tokens
+              remoteShipmentId: undefined,
+              requestToken: undefined,
+            });
+          }
+
+          if (directRates.length > 0) {
+            console.log(`[RateWizard] Direct carrier rates: ${directRates.length} rates merged for ${input.destPostal}`);
+          }
+        } catch (err) {
+          console.error(`[RateWizard] Direct carrier fetch error:`, err);
+        }
+      }
+
+      // ── Mock fallback (used when no live credentials available at all) ──────
       if (rates.length === 0) {
         const MOCK_SERVICES: Record<string, Array<{ service: string; transitDays: number; baseCost: number }>> = {
           usps: [
@@ -7697,6 +7769,11 @@ const rateWizardRouter = router({
       ca: CA_CARRIERS.map((c) => ({ code: c, label: CARRIER_LABELS[c] ?? c })),
       all: Object.entries(CARRIER_LABELS).map(([code, label]) => ({ code, label })),
     };
+  }),
+
+  /** Returns live connection status for each direct carrier API */
+  getCarrierStatus: protectedProcedure.query(() => {
+    return getCarrierConnectionStatus();
   }),
 });
 

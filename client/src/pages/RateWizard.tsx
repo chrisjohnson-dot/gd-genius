@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+import { Wifi, WifiOff } from "lucide-react";
 
 const CARRIER_LABELS: Record<string, string> = {
   usps: "USPS",
@@ -68,6 +69,11 @@ export default function RateWizard() {
     { configId: configId!, limit: 10 },
     { enabled: configId !== null }
   );
+
+  const { data: carrierStatus } = trpc.rateWizard.getCarrierStatus.useQuery();
+  const connectedCarrierCount = carrierStatus ? Object.values(carrierStatus).filter((s) => s.connected).length : 0;
+  const totalCarrierCount = carrierStatus ? Object.keys(carrierStatus).length : 5;
+  const allCarriersConnected = connectedCarrierCount === totalCarrierCount;
 
   const activeCarriers = (carrierAccounts as Array<{ id: number; carrierCode: string; name: string; locationId: string; country: string; isActive: boolean }>).filter((a) => a.isActive);
   const configuredLocations = Array.from(new Set(activeCarriers.map((a) => a.locationId)));
@@ -281,6 +287,51 @@ export default function RateWizard() {
         </Card>
       )}
 
+      {/* Direct Carrier API Status */}
+      <Card className={allCarriersConnected ? "border-green-200 dark:border-green-800" : "border-amber-200 dark:border-amber-800"}>
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            {allCarriersConnected
+              ? <Wifi className="h-4 w-4 text-green-600" />
+              : <WifiOff className="h-4 w-4 text-amber-500" />
+            }
+            Direct Carrier API Connections — {connectedCarrierCount}/{totalCarrierCount} live
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {carrierStatus && Object.entries(carrierStatus).map(([code, info]) => (
+              <div key={code} className={`rounded-lg border p-2.5 flex flex-col items-center gap-1 ${
+                info.connected
+                  ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30"
+                  : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30"
+              }`}>
+                <div className={`h-7 w-7 rounded-full flex items-center justify-center ${
+                  info.connected ? "bg-green-100 dark:bg-green-900" : "bg-slate-100 dark:bg-slate-800"
+                }`}>
+                  {info.connected
+                    ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    : <AlertCircle className="h-4 w-4 text-slate-400" />
+                  }
+                </div>
+                <span className="text-xs font-medium text-center leading-tight">{info.label}</span>
+                <Badge className={`text-xs px-1.5 py-0 ${
+                  info.connected ? "bg-green-600 text-white" : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}>
+                  {info.connected ? "Live" : "Not set"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          {!allCarriersConnected && (
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              Carrier API credentials are stored as Manus secrets. Contact your administrator to add missing credentials.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Phase 2 status */}
       <Card className="border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-950/20">
         <CardHeader className="pb-2 pt-4 px-5">
@@ -292,7 +343,11 @@ export default function RateWizard() {
         <CardContent className="px-5 pb-5">
           <p className="text-xs text-muted-foreground mb-4">
             The Rate Wizard rate card is now live in the Pack &amp; Ship workflow. Operators see carrier rates after entering dimensions.
-            Currently using <strong>estimated rates</strong> — add API credentials to see your negotiated rates.
+            {connectedCarrierCount > 0
+              ? <> <strong className="text-green-700 dark:text-green-400">{connectedCarrierCount} carrier{connectedCarrierCount !== 1 ? "s" : ""} returning live negotiated rates.</strong> Rates from connected carriers are your actual negotiated pricing.
+              {connectedCarrierCount < totalCarrierCount && " Remaining carriers use estimated rates until credentials are added."}</>
+              : <> Currently using <strong>estimated rates</strong> — carrier API credentials are configured and will return live rates on the next rate query.</>
+            }
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[

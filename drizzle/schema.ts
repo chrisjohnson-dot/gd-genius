@@ -1483,9 +1483,9 @@ export const shipments = mysqlTable("shipments", {
 
   // ── Platform source ──────────────────────────────────────────────────────
   /** Which shipping platform generated this shipment */
-  platform: shipmentPlatformEnum.notNull(),
+  platform: mysqlEnum("platform", ["veeqo", "techship", "shipwell", "manual", "rate_wizard"]).notNull(),
   /** Shipping mode */
-  mode: shipmentModeEnum.notNull().default("small_parcel"),
+  mode: mysqlEnum("mode", ["small_parcel", "ltl", "ftl", "other"]).notNull().default("small_parcel"),
 
   // ── Order / customer context ─────────────────────────────────────────────
   /** Extensiv config ID (which GD warehouse account) */

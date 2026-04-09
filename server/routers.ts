@@ -7781,6 +7781,20 @@ const shippingHistoryRouter = router({
       void pushShipmentToClearSight(id, "shipment.updated");
       return { success: true };
     }),
+
+  /** Manually retry pushing a shipment to ClearSight */
+  retryPush: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      // Reset attempt count so the push is retried even if it hit the 5-attempt cap
+      await updateShipment(input.id, {
+        clearSightPushStatus: "pending",
+        clearSightPushAttempts: 0,
+        clearSightPushError: null,
+      });
+      void pushShipmentToClearSight(input.id, "shipment.updated");
+      return { success: true };
+    }),
 });
 
 export const appRouterV4 = router({

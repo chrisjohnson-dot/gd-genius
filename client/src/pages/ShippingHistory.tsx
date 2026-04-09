@@ -1,6 +1,9 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { ScrollText, Search, Plus, RefreshCw, Package, Truck, ExternalLink, Copy, Check, X } from "lucide-react";
+import {
+  ScrollText, Search, Plus, RefreshCw, Package, Truck,
+  ExternalLink, Copy, Check, X, RotateCcw, Eye, EyeOff,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,6 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
@@ -49,6 +58,124 @@ const STATUS_COLORS: Record<string, string> = {
   void: "bg-gray-100 text-gray-500 border-gray-200",
 };
 
+// ─── ClearSight push-status badge ────────────────────────────────────────────
+
+type PushStatus = "pending" | "sent" | "failed" | null | undefined;
+
+interface ClearSightBadgeProps {
+  status: PushStatus;
+  attempts: number | null | undefined;
+  lastPushedAt: Date | string | null | undefined;
+  error: string | null | undefined;
+  shipmentId: number;
+  onRetry: () => void;
+  isRetrying: boolean;
+}
+
+function ClearSightBadge({
+  status,
+  attempts,
+  lastPushedAt,
+  error,
+  shipmentId,
+  onRetry,
+  isRetrying,
+}: ClearSightBadgeProps) {
+  // Not yet pushed (no status set) — show a neutral "not synced" indicator
+  if (!status) {
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-gray-100 text-gray-400 border-gray-200 cursor-default select-none">
+              <span className="h-1.5 w-1.5 rounded-full bg-gray-300 inline-block" />
+              Not synced
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-xs text-xs">
+            <p>ClearSight connection not configured or push not yet attempted.</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  if (status === "sent") {
+    const pushedAt = lastPushedAt ? new Date(lastPushedAt).toLocaleString() : null;
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-emerald-50 text-emerald-700 border-emerald-200 cursor-default select-none">
+              <Check className="h-3 w-3" />
+              Synced
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-xs text-xs space-y-1">
+            <p className="font-semibold text-emerald-700">✓ Pushed to ClearSight</p>
+            {pushedAt && <p className="text-muted-foreground">Last synced: {pushedAt}</p>}
+            {attempts != null && <p className="text-muted-foreground">Attempt #{attempts}</p>}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  if (status === "pending") {
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200 cursor-default select-none">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block animate-pulse" />
+              Pending
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-xs text-xs space-y-1">
+            <p className="font-semibold text-amber-700">⏳ Queued for ClearSight</p>
+            <p className="text-muted-foreground">Will be pushed in the next sync cycle (every 30 min).</p>
+            {attempts != null && attempts > 0 && (
+              <p className="text-muted-foreground">{attempts} attempt{attempts !== 1 ? "s" : ""} so far</p>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // failed
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={(e) => { e.stopPropagation(); onRetry(); }}
+            disabled={isRetrying}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-red-50 text-red-700 border-red-200 hover:bg-red-100 transition-colors disabled:opacity-60 cursor-pointer"
+            title={`Retry push for shipment #${shipmentId}`}
+          >
+            {isRetrying
+              ? <RefreshCw className="h-3 w-3 animate-spin" />
+              : <RotateCcw className="h-3 w-3" />
+            }
+            Failed
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="max-w-xs text-xs space-y-1">
+          <p className="font-semibold text-red-700">✗ Push to ClearSight failed</p>
+          {error && <p className="text-muted-foreground break-words">{error}</p>}
+          {attempts != null && (
+            <p className="text-muted-foreground">{attempts} attempt{attempts !== 1 ? "s" : ""} made</p>
+          )}
+          <p className="text-muted-foreground italic">Click to retry now</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// ─── Copy button ──────────────────────────────────────────────────────────────
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -63,6 +190,8 @@ function CopyButton({ text }: { text: string }) {
     </button>
   );
 }
+
+// ─── Manual entry form ────────────────────────────────────────────────────────
 
 interface ManualEntryForm {
   platform: "veeqo" | "techship" | "shipwell" | "manual";
@@ -100,11 +229,14 @@ const DEFAULT_FORM: ManualEntryForm = {
   notes: "",
 };
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function ShippingHistory() {
   // Filters
   const [search, setSearch] = useState("");
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [page, setPage] = useState(0);
+  const [showClearSight, setShowClearSight] = useState(true);
   const PAGE_SIZE = 50;
 
   // Debounce search
@@ -145,6 +277,24 @@ export default function ShippingHistory() {
     },
   });
 
+  // Retry push mutation
+  const utils = trpc.useUtils();
+  const [retryingIds, setRetryingIds] = useState<Set<number>>(new Set());
+  const retryPush = trpc.shippingHistory.retryPush.useMutation({
+    onMutate: ({ id }) => {
+      setRetryingIds(prev => new Set(prev).add(id));
+    },
+    onSuccess: (_, { id }) => {
+      setRetryingIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+      toast.success("Retry queued", { description: "ClearSight push re-queued. Refresh in a moment to see the result." });
+      setTimeout(() => void refetch(), 3000);
+    },
+    onError: (err, { id }) => {
+      setRetryingIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+      toast.error("Retry failed", { description: err.message });
+    },
+  });
+
   const handleSubmitManual = () => {
     if (!form.trackingNumber.trim()) {
       toast.error("Tracking number required");
@@ -168,6 +318,7 @@ export default function ShippingHistory() {
   };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  const colSpan = showClearSight ? 10 : 9;
 
   return (
     <div className="p-7 page-enter">
@@ -180,6 +331,15 @@ export default function ShippingHistory() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowClearSight(v => !v)}
+            title={showClearSight ? "Hide ClearSight column" : "Show ClearSight column"}
+          >
+            {showClearSight ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+            ClearSight
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
@@ -233,13 +393,18 @@ export default function ShippingHistory() {
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ship To</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Carrier / Service</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                {showClearSight && (
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
+                    ClearSight
+                  </th>
+                )}
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Date</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={9} className="text-center py-16 text-muted-foreground">
+                  <td colSpan={colSpan} className="text-center py-16 text-muted-foreground">
                     <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
                     Loading shipments...
                   </td>
@@ -247,7 +412,7 @@ export default function ShippingHistory() {
               )}
               {!isLoading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="text-center py-16 text-muted-foreground">
+                  <td colSpan={colSpan} className="text-center py-16 text-muted-foreground">
                     <ScrollText className="h-10 w-10 mx-auto mb-3 opacity-20" />
                     <p className="font-medium">No shipments found</p>
                     <p className="text-xs mt-1 opacity-70">
@@ -260,6 +425,7 @@ export default function ShippingHistory() {
               )}
               {rows.map((row) => (
                 <tr key={row.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                  {/* Tracking # */}
                   <td className="px-4 py-3 font-mono text-xs">
                     {row.trackingNumber ? (
                       <span className="flex items-center gap-1">
@@ -278,11 +444,15 @@ export default function ShippingHistory() {
                       <div className="text-muted-foreground text-xs mt-0.5">PRO: {row.proNumber}</div>
                     )}
                   </td>
+
+                  {/* Platform */}
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${PLATFORM_COLORS[row.platform] ?? "bg-gray-100 text-gray-600"}`}>
                       {PLATFORM_LABELS[row.platform] ?? row.platform}
                     </span>
                   </td>
+
+                  {/* Mode */}
                   <td className="px-4 py-3 text-muted-foreground text-xs">
                     {row.mode === "small_parcel" ? (
                       <span className="flex items-center gap-1"><Package className="h-3 w-3" />{MODE_LABELS[row.mode]}</span>
@@ -290,15 +460,23 @@ export default function ShippingHistory() {
                       <span className="flex items-center gap-1"><Truck className="h-3 w-3" />{MODE_LABELS[row.mode ?? ""] ?? row.mode}</span>
                     )}
                   </td>
+
+                  {/* Order # */}
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
                     {row.orderNumber ?? <span className="italic opacity-50">—</span>}
                   </td>
+
+                  {/* Customer */}
                   <td className="px-4 py-3 text-xs">
                     {row.customerName ?? <span className="text-muted-foreground italic opacity-50">—</span>}
                   </td>
+
+                  {/* Ship To */}
                   <td className="px-4 py-3 text-xs text-muted-foreground">
                     {[row.shipToCity, row.shipToState].filter(Boolean).join(", ") || <span className="italic opacity-50">—</span>}
                   </td>
+
+                  {/* Carrier / Service */}
                   <td className="px-4 py-3 text-xs">
                     {row.carrier ? (
                       <div>
@@ -309,11 +487,30 @@ export default function ShippingHistory() {
                       <span className="text-muted-foreground italic opacity-50">—</span>
                     )}
                   </td>
+
+                  {/* Status */}
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${STATUS_COLORS[row.status ?? "booked"] ?? "bg-gray-100 text-gray-600"}`}>
                       {(row.status ?? "booked").replace(/_/g, " ")}
                     </span>
                   </td>
+
+                  {/* ClearSight push status */}
+                  {showClearSight && (
+                    <td className="px-4 py-3">
+                      <ClearSightBadge
+                        status={row.clearSightPushStatus as PushStatus}
+                        attempts={row.clearSightPushAttempts}
+                        lastPushedAt={row.clearSightLastPushedAt}
+                        error={row.clearSightPushError}
+                        shipmentId={row.id}
+                        onRetry={() => retryPush.mutate({ id: row.id })}
+                        isRetrying={retryingIds.has(row.id)}
+                      />
+                    </td>
+                  )}
+
+                  {/* Date */}
                   <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                     {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}
                     {row.labelUrl && (

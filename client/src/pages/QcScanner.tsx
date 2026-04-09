@@ -1084,6 +1084,23 @@ export default function QcScanner() {
                 >
                   {addPallet.isPending ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
                   Add Pallet
+                  {(() => {
+                    const inheritedType =
+                      pallets.find((p) => p.palletType)?.palletType ??
+                      pallets[pallets.length - 1]?.palletType ??
+                      "gd_owned";
+                    const shortLabel =
+                      inheritedType === "customer_owned" ? "CUST"
+                      : inheritedType === "gd_owned" ? "GD"
+                      : inheritedType === "chep" ? "CHEP"
+                      : inheritedType.toUpperCase().slice(0, 4);
+                    const badgeClass = palletTypeBadgeClass(inheritedType);
+                    return (
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none ${badgeClass}`}>
+                        {shortLabel}
+                      </span>
+                    );
+                  })()}
                 </Button>
               </div>
             )}

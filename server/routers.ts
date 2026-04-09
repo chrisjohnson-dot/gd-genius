@@ -226,6 +226,7 @@ import {
   deleteProductionSkuConfig,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
+import { getCarrierMarkups, getMarkupPct, applyMarkup } from "./opfiRateSheets";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
@@ -6919,7 +6920,6 @@ const smallParcelRouter = router({
           rateWizardShipmentId: confirmedShipment?.id ?? undefined,
           smallParcelSessionId: input.id,
           labelCostCents: confirmedShipment?.rateAmountCents ?? undefined,
-          rawCostCents: confirmedShipment?.rateAmountCents ?? undefined,
           labelUrl,
           labelZpl,
           status: "booked",
@@ -7343,19 +7343,15 @@ const smallParcelRouter = router({
 
   /** Get all small parcel settings as a key/value map */
   getAllSettings: protectedProcedure.query(async () => {
-    const [countdown, replenishmentWeeks, markupRaw] = await Promise.all([
+    const [countdown, replenishmentWeeks] = await Promise.all([
       getSmallParcelSetting('reprint_countdown_seconds'),
       getSmallParcelSetting('packaging_replenishment_weeks'),
-      getSmallParcelSetting('rate_markup_multiplier'),
     ]);
     const parsedWeeks = replenishmentWeeks ? parseInt(replenishmentWeeks, 10) : 4;
     const validWeeks = [2, 4, 6].includes(parsedWeeks) ? parsedWeeks : 4;
-    const parsedMarkup = markupRaw ? parseFloat(markupRaw) : 1.0;
-    const validMarkup = isFinite(parsedMarkup) && parsedMarkup >= 1.0 && parsedMarkup <= 3.0 ? parsedMarkup : 1.0;
     return {
       reprintCountdownSeconds: countdown ? parseInt(countdown, 10) : 10,
       packagingReplenishmentWeeks: validWeeks,
-      rateMarkupMultiplier: validMarkup,
     };
   }),
 
@@ -7933,10 +7929,8 @@ const rateWizardRouter = router({
       // ── Hard gate: read the active small_parcel integration ─────────────────
       // This is the ONLY routing decision. No fallthrough between integrations.
       const activeIntegration = (await getActiveShippingIntegration('small_parcel')) ?? 'rate_wizard';
-      // Load markup multiplier from settings (hidden from customer)
-      const markupRaw = await getSmallParcelSetting('rate_markup_multiplier');
-      const parsedMarkup = markupRaw ? parseFloat(markupRaw) : 1.0;
-      const markupMultiplier = isFinite(parsedMarkup) && parsedMarkup >= 1.0 && parsedMarkup <= 3.0 ? parsedMarkup : 1.0;
+      // Fetch per-carrier markup percentages from OpFi (cached 5 min per client)
+      const opfiMarkups = await getCarrierMarkups(input.customerId ?? 0);
       // Customer routing rule (for preferred carrier / excluded carriers / max transit days)
       let customerRule: Awaited<ReturnType<typeof listCustomerShippingRules>>[number] | null = null;
       if (input.customerId && input.configId) {
@@ -8034,7 +8028,7 @@ const rateWizardRouter = router({
             const carrierCode = vRate.service_carrier ?? vRate.carrier ?? "other";
             if (excludedCarriers.includes(carrierCode)) continue;
 
-            const totalCost = parseFloat((rawCost * markupMultiplier).toFixed(2));
+            const totalCost = applyMarkup(rawCost, getMarkupPct(CARRIER_LABELS[carrierCode] ?? carrierCode, opfiMarkups));
             const surcharges: Array<{ label: string; amount: number }> = vRate.charges
               .filter((c) => c.charge_type === "OPTIONAL" && parseFloat(c.price.replace(/[^0-9.]/g, "")) > 0)
               .map((c) => ({ label: c.charge_title, amount: parseFloat(c.price.replace(/[^0-9.]/g, "")) }));
@@ -8104,7 +8098,7 @@ const rateWizardRouter = router({
             // Skip if Veeqo already returned rates for this carrier (avoid duplicates)
             if (veeqoCarrierCodes.has(dr.carrierCode)) continue;
 
-            const totalCost = parseFloat((dr.totalCost * markupMultiplier).toFixed(2));
+            const totalCost = applyMarkup(dr.totalCost, getMarkupPct(dr.carrierName, opfiMarkups));
 
             rates.push({
               rateId: dr.rateId,
@@ -8203,7 +8197,7 @@ const rateWizardRouter = router({
             if (residentialSurcharge > 0) surcharges.push({ label: "Residential", amount: residentialSurcharge });
             if (signatureSurcharge > 0) surcharges.push({ label: "Signature", amount: signatureSurcharge });
             const rawCost = svc.baseCost * weightMultiplier + surcharges.reduce((s, x) => s + x.amount, 0);
-            const totalCost = parseFloat((rawCost * markupMultiplier).toFixed(2));
+            const totalCost = applyMarkup(rawCost, getMarkupPct(CARRIER_LABELS[account.carrierCode] ?? account.carrierCode, opfiMarkups));
             rates.push({
               rateId: `${account.carrierCode}_${svc.service.replace(/\s+/g, "_").toLowerCase()}_mock`,
               carrierCode: account.carrierCode,

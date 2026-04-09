@@ -393,113 +393,6 @@ function InboundReturnsLog() {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-// ─── Freight Rate Markup Card ─────────────────────────────────────────────────
-function FreightMarkupCard() {
-  const { data: settings, refetch } = trpc.smallParcel.getAllSettings.useQuery();
-  const setSettingMutation = trpc.smallParcel.setSetting.useMutation({
-    onSuccess: () => { refetch(); toast.success("Markup multiplier saved"); setEditing(false); },
-    onError: (err) => toast.error(`Failed: ${err.message}`),
-  });
-
-  const currentMultiplier = settings?.rateMarkupMultiplier ?? 1.0;
-  const [editing, setEditing] = useState(false);
-  const [inputVal, setInputVal] = useState("");
-
-  const handleEdit = () => {
-    setInputVal(currentMultiplier.toFixed(2));
-    setEditing(true);
-  };
-
-  const handleSave = () => {
-    const v = parseFloat(inputVal);
-    if (!isFinite(v) || v < 1.0 || v > 3.0) {
-      toast.error("Multiplier must be between 1.00 and 3.00");
-      return;
-    }
-    setSettingMutation.mutate({ key: "rate_markup_multiplier", value: v.toFixed(4) });
-  };
-
-  const markupPct = ((currentMultiplier - 1) * 100).toFixed(1);
-  const isMarkupActive = currentMultiplier > 1.0;
-
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Freight Rate Markup</CardTitle>
-            <CardDescription>
-              A hidden multiplier applied to all Rate Wizard carrier rates before they are displayed to operators.
-              The sourced carrier cost is multiplied by this factor — the difference is GD's margin.
-            </CardDescription>
-          </div>
-          {isMarkupActive ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5" /> +{markupPct}% margin active
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-muted text-muted-foreground px-2.5 py-1 rounded-full">
-              No markup (pass-through)
-            </span>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-end gap-4">
-          <div className="space-y-1.5 flex-1 max-w-xs">
-            <Label htmlFor="markup-multiplier">Multiplier</Label>
-            {editing ? (
-              <Input
-                id="markup-multiplier"
-                type="number"
-                step="0.01"
-                min="1.00"
-                max="3.00"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-                className="font-mono"
-                autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
-              />
-            ) : (
-              <div className="flex items-center gap-2 h-10 px-3 rounded-md border bg-muted/40">
-                <span className="font-mono font-semibold text-lg">{currentMultiplier.toFixed(2)}×</span>
-                <span className="text-muted-foreground text-sm ml-1">
-                  {isMarkupActive ? `(carrier cost + ${markupPct}%)` : "(no markup — pass-through)"}
-                </span>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Example: a carrier rate of $10.00 × {currentMultiplier.toFixed(2)} = <strong>${(10 * currentMultiplier).toFixed(2)}</strong> shown to operator.
-              Valid range: 1.00 – 3.00.
-            </p>
-          </div>
-          <div className="flex gap-2 pb-7">
-            {editing ? (
-              <>
-                <Button size="sm" onClick={handleSave} disabled={setSettingMutation.isPending}>
-                  {setSettingMutation.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : "Save"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
-              </>
-            ) : (
-              <Button size="sm" variant="outline" onClick={handleEdit}>Edit</Button>
-            )}
-          </div>
-        </div>
-
-        {/* Audit note */}
-        <div className="mt-4 flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-md p-3">
-          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          <span>
-            This multiplier is applied <strong>server-side</strong> and is never exposed to operators or customers.
-            The displayed rate already includes the markup. The raw carrier cost is stored separately in the shipment record for reconciliation.
-          </span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function CortexSettings() {
   return (
@@ -555,7 +448,6 @@ export default function CortexSettings() {
               <ConnectionCard platform="opfi" label="OpFi" />
             </CardContent>
           </Card>
-          <FreightMarkupCard />
         </TabsContent>
 
         <TabsContent value="inbound">

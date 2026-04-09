@@ -5418,6 +5418,140 @@ const whLocationConfigRouter = router({
     }),
 });
 
+
+// ─── Pallet Capture Router ──────────────────────────────────────────────────
+import {
+  createPalletSession,
+  getPalletSession,
+  getOpenPalletSession,
+  listPalletSessions,
+  addPalletToSession,
+  removeLastPallet,
+  listSessionPallets,
+  completePalletSession,
+  updatePalletSessionOpfiStatus,
+} from "./db.js";
+
+const palletCaptureRouter = router({
+  /** Start a new pallet capture session for an Extensiv receiving transaction. */
+  startSession: protectedProcedure
+    .input(z.object({
+      transactionId: z.number(),
+      facilityId: z.number(),
+      facilityName: z.string().default(""),
+      customerId: z.number(),
+      customerName: z.string().default(""),
+      poNum: z.string().optional(),
+      referenceNum: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const existing = await getOpenPalletSession(input.transactionId);
+      if (existing) return { sessionId: existing.id, resumed: true };
+      const sessionId = await createPalletSession({
+        ...input,
+        startedBy: ctx.user.name ?? ctx.user.openId,
+      });
+      return { sessionId, resumed: false };
+    }),
+
+  /** Get a session with its pallet list. */
+  getSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const session = await getPalletSession(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const pallets = await listSessionPallets(input.sessionId);
+      return { session, pallets };
+    }),
+
+  /** List recent sessions for a facility. */
+  listSessions: protectedProcedure
+    .input(z.object({ facilityId: z.number(), limit: z.number().min(1).max(200).default(50) }))
+    .query(async ({ input }) => {
+      return listPalletSessions(input.facilityId, input.limit);
+    }),
+
+  /** Add a pallet to an open session. */
+  addPallet: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      palletType: z.enum(["standard", "oversize", "other"]),
+      description: z.string().optional(),
+      notes: z.string().optional(),
+      weightLbs: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const palletId = await addPalletToSession(input.sessionId, {
+        palletType: input.palletType,
+        description: input.description,
+        notes: input.notes,
+        weightLbs: input.weightLbs,
+      });
+      const session = await getPalletSession(input.sessionId);
+      return { palletId, session };
+    }),
+
+  /** Undo the last pallet added to a session. */
+  undoLastPallet: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const removed = await removeLastPallet(input.sessionId);
+      const session = await getPalletSession(input.sessionId);
+      return { removed, session };
+    }),
+
+  /** Complete a session and trigger OpFi push. */
+  completeSession: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      nonConformingHours: z.number().min(0).max(24).optional().nullable(),
+      nonConformingReason: z.string().max(512).optional().nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const session = await getPalletSession(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.status === "completed") throw new TRPCError({ code: "BAD_REQUEST", message: "Session already completed" });
+
+      await completePalletSession(input.sessionId, {
+        completedBy: ctx.user.name ?? ctx.user.openId,
+        nonConformingHours: input.nonConformingHours,
+        nonConformingReason: input.nonConformingReason,
+      });
+
+      // OpFi push — fire and forget
+      const opfiUrl = process.env.OPFI_WEBHOOK_URL;
+      if (opfiUrl) {
+        const pallets = await listSessionPallets(input.sessionId);
+        const completedSession = await getPalletSession(input.sessionId);
+        const payload = { event: "pallet_session_completed", session: completedSession, pallets };
+        fetch(opfiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.OPFI_API_KEY ?? ""}`,
+          },
+          body: JSON.stringify(payload),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              await updatePalletSessionOpfiStatus(input.sessionId, "sent");
+            } else {
+              const err = await res.text().catch(() => res.statusText);
+              await updatePalletSessionOpfiStatus(input.sessionId, "failed", err.slice(0, 512));
+            }
+          })
+          .catch(async (err: Error) => {
+            await updatePalletSessionOpfiStatus(input.sessionId, "failed", err.message.slice(0, 512));
+          });
+      } else {
+        await updatePalletSessionOpfiStatus(input.sessionId, "skipped");
+      }
+
+      const finalSession = await getPalletSession(input.sessionId);
+      return { success: true, session: finalSession };
+    }),
+});
+
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
 export const appRouter = router({
   ..._appRouter._def.record,
@@ -5429,6 +5563,7 @@ export const appRouter = router({
   qcScanner: qcScannerRouter,
   palletScanner: palletScannerRouter,
   receiving: receivingRouter,
+  palletCapture: palletCaptureRouter,
   putAway: putAwayRouter,
   auditDocuments: auditDocumentsRouter,
   labelScan: labelScanRouter,

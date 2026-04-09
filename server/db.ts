@@ -4104,3 +4104,206 @@ export async function findShipmentByShipwellId(shipwellShipmentId: string): Prom
     .limit(1);
   return row ?? null;
 }
+
+// ─── Receiving Pallet Capture helpers ──────────────────────────────────────
+
+import {
+  receivePalletSessions,
+  receivePallets,
+  type ReceivePalletSession,
+  type InsertReceivePalletSession,
+  type ReceivePallet,
+} from "../drizzle/schema.js";
+
+/** Create a new pallet capture session for an Extensiv receiving transaction. */
+export async function createPalletSession(
+  data: InsertReceivePalletSession
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(receivePalletSessions).values(data);
+  return (result as any).insertId as number;
+}
+
+/** Get a single pallet session by ID. */
+export async function getPalletSession(id: number): Promise<ReceivePalletSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select()
+    .from(receivePalletSessions)
+    .where(eq(receivePalletSessions.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Get the open session for a given Extensiv transaction (if any). */
+export async function getOpenPalletSession(
+  transactionId: number
+): Promise<ReceivePalletSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select()
+    .from(receivePalletSessions)
+    .where(
+      and(
+        eq(receivePalletSessions.transactionId, transactionId),
+        eq(receivePalletSessions.status, "open")
+      )
+    )
+    .orderBy(desc(receivePalletSessions.startedAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/** List pallet sessions for a facility, most recent first. */
+export async function listPalletSessions(
+  facilityId: number,
+  limit = 50
+): Promise<ReceivePalletSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(receivePalletSessions)
+    .where(eq(receivePalletSessions.facilityId, facilityId))
+    .orderBy(desc(receivePalletSessions.startedAt))
+    .limit(limit);
+}
+
+/** Add a pallet to a session and update the aggregate counts. */
+export async function addPalletToSession(
+  sessionId: number,
+  data: { palletType: "standard" | "oversize" | "other"; description?: string; notes?: string; weightLbs?: number }
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const session = await getPalletSession(sessionId);
+  if (!session) throw new Error("Session not found");
+  if (session.status === "completed") throw new Error("Session is already completed");
+
+  const palletNumber = session.totalPallets + 1;
+
+  const [result] = await db.insert(receivePallets).values({
+    sessionId,
+    palletNumber,
+    palletType: data.palletType,
+    description: data.description ?? null,
+    notes: data.notes ?? null,
+    weightLbs: data.weightLbs != null ? String(data.weightLbs) : null,
+  });
+  const palletId = (result as any).insertId as number;
+
+  const palletType = data.palletType;
+  await db
+    .update(receivePalletSessions)
+    .set({
+      totalPallets: sql`${receivePalletSessions.totalPallets} + 1`,
+      standardPallets: palletType === "standard"
+        ? sql`${receivePalletSessions.standardPallets} + 1`
+        : sql`${receivePalletSessions.standardPallets}`,
+      oversizePallets: palletType === "oversize"
+        ? sql`${receivePalletSessions.oversizePallets} + 1`
+        : sql`${receivePalletSessions.oversizePallets}`,
+      otherPallets: palletType === "other"
+        ? sql`${receivePalletSessions.otherPallets} + 1`
+        : sql`${receivePalletSessions.otherPallets}`,
+    })
+    .where(eq(receivePalletSessions.id, sessionId));
+
+  return palletId;
+}
+
+/** Remove the last pallet from a session (undo last capture). */
+export async function removeLastPallet(sessionId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const session = await getPalletSession(sessionId);
+  if (!session || session.status === "completed" || session.totalPallets === 0) return false;
+
+  const [lastPallet] = await db
+    .select()
+    .from(receivePallets)
+    .where(eq(receivePallets.sessionId, sessionId))
+    .orderBy(desc(receivePallets.palletNumber))
+    .limit(1);
+  if (!lastPallet) return false;
+
+  await db.delete(receivePallets).where(eq(receivePallets.id, lastPallet.id));
+
+  const palletType = lastPallet.palletType;
+  await db
+    .update(receivePalletSessions)
+    .set({
+      totalPallets: sql`${receivePalletSessions.totalPallets} - 1`,
+      standardPallets: palletType === "standard"
+        ? sql`${receivePalletSessions.standardPallets} - 1`
+        : sql`${receivePalletSessions.standardPallets}`,
+      oversizePallets: palletType === "oversize"
+        ? sql`${receivePalletSessions.oversizePallets} - 1`
+        : sql`${receivePalletSessions.oversizePallets}`,
+      otherPallets: palletType === "other"
+        ? sql`${receivePalletSessions.otherPallets} - 1`
+        : sql`${receivePalletSessions.otherPallets}`,
+    })
+    .where(eq(receivePalletSessions.id, sessionId));
+
+  return true;
+}
+
+/** List all pallets in a session, ordered by pallet number. */
+export async function listSessionPallets(sessionId: number): Promise<ReceivePallet[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(receivePallets)
+    .where(eq(receivePallets.sessionId, sessionId))
+    .orderBy(receivePallets.palletNumber);
+}
+
+/** Complete a pallet session — sets status, completedAt, non-conforming hours, and completedBy. */
+export async function completePalletSession(
+  sessionId: number,
+  opts: {
+    completedBy: string;
+    nonConformingHours?: number | null;
+    nonConformingReason?: string | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(receivePalletSessions)
+    .set({
+      status: "completed",
+      completedAt: new Date(),
+      completedBy: opts.completedBy,
+      nonConformingHours: opts.nonConformingHours != null
+        ? String(opts.nonConformingHours)
+        : null,
+      nonConformingReason: opts.nonConformingReason ?? null,
+    })
+    .where(eq(receivePalletSessions.id, sessionId));
+}
+
+/** Update OpFi push status on a pallet session. */
+export async function updatePalletSessionOpfiStatus(
+  sessionId: number,
+  status: "pending" | "sent" | "failed" | "skipped",
+  error?: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(receivePalletSessions)
+    .set({
+      opfiPushStatus: status,
+      opfiPushedAt: status === "sent" ? new Date() : undefined,
+      opfiError: error ?? null,
+    })
+    .where(eq(receivePalletSessions.id, sessionId));
+}

@@ -42,6 +42,7 @@ import {
   Loader2,
   ArrowRight,
   ClipboardCheck,
+  Package,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -910,6 +911,81 @@ export default function ReceivingDashboard() {
           onStarted={() => void refetch()}
         />
       )}
+
+      {/* Pallet Session History */}
+      <PalletSessionHistory />
+    </div>
+  );
+}
+
+// ─── Pallet Session History Panel ────────────────────────────────────────────
+function PalletSessionHistory() {
+  const { data: sessions, isLoading } = trpc.palletCapture.listSessions.useQuery(
+    { facilityId: 0, limit: 20 },
+    { refetchInterval: 60_000 }
+  );
+
+  if (isLoading) return null;
+  if (!sessions || sessions.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <Package className="h-4 w-4 text-muted-foreground" />
+        Recent Pallet Sessions
+      </h2>
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/30">
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Transaction ID</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Facility</th>
+              <th className="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground">Pallets</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">OpFi Push</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Completed</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">By</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {sessions.map((s) => (
+              <tr key={s.id} className="hover:bg-muted/20 transition-colors">
+                <td className="px-4 py-2.5 font-mono text-xs text-foreground">{s.transactionId ?? "—"}</td>
+                <td className="px-4 py-2.5 text-xs text-muted-foreground">{s.facilityName ?? String(s.facilityId)}</td>
+                <td className="px-4 py-2.5 text-right text-xs font-medium text-foreground">{s.totalPallets}</td>
+                <td className="px-4 py-2.5">
+                  <span className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium",
+                    s.status === "completed" ? "bg-green-500/10 text-green-600" :
+                    s.status === "open" ? "bg-blue-500/10 text-blue-600" :
+                    "bg-muted text-muted-foreground"
+                  )}>
+                    {s.status === "completed" ? "Completed" : s.status === "open" ? "In Progress" : s.status}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium",
+                    s.opfiPushStatus === "sent" ? "bg-green-500/10 text-green-600" :
+                    s.opfiPushStatus === "failed" ? "bg-red-500/10 text-red-600" :
+                    s.opfiPushStatus === "pending" ? "bg-amber-500/10 text-amber-600" :
+                    "bg-muted text-muted-foreground"
+                  )}>
+                    {s.opfiPushStatus === "sent" ? "Sent" :
+                     s.opfiPushStatus === "failed" ? "Failed" :
+                     s.opfiPushStatus === "pending" ? "Pending" :
+                     s.opfiPushStatus === "skipped" ? "Skipped" : "—"}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                  {s.completedAt ? new Date(s.completedAt).toLocaleString() : "—"}
+                </td>
+                <td className="px-4 py-2.5 text-xs text-muted-foreground">{s.completedBy ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

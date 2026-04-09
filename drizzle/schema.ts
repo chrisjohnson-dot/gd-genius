@@ -1592,3 +1592,67 @@ export const shipments = mysqlTable("shipments", {
 
 export type Shipment = typeof shipments.$inferSelect;
 export type InsertShipment = typeof shipments.$inferInsert;
+
+// ─── Receiving Pallet Capture ───────────────────────────────────────────────
+// One session per receiving transaction (ASN/PO receipt from Extensiv).
+// A session is "open" while pallets are being logged; "completed" once the
+// supervisor clicks Complete Session (which triggers the OpFi push).
+export const receivePalletSessions = mysqlTable("receive_pallet_sessions", {
+  id:                  int("id").primaryKey().autoincrement(),
+  // Extensiv transaction ID (readOnly.transactionId on the receiver)
+  transactionId:       int("transactionId").notNull(),
+  // Extensiv facility / customer identifiers for display
+  facilityId:          int("facilityId").notNull(),
+  facilityName:        varchar("facilityName", { length: 128 }).notNull().default(""),
+  customerId:          int("customerId").notNull(),
+  customerName:        varchar("customerName", { length: 128 }).notNull().default(""),
+  // PO / reference for display
+  poNum:               varchar("poNum", { length: 128 }),
+  referenceNum:        varchar("referenceNum", { length: 128 }),
+  // Session lifecycle
+  status:              mysqlEnum("rps_status", ["open", "completed"]).notNull().default("open"),
+  // Non-conforming hours: hours outside standard receiving window that were required
+  nonConformingHours:  decimal("nonConformingHours", { precision: 5, scale: 2 }),
+  nonConformingReason: varchar("nonConformingReason", { length: 512 }),
+  // Aggregate counts (denormalised for quick display)
+  totalPallets:        int("totalPallets").notNull().default(0),
+  standardPallets:     int("standardPallets").notNull().default(0),
+  oversizePallets:     int("oversizePallets").notNull().default(0),
+  otherPallets:        int("otherPallets").notNull().default(0),
+  // OpFi push tracking
+  opfiPushStatus:      mysqlEnum("rps_opfi_status", ["pending", "sent", "failed", "skipped"]).default("pending"),
+  opfiPushedAt:        timestamp("opfiPushedAt"),
+  opfiError:           varchar("opfiError", { length: 512 }),
+  // Who started / completed the session
+  startedBy:           varchar("startedBy", { length: 128 }),
+  completedBy:         varchar("completedBy", { length: 128 }),
+  startedAt:           timestamp("startedAt").notNull().defaultNow(),
+  completedAt:         timestamp("completedAt"),
+  createdAt:           timestamp("rps_createdAt").notNull().defaultNow(),
+  updatedAt:           timestamp("rps_updatedAt").notNull().defaultNow().onUpdateNow(),
+});
+
+export type ReceivePalletSession = typeof receivePalletSessions.$inferSelect;
+export type InsertReceivePalletSession = typeof receivePalletSessions.$inferInsert;
+
+// One row per physical pallet captured during a receiving session.
+export const receivePallets = mysqlTable("receive_pallets", {
+  id:           int("id").primaryKey().autoincrement(),
+  sessionId:    int("sessionId").notNull(),
+  // Sequential pallet number within the session (1, 2, 3 …)
+  palletNumber: int("palletNumber").notNull(),
+  // Pallet type confirmed by the receiver
+  palletType:   mysqlEnum("rp_palletType", ["standard", "oversize", "other"]).notNull(),
+  // Optional free-text description (required when palletType = "other")
+  description:  varchar("description", { length: 256 }),
+  // Optional photo URL (S3) captured at dock
+  photoUrl:     varchar("photoUrl", { length: 512 }),
+  // Weight (optional)
+  weightLbs:    decimal("weightLbs", { precision: 8, scale: 2 }),
+  notes:        varchar("notes", { length: 512 }),
+  capturedAt:   timestamp("capturedAt").notNull().defaultNow(),
+  createdAt:    timestamp("rp_createdAt").notNull().defaultNow(),
+});
+
+export type ReceivePallet = typeof receivePallets.$inferSelect;
+export type InsertReceivePallet = typeof receivePallets.$inferInsert;

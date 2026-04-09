@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useUnitSystem } from "@/hooks/useUnitSystem";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
   CheckCircle2,
   Circle,
   Mail,
+  Ruler,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -286,65 +288,77 @@ function CategoryDetailPanel({
     });
   };
 
+  const { unit, toggle, fmtInchDims, fmtLbs, unitLabel } = useUnitSystem();
+
   // Build the list of items to show for this category
+  type ItemEntry = {
+    typeName: string;
+    dbCategory: "package_unit" | "pallet";
+    fromExtensiv: boolean;
+    // Raw imperial dims from Extensiv (null for global-catalogue-only items)
+    imperial: { l: number | null; w: number | null; h: number | null; wt: number | null } | null;
+    extra: string; // non-dimension metadata (units/pallet, SKU count, etc.)
+    globalClientCount?: number;
+  };
   const items = useMemo(() => {
     const seen = new Set<string>();
-    const result: Array<{ typeName: string; subtext: string; dbCategory: "package_unit" | "pallet"; fromExtensiv: boolean }> = [];
+    const result: ItemEntry[] = [];
 
     if (category === "pallet") {
-      // Extensiv pallet types for this client
       if (extData) {
         for (const p of extData.palletTypes) {
           if (!seen.has(p.palletName)) {
             seen.add(p.palletName);
-            const dimStr = [p.imperial.length, p.imperial.width, p.imperial.height].filter(Boolean).join(" × ");
-            const parts: string[] = [];
-            if (p.qtyPerPallet && p.qtyPerPallet > 0) parts.push(`${p.qtyPerPallet} units/pallet`);
-            if (dimStr) parts.push(`${dimStr} in`);
-            if (p.imperial.weight) parts.push(`${p.imperial.weight} lbs`);
-            parts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
-            result.push({ typeName: p.palletName, subtext: parts.join(" · "), dbCategory: "pallet", fromExtensiv: true });
+            const extraParts: string[] = [];
+            if (p.qtyPerPallet && p.qtyPerPallet > 0) extraParts.push(`${p.qtyPerPallet} units/pallet`);
+            extraParts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
+            result.push({
+              typeName: p.palletName,
+              dbCategory: "pallet",
+              fromExtensiv: true,
+              imperial: { l: p.imperial.length, w: p.imperial.width, h: p.imperial.height, wt: p.imperial.weight },
+              extra: extraParts.join(" · "),
+            });
           }
         }
       }
-      // Global pallet types from DB (other clients)
       for (const g of globalTypeNames) {
         if (g.category === "pallet" && !seen.has(g.typeName)) {
           seen.add(g.typeName);
-          result.push({ typeName: g.typeName, subtext: `Used by ${g.clientCount} client${g.clientCount !== 1 ? "s" : ""}`, dbCategory: "pallet", fromExtensiv: false });
+          result.push({ typeName: g.typeName, dbCategory: "pallet", fromExtensiv: false, imperial: null, extra: "", globalClientCount: g.clientCount });
         }
       }
     } else {
-      // package_unit items filtered by envelope/box classification
       if (extData) {
         for (const p of extData.packageUnits) {
           const cls = classifyPackageUnit(p.unitName);
           if (cls !== category) continue;
           if (!seen.has(p.unitName)) {
             seen.add(p.unitName);
-            const dimStr = [p.imperial.length, p.imperial.width, p.imperial.height].filter(Boolean).join(" × ");
-            const parts: string[] = [];
-            if (p.inventoryUnitsPerUnit && p.inventoryUnitsPerUnit > 0) parts.push(`${p.inventoryUnitsPerUnit} units/pkg`);
-            if (dimStr) parts.push(`${dimStr} in`);
-            if (p.imperial.weight) parts.push(`${p.imperial.weight} lbs`);
-            parts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
-            result.push({ typeName: p.unitName, subtext: parts.join(" · "), dbCategory: "package_unit", fromExtensiv: true });
+            const extraParts: string[] = [];
+            if (p.inventoryUnitsPerUnit && p.inventoryUnitsPerUnit > 0) extraParts.push(`${p.inventoryUnitsPerUnit} units/pkg`);
+            extraParts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
+            result.push({
+              typeName: p.unitName,
+              dbCategory: "package_unit",
+              fromExtensiv: true,
+              imperial: { l: p.imperial.length, w: p.imperial.width, h: p.imperial.height, wt: p.imperial.weight },
+              extra: extraParts.join(" · "),
+            });
           }
         }
       }
-      // Global package_unit types from DB filtered by category
       for (const g of globalTypeNames) {
         if (g.category !== "package_unit") continue;
         const cls = classifyPackageUnit(g.typeName);
         if (cls !== category) continue;
         if (!seen.has(g.typeName)) {
           seen.add(g.typeName);
-          result.push({ typeName: g.typeName, subtext: `Used by ${g.clientCount} client${g.clientCount !== 1 ? "s" : ""}`, dbCategory: "package_unit", fromExtensiv: false });
+          result.push({ typeName: g.typeName, dbCategory: "package_unit", fromExtensiv: false, imperial: null, extra: "", globalClientCount: g.clientCount });
         }
       }
     }
 
-    // Sort: enabled first, then alphabetical
     return result.sort((a, b) => {
       const aEnabled = enabledMap.get(`${a.dbCategory}:${a.typeName}`) ?? false;
       const bEnabled = enabledMap.get(`${b.dbCategory}:${b.typeName}`) ?? false;
@@ -361,7 +375,7 @@ function CategoryDetailPanel({
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return items;
-    return items.filter((i) => i.typeName.toLowerCase().includes(q) || i.subtext.toLowerCase().includes(q));
+    return items.filter((i) => i.typeName.toLowerCase().includes(q) || i.extra.toLowerCase().includes(q));
   }, [items, searchQuery]);
 
   if (extLoading || enabledLoading) {
@@ -398,6 +412,10 @@ function CategoryDetailPanel({
             </p>
           </div>
         </div>
+        <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={toggle} title={`Currently showing ${unitLabel}`}>
+          <Ruler className="w-3.5 h-3.5" />
+          {unit === "metric" ? "in/lbs" : "cm/kg"}
+        </Button>
         <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => extRefetch()} disabled={extFetching}>
           <RefreshCw className={`w-3.5 h-3.5 ${extFetching ? "animate-spin" : ""}`} />
           Refresh
@@ -450,7 +468,21 @@ function CategoryDetailPanel({
               <PackagingTypeCard
                 key={key}
                 label={item.typeName}
-                subtext={item.subtext}
+                subtext={(() => {
+                  if (!item.fromExtensiv || !item.imperial) {
+                    return item.globalClientCount != null
+                      ? `Used by ${item.globalClientCount} client${item.globalClientCount !== 1 ? "s" : ""}`
+                      : item.extra || undefined;
+                  }
+                  const parts: string[] = [];
+                  const dimStr = fmtInchDims(item.imperial.l, item.imperial.w, item.imperial.h);
+                  if (item.extra) parts.push(item.extra.split(" · ")[0]); // units/pallet or units/pkg
+                  if (dimStr) parts.push(dimStr);
+                  if (item.imperial.wt) parts.push(fmtLbs(item.imperial.wt));
+                  const skuPart = item.extra.split(" · ").at(-1) ?? "";
+                  if (skuPart && skuPart !== parts[0]) parts.push(skuPart);
+                  return parts.join(" · ") || undefined;
+                })()}
                 enabled={isEnabled}
                 onToggle={() => handleToggle(item.dbCategory, item.typeName, isEnabled)}
                 pending={isPending}
@@ -664,18 +696,23 @@ function ExtensivPackagingSection({
     );
   }
 
+  const { unit: rootUnit, toggle: rootToggle } = useUnitSystem();
   // Root: three category tiles
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold">{clientName}</h2>
           <p className="text-xs text-muted-foreground">
             Select a category to enable packaging types
           </p>
         </div>
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+        <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={rootToggle} title={`Currently showing ${rootUnit === "metric" ? "cm/kg" : "in/lbs"}`}>
+          <Ruler className="w-3.5 h-3.5" />
+          {rootUnit === "metric" ? "in/lbs" : "cm/kg"}
+        </Button>
+        <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
           Refresh
         </Button>
@@ -718,6 +755,7 @@ function ExtensivPackagingSection({
 // ─── Custom Package Sizes Section ─────────────────────────────────────────────
 function CustomPackageSizesSection({ clientId, clientName, sizes }: { clientId: number; clientName: string; sizes: PackageSize[] }) {
   const [editingId, setEditingId] = useState<number | null>(null);
+  const { unit: customUnit, toggle: customToggle, fmtDims, fmtWt } = useUnitSystem();
   const utils = trpc.useUtils();
 
   const deleteMutation = trpc.smallParcel.deletePackageSize.useMutation({
@@ -735,6 +773,10 @@ function CustomPackageSizesSection({ clientId, clientName, sizes }: { clientId: 
         <Package className="w-4 h-4 text-green-600" />
         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Custom Pack &amp; Ship Sizes</h3>
         <Badge variant="secondary">{sizes.length}</Badge>
+        <Button size="sm" variant="outline" className="gap-1.5 ml-auto h-7 text-xs" onClick={customToggle} title={`Currently showing ${customUnit === "metric" ? "cm/kg" : "in/lbs"}`}>
+          <Ruler className="w-3 h-3" />
+          {customUnit === "metric" ? "in/lbs" : "cm/kg"}
+        </Button>
       </div>
       <div className="flex flex-col gap-2">
         {sizes.length === 0 && (
@@ -751,9 +793,9 @@ function CustomPackageSizesSection({ clientId, clientName, sizes }: { clientId: 
               <Package className="w-4 h-4 text-muted-foreground shrink-0" />
               <span className="font-medium text-sm">{size.name}</span>
               {(size.lengthCm || size.widthCm || size.heightCm) && (
-                <span className="text-xs text-muted-foreground">{[size.lengthCm, size.widthCm, size.heightCm].filter(Boolean).join(" × ")} cm</span>
+                <span className="text-xs text-muted-foreground">{fmtDims(size.lengthCm, size.widthCm, size.heightCm)}</span>
               )}
-              {size.weightKg && <span className="text-xs text-muted-foreground">{size.weightKg} kg</span>}
+              {size.weightKg && <span className="text-xs text-muted-foreground">{fmtWt(size.weightKg)}</span>}
               <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(size.id)}><Pencil className="w-3.5 h-3.5" /></Button>
                 <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive"

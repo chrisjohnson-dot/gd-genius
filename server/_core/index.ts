@@ -19,6 +19,7 @@ import { flushPendingWebhooks, flushPendingShipmentPushes } from "../cortex/webh
 import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
 import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
 import { startScanImagePurgeScheduler } from "../scheduler/scanImagePurge";
+import { startOpFiHealthCheckScheduler } from "../scheduler/opfiHealthCheck";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -98,6 +99,8 @@ async function startServer() {
     startSlaNightlySnapshot();
     // Nightly scan image retention purge at 02:00 UTC
     startScanImagePurgeScheduler();
+    // OpFi connection health check every 15 minutes
+    startOpFiHealthCheckScheduler();
   });
 }
 

@@ -132,7 +132,7 @@ export async function syncShipwellStatusNow(): Promise<{
           const deliveredRow = await findShipmentByShipwellId(order.shipwellShipmentId!);
           if (deliveredRow && deliveredRow.status !== "delivered") {
             await updateShipment(deliveredRow.id, { status: "delivered", deliveredAt: new Date() });
-            void pushShipmentToClearSight(deliveredRow.id, "shipment.delivered");
+            void pushShipmentToClearSight(deliveredRow.id, "shipment.updated");
             console.log(`[ShipwellSync] Mirrored delivered status to unified shipment #${deliveredRow.id}`);
           }
         } catch (err) {
@@ -148,7 +148,7 @@ export async function syncShipwellStatusNow(): Promise<{
           const mappedStatus: string | null =
             newStatus === "in_transit" ? "in_transit" :
             newStatus === "carrier_confirmed" || newStatus === "tendered" ? "booked" :
-            newStatus === "exception" ? "exception" :
+            newStatus === ("exception" as string) ? "exception" :
             null;
           if (mappedStatus) {
             try {

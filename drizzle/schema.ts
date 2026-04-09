@@ -1656,3 +1656,29 @@ export const receivePallets = mysqlTable("receive_pallets", {
 
 export type ReceivePallet = typeof receivePallets.$inferSelect;
 export type InsertReceivePallet = typeof receivePallets.$inferInsert;
+
+// ─── Purchase Orders ──────────────────────────────────────────────────────────
+// Stores GD Genius purchase orders created by staff and pushed to OpFi.
+export const purchaseOrders = mysqlTable("purchase_orders", {
+  id:                int("id").primaryKey().autoincrement(),
+  poNumber:          varchar("po_number", { length: 64 }).notNull().unique(),
+  customerId:        varchar("customer_id", { length: 64 }).notNull(),
+  customerName:      varchar("customer_name", { length: 255 }).notNull(),
+  warehouse:         mysqlEnum("po_warehouse", ["Columbus", "Reno", "Toronto", "Calgary"]).notNull(),
+  poDate:            varchar("po_date", { length: 10 }).notNull(),
+  billingPeriod:     varchar("billing_period", { length: 7 }).notNull(),
+  kittingCharge:     decimal("kitting_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  labourCharge:      decimal("labour_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  materialCharge:    decimal("material_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  totalCharge:       decimal("total_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  currency:          mysqlEnum("po_currency", ["USD", "CAD"]).notNull().default("CAD"),
+  notes:             text("notes"),
+  opfiPushStatus:    mysqlEnum("opfi_push_status", ["pending", "sent", "failed", "skipped"]).notNull().default("pending"),
+  opfiPushError:     text("opfi_push_error"),
+  opfiPushAttempts:  int("opfi_push_attempts").notNull().default(0),
+  opfiLastPushedAt:  bigint("opfi_last_pushed_at", { mode: "number" }),
+  createdBy:         varchar("created_by", { length: 128 }),
+  createdAt:         bigint("created_at", { mode: "number" }).notNull().default(0),
+});
+export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+export type InsertPurchaseOrder = typeof purchaseOrders.$inferInsert;

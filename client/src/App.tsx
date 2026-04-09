@@ -34,6 +34,7 @@ import FlaggedScans from "@/pages/FlaggedScans";
 import PalletScanner from "@/pages/PalletScanner";
 import ReceivingDashboard from "@/pages/ReceivingDashboard";
 import PalletCapture from "@/pages/PalletCapture";
+import PurchaseOrders from "@/pages/PurchaseOrders";
 import PutAwayAssistant from "@/pages/PutAwayAssistant";
 import PutAwayList from "@/pages/PutAwayList";
 import ReceiptConfirmation from "@/pages/ReceiptConfirmation";
@@ -98,6 +99,7 @@ function AppRoutes() {
         <Route path="/shipping-integration" component={ShippingIntegration} />
         <Route path="/sla-tracker">{() => { window.location.replace("/sla-performance"); return null; }}</Route>
         <Route path="/client-visibility" component={ClientVisibility} />
+        <Route path="/purchase-orders" component={PurchaseOrders} />
         <Route path="/returns" component={ReturnsDashboard} />
         <Route path="/returns/process" component={ProcessReturns} />
         <Route path="/returns/session/:id" component={ProcessReturns} />

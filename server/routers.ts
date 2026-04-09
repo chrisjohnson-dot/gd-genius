@@ -204,6 +204,8 @@ import {
 } from "./db";
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
+import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
+import { purchaseOrders } from "../drizzle/schema";
 import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, type CarrierRateInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
@@ -5553,6 +5555,169 @@ const palletCaptureRouter = router({
 });
 
 // Extend _appRouter with laneThresholds, overdueAlert, clientVisibility, returns, cortex, qcScanner, and palletScanner
+
+// ─── Purchase Order Router ────────────────────────────────────────────────────
+const purchaseOrderRouter = router({
+  // List all POs (most recent first)
+  list: protectedProcedure
+    .input(z.object({
+      billingPeriod: z.string().optional(),
+      warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary"]).optional(),
+      status: z.enum(["pending", "sent", "failed", "skipped"]).optional(),
+      limit: z.number().int().min(1).max(200).default(100),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const { eq, desc, and } = await import("drizzle-orm");
+      const conditions = [];
+      if (input.billingPeriod) conditions.push(eq(purchaseOrders.billingPeriod, input.billingPeriod));
+      if (input.warehouse) conditions.push(eq(purchaseOrders.warehouse, input.warehouse));
+      if (input.status) conditions.push(eq(purchaseOrders.opfiPushStatus, input.status));
+      const rows = await db
+        .select()
+        .from(purchaseOrders)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(purchaseOrders.createdAt))
+        .limit(input.limit);
+      return rows;
+    }),
+
+  // Get a single PO by ID
+  get: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      const { eq } = await import("drizzle-orm");
+      const [row] = await db
+        .select()
+        .from(purchaseOrders)
+        .where(eq(purchaseOrders.id, input.id))
+        .limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "PO not found" });
+      return row;
+    }),
+
+  // Create a new PO and immediately push to OpFi
+  create: protectedProcedure
+    .input(z.object({
+      customerId: z.string().min(1),
+      customerName: z.string().min(1),
+      warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary"]),
+      poDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      billingPeriod: z.string().regex(/^\d{4}-\d{2}$/),
+      kittingCharge: z.number().min(0).default(0),
+      labourCharge: z.number().min(0).default(0),
+      materialCharge: z.number().min(0).default(0),
+      currency: z.enum(["USD", "CAD"]).default("CAD"),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      // Auto-generate PO number: GEN-YYYY-MM-NNNN
+      const { sql: drizzleSql } = await import("drizzle-orm");
+      const [countRow] = await db
+        .select({ cnt: drizzleSql<number>`COUNT(*)` })
+        .from(purchaseOrders)
+        .where(drizzleSql`billing_period = ${input.billingPeriod}`);
+      const seq = ((countRow?.cnt as number) ?? 0) + 1;
+      const poNumber = `GEN-${input.billingPeriod}-${String(seq).padStart(4, "0")}`;
+
+      const total = input.kittingCharge + input.labourCharge + input.materialCharge;
+
+      const [result] = await db.insert(purchaseOrders).values({
+        poNumber,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        warehouse: input.warehouse,
+        poDate: input.poDate,
+        billingPeriod: input.billingPeriod,
+        kittingCharge: String(input.kittingCharge),
+        labourCharge: String(input.labourCharge),
+        materialCharge: String(input.materialCharge),
+        totalCharge: String(total),
+        currency: input.currency,
+        notes: input.notes,
+        opfiPushStatus: "pending",
+        opfiPushAttempts: 0,
+        createdBy: ctx.user?.name ?? "unknown",
+        createdAt: Date.now(),
+      });
+
+      const insertId = (result as { insertId?: number }).insertId ?? 0;
+
+      // Immediately push to OpFi (fire-and-forget; status tracked in DB)
+      void pushPurchaseOrderToOpFi(insertId, {
+        poNumber,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        warehouse: input.warehouse,
+        poDate: input.poDate,
+        billingPeriod: input.billingPeriod,
+        kittingCharge: input.kittingCharge,
+        labourCharge: input.labourCharge,
+        materialCharge: input.materialCharge,
+        currency: input.currency,
+      }).then(async (res) => {
+        if (!res.success) {
+          const dbInner = await getDb();
+          if (dbInner) {
+            const { eq: eqInner } = await import("drizzle-orm");
+            await dbInner
+              .update(purchaseOrders)
+              .set({ opfiPushAttempts: 1 })
+              .where(eqInner(purchaseOrders.id, insertId));
+          }
+        }
+      });
+
+      return { poNumber, id: insertId };
+    }),
+
+  // Manually retry an OpFi push for a failed/pending PO
+  retryPush: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      const { eq } = await import("drizzle-orm");
+      const [po] = await db
+        .select()
+        .from(purchaseOrders)
+        .where(eq(purchaseOrders.id, input.id))
+        .limit(1);
+      if (!po) throw new TRPCError({ code: "NOT_FOUND", message: "PO not found" });
+
+      // Reset to pending so the push fires
+      await db
+        .update(purchaseOrders)
+        .set({ opfiPushStatus: "pending", opfiPushError: null })
+        .where(eq(purchaseOrders.id, input.id));
+
+      const result = await pushPurchaseOrderToOpFi(po.id, {
+        poNumber: po.poNumber,
+        customerId: po.customerId,
+        customerName: po.customerName,
+        warehouse: po.warehouse as "Columbus" | "Reno" | "Toronto" | "Calgary",
+        poDate: po.poDate,
+        billingPeriod: po.billingPeriod,
+        kittingCharge: parseFloat(po.kittingCharge ?? "0"),
+        labourCharge: parseFloat(po.labourCharge ?? "0"),
+        materialCharge: parseFloat(po.materialCharge ?? "0"),
+        currency: (po.currency ?? "CAD") as "USD" | "CAD",
+      });
+
+      await db
+        .update(purchaseOrders)
+        .set({ opfiPushAttempts: (po.opfiPushAttempts ?? 0) + 1 })
+        .where(eq(purchaseOrders.id, input.id));
+
+      return result;
+    }),
+});
+
 export const appRouter = router({
   ..._appRouter._def.record,
   laneThresholds: laneThresholdRouter,
@@ -5568,6 +5733,7 @@ export const appRouter = router({
   auditDocuments: auditDocumentsRouter,
   labelScan: labelScanRouter,
   whLocationConfig: whLocationConfigRouter,
+  purchaseOrder: purchaseOrderRouter,
 });
 export type AppRouter = typeof appRouter;
 

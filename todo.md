@@ -1076,3 +1076,14 @@
 - [x] Item 14: Shipwell — poll for live load status updates on in-transit GD Genius shipments, auto-update status field
 - [x] Item 15: Location Config — warehouse dropdown should show Columbus, Reno, Toronto, Calgary (not "Go Direct")
 - [x] Item 16: Warehouse Location Config — add aisle, bay (with left/right), and level fields; start with example location
+
+## Purchase Orders Section
+
+- [ ] Add purchase_orders DB table (poNumber, customerId, customerName, warehouse, poDate, billingPeriod, kittingCharge, labourCharge, materialCharge, currency, totalCharge, opfiPushStatus, opfiPushError, opfiPushAttempts, createdBy, createdAt)
+- [ ] Write migration SQL and apply it
+- [ ] Build HMAC-SHA256 signed OpFi push service (server/purchaseOrderPush.ts)
+- [ ] Add purchaseOrder tRPC router (create, list, get, retryPush)
+- [ ] Build PurchaseOrders.tsx page — PO list with status badges, create PO form
+- [ ] Register /purchase-orders route in App.tsx
+- [ ] Add Purchase Orders sidebar item between Packaging and Returns in AppLayout
+- [ ] Write vitest tests for PO push service

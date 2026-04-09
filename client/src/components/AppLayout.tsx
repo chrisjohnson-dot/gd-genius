@@ -45,6 +45,7 @@ import {
   Boxes,
   Wand2,
   UserCog,
+  Receipt,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -99,6 +100,10 @@ const shippingItems = [
 const returnsItems = [
   { href: "/returns",         label: "Returns Dashboard", icon: RotateCcw },
   { href: "/returns/process", label: "Process Returns",   icon: ScanBarcode },
+];
+
+const purchaseOrderItems = [
+  { href: "/purchase-orders", label: "Purchase Orders", icon: Receipt },
 ];
 
 const auditItems = [
@@ -425,7 +430,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Packaging section — between Returns and Audit */}
+          {/* Purchase Orders section — between Returns and Packaging */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Billing</p>
+            <div className="space-y-0.5">
+              {purchaseOrderItems.map(item => (
+                <NavItem key={item.href} {...item} active={location === item.href} />
+              ))}
+            </div>
+          </div>
+
+          {/* Packaging section — between Billing and Audit */}
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Packaging</p>
             <div className="space-y-0.5">

@@ -6744,21 +6744,28 @@ const smallParcelRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Label already purchased for this session" });
       }
 
-      // ── Step 1: Purchase label via Veeqo Rate Shopping API ────────────────────────
-      const veeqoApiKey = process.env.VEEQO_API_KEY;
+          // ── Step 1: Purchase label — STRICT INTEGRATION GATE ────────────────────
+      // Read the active small_parcel integration. Only that system is called.
+      // No fallthrough between Rate Wizard, Veeqo, and TechShip.
+      const activeIntegration = (await getActiveShippingIntegration('small_parcel')) ?? 'rate_wizard';
       let labelUrl: string;
       let trackingNumber: string;
       let carrier: string;
       let serviceLevel: string;
       let labelZpl: string;
-
-      // Look up the confirmed rate record for this session to get Veeqo tokens
+      // Look up the confirmed rate record for this session
       const confirmedShipment = session.extensivOrderId
         ? await getLatestRatedShipmentForOrder(String(session.extensivOrderId))
         : null;
-
-      const hasVeeqoTokens = !!(veeqoApiKey && confirmedShipment?.remoteShipmentId && confirmedShipment?.requestToken && confirmedShipment?.serviceCode);
-
+      // Veeqo path: ONLY when activeIntegration === 'veeqo'
+      const veeqoApiKey = activeIntegration === 'veeqo' ? process.env.VEEQO_API_KEY : undefined;
+      const hasVeeqoTokens = activeIntegration === 'veeqo' && !!(veeqoApiKey && confirmedShipment?.remoteShipmentId && confirmedShipment?.requestToken && confirmedShipment?.serviceCode);
+      if (activeIntegration === 'veeqo' && !hasVeeqoTokens) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Veeqo is the active integration but no Veeqo rate tokens were found. Please re-shop rates with Veeqo selected.",
+        });
+      }
       if (hasVeeqoTokens) {
         // ── Live Veeqo label booking ─────────────────────────────────────────────────
         const veeqo = createVeeqoClient();
@@ -6804,8 +6811,8 @@ const smallParcelRouter = router({
         }
 
         console.log(`[SmallParcel] Veeqo label booked: ${trackingNumber} via ${carrier} ${serviceLevel}`);
-       } else if (confirmedShipment?.carrierCode && hasAnyCarrierCredentials()) {
-        // ── Direct carrier label purchase (no Veeqo) ─────────────────────────────
+      } else if (activeIntegration === 'rate_wizard' && confirmedShipment?.carrierCode && hasAnyCarrierCredentials()) {
+        // ── Direct carrier label purchase (Rate Wizard only) ──────────────────────────
         // Build origin from carrier account or fall back to env defaults
         const allAccounts = await listCarrierAccounts();
         const activeAccounts = allAccounts.filter((a) => a.isActive);
@@ -6865,14 +6872,19 @@ const smallParcelRouter = router({
         labelUrl = labelResult.labelUrl ?? "";
         labelZpl = labelResult.labelZpl ?? buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
         console.log(`[SmallParcel] Direct carrier label purchased: ${trackingNumber} via ${carrier} ${serviceLevel}`);
+      } else if (activeIntegration === 'techship') {
+        // ── TechShip label purchase ──────────────────────────────────────────────────────
+        // TechShip API integration placeholder — credentials and endpoint TBD
+        throw new TRPCError({
+          code: "NOT_IMPLEMENTED",
+          message: "TechShip label purchase is not yet configured. Please contact your administrator to set up TechShip credentials.",
+        });
       } else {
-        // ── Stub response for development/testing (no carrier configured) ─────────
-        trackingNumber = `STUB-${Date.now()}-${session.extensivOrderId}`;
-        carrier = input.carrierService ?? confirmedShipment?.carrierCode ?? "Stub Carrier";
-        serviceLevel = confirmedShipment?.serviceName ?? "Ground";
-        labelUrl = `https://stub-labels.example.com/${trackingNumber}.pdf`;
-        labelZpl = buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
-        console.warn(`[SmallParcel] No carrier credentials configured — using stub label for order ${session.extensivOrderId}`);
+        // No valid integration path found — surface a clear error instead of a stub
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot purchase label: active integration is '${activeIntegration}' but no matching credentials or confirmed rate were found. Please re-shop rates and try again.`,
+        });
       }
 
       // ── Step 2: Update session record with label details ──
@@ -7839,19 +7851,21 @@ const rateWizardRouter = router({
         requireSignature: z.boolean().default(false),
       })
     )
-    .query(async ({ input }) => {
+     .query(async ({ input }) => {
+      // ── Hard gate: read the active small_parcel integration ─────────────────
+      // This is the ONLY routing decision. No fallthrough between integrations.
+      const activeIntegration = (await getActiveShippingIntegration('small_parcel')) ?? 'rate_wizard';
       // Load markup multiplier from settings (hidden from customer)
       const markupRaw = await getSmallParcelSetting('rate_markup_multiplier');
       const parsedMarkup = markupRaw ? parseFloat(markupRaw) : 1.0;
       const markupMultiplier = isFinite(parsedMarkup) && parsedMarkup >= 1.0 && parsedMarkup <= 3.0 ? parsedMarkup : 1.0;
-
-      // Customer routing rule
+      // Customer routing rule (for preferred carrier / excluded carriers / max transit days)
       let customerRule: Awaited<ReturnType<typeof listCustomerShippingRules>>[number] | null = null;
       if (input.customerId && input.configId) {
         const rules = await listCustomerShippingRules(input.configId);
         customerRule = rules.find((r) => r.customerId === input.customerId) ?? null;
       }
-      const integration = customerRule?.integration ?? "rate_wizard";
+      const integration = activeIntegration;
       const preferredCarrier = customerRule?.preferredCarrier ?? null;
       const excludedCarriers: string[] = (() => {
         try { return JSON.parse(customerRule?.excludedCarriers ?? "[]"); } catch { return []; }
@@ -7873,23 +7887,24 @@ const rateWizardRouter = router({
         remoteShipmentId?: string;
         requestToken?: string;
       };
-      const rates: RateResult[] = [];
-
-      // Check if Veeqo API key is available for live rate shopping
-      const veeqoApiKey = process.env.VEEQO_API_KEY;
-
-      // Collect all shipping_configuration_ids from active accounts that have Veeqo credentials
+       const rates: RateResult[] = [];
+      // ── STRICT INTEGRATION GATE ──────────────────────────────────────────────────────
+      // Only the ACTIVE integration is called. No fallthrough between systems.
+      // activeIntegration: 'rate_wizard' | 'veeqo' | 'techship'
+      // Veeqo credentials (only used when activeIntegration === 'veeqo')
+      const veeqoApiKey = activeIntegration === 'veeqo' ? process.env.VEEQO_API_KEY : undefined;
       const veeqoConfigIds: number[] = [];
-      for (const account of activeAccounts) {
-        try {
-          const creds = JSON.parse(account.credentials ?? "{}");
-          if (creds.shipping_configuration_id) {
-            veeqoConfigIds.push(Number(creds.shipping_configuration_id));
-          }
-        } catch { /* skip */ }
+      if (activeIntegration === 'veeqo') {
+        for (const account of activeAccounts) {
+          try {
+            const creds = JSON.parse(account.credentials ?? "{}");
+            if (creds.shipping_configuration_id) {
+              veeqoConfigIds.push(Number(creds.shipping_configuration_id));
+            }
+          } catch { /* skip */ }
+        }
       }
-
-      const hasVeeqoCredentials = veeqoApiKey && veeqoConfigIds.length > 0;
+      const hasVeeqoCredentials = activeIntegration === 'veeqo' && !!(veeqoApiKey && veeqoConfigIds.length > 0);
 
       if (hasVeeqoCredentials && input.destPostal) {
         // ── Live Veeqo Rate Shopping ──────────────────────────────────────────
@@ -7972,11 +7987,9 @@ const rateWizardRouter = router({
         }
       }
 
-      // ── Direct Carrier Rate Fetchers (GD Rate Wizard — live negotiated rates) ──
-      // Run all configured carrier APIs in parallel. Results supplement or replace
-      // Veeqo rates. If Veeqo already returned rates for a carrier, direct rates
-      // for that same carrier are skipped to avoid duplicates.
-      if (input.destPostal) {
+      // ── Direct Carrier Rate Fetchers (Rate Wizard only) ────────────────────────
+      // ONLY runs when activeIntegration === 'rate_wizard'. Never mixes with Veeqo.
+      if (activeIntegration === 'rate_wizard' && input.destPostal) {
         const originAccount = activeAccounts.find((a) => a.originAddress1 && a.originPostal);
         const carrierInput: CarrierRateInput = {
           originName: originAccount?.originName ?? "Go Direct Logistics",
@@ -8043,8 +8056,8 @@ const rateWizardRouter = router({
         }
       }
 
-      // ── Mock fallback (used when no live credentials available at all) ──────
-      if (rates.length === 0) {
+      // ── Mock fallback (Rate Wizard only, when no live credentials available) ────
+      if (rates.length === 0 && activeIntegration === 'rate_wizard') {
         const MOCK_SERVICES: Record<string, Array<{ service: string; transitDays: number; baseCost: number }>> = {
           usps: [
             { service: "Priority Mail", transitDays: 2, baseCost: 8.5 },

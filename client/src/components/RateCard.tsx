@@ -88,7 +88,8 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
   const [sortKey, setSortKey] = useState<SortKey>("cost");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterCarrier, setFilterCarrier] = useState<string>("all");
-  const [filterMaxDays, setFilterMaxDays] = useState<string>("all");
+  // Default to ≤ 2 days — this is a 2-day SLA program; ops can relax the filter manually if needed
+  const [filterMaxDays, setFilterMaxDays] = useState<string>("2");
   const [showSurcharges, setShowSurcharges] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -136,6 +137,11 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSelectedRateId]);
+
+  // When the transit filter changes, clear the selection so the user picks from the new filtered list
+  useEffect(() => {
+    setSelectedRateId(null);
+  }, [filterMaxDays]);
 
   // Snapshot the input whenever fresh data arrives
   useEffect(() => {
@@ -370,7 +376,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
 
             <Select value={filterMaxDays} onValueChange={setFilterMaxDays}>
               <SelectTrigger className="h-7 text-xs w-36">
-                <SelectValue placeholder="Any transit" />
+                <SelectValue placeholder="≤ 2 days" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Any transit</SelectItem>

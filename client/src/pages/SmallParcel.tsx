@@ -230,25 +230,54 @@ function Step2PackageSize({
       { enabled: configId > 0, staleTime: 30_000 }
     );
 
-  // Fallback: custom DB sizes (legacy)
+  // Fallback A: live Extensiv packaging types (used when no enabled rows exist yet)
+  const { data: extData, isLoading: extLoading } =
+    trpc.smallParcel.getExtensivPackaging.useQuery(
+      { configId, clientId: order.clientId },
+      { enabled: configId > 0 && order.clientId > 0 && !enabledLoading && enabledTypes.length === 0, staleTime: 5 * 60_000 }
+    );
+
+  // Fallback B: custom DB sizes (legacy)
   const { data: customSizes = [], isLoading: customLoading } =
     trpc.smallParcel.listPackageSizes.useQuery(
       { clientId: order.clientId },
       { staleTime: 30_000 }
     );
 
-  const isLoading = enabledLoading || customLoading;
+  const isLoading = enabledLoading || customLoading || (enabledTypes.length === 0 && extLoading);
 
-  // Build unified button list: enabled Extensiv types first, then custom DB sizes
+  // Build unified button list:
+  // 1. If ops have explicitly enabled types → use those
+  // 2. Otherwise fall back to all Extensiv types for this client (auto-discovered)
+  // 3. Then append any custom DB sizes
   const allButtons: PackageSize[] = [
-    ...enabledTypes.map((t, i) => ({
-      id: -(i + 1), // synthetic negative IDs for Extensiv types
-      name: t.typeName,
-      lengthCm: null,
-      widthCm: null,
-      heightCm: null,
-      weightKg: null,
-    })),
+    ...(enabledTypes.length > 0
+      ? enabledTypes.map((t, i) => ({
+          id: -(i + 1),
+          name: t.typeName,
+          lengthCm: null,
+          widthCm: null,
+          heightCm: null,
+          weightKg: null,
+        }))
+      : [
+          ...(extData?.packageUnits ?? []).map((p, i) => ({
+            id: -(i + 1),
+            name: p.unitName,
+            lengthCm: p.imperial.length != null ? String(Math.round(p.imperial.length * 2.54)) : null,
+            widthCm: p.imperial.width != null ? String(Math.round(p.imperial.width * 2.54)) : null,
+            heightCm: p.imperial.height != null ? String(Math.round(p.imperial.height * 2.54)) : null,
+            weightKg: p.imperial.weight != null ? String(Math.round(p.imperial.weight * 0.453592 * 10) / 10) : null,
+          })),
+          ...(extData?.palletTypes ?? []).map((p, i) => ({
+            id: -(1000 + i),
+            name: p.palletName,
+            lengthCm: p.imperial.length != null ? String(Math.round(p.imperial.length * 2.54)) : null,
+            widthCm: p.imperial.width != null ? String(Math.round(p.imperial.width * 2.54)) : null,
+            heightCm: p.imperial.height != null ? String(Math.round(p.imperial.height * 2.54)) : null,
+            weightKg: p.imperial.weight != null ? String(Math.round(p.imperial.weight * 0.453592 * 10) / 10) : null,
+          })),
+        ]),
     ...customSizes.map((s) => ({ ...s, lengthCm: s.lengthCm ?? null, widthCm: s.widthCm ?? null, heightCm: s.heightCm ?? null, weightKg: s.weightKg ?? null })),
   ];
 
@@ -293,7 +322,10 @@ function Step2PackageSize({
         ) : allButtons.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
             <AlertCircle className="w-8 h-8" />
-            <p className="text-sm">No package types enabled for this client.</p>
+            <p className="text-sm">No package types found for this client in Extensiv.</p>
+            <p className="text-xs text-center max-w-xs">
+              Ensure items for this client have a Package Unit assigned in Extensiv, or manually configure sizes in Package Sizes settings.
+            </p>
             <Link href="/small-parcel/package-sizes" className="text-sm underline text-blue-600">
               Configure in Package Sizes
             </Link>
@@ -1060,6 +1092,10 @@ function Step4PackShip({
   const { data: spSettings, refetch: refetchSettings } = trpc.smallParcel.getAllSettings.useQuery();
   const countdownDuration = spSettings?.reprintCountdownSeconds ?? 10;
 
+  // Determine active shipping integration — only show integration-specific warnings when relevant
+  const { data: integrationSettings } = trpc.shippingIntegration.getSettings.useQuery();
+  const activeSmallParcelIntegration = integrationSettings?.small_parcel ?? "rate_wizard";
+
   // Inline countdown duration editor state
   const [editingCountdown, setEditingCountdown] = useState(false);
   const [countdownInput, setCountdownInput] = useState("");
@@ -1378,17 +1414,19 @@ function Step4PackShip({
         </div>
       )}
 
-      {/* Veeqo not configured notice */}
-      <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
-        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-        <div className="text-sm">
-          <p className="font-semibold text-amber-800 dark:text-amber-300">Veeqo API key not yet configured</p>
-          <p className="text-amber-700 dark:text-amber-400">
-            Add your <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">VEEQO_API_KEY</code> in
-            Settings → Secrets to enable label purchasing. The workflow and session data are fully ready.
-          </p>
+      {/* Veeqo not configured notice — only shown when Veeqo is the active integration */}
+      {activeSmallParcelIntegration === "veeqo" && (
+        <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold text-amber-800 dark:text-amber-300">Veeqo API key not yet configured</p>
+            <p className="text-amber-700 dark:text-amber-400">
+              Add your <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">VEEQO_API_KEY</code> in
+              Settings → Secrets to enable label purchasing. The workflow and session data are fully ready.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Print status */}
       <PrintStatusBanner

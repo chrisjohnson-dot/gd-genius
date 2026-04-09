@@ -1089,3 +1089,8 @@
 - [ ] Write vitest tests for PO push service
 - [x] Feature: Wire OpFi Test Connection button — add testOpFiConnection tRPC procedure that calls OPFI_BASE_URL/api/rate-sheets with a dummy clientId, verifies HTTP 200 and valid JSON shape, updates cortex health status, and shows success/failure toast in CortexSettings OpFi tab
 - [x] Feature: Scheduled server-side OpFi health check — runs testOpFiConnection every 15 minutes, persists ok/error status to cortex_connections health_status column, logs result to console
+- [x] Bug: Rate Wizard shows rates that don't meet 2-day transit — filter out services with transit > 2 days when customer SLA requires 2-day delivery; or add a "2-day and faster only" filter toggle
+- [x] Bug: Veeqo API key warning banner shows in Rate Wizard even when Rate Wizard mode is active — suppress this banner when the active shipping integration is Rate Wizard (not Veeqo)
+- [ ] Investigation: SKU scan not accepted in Rate Wizard — determine if Genius needs its own SKU registry or can pull SKU/barcode data from Extensiv item master
+- [x] Bug: Extensiv packaging types not showing in Step 2 package size selector in Small Parcel workflow
+- [ ] Bug: SKU scan fails when barcode encodes UPC — add UPC→SKU alias lookup from Extensiv item master

@@ -295,7 +295,26 @@ export const slaRules = mysqlTable("sla_rules", {
 export type SlaRule = typeof slaRules.$inferSelect;
 export type InsertSlaRule = typeof slaRules.$inferInsert;
 
-// Zero-bid alert thresholds per shipping lane
+// Ship-to-specific SLA overrides per client
+// Each row defines a custom SLA day count for a specific ship-to customer name
+export const slaShipToRules = mysqlTable("sla_ship_to_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  // Parent client (Extensiv customer)
+  clientId: int("clientId").notNull(),
+  clientName: varchar("clientName", { length: 256 }).notNull(),
+  // Ship-to customer name (free-text, matched against order shipTo.companyName)
+  shipToName: varchar("shipToName", { length: 256 }).notNull(),
+  // SLA days for this specific ship-to
+  slaDays: int("slaDays").notNull().default(2),
+  // Optional notes / reason
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SlaShipToRule = typeof slaShipToRules.$inferSelect;
+export type InsertSlaShipToRule = typeof slaShipToRules.$inferInsert;
+
+// Zero-bid alert thresholds per shipping lanee
 // A "lane" is identified by origin facility + destination region/state
 // Default threshold is 2 hours; can be overridden per lane
 export const laneThresholds = mysqlTable("lane_thresholds", {

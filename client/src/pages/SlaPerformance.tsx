@@ -62,8 +62,11 @@ import {
   CheckCircle2,
   CheckSquare,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Clock,
+  MapPin,
+  Plus,
   Download,
   Eye,
   FileDown,
@@ -717,6 +720,166 @@ function TrendChart({ clientId }: { clientId: number }) {
 // ─── SLA Requirements Tab (from SlaTracker) ───────────────────────────────────
 type ClientSlaRow = { clientId: number; clientName: string; slaDays: number; isDefault: boolean; requirementId: number | null; notes: string | null; updatedAt: Date | string | null; };
 type SlaRuleRow = { id: number; requirementId: number; clientId: number; clientName: string; ruleName: string; slaDays: number; notes: string | null };
+// ─── Ship-to SLA detail panel ─────────────────────────────────────────────────
+function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () => void }) {
+  const utils = trpc.useUtils();
+  const { data: rules = [], isLoading } = trpc.sla.listShipToRules.useQuery({ clientId: client.clientId });
+  const [newShipTo, setNewShipTo] = useState("");
+  const [newDays, setNewDays] = useState(2);
+  const [newNotes, setNewNotes] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editShipTo, setEditShipTo] = useState("");
+  const [editDays, setEditDays] = useState(2);
+  const [editNotes, setEditNotes] = useState("");
+  const upsert = trpc.sla.upsertShipToRule.useMutation({
+    onSuccess: () => { utils.sla.listShipToRules.invalidate({ clientId: client.clientId }); setNewShipTo(""); setNewDays(2); setNewNotes(""); setEditId(null); toast.success("Ship-to SLA saved"); },
+    onError: () => toast.error("Failed to save ship-to SLA"),
+  });
+  const del = trpc.sla.deleteShipToRule.useMutation({
+    onSuccess: () => { utils.sla.listShipToRules.invalidate({ clientId: client.clientId }); toast.success("Ship-to SLA removed"); },
+    onError: () => toast.error("Failed to delete"),
+  });
+  const startEdit = (r: { id: number; shipToName: string; slaDays: number; notes: string | null }) => {
+    setEditId(r.id); setEditShipTo(r.shipToName); setEditDays(r.slaDays); setEditNotes(r.notes ?? "");
+  };
+  return (
+    <div className="space-y-4">
+      {/* Back breadcrumb */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" /> Back to all clients
+        </Button>
+        <span className="text-muted-foreground">/</span>
+        <span className="text-sm font-semibold text-foreground">{client.clientName}</span>
+        <span className="text-muted-foreground">/</span>
+        <span className="text-sm text-muted-foreground">Ship-to SLA Rules</span>
+      </div>
+
+      {/* Header card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-primary" />
+            Ship-to SLA Rules — {client.clientName}
+            <span className="text-sm font-normal text-muted-foreground">
+              Base SLA: {client.slaDays} business day{client.slaDays !== 1 ? "s" : ""}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Define custom SLA day targets for specific ship-to customers. When an order’s ship-to name matches an entry below,
+            that SLA overrides the client’s base SLA of <strong>{client.slaDays} days</strong>.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Add new rule */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2"><Plus className="h-4 w-4 text-primary" />Add Ship-to SLA Rule</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-1">
+              <Label className="text-xs mb-1 block">Ship-to Customer Name</Label>
+              <Input placeholder="e.g. Walmart DC #6045" value={newShipTo} onChange={(e) => setNewShipTo(e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">SLA Days</Label>
+              <Input type="number" min={1} max={365} value={newDays} onChange={(e) => setNewDays(Number(e.target.value))} className="h-8 text-sm w-24" />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Notes (optional)</Label>
+              <Input placeholder="e.g. Retailer requirement" value={newNotes} onChange={(e) => setNewNotes(e.target.value)} className="h-8 text-sm" />
+            </div>
+          </div>
+          <Button
+            size="sm" className="mt-3 gap-1.5"
+            disabled={!newShipTo.trim() || upsert.isPending}
+            onClick={() => upsert.mutate({ clientId: client.clientId, clientName: client.clientName, shipToName: newShipTo.trim(), slaDays: newDays, notes: newNotes || null })}
+          >
+            {upsert.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            Add Rule
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Existing rules table */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            Existing Ship-to Rules
+            <span className="text-xs font-normal text-muted-foreground">({rules.length} rule{rules.length !== 1 ? "s" : ""})</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground text-sm"><RefreshCw className="h-4 w-4 animate-spin" /> Loading…</div>
+          ) : rules.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground text-sm">
+              <MapPin className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              No ship-to SLA rules yet. Add one above.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead><tr className="border-b border-border bg-muted/40">
+                  <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Ship-to Customer</th>
+                  <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">SLA Days</th>
+                  <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Notes</th>
+                  <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">Actions</th>
+                </tr></thead>
+                <tbody className="divide-y divide-border">
+                  {rules.map((r) => editId === r.id ? (
+                    <tr key={r.id} className="bg-primary/5">
+                      <td className="px-4 py-2">
+                        <Input value={editShipTo} onChange={(e) => setEditShipTo(e.target.value)} className="h-7 text-sm" />
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <Input type="number" min={1} max={365} value={editDays} onChange={(e) => setEditDays(Number(e.target.value))} className="w-16 h-7 text-center text-sm mx-auto" />
+                      </td>
+                      <td className="px-4 py-2">
+                        <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className="h-7 text-sm" placeholder="Notes…" />
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button size="sm" className="h-6 text-[10px] px-2" disabled={!editShipTo.trim() || upsert.isPending}
+                            onClick={() => upsert.mutate({ id: r.id, clientId: client.clientId, clientName: client.clientName, shipToName: editShipTo.trim(), slaDays: editDays, notes: editNotes || null })}>
+                            {upsert.isPending ? <RefreshCw className="h-2.5 w-2.5 animate-spin" /> : "Save"}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => setEditId(null)}>Cancel</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={r.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => startEdit(r)}>
+                      <td className="px-4 py-2.5 font-medium">{r.shipToName}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                          {r.slaDays}d
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground text-xs">{r.notes || "—"}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 text-muted-foreground hover:text-red-600"
+                          onClick={(e) => { e.stopPropagation(); del.mutate({ id: r.id }); }}>
+                          <Trash2 className="h-2.5 w-2.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function SlaRequirementsTab() {
   const { data: allClients = [], isLoading } = trpc.sla.allClientsWithRequirements.useQuery();
   const { data: allRules = [] } = trpc.sla.listRules.useQuery();
@@ -724,6 +887,7 @@ function SlaRequirementsTab() {
   const [pending, setPending] = useState<Record<number, number>>({});
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   const [search, setSearch] = useState("");
+  const [selectedClient, setSelectedClient] = useState<ClientSlaRow | null>(null);
   const upsert = trpc.sla.upsertRequirement.useMutation({
     onSuccess: (_data, vars) => {
       utils.sla.allClientsWithRequirements.invalidate(); utils.sla.listRules.invalidate();
@@ -744,6 +908,12 @@ function SlaRequirementsTab() {
     const q = search.toLowerCase().trim();
     return q ? (allClients as ClientSlaRow[]).filter((c) => c.clientName.toLowerCase().includes(q)) : (allClients as ClientSlaRow[]);
   }, [allClients, search]);
+
+  // If a client is selected, show the ship-to detail panel
+  if (selectedClient) {
+    return <ShipToSlaPanel client={selectedClient} onBack={() => setSelectedClient(null)} />;
+  }
+
   if (isLoading) return <div className="flex items-center justify-center py-16 text-muted-foreground gap-2"><RefreshCw className="h-5 w-5 animate-spin" /><span>Loading…</span></div>;
   return (
     <div className="space-y-4">
@@ -793,14 +963,25 @@ function SlaRequirementsTab() {
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
-            <thead><tr className="border-b border-border bg-muted/40"><th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Client</th><th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">SLA Days</th><th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Sub-Rules</th><th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">Actions</th></tr></thead>
+            <thead><tr className="border-b border-border bg-muted/40">
+              <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Client</th>
+              <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">SLA Days</th>
+              <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Sub-Rules</th>
+              <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">Ship-to Rules</th>
+              <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">Actions</th>
+            </tr></thead>
             <tbody className="divide-y divide-border">
               {filtered.map((row) => {
                 const rules = rulesByClient.get(row.clientId) ?? [];
                 return (
-                  <tr key={row.clientId}>
-                    <td className="px-4 py-2.5 font-medium text-foreground">{row.clientName}{row.isDefault && <span className="ml-2 text-[10px] text-muted-foreground font-normal">(default)</span>}</td>
-                    <td className="px-4 py-2.5 text-center"><Input type="number" min={1} max={365} className="w-16 h-7 text-center text-sm mx-auto" value={pending[row.clientId] ?? row.slaDays} onChange={(e) => setPending((p) => ({ ...p, [row.clientId]: Number(e.target.value) }))} /></td>
+                  <tr key={row.clientId} className="hover:bg-muted/20">
+                    <td className="px-4 py-2.5 font-medium text-foreground">
+                      {row.clientName}
+                      {row.isDefault && <span className="ml-2 text-[10px] text-muted-foreground font-normal">(default)</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <Input type="number" min={1} max={365} className="w-16 h-7 text-center text-sm mx-auto" value={pending[row.clientId] ?? row.slaDays} onChange={(e) => setPending((p) => ({ ...p, [row.clientId]: Number(e.target.value) }))} />
+                    </td>
                     <td className="px-4 py-2.5">
                       <div className="flex flex-wrap gap-1">
                         {rules.map((r) => (
@@ -810,6 +991,16 @@ function SlaRequirementsTab() {
                           </span>
                         ))}
                       </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <Button
+                        size="sm" variant="outline"
+                        className="h-6 text-[10px] px-2 gap-1 border-blue-300 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                        onClick={() => setSelectedClient(row as ClientSlaRow)}
+                      >
+                        <MapPin className="h-2.5 w-2.5" /> Ship-to SLAs
+                        <ChevronRight className="h-2.5 w-2.5" />
+                      </Button>
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       <div className="flex items-center justify-center gap-1">
@@ -824,7 +1015,7 @@ function SlaRequirementsTab() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground text-sm">No clients match your search.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">No clients match your search.</td></tr>}
             </tbody>
           </table>
         </div>

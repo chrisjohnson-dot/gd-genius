@@ -314,6 +314,18 @@ function QuickAllocateFacilityCard({
   const allSelected = customers ? customers.length > 0 && effectiveSelected.size === customers.length : false;
   const someSelected = effectiveSelected.size > 0 && !allSelected;
 
+  // Sort: checked first (A–Z), then unchecked (A–Z)
+  const sortedCustomers = useMemo(
+    () =>
+      (customers ?? []).slice().sort((a, b) => {
+        const aChecked = effectiveSelected.has(a.id) ? 0 : 1;
+        const bChecked = effectiveSelected.has(b.id) ? 0 : 1;
+        if (aChecked !== bChecked) return aChecked - bChecked;
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      }),
+    [customers, effectiveSelected]
+  );
+
   const toggleCustomer = (id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev ?? []);
@@ -391,7 +403,7 @@ function QuickAllocateFacilityCard({
                 </div>
                 {/* Customer list */}
                 <div className="space-y-0.5 max-h-40 overflow-y-auto">
-                  {customers.map((c) => (
+                  {sortedCustomers.map((c) => (
                     <div key={c.id} className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/40 cursor-pointer" onClick={() => toggleCustomer(c.id)}>
                       <Checkbox
                         id={`qa-c-${facility.id}-${c.id}`}
@@ -463,10 +475,17 @@ export default function OrderSelection() {
     { enabled: !!configId && !!selectedFacility }
   );
 
-  // Sort customers A–Z by name for the client selection step
+  // Sort customers: checked first (A–Z), then unchecked (A–Z)
   const customers = useMemo(
-    () => (customersRaw ?? []).slice().sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
-    [customersRaw]
+    () =>
+      (customersRaw ?? []).slice().sort((a, b) => {
+        const aChecked = selectedClientIds.has(a.id) ? 0 : 1;
+        const bChecked = selectedClientIds.has(b.id) ? 0 : 1;
+        if (aChecked !== bChecked) return aChecked - bChecked;
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customersRaw, selectedClientIds]
   );
 
   // Only the selected customers (for orders step)

@@ -42,6 +42,9 @@ import {
   slaRules,
   SlaRule,
   InsertSlaRule,
+  slaShipToRules,
+  SlaShipToRule,
+  InsertSlaShipToRule,
   returnsSessions,
   returnsItems,
   ReturnsSession,
@@ -1556,6 +1559,58 @@ export async function deleteSlaRule(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(slaRules).where(eq(slaRules.id, id));
+}
+
+// ─── Ship-to SLA rules ───────────────────────────────────────────────────────
+
+export async function getShipToRulesForClient(clientId: number): Promise<SlaShipToRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(slaShipToRules)
+    .where(eq(slaShipToRules.clientId, clientId))
+    .orderBy(slaShipToRules.shipToName);
+}
+
+export async function listAllShipToRules(): Promise<SlaShipToRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(slaShipToRules).orderBy(slaShipToRules.clientName, slaShipToRules.shipToName);
+}
+
+export async function upsertShipToRule(input: {
+  id?: number;
+  clientId: number;
+  clientName: string;
+  shipToName: string;
+  slaDays: number;
+  notes?: string | null;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (input.id) {
+    await db
+      .update(slaShipToRules)
+      .set({ shipToName: input.shipToName, slaDays: input.slaDays, notes: input.notes ?? null })
+      .where(eq(slaShipToRules.id, input.id));
+    return input.id;
+  }
+  const row: InsertSlaShipToRule = {
+    clientId: input.clientId,
+    clientName: input.clientName,
+    shipToName: input.shipToName,
+    slaDays: input.slaDays,
+    notes: input.notes ?? null,
+  };
+  const result = await db.insert(slaShipToRules).values(row);
+  return (result as unknown as { insertId: number }).insertId;
+}
+
+export async function deleteShipToRule(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(slaShipToRules).where(eq(slaShipToRules.id, id));
 }
 
 // ─── Per-order SLA extension ─────────────────────────────────────────────────

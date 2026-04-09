@@ -70,6 +70,10 @@ import {
   getSlaRulesForClient,
   upsertSlaRule,
   deleteSlaRule,
+  getShipToRulesForClient,
+  listAllShipToRules,
+  upsertShipToRule,
+  deleteShipToRule,
   setSlaExtension,
   clearSlaExtension,
   createReturnsSession,
@@ -2848,6 +2852,40 @@ const _appRouter = router({
       .input(z.object({ extensivOrderId: z.number().int().optional() }))
       .query(async ({ input }) => {
         return listSlaOrderActions(input.extensivOrderId);
+      }),
+
+    // ── Ship-to SLA rules ──────────────────────────────────────────────────
+    listShipToRules: protectedProcedure
+      .input(z.object({ clientId: z.number().int() }))
+      .query(async ({ input }) => {
+        return getShipToRulesForClient(input.clientId);
+      }),
+
+    listAllShipToRules: protectedProcedure.query(async () => {
+      return listAllShipToRules();
+    }),
+
+    upsertShipToRule: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int().optional(),
+          clientId: z.number().int(),
+          clientName: z.string().min(1).max(256),
+          shipToName: z.string().min(1).max(256),
+          slaDays: z.number().int().min(1).max(365),
+          notes: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const id = await upsertShipToRule(input);
+        return { id };
+      }),
+
+    deleteShipToRule: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ input }) => {
+        await deleteShipToRule(input.id);
+        return { success: true };
       }),
   }),
 });
@@ -5752,8 +5790,24 @@ const purchaseOrderRouter = router({
 
       return result;
     }),
-});
 
+  // Return distinct active customer names from order tracking (for autocomplete)
+  activeCustomers: protectedProcedure
+    .input(z.object({ search: z.string().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const { orderTracking } = await import("../drizzle/schema");
+      const { sql: drizzleSql, like } = await import("drizzle-orm");
+      const rows = await db
+        .selectDistinct({ clientName: orderTracking.clientName })
+        .from(orderTracking)
+        .where(input.search ? like(orderTracking.clientName, `%${input.search}%`) : undefined)
+        .orderBy(orderTracking.clientName)
+        .limit(20);
+      return rows.map((r) => r.clientName).filter(Boolean) as string[];
+    }),
+});
 export const appRouter = router({
   ..._appRouter._def.record,
   laneThresholds: laneThresholdRouter,

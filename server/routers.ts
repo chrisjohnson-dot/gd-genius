@@ -203,7 +203,7 @@ import {
   getShipmentById,
 } from "./db";
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
-import { fireCortexWebhook } from "./cortex/webhook";
+import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
   createProductionRun,
@@ -2480,7 +2480,7 @@ const _appRouter = router({
 
         // Write a pending unified shipment record for Shipwell LTL
         try {
-          await createShipment({
+          const ltlShipmentId = await createShipment({
             platform: "shipwell",
             mode: "ltl",
             extensivOrderId: input.extensivOrderId,
@@ -2495,6 +2495,8 @@ const _appRouter = router({
             bookedByUserId: String(ctx.user.id),
             bookedByName: ctx.user.name ?? undefined,
           });
+          // Push immediately to ClearSight (non-blocking)
+          void pushShipmentToClearSight(ltlShipmentId, "shipment.created");
         } catch (err) {
           console.error("[Shipwell] Failed to write unified shipment record:", err);
         }
@@ -6435,7 +6437,7 @@ const smallParcelRouter = router({
 
       // ── Step 2b: Write to unified shipments registry ──────────────────────────
       try {
-        await createShipment({
+        const shipmentId = await createShipment({
           platform: hasVeeqoTokens ? "veeqo" : "manual",
           mode: "small_parcel",
           configId: session.configId ?? undefined,
@@ -6460,6 +6462,8 @@ const smallParcelRouter = router({
           labelZpl,
           status: "booked",
         });
+        // Push immediately to ClearSight (non-blocking)
+        void pushShipmentToClearSight(shipmentId, "shipment.created");
       } catch (err) {
         // Non-fatal: log but don't fail the label purchase
         console.error("[SmallParcel] Failed to write unified shipment record:", err);
@@ -7753,6 +7757,8 @@ const shippingHistoryRouter = router({
         bookedByUserId: String(ctx.user.id),
         bookedByName: ctx.user.name ?? undefined,
       });
+      // Push immediately to ClearSight (non-blocking)
+      void pushShipmentToClearSight(id, "shipment.created");
       return { id };
     }),
 
@@ -7771,6 +7777,8 @@ const shippingHistoryRouter = router({
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
       await updateShipment(id, data);
+      // Push update to ClearSight (non-blocking)
+      void pushShipmentToClearSight(id, "shipment.updated");
       return { success: true };
     }),
 });

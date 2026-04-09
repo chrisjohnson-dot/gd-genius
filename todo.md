@@ -1036,3 +1036,14 @@
 - [ ] Packaging Inventory page: stock table with low-stock badges, weekly burn rate, weeks-on-hand
 - [ ] Reorder request form: production staff submit qty + notes, notification sent to accounting
 - [ ] Sidebar nav entry between Returns and Audit Log
+
+## ClearSight (Banish) Integration
+- [ ] Research Banish platform API for REST intake endpoints and authentication
+- [ ] Build ClearSight push service (server/clearsight.ts) — outbound POST on shipment create and update
+- [ ] Wire push on purchaseLabel (Veeqo small parcel) shipment creation
+- [ ] Wire push on Shipwell sendOrder (LTL) shipment creation
+- [ ] Wire push on shipwellSync PRO/BOL/tracking update milestone
+- [ ] Wire push on manual tracking entry (recordManual)
+- [ ] Add CLEARSIGHT_API_URL and CLEARSIGHT_API_KEY to environment secrets
+- [ ] Write ClearSight Banish intake script for the developer screen
+- [ ] Add ClearSight push status column to Shipping History UI (pushed/failed/pending)

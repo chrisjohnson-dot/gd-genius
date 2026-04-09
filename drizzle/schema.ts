@@ -1570,6 +1570,22 @@ export const shipments = mysqlTable("shipments", {
   bookedByName: varchar("booked_by_name", { length: 255 }),
   /** Free-text notes (manual entry reason, exception notes, etc.) */
   notes: text("notes"),
+
+  // ── ClearSight push tracking ─────────────────────────────────────────────
+  /**
+   * Status of the last push attempt to ClearSight.
+   * "pending"  — not yet pushed (ClearSight not configured, or first attempt queued)
+   * "sent"     — successfully delivered to ClearSight
+   * "failed"   — last attempt failed; will be retried up to 5 times
+   */
+  clearSightPushStatus: mysqlEnum("clear_sight_push_status", ["pending", "sent", "failed"]),
+  /** Number of push attempts made so far */
+  clearSightPushAttempts: int("clear_sight_push_attempts").notNull().default(0),
+  /** Error message from the last failed push attempt */
+  clearSightPushError: varchar("clear_sight_push_error", { length: 512 }),
+  /** Timestamp of the last successful push */
+  clearSightLastPushedAt: timestamp("clear_sight_last_pushed_at"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });

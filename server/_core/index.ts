@@ -15,7 +15,7 @@ import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 import { registerCortexRoutes } from "../cortex/routes";
 import { registerScanEndpoint } from "../scanEndpoint";
 import { registerScanImageEndpoints } from "../scanImageEndpoint";
-import { flushPendingWebhooks } from "../cortex/webhook";
+import { flushPendingWebhooks, flushPendingShipmentPushes } from "../cortex/webhook";
 import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
 import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
 import { startScanImagePurgeScheduler } from "../scheduler/scanImagePurge";
@@ -90,6 +90,8 @@ async function startServer() {
     startOverdueAlertScheduler().catch((err) => console.error("[OverdueAlert] Init failed:", err));
     // Flush any pending Cortex webhooks every 5 minutes
     setInterval(() => flushPendingWebhooks(), 5 * 60 * 1000);
+    // Flush any pending ClearSight shipment pushes every 30 minutes
+    setInterval(() => flushPendingShipmentPushes(), 30 * 60 * 1000);
     // Retry failed ClearSight webhook pushes with exponential backoff (1min, 5min, 15min)
     startWebhookRetryScheduler();
     // Record nightly SLA rate snapshots for all facilities at midnight UTC

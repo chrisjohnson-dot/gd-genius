@@ -25,6 +25,7 @@ import {
 } from "../db";
 import { createShipwellClient } from "../shipwell/api";
 import { notifyOwner } from "../_core/notification";
+import { pushShipmentToClearSight } from "../cortex/webhook";
 
 let syncRunning = false;
 let lastSyncAt: Date | null = null;
@@ -111,6 +112,8 @@ export async function syncShipwellStatusNow(): Promise<{
                     order.extensivOrderId
                   } — PRO: ${result.proNumber ?? "—"}, BOL: ${result.bolNumber ?? "—"}, Tracking: ${result.trackingNumber ?? "—"}`
                 );
+                // Push updated tracking data to ClearSight (non-blocking)
+                void pushShipmentToClearSight(unifiedRow.id, "shipment.updated");
               }
             }
           } catch (err) {

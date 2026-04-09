@@ -27,6 +27,9 @@ import {
   AlertTriangle,
   Timer,
   Truck,
+  Pin,
+  PinOff,
+  Zap,
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
 import { RateCard, type RateCardInput, type RateRow } from "@/components/RateCard";
@@ -210,11 +213,13 @@ function Step2PackageSize({
   order,
   configId,
   onSelect,
+  onSelectAndLock,
   onBack,
 }: {
   order: OrderData;
   configId: number;
   onSelect: (size: PackageSize) => void;
+  onSelectAndLock: (size: PackageSize) => void;
   onBack: () => void;
 }) {
   // Primary: enabled Extensiv packaging types configured in Package Sizes
@@ -295,20 +300,33 @@ function Step2PackageSize({
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {allButtons.map((size) => (
-              <button
-                key={`${size.id}-${size.name}`}
-                type="button"
-                onClick={() => onSelect(size)}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all p-5 text-center group"
-              >
-                <Package className="w-8 h-8 text-muted-foreground group-hover:text-blue-600 transition-colors" />
-                <span className="font-semibold text-sm leading-tight">{size.name}</span>
-                {(size.lengthCm || size.widthCm || size.heightCm) && (
-                  <span className="text-xs text-muted-foreground">
-                    {[size.lengthCm, size.widthCm, size.heightCm].filter(Boolean).join(" × ")} cm
-                  </span>
-                )}
-              </button>
+              <div key={`${size.id}-${size.name}`} className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  onClick={() => onSelect(size)}
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all p-5 text-center group flex-1"
+                >
+                  <Package className="w-8 h-8 text-muted-foreground group-hover:text-blue-600 transition-colors" />
+                  <span className="font-semibold text-sm leading-tight">{size.name}</span>
+                  {(size.lengthCm || size.widthCm || size.heightCm) && (
+                    <span className="text-xs text-muted-foreground">
+                      {[size.lengthCm, size.widthCm, size.heightCm].filter(Boolean).join(" × ")} cm
+                    </span>
+                  )}
+                  {size.weightKg && (
+                    <span className="text-xs text-muted-foreground">{size.weightKg} kg</span>
+                  )}
+                </button>
+                {/* Autobagger lock button — select this size AND lock it for all subsequent orders */}
+                <button
+                  type="button"
+                  onClick={() => onSelectAndLock(size)}
+                  className="flex items-center justify-center gap-1 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors border border-transparent hover:border-amber-200 dark:hover:border-amber-800"
+                  title="Select this package and lock it for Autobagger mode"
+                >
+                  <Pin className="w-3 h-3" /> Use for Autobagger
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -1482,9 +1500,52 @@ export default function SmallParcel() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
 
+  // ── Autobagger mode: lock a package size across orders ─────────────────────
+  const [autobaggerActive, setAutobaggerActive] = useState(false);
+  const [lockedSize, setLockedSize] = useState<PackageSize | null>(null);
+
   // Get the first available config
   const { data: configs } = trpc.config.list.useQuery();
   const configId = configs?.[0]?.id ?? 0;
+
+  // ── Rate pre-fetch utils ───────────────────────────────────────────────────
+  const utils = trpc.useUtils();
+
+  /**
+   * Pre-fetches carrier rates as soon as a package size and order are known.
+   * Called from both handlePackageSizeSelected and handleOrderFound (autobagger).
+   */
+  const prefetchRates = useCallback((order: OrderData, size: PackageSize) => {
+    const destPostal = order.shipTo?.zip ?? "";
+    if (!destPostal || configId === 0) return;
+
+    const locationId = facilityToLocationId(order.facilityName);
+    const destCountry = order.shipTo?.country?.toUpperCase() === "CA" ? "CA" : "US";
+
+    const weightLbs = size.weightKg ? parseFloat((parseFloat(size.weightKg) * 2.20462).toFixed(2)) : 1;
+    const lengthIn  = size.lengthCm  ? parseFloat((parseFloat(size.lengthCm)  / 2.54).toFixed(2)) : 12;
+    const widthIn   = size.widthCm   ? parseFloat((parseFloat(size.widthCm)   / 2.54).toFixed(2)) : 9;
+    const heightIn  = size.heightCm  ? parseFloat((parseFloat(size.heightCm)  / 2.54).toFixed(2)) : 6;
+
+    utils.rateWizard.getRates.prefetch({
+      configId,
+      orderId: order.extensivOrderId,
+      orderNumber: order.referenceNum,
+      locationId,
+      customerId: order.clientId,
+      customerName: order.clientName,
+      weightLbs,
+      lengthIn,
+      widthIn,
+      heightIn,
+      destPostal,
+      destCountry,
+      destCity: order.shipTo?.city,
+      destState: order.shipTo?.state,
+      isResidential: false,
+      requireSignature: false,
+    });
+  }, [configId, utils]);
 
   const createSessionMutation = trpc.smallParcel.createSession.useMutation({
     onSuccess: ({ id }) => {
@@ -1496,16 +1557,42 @@ export default function SmallParcel() {
     },
   });
 
-  // Step 1 → 2: order found, go straight to package size selection
-  const handleOrderFound = (_ref: string, data: OrderData) => {
+  // Step 1 → 2 (or 3 in autobagger mode): order found
+  const handleOrderFound = useCallback((_ref: string, data: OrderData) => {
     setOrderData(data);
-    setStep(2);
-  };
+    if (autobaggerActive && lockedSize) {
+      // Skip Step 2 — use locked package, create session immediately
+      setSelectedSize(lockedSize);
+      prefetchRates(data, lockedSize);
+      createSessionMutation.mutate({
+        configId,
+        facilityId: data.facilityId,
+        facilityName: data.facilityName,
+        extensivOrderId: data.extensivOrderId,
+        referenceNum: data.referenceNum,
+        clientId: data.clientId,
+        clientName: data.clientName,
+        shipToName: data.shipTo?.companyName ?? data.shipTo?.name,
+        shipToAddress1: data.shipTo?.address1,
+        shipToCity: data.shipTo?.city,
+        shipToState: data.shipTo?.state,
+        shipToZip: data.shipTo?.zip,
+        shipToCountry: data.shipTo?.country,
+        orderItems: data.orderItems,
+        selectedPackageSizeId: lockedSize.id,
+        selectedPackageSizeName: lockedSize.name,
+      });
+    } else {
+      setStep(2);
+    }
+  }, [autobaggerActive, lockedSize, configId, createSessionMutation, prefetchRates]);
 
-  // Step 2 → 3: package size chosen, create session
-  const handlePackageSizeSelected = (size: PackageSize) => {
+  // Step 2 → 3: package size chosen, create session + pre-fetch rates
+  const handlePackageSizeSelected = useCallback((size: PackageSize) => {
     if (!orderData) return;
     setSelectedSize(size);
+    // Pre-fetch rates immediately — will be cached by the time Step 4 renders
+    prefetchRates(orderData, size);
     createSessionMutation.mutate({
       configId,
       facilityId: orderData.facilityId,
@@ -1524,22 +1611,52 @@ export default function SmallParcel() {
       selectedPackageSizeId: size.id,
       selectedPackageSizeName: size.name,
     });
-  };
+  }, [orderData, configId, createSessionMutation, prefetchRates]);
 
   const handleScanComplete = (items: ScannedItem[]) => {
     setScannedItems(items);
     setStep(4);
   };
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setStep(1);
     setOrderData(null);
-    setSelectedSize(null);
+    // In autobagger mode, keep the locked size; otherwise clear it
+    if (!autobaggerActive) setSelectedSize(null);
     setSessionId(null);
     setScannedItems([]);
+  }, [autobaggerActive]);
+
+  // Step 2: select a size AND immediately lock it for autobagger mode
+  const handleSelectAndLock = useCallback((size: PackageSize) => {
+    setLockedSize(size);
+    setAutobaggerActive(true);
+    toast.success(`Autobagger ON — locked to "${size.name}"`);
+    // Also proceed with this order normally
+    handlePackageSizeSelected(size);
+  }, [handlePackageSizeSelected]);
+
+  // Toggle autobagger — if turning on and a size is already selected, lock it
+  const handleToggleAutobagger = () => {
+    if (!autobaggerActive) {
+      if (selectedSize) {
+        setLockedSize(selectedSize);
+        toast.success(`Autobagger ON — locked to "${selectedSize.name}"`);
+      } else {
+        toast("Select a package size first, then enable Autobagger.");
+        return;
+      }
+    } else {
+      setLockedSize(null);
+      toast("Autobagger OFF");
+    }
+    setAutobaggerActive((v) => !v);
   };
 
   if (!user) return null;
+
+  // Effective step label for Step 2 in autobagger mode
+  const step2Label = autobaggerActive && lockedSize ? `📦 ${lockedSize.name}` : "Package Size";
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto">
@@ -1548,25 +1665,58 @@ export default function SmallParcel() {
         <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
           <Package className="w-5 h-5 text-white" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">Small Parcel</h1>
-          <p className="text-muted-foreground text-sm">Pack and ship D2C orders via Veeqo</p>
+          <p className="text-muted-foreground text-sm">Pack and ship D2C orders</p>
         </div>
+        {/* Autobagger toggle — visible once a package has been selected */}
+        {(selectedSize || lockedSize) && (
+          <Button
+            variant={autobaggerActive ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggleAutobagger}
+            className={`gap-2 ${autobaggerActive ? "bg-amber-500 hover:bg-amber-600 border-amber-500 text-white" : ""}`}
+          >
+            {autobaggerActive ? <Pin className="w-4 h-4" /> : <PinOff className="w-4 h-4" />}
+            {autobaggerActive ? "Autobagger ON" : "Autobagger"}
+          </Button>
+        )}
       </div>
+
+      {/* Autobagger active banner */}
+      {autobaggerActive && lockedSize && (
+        <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-2.5">
+          <Zap className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="flex-1 text-sm">
+            <span className="font-semibold text-amber-800 dark:text-amber-300">Autobagger active</span>
+            <span className="text-amber-700 dark:text-amber-400 ml-2">Package locked to <strong>{lockedSize.name}</strong> — Step 2 will be skipped</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setAutobaggerActive(false); setLockedSize(null); toast("Autobagger OFF"); }}
+            className="text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 shrink-0"
+          >
+            <PinOff className="w-3.5 h-3.5 mr-1" /> Unlock
+          </Button>
+        </div>
+      )}
 
       {/* Step indicator — completed steps are clickable for back navigation */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
         <StepIndicator current={step} step={1} label="Scan TX ID"
           onClick={step > 1 ? handleReset : undefined}
         />
-        <StepIndicator current={step} step={2} label="Package Size"
-          onClick={step > 2 ? () => { setStep(2); setSessionId(null); } : undefined}
+        <StepIndicator current={step} step={2} label={step2Label}
+          onClick={step > 2 && !autobaggerActive ? () => { setStep(2); setSessionId(null); } : undefined}
         />
         <StepIndicator current={step} step={3} label="Scan Items"
           onClick={step > 3 ? () => setStep(3) : undefined}
         />
         <StepIndicator current={step} step={4} label="Pack & Ship" />
       </div>
+
+      {/* Rate pre-fetch status indicator (only while fetching in background) */}
 
       {/* Step content */}
       <Card>
@@ -1580,11 +1730,13 @@ export default function SmallParcel() {
               <p>No Extensiv configuration found. Please set up a connection in Settings first.</p>
             </div>
           )}
+          {/* Step 2 is skipped in autobagger mode — show spinner while session creates */}
           {step === 2 && orderData && createSessionMutation.status !== "pending" && (
             <Step2PackageSize
               order={orderData}
               configId={configId}
               onSelect={handlePackageSizeSelected}
+              onSelectAndLock={handleSelectAndLock}
               onBack={handleReset}
             />
           )}
@@ -1601,7 +1753,14 @@ export default function SmallParcel() {
               clientName={orderData.clientName}
               items={orderData.orderItems.map((item) => ({ sku: item.sku, qty: item.qty, scanned: 0 }))}
               onComplete={handleScanComplete}
-              onBack={() => { setStep(2); setSessionId(null); }}
+              onBack={() => {
+                if (autobaggerActive) {
+                  // In autobagger mode, back goes to Step 1 (re-scan)
+                  handleReset();
+                } else {
+                  setStep(2); setSessionId(null);
+                }
+              }}
             />
           )}
           {step === 4 && sessionId !== null && orderData && (

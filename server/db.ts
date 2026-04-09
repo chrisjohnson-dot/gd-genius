@@ -4092,3 +4092,15 @@ export async function getShipmentById(id: number): Promise<Shipment | null> {
 export async function createManualShipment(data: InsertShipment): Promise<number> {
   return createShipment({ ...data, platform: "manual" });
 }
+
+/** Find a unified shipment record by its Shipwell Shipment ID. */
+export async function findShipmentByShipwellId(shipwellShipmentId: string): Promise<Shipment | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select()
+    .from(shipments)
+    .where(eq(shipments.shipwellShipmentId, shipwellShipmentId))
+    .limit(1);
+  return row ?? null;
+}

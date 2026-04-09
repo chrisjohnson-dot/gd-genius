@@ -91,6 +91,12 @@ export interface ShipwellShipment {
   customer_reference_number?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  // Tracking & carrier assignment fields
+  pro_number?: string | null;
+  bol_number?: string | null;
+  tracking_number?: string | null;
+  pickup_number?: string | null;
+  carrier_name?: string | null;
 }
 
 export interface ShipwellShipmentStatusResult {
@@ -98,6 +104,12 @@ export interface ShipwellShipmentStatusResult {
   rawStatus: string | null;
   normalizedStatus: ShipwellShipmentStatus;
   isDelivered: boolean;
+  // Carrier assignment fields (populated when available)
+  proNumber?: string | null;
+  bolNumber?: string | null;
+  trackingNumber?: string | null;
+  pickupNumber?: string | null;
+  carrierName?: string | null;
 }
 
 // ─── Client class ─────────────────────────────────────────────────────────────
@@ -168,19 +180,25 @@ export class ShipwellClient {
 
   // ─── Shipments ──────────────────────────────────────────────────────────────
 
-  /** Get a shipment by ID and return its live status */
+  /** Get a shipment by ID and return its live status, PRO number, BOL, and tracking info */
   async getShipmentStatus(shipmentId: string): Promise<ShipwellShipmentStatusResult> {
     const token = await this.authenticate();
     const res = await this.http.get<ShipwellShipment>(`/v2/shipments/${shipmentId}/`, {
       headers: { Authorization: `Token ${token}` },
     });
-    const rawStatus = res.data.status ?? null;
+    const data = res.data;
+    const rawStatus = data.status ?? null;
     const normalizedStatus = normalizeShipwellStatus(rawStatus);
     return {
       shipmentId,
       rawStatus,
       normalizedStatus,
       isDelivered: normalizedStatus === "delivered",
+      proNumber: data.pro_number ?? null,
+      bolNumber: data.bol_number ?? null,
+      trackingNumber: data.tracking_number ?? null,
+      pickupNumber: data.pickup_number ?? null,
+      carrierName: data.carrier_name ?? null,
     };
   }
 

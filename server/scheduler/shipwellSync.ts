@@ -20,6 +20,8 @@ import {
   markZeroBidNotified,
   removeTrackedOrder,
   resolveZeroBidThreshold,
+  findShipmentByShipwellId,
+  updateShipment,
 } from "../db";
 import { createShipwellClient } from "../shipwell/api";
 import { notifyOwner } from "../_core/notification";
@@ -83,6 +85,39 @@ export async function syncShipwellStatusNow(): Promise<{
       if (!order.shipwellShipmentId) continue;
       const result = statusMap.get(order.shipwellShipmentId);
       if (!result) continue;
+
+      // ── Write PRO/BOL/tracking to unified shipments when they appear ──────
+      if (order.shipwellShipmentId) {
+        const hasNewTrackingData =
+          result.proNumber || result.bolNumber || result.trackingNumber || result.pickupNumber;
+        if (hasNewTrackingData) {
+          try {
+            const unifiedRow = await findShipmentByShipwellId(order.shipwellShipmentId);
+            if (unifiedRow) {
+              const updates: Record<string, string | null> = {};
+              // Only update fields that are newly populated (don't overwrite existing values)
+              if (result.proNumber && !unifiedRow.proNumber)
+                updates.proNumber = result.proNumber;
+              if (result.bolNumber && !unifiedRow.bolNumber)
+                updates.bolNumber = result.bolNumber;
+              if (result.trackingNumber && !unifiedRow.trackingNumber)
+                updates.trackingNumber = result.trackingNumber;
+              if (result.carrierName && !unifiedRow.carrier)
+                updates.carrier = result.carrierName;
+              if (Object.keys(updates).length > 0) {
+                await updateShipment(unifiedRow.id, updates);
+                console.log(
+                  `[ShipwellSync] Updated unified shipment #${unifiedRow.id} for order ${
+                    order.extensivOrderId
+                  } — PRO: ${result.proNumber ?? "—"}, BOL: ${result.bolNumber ?? "—"}, Tracking: ${result.trackingNumber ?? "—"}`
+                );
+              }
+            }
+          } catch (err) {
+            console.warn(`[ShipwellSync] Failed to update unified shipment for ${order.shipwellShipmentId}:`, err);
+          }
+        }
+      }
 
       if (result.isDelivered) {
         // Remove the order from the tracking table — it's done

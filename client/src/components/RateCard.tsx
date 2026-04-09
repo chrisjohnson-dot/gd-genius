@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Zap, DollarSign, Clock, Star, AlertTriangle, CheckCircle2,
   RefreshCw, ChevronUp, ChevronDown, Loader2, Info, Package,
-  Truck, ArrowRight,
+  Truck, ArrowRight, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -87,6 +87,10 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
   const [showSurcharges, setShowSurcharges] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
+  // Track the input snapshot that was used to fetch the current rates
+  // so we can detect when dimensions change and rates are stale
+  const [fetchedInput, setFetchedInput] = useState<RateCardInput | null>(null);
+
   const ratesQuery = trpc.rateWizard.getRates.useQuery(
     {
       ...input,
@@ -97,9 +101,30 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
     {
       enabled: !!(input.locationId && input.weightLbs > 0 && input.destPostal),
       staleTime: 30_000,
-  
     }
   );
+
+  // Snapshot the input whenever fresh data arrives
+  useEffect(() => {
+    if (ratesQuery.data) {
+      setFetchedInput({ ...input });
+    }
+  // We intentionally only run this when data changes, not on every input change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ratesQuery.data]);
+
+  // Detect if dimensions have changed since last fetch
+  const dimensionsChanged = fetchedInput !== null && (
+    fetchedInput.weightLbs !== input.weightLbs ||
+    fetchedInput.lengthIn !== input.lengthIn ||
+    fetchedInput.widthIn !== input.widthIn ||
+    fetchedInput.heightIn !== input.heightIn
+  );
+
+  function handleRefresh() {
+    setSelectedRateId(null);
+    ratesQuery.refetch();
+  }
 
   const confirmMutation = trpc.rateWizard.confirmRate.useMutation({
     onSuccess: (data) => {
@@ -240,6 +265,30 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
     <TooltipProvider>
       <div className="flex flex-col gap-3">
 
+        {/* Stale rates warning — shown when dimensions changed after fetch */}
+        {dimensionsChanged && (
+          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            <RotateCcw className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="text-xs text-amber-800 dark:text-amber-300 flex-1">
+              <strong>Dimensions changed</strong> — rates shown are for the previous dimensions.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs gap-1.5 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 shrink-0"
+              onClick={handleRefresh}
+              disabled={ratesQuery.isFetching}
+            >
+              {ratesQuery.isFetching ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
+              Refresh Rates
+            </Button>
+          </div>
+        )}
+
         {/* Mock data banner */}
         {data.isMockData && (
           <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
@@ -298,8 +347,19 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
               <Label htmlFor="show-surcharges" className="text-xs cursor-pointer">Show surcharges</Label>
             </div>
 
-            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => ratesQuery.refetch()}>
-              <RefreshCw className="w-3.5 h-3.5" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 gap-1.5 text-xs ml-1"
+              onClick={handleRefresh}
+              disabled={ratesQuery.isFetching}
+            >
+              {ratesQuery.isFetching ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
+              {!compact && "Refresh"}
             </Button>
           </div>
         )}

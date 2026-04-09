@@ -1254,7 +1254,7 @@ function Step4PackShip({
                 type="number"
                 placeholder="0.00"
                 value={weight}
-                onChange={(e) => setWeight(e.target.value)}
+                onChange={(e) => { setWeight(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
                 min="0"
                 step="0.01"
               />
@@ -1265,7 +1265,7 @@ function Step4PackShip({
                 type="number"
                 placeholder="0"
                 value={length}
-                onChange={(e) => setLength(e.target.value)}
+                onChange={(e) => { setLength(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
                 min="0"
               />
             </div>
@@ -1275,7 +1275,7 @@ function Step4PackShip({
                 type="number"
                 placeholder="0"
                 value={width}
-                onChange={(e) => setWidth(e.target.value)}
+                onChange={(e) => { setWidth(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
                 min="0"
               />
             </div>
@@ -1285,7 +1285,7 @@ function Step4PackShip({
                 type="number"
                 placeholder="0"
                 value={height}
-                onChange={(e) => setHeight(e.target.value)}
+                onChange={(e) => { setHeight(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
                 min="0"
               />
             </div>

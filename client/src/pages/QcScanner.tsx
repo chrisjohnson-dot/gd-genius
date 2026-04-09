@@ -361,8 +361,10 @@ export default function QcScanner() {
   const barcodeRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
 
+  const trpcUtils = trpc.useUtils();
+
   const fetchFromExtensiv = trpc.qcScanner.fetchFromExtensiv.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setExtensivLoadError(null);
       setItems(data.items as ScanItem[]);
       if (data.customerName && session) setSession((s) => s ? { ...s, customerName: data.customerName } : s);
@@ -370,6 +372,31 @@ export default function QcScanner() {
       toast.success(`Loaded ${data.seededCount} item${data.seededCount !== 1 ? "s" : ""} from Extensiv`, {
         description: data.customerName ? `Customer: ${data.customerName}` : undefined,
       });
+
+      // Auto-apply pallet type if confidence ≥90%, otherwise show dialog
+      if (data.customerName) {
+        try {
+          const palletDefault = await trpcUtils.qcScanner.getCustomerPalletDefault.fetch(
+            { customerName: data.customerName }
+          );
+          if (palletDefault.suggestedType && palletDefault.confidence >= 90) {
+            // High confidence — silently apply and skip the dialog
+            setPalletTypeDialog(false);
+            const firstPallet = pallets[0];
+            if (firstPallet && !firstPallet.palletType) {
+              updatePalletType.mutate({ palletId: firstPallet.id, palletType: palletDefault.suggestedType });
+            }
+            toast.info(
+              `Pallet type auto-set: ${palletTypeLabel(palletDefault.suggestedType)}`,
+              { description: `${palletDefault.confidence}% confidence from past sessions` }
+            );
+          }
+          // If confidence <90% or no history, the dialog stays open (already shown by startSession)
+        } catch {
+          // Silently ignore — dialog stays open as fallback
+        }
+      }
+
       setTimeout(() => barcodeRef.current?.focus(), 100);
     },
     onError: (e) => {

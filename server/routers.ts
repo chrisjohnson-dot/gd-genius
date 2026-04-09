@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { getDb } from "./db";
 import { COOKIE_NAME } from "@shared/const";
 import { storagePut } from "./storage";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -181,6 +183,7 @@ import {
   getClientPackagingEnabled,
   upsertClientPackagingEnabled,
   getLastOrderDatePerClient,
+  getCustomerPalletDefaultFromDb,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -3658,6 +3661,16 @@ const qcScannerRouter = router({
     .mutation(async ({ input }) => {
       await updateQcPallet(input.palletId, { palletType: input.palletType });
       return { success: true, palletId: input.palletId, palletType: input.palletType };
+    }),
+
+  // Learn the most-used pallet type for a customer from recent completed sessions
+  getCustomerPalletDefault: protectedProcedure
+    .input(z.object({
+      customerName: z.string().min(1),
+      lookbackSessions: z.number().min(1).max(50).optional(),
+    }))
+    .query(async ({ input }) => {
+      return getCustomerPalletDefaultFromDb(input.customerName);
     }),
 
   // Unified QC Audit Log — merges QC Scanner and Label Scanner events

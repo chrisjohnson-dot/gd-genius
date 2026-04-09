@@ -2005,6 +2005,48 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
   return results;
 }
 
+// ─── Customer Pallet Default (learned from history) ─────────────────────────
+
+/** Returns the most-used pallet type for a customer across all completed QC sessions. */
+export async function getCustomerPalletDefaultFromDb(customerName: string): Promise<{
+  suggestedType: string | null;
+  confidence: number;
+  totalSessions: number;
+  breakdown: Record<string, number>;
+}> {
+  const db = await getDb();
+  if (!db) return { suggestedType: null, confidence: 0, totalSessions: 0, breakdown: {} };
+
+  // Fetch all pallets for completed sessions with this customer
+  const rows = await db
+    .select({ palletType: qcPallets.palletType })
+    .from(qcPallets)
+    .innerJoin(qcScanSessions, eq(qcPallets.sessionId, qcScanSessions.id))
+    .where(
+      and(
+        eq(qcScanSessions.customerName, customerName),
+        eq(qcScanSessions.status, "complete"),
+        isNotNull(qcPallets.palletType),
+        isNull(qcPallets.deletedAt)
+      )
+    );
+
+  const counts: Record<string, number> = {};
+  let total = 0;
+  for (const row of rows) {
+    if (!row.palletType) continue;
+    counts[row.palletType] = (counts[row.palletType] ?? 0) + 1;
+    total++;
+  }
+  const suggestedType = total > 0
+    ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
+    : null;
+  const confidence = suggestedType && total > 0
+    ? Math.round((counts[suggestedType] / total) * 100)
+    : 0;
+  return { suggestedType, confidence, totalSessions: total, breakdown: counts };
+}
+
 // ─── SLA Facility Thresholds ─────────────────────────────────────────────────
 
 export async function getSlaFacilityThresholds() {

@@ -226,7 +226,7 @@ import {
   deleteProductionSkuConfig,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
-import { getCarrierMarkups, getMarkupPct, applyMarkup } from "./opfiRateSheets";
+import { getCarrierMarkups, getMarkupPct, applyMarkup, testOpFiConnection } from "./opfiRateSheets";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
@@ -3304,6 +3304,29 @@ const cortexRouter = router({
   testConnection: protectedProcedure
     .input(z.object({ platform: z.string() }))
     .mutation(async ({ input }) => {
+      // OpFi uses its own dedicated test function (rate-sheets probe)
+      if (input.platform === "opfi") {
+        try {
+          const result = await testOpFiConnection();
+          await updateCortexHealthStatus("opfi", "ok");
+          return {
+            success: true,
+            status: "ok",
+            body: {
+              platform: "opfi",
+              baseUrl: result.baseUrl,
+              httpStatus: result.httpStatus,
+              hasRateSheets: result.hasRateSheets,
+              durationMs: result.durationMs,
+            } as Record<string, unknown>,
+          };
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await updateCortexHealthStatus("opfi", "error");
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: msg });
+        }
+      }
+      // All other platforms: hit their /api/health endpoint
       const conn = await getCortexConnection(input.platform);
       if (!conn || !conn.baseUrl) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Connection not configured" });

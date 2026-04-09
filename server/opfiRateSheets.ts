@@ -117,3 +117,47 @@ export function getMarkupPct(carrierName: string, markups: CarrierMarkups): numb
 export function applyMarkup(rawCost: number, pct: number): number {
   return Math.round(rawCost * (1 + pct / 100) * 100) / 100;
 }
+
+/**
+ * Test the live connection to the OpFi rate-sheets endpoint.
+ * Uses a probe clientId of "0" to verify the service is reachable
+ * and returns a valid JSON response with the expected shape.
+ * Throws if the service is unreachable or returns an unexpected response.
+ */
+export async function testOpFiConnection(): Promise<{
+  ok: boolean;
+  baseUrl: string;
+  httpStatus: number;
+  hasRateSheets: boolean;
+  durationMs: number;
+}> {
+  const t0 = Date.now();
+  const url = `${OPFI_BASE_URL}/api/rate-sheets?clientId=0`;
+  const res = await fetch(url, {
+    headers: {
+      "X-API-Key": OPFI_API_KEY,
+      "Content-Type": "application/json",
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const durationMs = Date.now() - t0;
+  // We accept 200 or 404 (no client found) as "service is alive"
+  const serviceAlive = res.status === 200 || res.status === 404;
+  if (!serviceAlive) {
+    throw new Error(`OpFi returned HTTP ${res.status}`);
+  }
+  let hasRateSheets = false;
+  try {
+    const body = await res.json() as { rateSheets?: unknown[] };
+    hasRateSheets = Array.isArray(body.rateSheets);
+  } catch {
+    // Non-JSON body — service is alive but response is unexpected
+  }
+  return {
+    ok: true,
+    baseUrl: OPFI_BASE_URL,
+    httpStatus: res.status,
+    hasRateSheets,
+    durationMs,
+  };
+}

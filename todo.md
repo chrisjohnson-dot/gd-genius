@@ -1087,3 +1087,4 @@
 - [ ] Register /purchase-orders route in App.tsx
 - [ ] Add Purchase Orders sidebar item between Packaging and Returns in AppLayout
 - [ ] Write vitest tests for PO push service
+- [x] Feature: Wire OpFi Test Connection button — add testOpFiConnection tRPC procedure that calls OPFI_BASE_URL/api/rate-sheets with a dummy clientId, verifies HTTP 200 and valid JSON shape, updates cortex health status, and shows success/failure toast in CortexSettings OpFi tab

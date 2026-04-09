@@ -106,7 +106,17 @@ function ConnectionCard({ platform, label }: { platform: string; label: string }
 
   const test = trpc.cortex.testConnection.useMutation({
     onSuccess: (data) => {
-      toast.success(`${label} health check passed. Platform: ${(data.body as Record<string,string>)?.platform ?? "unknown"}`);
+      const body = data.body as Record<string, unknown>;
+      if (platform === "opfi") {
+        const ms = body?.durationMs as number | undefined;
+        const hasSheets = body?.hasRateSheets as boolean | undefined;
+        toast.success(
+          `OpFi connection verified — responded in ${ms ?? "?"}ms` +
+          (hasSheets ? ", rate sheets available" : ", no rate sheets for probe client")
+        );
+      } else {
+        toast.success(`${label} health check passed. Platform: ${(body?.platform as string) ?? "unknown"}`);
+      }
       utils.cortex.getConnection.invalidate({ platform });
     },
     onError: (e) => toast.error(`Connection failed: ${e.message}`),
@@ -262,7 +272,7 @@ function ConnectionCard({ platform, label }: { platform: string; label: string }
           <Button
             variant="outline"
             onClick={() => test.mutate({ platform })}
-            disabled={test.isPending || !form.baseUrl}
+            disabled={test.isPending}
             className="gap-2"
           >
             {test.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}

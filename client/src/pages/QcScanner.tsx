@@ -1111,13 +1111,52 @@ export default function QcScanner() {
             <Tabs value={activePalletTab} onValueChange={setActivePalletTab}>
               <TabsList className="flex-wrap h-auto gap-1">
                 {pallets.map((p, idx) => (
-                  <TabsTrigger key={p.id} value={String(idx)}>
+                  <TabsTrigger key={p.id} value={String(idx)} className="gap-0">
                     Pallet {p.palletNumber}
-                    {p.palletType && (
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${palletTypeBadgeClass(p.palletType)}`}>
-                        {p.palletType === "customer_owned" ? "CUST" : p.palletType === "gd_owned" ? "GD" : "CHEP"}
-                      </span>
-                    )}
+                    {/* Clickable type badge — opens popover to change type mid-session */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+                          title="Tap to change pallet type"
+                          className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none cursor-pointer hover:opacity-75 transition-opacity ${
+                            p.palletType ? palletTypeBadgeClass(p.palletType) : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                          }`}
+                        >
+                          {p.palletType
+                            ? (p.palletType === "customer_owned" ? "CUST" : p.palletType === "gd_owned" ? "GD" : "CHEP")
+                            : "?"}
+                        </span>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-52 p-2" align="start" onClick={(e) => e.stopPropagation()}>
+                        <p className="text-xs text-muted-foreground mb-2 font-medium">Change pallet type</p>
+                        <div className="flex flex-col gap-1">
+                          {PALLET_TYPES.map((pt) => (
+                            <button
+                              key={pt.value}
+                              className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs font-medium w-full text-left transition-opacity ${
+                                p.palletType === pt.value ? pt.color + " ring-1 ring-current" : "hover:bg-muted"
+                              }`}
+                              onClick={() => {
+                                if (p.palletType !== pt.value) {
+                                  updatePalletType.mutate({ palletId: p.id, palletType: pt.value });
+                                  toast.success(`Pallet ${p.palletNumber} → ${pt.label}`);
+                                }
+                              }}
+                              disabled={updatePalletType.isPending}
+                            >
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.color}`}>
+                                {pt.value === "customer_owned" ? "CUST" : pt.value === "gd_owned" ? "GD" : "CHEP"}
+                              </span>
+                              {pt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                     {p.items && p.items.length > 0 && (
                       <Badge variant="secondary" className="ml-1 text-xs">{p.items.length}</Badge>
                     )}

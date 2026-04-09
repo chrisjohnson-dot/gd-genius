@@ -6781,15 +6781,19 @@ const smallParcelRouter = router({
 
   /** Get all small parcel settings as a key/value map */
   getAllSettings: protectedProcedure.query(async () => {
-    const [countdown, replenishmentWeeks] = await Promise.all([
+    const [countdown, replenishmentWeeks, markupRaw] = await Promise.all([
       getSmallParcelSetting('reprint_countdown_seconds'),
       getSmallParcelSetting('packaging_replenishment_weeks'),
+      getSmallParcelSetting('rate_markup_multiplier'),
     ]);
     const parsedWeeks = replenishmentWeeks ? parseInt(replenishmentWeeks, 10) : 4;
     const validWeeks = [2, 4, 6].includes(parsedWeeks) ? parsedWeeks : 4;
+    const parsedMarkup = markupRaw ? parseFloat(markupRaw) : 1.0;
+    const validMarkup = isFinite(parsedMarkup) && parsedMarkup >= 1.0 && parsedMarkup <= 3.0 ? parsedMarkup : 1.0;
     return {
       reprintCountdownSeconds: countdown ? parseInt(countdown, 10) : 10,
       packagingReplenishmentWeeks: validWeeks,
+      rateMarkupMultiplier: validMarkup,
     };
   }),
 
@@ -7284,6 +7288,11 @@ const rateWizardRouter = router({
       })
     )
     .query(async ({ input }) => {
+      // Load markup multiplier from settings (hidden from customer)
+      const markupRaw = await getSmallParcelSetting('rate_markup_multiplier');
+      const parsedMarkup = markupRaw ? parseFloat(markupRaw) : 1.0;
+      const markupMultiplier = isFinite(parsedMarkup) && parsedMarkup >= 1.0 && parsedMarkup <= 3.0 ? parsedMarkup : 1.0;
+
       // Customer routing rule
       let customerRule: Awaited<ReturnType<typeof listCustomerShippingRules>>[number] | null = null;
       if (input.customerId && input.configId) {
@@ -7377,9 +7386,8 @@ const rateWizardRouter = router({
           const surcharges: Array<{ label: string; amount: number }> = [];
           if (residentialSurcharge > 0) surcharges.push({ label: "Residential", amount: residentialSurcharge });
           if (signatureSurcharge > 0) surcharges.push({ label: "Signature", amount: signatureSurcharge });
-          const totalCost = parseFloat(
-            (svc.baseCost * weightMultiplier + surcharges.reduce((s, x) => s + x.amount, 0)).toFixed(2)
-          );
+          const rawCost = svc.baseCost * weightMultiplier + surcharges.reduce((s, x) => s + x.amount, 0);
+          const totalCost = parseFloat((rawCost * markupMultiplier).toFixed(2));
           rates.push({
             rateId: `${account.carrierCode}_${svc.service.replace(/\s+/g, "_").toLowerCase()}_mock`,
             carrierCode: account.carrierCode,

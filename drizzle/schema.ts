@@ -1662,16 +1662,34 @@ export type InsertReceivePallet = typeof receivePallets.$inferInsert;
 export const purchaseOrders = mysqlTable("purchase_orders", {
   id:                int("id").primaryKey().autoincrement(),
   poNumber:          varchar("po_number", { length: 64 }).notNull().unique(),
+  // PO category: kitting | labor | materials
+  poType:            mysqlEnum("po_type", ["kitting", "labor", "materials"]).notNull().default("kitting"),
+  // Approval/workflow status
+  poStatus:          mysqlEnum("po_status", ["pending", "approved", "invoiced", "rejected", "received", "ordered"]).notNull().default("pending"),
   customerId:        varchar("customer_id", { length: 64 }).notNull(),
   customerName:      varchar("customer_name", { length: 255 }).notNull(),
-  warehouse:         mysqlEnum("po_warehouse", ["Columbus", "Reno", "Toronto", "Calgary"]).notNull(),
+  warehouse:         mysqlEnum("warehouse", ["Columbus", "Reno", "Toronto", "Calgary"]).notNull(),
   poDate:            varchar("po_date", { length: 10 }).notNull(),
   billingPeriod:     varchar("billing_period", { length: 7 }).notNull(),
+  // Legacy combined-charge fields (kept for backward compat)
   kittingCharge:     decimal("kitting_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
   labourCharge:      decimal("labour_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
   materialCharge:    decimal("material_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
   totalCharge:       decimal("total_charge", { precision: 10, scale: 2 }).notNull().default("0.00"),
-  currency:          mysqlEnum("po_currency", ["USD", "CAD"]).notNull().default("CAD"),
+  currency:          mysqlEnum("currency", ["USD", "CAD"]).notNull().default("CAD"),
+  // Kitting-specific fields
+  sku:               varchar("sku", { length: 128 }),
+  skuDescription:    varchar("sku_description", { length: 255 }),
+  qty:               int("qty"),
+  unitCost:          decimal("unit_cost", { precision: 10, scale: 4 }),
+  // Labor-specific fields
+  employeeName:      varchar("employee_name", { length: 128 }),
+  employeeRole:      varchar("employee_role", { length: 128 }),
+  hoursWorked:       decimal("hours_worked", { precision: 8, scale: 2 }),
+  hourlyRate:        decimal("hourly_rate", { precision: 10, scale: 2 }),
+  // Materials-specific fields
+  itemName:          varchar("item_name", { length: 255 }),
+  vendorName:        varchar("vendor_name", { length: 255 }),
   notes:             text("notes"),
   opfiPushStatus:    mysqlEnum("opfi_push_status", ["pending", "sent", "failed", "skipped"]).notNull().default("pending"),
   opfiPushError:     text("opfi_push_error"),

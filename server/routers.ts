@@ -5561,16 +5561,18 @@ const purchaseOrderRouter = router({
   // List all POs (most recent first)
   list: protectedProcedure
     .input(z.object({
+      poType: z.enum(["kitting", "labor", "materials"]).optional(),
       billingPeriod: z.string().optional(),
       warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary"]).optional(),
       status: z.enum(["pending", "sent", "failed", "skipped"]).optional(),
-      limit: z.number().int().min(1).max(200).default(100),
+      limit: z.number().int().min(1).max(200).default(200),
     }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
       const { eq, desc, and } = await import("drizzle-orm");
       const conditions = [];
+      if (input.poType) conditions.push(eq(purchaseOrders.poType, input.poType));
       if (input.billingPeriod) conditions.push(eq(purchaseOrders.billingPeriod, input.billingPeriod));
       if (input.warehouse) conditions.push(eq(purchaseOrders.warehouse, input.warehouse));
       if (input.status) conditions.push(eq(purchaseOrders.opfiPushStatus, input.status));
@@ -5602,16 +5604,32 @@ const purchaseOrderRouter = router({
   // Create a new PO and immediately push to OpFi
   create: protectedProcedure
     .input(z.object({
+      poType: z.enum(["kitting", "labor", "materials"]).default("kitting"),
+      poStatus: z.enum(["pending", "approved", "invoiced", "rejected", "received", "ordered"]).default("pending"),
       customerId: z.string().min(1),
       customerName: z.string().min(1),
       warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary"]),
       poDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       billingPeriod: z.string().regex(/^\d{4}-\d{2}$/),
+      // Legacy combined charges
       kittingCharge: z.number().min(0).default(0),
       labourCharge: z.number().min(0).default(0),
       materialCharge: z.number().min(0).default(0),
       currency: z.enum(["USD", "CAD"]).default("CAD"),
       notes: z.string().optional(),
+      // Kitting-specific
+      sku: z.string().optional(),
+      skuDescription: z.string().optional(),
+      qty: z.number().int().min(0).optional(),
+      unitCost: z.number().min(0).optional(),
+      // Labor-specific
+      employeeName: z.string().optional(),
+      employeeRole: z.string().optional(),
+      hoursWorked: z.number().min(0).optional(),
+      hourlyRate: z.number().min(0).optional(),
+      // Materials-specific
+      itemName: z.string().optional(),
+      vendorName: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -5624,11 +5642,19 @@ const purchaseOrderRouter = router({
         .where(drizzleSql`billing_period = ${input.billingPeriod}`);
       const seq = ((countRow?.cnt as number) ?? 0) + 1;
       const poNumber = `GEN-${input.billingPeriod}-${String(seq).padStart(4, "0")}`;
-
-      const total = input.kittingCharge + input.labourCharge + input.materialCharge;
-
+      // Compute total: for typed POs use qty*unitCost or hours*rate; fallback to legacy charges
+      let total = input.kittingCharge + input.labourCharge + input.materialCharge;
+      if (input.poType === "kitting" && input.qty != null && input.unitCost != null) {
+        total = input.qty * input.unitCost;
+      } else if (input.poType === "labor" && input.hoursWorked != null && input.hourlyRate != null) {
+        total = input.hoursWorked * input.hourlyRate;
+      } else if (input.poType === "materials" && input.qty != null && input.unitCost != null) {
+        total = input.qty * input.unitCost;
+      }
       const [result] = await db.insert(purchaseOrders).values({
         poNumber,
+        poType: input.poType,
+        poStatus: input.poStatus,
         customerId: input.customerId,
         customerName: input.customerName,
         warehouse: input.warehouse,
@@ -5640,6 +5666,16 @@ const purchaseOrderRouter = router({
         totalCharge: String(total),
         currency: input.currency,
         notes: input.notes,
+        sku: input.sku,
+        skuDescription: input.skuDescription,
+        qty: input.qty,
+        unitCost: input.unitCost != null ? String(input.unitCost) : undefined,
+        employeeName: input.employeeName,
+        employeeRole: input.employeeRole,
+        hoursWorked: input.hoursWorked != null ? String(input.hoursWorked) : undefined,
+        hourlyRate: input.hourlyRate != null ? String(input.hourlyRate) : undefined,
+        itemName: input.itemName,
+        vendorName: input.vendorName,
         opfiPushStatus: "pending",
         opfiPushAttempts: 0,
         createdBy: ctx.user?.name ?? "unknown",

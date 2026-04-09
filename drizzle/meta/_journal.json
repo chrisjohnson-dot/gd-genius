@@ -323,6 +323,13 @@
       "when": 1775513975731,
       "tag": "0045_powerful_ultragirl",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1775762782477,
+      "tag": "0046_perfect_odin",
+      "breakpoints": true
     }
   ]
 }

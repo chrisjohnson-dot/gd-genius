@@ -1,9 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -18,522 +17,428 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Plus,
-  RefreshCw,
-  RotateCcw,
+  ChevronLeft,
+  Package,
+  HardHat,
+  Wrench,
   FileText,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  AlertCircle,
+  Box,
+  DollarSign,
+  LayoutGrid,
+  RotateCcw,
 } from "lucide-react";
 
-const WAREHOUSES = ["Columbus", "Reno", "Toronto", "Calgary"] as const;
-type Warehouse = (typeof WAREHOUSES)[number];
+type PoType = "kitting" | "labor" | "materials";
+type View = "landing" | PoType;
 
+const WAREHOUSES = ["Columbus", "Reno", "Toronto", "Calgary"] as const;
 const CURRENCIES = ["CAD", "USD"] as const;
 
-function formatCurrency(val: string | null | undefined, currency = "CAD") {
-  const n = parseFloat(val ?? "0");
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(n);
+function fmt(n: number) {
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function PushStatusBadge({
-  status,
-  attempts,
-}: {
-  status: string;
-  attempts: number;
-}) {
-  if (status === "sent")
-    return (
-      <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 gap-1">
-        <CheckCircle2 className="w-3 h-3" />
-        Sent to OpFi
-      </Badge>
-    );
-  if (status === "pending")
-    return (
-      <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 gap-1">
-        <Clock className="w-3 h-3" />
-        Pending
-      </Badge>
-    );
-  if (status === "failed")
-    return (
-      <Badge className="bg-red-500/15 text-red-600 border-red-500/30 gap-1">
-        <XCircle className="w-3 h-3" />
-        Failed ({attempts})
-      </Badge>
-    );
+function statusStyle(status: string) {
+  const map: Record<string, { bg: string; color: string }> = {
+    approved: { bg: "#d1fae5", color: "#065f46" },
+    pending:  { bg: "#fef3c7", color: "#92400e" },
+    invoiced: { bg: "#dbeafe", color: "#1e40af" },
+    received: { bg: "#d1fae5", color: "#065f46" },
+    ordered:  { bg: "#fef3c7", color: "#92400e" },
+    rejected: { bg: "#fee2e2", color: "#991b1b" },
+    sent:     { bg: "#d1fae5", color: "#065f46" },
+    failed:   { bg: "#fee2e2", color: "#991b1b" },
+    skipped:  { bg: "#f3f4f6", color: "#374151" },
+  };
+  return map[status] ?? { bg: "#f3f4f6", color: "#374151" };
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const s = statusStyle(status);
   return (
-    <Badge variant="outline" className="gap-1 text-muted-foreground">
-      <AlertCircle className="w-3 h-3" />
-      Skipped
-    </Badge>
+    <span style={{ background: s.bg, color: s.color }} className="px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap">
+      {status}
+    </span>
   );
 }
 
-function getCurrentBillingPeriod() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+function WarehouseBadge({ warehouse }: { warehouse: string }) {
+  return (
+    <span className="bg-[#dcf0c8] text-[#3a6b20] px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap">
+      {warehouse}
+    </span>
+  );
 }
 
-function getTodayDate() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+function KpiCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm flex items-center gap-4">
+      <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">{icon}</div>
+      <div>
+        <div className="text-xs text-gray-500 font-medium mb-0.5">{label}</div>
+        <div className="text-2xl font-extrabold text-gray-900 tracking-tight">{value}</div>
+      </div>
+    </div>
+  );
 }
 
-interface CreatePOForm {
-  customerId: string;
-  customerName: string;
-  warehouse: Warehouse | "";
-  poDate: string;
-  billingPeriod: string;
-  kittingCharge: string;
-  labourCharge: string;
-  materialCharge: string;
-  currency: "CAD" | "USD";
-  notes: string;
+function SimpleKpiCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+      <div className="text-xs text-gray-500 font-medium mb-1">{label}</div>
+      <div className="text-2xl font-extrabold text-gray-900 tracking-tight">{value}</div>
+    </div>
+  );
 }
 
-const EMPTY_FORM: CreatePOForm = {
-  customerId: "",
-  customerName: "",
-  warehouse: "",
-  poDate: getTodayDate(),
-  billingPeriod: getCurrentBillingPeriod(),
-  kittingCharge: "0.00",
-  labourCharge: "0.00",
-  materialCharge: "0.00",
-  currency: "CAD",
-  notes: "",
-};
-
-export default function PurchaseOrders() {
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState<CreatePOForm>(EMPTY_FORM);
-  const [filterWarehouse, setFilterWarehouse] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterBillingPeriod, setFilterBillingPeriod] = useState<string>("");
-
-  const utils = trpc.useUtils();
-
-  const { data: pos = [], isLoading } = trpc.purchaseOrder.list.useQuery({
-    warehouse: filterWarehouse !== "all" ? (filterWarehouse as Warehouse) : undefined,
-    status: filterStatus !== "all" ? (filterStatus as "pending" | "sent" | "failed" | "skipped") : undefined,
-    billingPeriod: filterBillingPeriod || undefined,
-    limit: 200,
-  });
+function CreatePoDialog({ open, onClose, defaultType, onCreated }: {
+  open: boolean; onClose: () => void; defaultType: PoType; onCreated: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const thisPeriod = today.slice(0, 7);
+  const [poType, setPoType] = useState<PoType>(defaultType);
+  const [customerName, setCustomerName] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [warehouse, setWarehouse] = useState("");
+  const [poDate, setPoDate] = useState(today);
+  const [billingPeriod, setBillingPeriod] = useState(thisPeriod);
+  const [currency, setCurrency] = useState<"CAD" | "USD">("CAD");
+  const [notes, setNotes] = useState("");
+  const [sku, setSku] = useState("");
+  const [skuDescription, setSkuDescription] = useState("");
+  const [qty, setQty] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+  const [employeeName, setEmployeeName] = useState("");
+  const [employeeRole, setEmployeeRole] = useState("");
+  const [hoursWorked, setHoursWorked] = useState("");
+  const [hourlyRate, setHourlyRate] = useState("");
+  const [itemName, setItemName] = useState("");
+  const [vendorName, setVendorName] = useState("");
 
   const createMutation = trpc.purchaseOrder.create.useMutation({
-    onSuccess: (data) => {
-      toast.success(`PO ${data.poNumber} created and pushed to OpFi`);
-      setShowCreate(false);
-      setForm(EMPTY_FORM);
-      utils.purchaseOrder.list.invalidate();
-    },
-    onError: (err) => {
-      toast.error(`Failed to create PO: ${err.message}`);
-    },
+    onSuccess: (data) => { toast.success(`PO ${data.poNumber} created`); onCreated(); onClose(); },
+    onError: (err) => toast.error(err.message),
   });
 
-  const retryMutation = trpc.purchaseOrder.retryPush.useMutation({
-    onSuccess: (res) => {
-      if (res.success) {
-        toast.success("Push to OpFi succeeded");
-      } else {
-        toast.error(`Retry failed: ${res.error}`);
-      }
-      utils.purchaseOrder.list.invalidate();
-    },
-    onError: (err) => {
-      toast.error(`Retry error: ${err.message}`);
-    },
-  });
-
-  const total = useMemo(() => {
-    const k = parseFloat(form.kittingCharge) || 0;
-    const l = parseFloat(form.labourCharge) || 0;
-    const m = parseFloat(form.materialCharge) || 0;
-    return k + l + m;
-  }, [form.kittingCharge, form.labourCharge, form.materialCharge]);
-
-  function handleCreate() {
-    if (!form.customerId.trim()) {
-      toast.error("Customer ID is required");
-      return;
-    }
-    if (!form.customerName.trim()) {
-      toast.error("Customer name is required");
-      return;
-    }
-    if (!form.warehouse) {
-      toast.error("Please select a warehouse");
-      return;
-    }
+  function handleSubmit() {
+    if (!customerName.trim()) return toast.error("Customer name is required");
+    if (!warehouse) return toast.error("Warehouse is required");
     createMutation.mutate({
-      customerId: form.customerId.trim(),
-      customerName: form.customerName.trim(),
-      warehouse: form.warehouse as Warehouse,
-      poDate: form.poDate,
-      billingPeriod: form.billingPeriod,
-      kittingCharge: parseFloat(form.kittingCharge) || 0,
-      labourCharge: parseFloat(form.labourCharge) || 0,
-      materialCharge: parseFloat(form.materialCharge) || 0,
-      currency: form.currency,
-      notes: form.notes || undefined,
+      poType, customerId: customerId || customerName, customerName,
+      warehouse: warehouse as typeof WAREHOUSES[number],
+      poDate, billingPeriod, currency, notes: notes || undefined,
+      sku: poType === "kitting" ? sku || undefined : undefined,
+      skuDescription: poType === "kitting" ? skuDescription || undefined : undefined,
+      qty: poType !== "labor" && qty ? parseInt(qty) : undefined,
+      unitCost: poType !== "labor" && unitCost ? parseFloat(unitCost) : undefined,
+      employeeName: poType === "labor" ? employeeName || undefined : undefined,
+      employeeRole: poType === "labor" ? employeeRole || undefined : undefined,
+      hoursWorked: poType === "labor" && hoursWorked ? parseFloat(hoursWorked) : undefined,
+      hourlyRate: poType === "labor" && hourlyRate ? parseFloat(hourlyRate) : undefined,
+      itemName: poType === "materials" ? itemName || undefined : undefined,
+      vendorName: poType === "materials" ? vendorName || undefined : undefined,
     });
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Purchase Orders</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Create and manage GD Genius purchase orders — pushed to OpFi automatically on submission.
-          </p>
-        </div>
-        <Button onClick={() => setShowCreate(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          New Purchase Order
-        </Button>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="All Warehouses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Warehouses</SelectItem>
-            {WAREHOUSES.map((w) => (
-              <SelectItem key={w} value={w}>{w}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="sent">Sent</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="skipped">Skipped</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Input
-          placeholder="Billing period (YYYY-MM)"
-          value={filterBillingPeriod}
-          onChange={(e) => setFilterBillingPeriod(e.target.value)}
-          className="w-48"
-        />
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => utils.purchaseOrder.list.invalidate()}
-          className="gap-1.5 text-muted-foreground"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </Button>
-      </div>
-
-      {/* Summary counts */}
-      {pos.length > 0 && (
-        <div className="flex gap-4 text-sm text-muted-foreground">
-          <span>{pos.length} PO{pos.length !== 1 ? "s" : ""}</span>
-          <span className="text-emerald-600 font-medium">
-            {pos.filter((p) => p.opfiPushStatus === "sent").length} sent
-          </span>
-          <span className="text-amber-600 font-medium">
-            {pos.filter((p) => p.opfiPushStatus === "pending").length} pending
-          </span>
-          <span className="text-red-600 font-medium">
-            {pos.filter((p) => p.opfiPushStatus === "failed").length} failed
-          </span>
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40">
-              <TableHead className="w-40">PO Number</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead className="w-28">Warehouse</TableHead>
-              <TableHead className="w-28">Billing Period</TableHead>
-              <TableHead className="w-24 text-right">Kitting</TableHead>
-              <TableHead className="w-24 text-right">Labour</TableHead>
-              <TableHead className="w-24 text-right">Material</TableHead>
-              <TableHead className="w-28 text-right font-semibold">Total</TableHead>
-              <TableHead className="w-36">OpFi Status</TableHead>
-              <TableHead className="w-16"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
-                  Loading purchase orders…
-                </TableCell>
-              </TableRow>
-            ) : pos.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={10} className="text-center py-16">
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    <FileText className="w-10 h-10 opacity-30" />
-                    <p className="font-medium">No purchase orders yet</p>
-                    <p className="text-sm">Click "New Purchase Order" to create your first PO.</p>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              pos.map((po) => (
-                <TableRow key={po.id} className="hover:bg-muted/20">
-                  <TableCell className="font-mono text-sm font-medium">{po.poNumber}</TableCell>
-                  <TableCell>
-                    <div className="font-medium text-sm">{po.customerName}</div>
-                    <div className="text-xs text-muted-foreground">{po.customerId}</div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">{po.warehouse}</Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">{po.billingPeriod}</TableCell>
-                  <TableCell className="text-right text-sm">
-                    {formatCurrency(po.kittingCharge, po.currency ?? "CAD")}
-                  </TableCell>
-                  <TableCell className="text-right text-sm">
-                    {formatCurrency(po.labourCharge, po.currency ?? "CAD")}
-                  </TableCell>
-                  <TableCell className="text-right text-sm">
-                    {formatCurrency(po.materialCharge, po.currency ?? "CAD")}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold text-sm">
-                    {formatCurrency(po.totalCharge, po.currency ?? "CAD")}
-                  </TableCell>
-                  <TableCell>
-                    <PushStatusBadge
-                      status={po.opfiPushStatus ?? "pending"}
-                      attempts={po.opfiPushAttempts ?? 0}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {(po.opfiPushStatus === "failed" || po.opfiPushStatus === "pending") && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Retry OpFi push"
-                        disabled={retryMutation.isPending}
-                        onClick={() => retryMutation.mutate({ id: po.id })}
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Create PO Dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              New Purchase Order
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {/* Customer */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Customer ID</Label>
-                <Input
-                  placeholder="e.g. CUST-001"
-                  value={form.customerId}
-                  onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Customer Name</Label>
-                <Input
-                  placeholder="e.g. Acme Corp"
-                  value={form.customerName}
-                  onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))}
-                />
-              </div>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>New {poType.charAt(0).toUpperCase() + poType.slice(1)} PO</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-2 max-h-[70vh] overflow-y-auto pr-1">
+          <div>
+            <Label>PO Type</Label>
+            <Select value={poType} onValueChange={(v) => setPoType(v as PoType)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="kitting">Kitting</SelectItem>
+                <SelectItem value="labor">Labor</SelectItem>
+                <SelectItem value="materials">Materials</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Customer Name *</Label><Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Acme Corp" /></div>
+            <div><Label>Customer ID</Label><Input value={customerId} onChange={(e) => setCustomerId(e.target.value)} placeholder="Optional" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Warehouse *</Label>
+              <Select value={warehouse} onValueChange={setWarehouse}>
+                <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+                <SelectContent>{WAREHOUSES.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-
-            {/* Warehouse + Currency */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Warehouse</Label>
-                <Select
-                  value={form.warehouse}
-                  onValueChange={(v) => setForm((f) => ({ ...f, warehouse: v as Warehouse }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select warehouse" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {WAREHOUSES.map((w) => (
-                      <SelectItem key={w} value={w}>{w}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Currency</Label>
-                <Select
-                  value={form.currency}
-                  onValueChange={(v) => setForm((f) => ({ ...f, currency: v as "CAD" | "USD" }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CURRENCIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Dates */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>PO Date</Label>
-                <Input
-                  type="date"
-                  value={form.poDate}
-                  onChange={(e) => setForm((f) => ({ ...f, poDate: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Billing Period</Label>
-                <Input
-                  placeholder="YYYY-MM"
-                  value={form.billingPeriod}
-                  onChange={(e) => setForm((f) => ({ ...f, billingPeriod: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            {/* Charges */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Charges ({form.currency})</Label>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Kitting</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.kittingCharge}
-                    onChange={(e) => setForm((f) => ({ ...f, kittingCharge: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Labour</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.labourCharge}
-                    onChange={(e) => setForm((f) => ({ ...f, labourCharge: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Material</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.materialCharge}
-                    onChange={(e) => setForm((f) => ({ ...f, materialCharge: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end pt-1">
-                <div className="text-sm font-semibold">
-                  Total:{" "}
-                  <span className="text-primary">
-                    {new Intl.NumberFormat("en-CA", {
-                      style: "currency",
-                      currency: form.currency,
-                    }).format(total)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-1.5">
-              <Label>Notes (optional)</Label>
-              <Textarea
-                placeholder="Any additional notes for this PO…"
-                rows={2}
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              />
+            <div>
+              <Label>Currency</Label>
+              <Select value={currency} onValueChange={(v) => setCurrency(v as "CAD" | "USD")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>PO Date</Label><Input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} /></div>
+            <div><Label>Billing Period (YYYY-MM)</Label><Input value={billingPeriod} onChange={(e) => setBillingPeriod(e.target.value)} placeholder="2026-04" /></div>
+          </div>
+          {poType === "kitting" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>SKU</Label><Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="KIT-001" /></div>
+                <div><Label>Description</Label><Input value={skuDescription} onChange={(e) => setSkuDescription(e.target.value)} placeholder="Gift Set Assembly" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Quantity</Label><Input type="number" min="0" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="500" /></div>
+                <div><Label>Unit Cost</Label><Input type="number" min="0" step="0.01" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} placeholder="2.10" /></div>
+              </div>
+            </>
+          )}
+          {poType === "labor" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Employee Name</Label><Input value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} placeholder="Mike Torres" /></div>
+                <div><Label>Role</Label><Input value={employeeRole} onChange={(e) => setEmployeeRole(e.target.value)} placeholder="Warehouse Associate" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Hours Worked</Label><Input type="number" min="0" step="0.5" value={hoursWorked} onChange={(e) => setHoursWorked(e.target.value)} placeholder="40" /></div>
+                <div><Label>Hourly Rate</Label><Input type="number" min="0" step="0.01" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} placeholder="28.00" /></div>
+              </div>
+            </>
+          )}
+          {poType === "materials" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Item Name</Label><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Poly Bags 12×15" /></div>
+                <div><Label>Vendor</Label><Input value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="PackCo" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Quantity</Label><Input type="number" min="0" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="5000" /></div>
+                <div><Label>Unit Cost</Label><Input type="number" min="0" step="0.0001" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} placeholder="0.08" /></div>
+              </div>
+            </>
+          )}
+          <div><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional notes…" /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={createMutation.isPending} className="bg-[#5da032] hover:bg-[#4a8828] text-white">
+            {createMutation.isPending ? "Creating…" : "Create PO"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={createMutation.isPending}
-              className="gap-2"
-            >
-              {createMutation.isPending ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Creating…
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  Create & Push to OpFi
-                </>
+function LandingView({ onNavigate }: { onNavigate: (v: PoType) => void }) {
+  const { data: allPos = [], refetch } = trpc.purchaseOrder.list.useQuery({});
+  const [showCreate, setShowCreate] = useState(false);
+  const [createType, setCreateType] = useState<PoType>("kitting");
+
+  const kittingPos = allPos.filter((p) => p.poType === "kitting");
+  const laborPos = allPos.filter((p) => p.poType === "labor");
+  const materialsPos = allPos.filter((p) => p.poType === "materials");
+  const totalValue = allPos.reduce((s, p) => s + parseFloat(p.totalCharge ?? "0"), 0);
+  const pendingCount = allPos.filter((p) => p.poStatus === "pending" || p.poStatus === "ordered").length;
+
+  const categories = [
+    {
+      id: "kitting" as PoType, label: "Kitting",
+      description: "Purchase orders for kitting and assembly operations. Track kit SKUs, quantities, unit costs, and approval status per customer.",
+      Icon: Package, iconBg: "#dbeafe", iconColor: "#2563eb", accentColor: "#2563eb",
+      count: kittingPos.length,
+      pending: kittingPos.filter((p) => p.poStatus === "pending").length,
+      value: kittingPos.reduce((s, p) => s + parseFloat(p.totalCharge ?? "0"), 0),
+    },
+    {
+      id: "labor" as PoType, label: "Labor",
+      description: "Purchase orders for warehouse labor charges. Track employee hours, roles, hourly rates, and billable labor cost per customer.",
+      Icon: HardHat, iconBg: "#ede9fe", iconColor: "#7c3aed", accentColor: "#7c3aed",
+      count: laborPos.length,
+      pending: laborPos.filter((p) => p.poStatus === "pending").length,
+      value: laborPos.reduce((s, p) => s + parseFloat(p.totalCharge ?? "0"), 0),
+    },
+    {
+      id: "materials" as PoType, label: "Materials",
+      description: "Purchase orders for packaging and consumable materials. Track items, vendors, quantities, and receipt status per customer.",
+      Icon: Wrench, iconBg: "#d1fae5", iconColor: "#059669", accentColor: "#059669",
+      count: materialsPos.length,
+      pending: materialsPos.filter((p) => p.poStatus === "ordered").length,
+      value: materialsPos.reduce((s, p) => s + parseFloat(p.totalCharge ?? "0"), 0),
+    },
+  ];
+
+  return (
+    <div className="p-8 bg-gray-50 min-h-full">
+      <div className="flex items-start justify-between mb-7">
+        <div>
+          <div className="text-xs text-gray-400 font-medium mb-1">Operations</div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Purchase Orders</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage kitting, labor, and materials POs across all warehouses</p>
+        </div>
+        <Button className="bg-[#5da032] hover:bg-[#4a8828] text-white font-semibold rounded-xl flex items-center gap-1.5"
+          onClick={() => { setCreateType("kitting"); setShowCreate(true); }}>
+          <Plus className="w-4 h-4" /> New PO
+        </Button>
+      </div>
+      <div className="grid grid-cols-4 gap-4 mb-7">
+        <KpiCard icon={<FileText className="w-5 h-5 text-[#5da032]" />} label="Total POs" value={allPos.length} />
+        <KpiCard icon={<Box className="w-5 h-5 text-amber-500" />} label="Pending / Ordered" value={pendingCount} />
+        <KpiCard icon={<DollarSign className="w-5 h-5 text-emerald-500" />} label="Total PO Value" value={fmt(totalValue)} />
+        <KpiCard icon={<LayoutGrid className="w-5 h-5 text-violet-600" />} label="Categories" value={3} />
+      </div>
+      <div className="grid grid-cols-3 gap-6">
+        {categories.map((cat) => (
+          <div key={cat.id} onClick={() => onNavigate(cat.id)}
+            className="bg-white rounded-2xl border-[1.5px] border-gray-200 p-7 cursor-pointer transition-all duration-200 shadow-sm hover:-translate-y-0.5"
+            onMouseEnter={(e) => { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = cat.accentColor; el.style.boxShadow = `0 4px 16px ${cat.accentColor}22`; }}
+            onMouseLeave={(e) => { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = "#e5e7eb"; el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)"; }}
+          >
+            <div className="flex items-start justify-between mb-5">
+              <div className="rounded-2xl flex items-center justify-center" style={{ background: cat.iconBg, color: cat.iconColor, width: 52, height: 52 }}>
+                <cat.Icon className="w-6 h-6" />
+              </div>
+              {cat.pending > 0 && (
+                <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full border border-amber-200">{cat.pending} pending</span>
               )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </div>
+            <div className="text-xl font-extrabold text-gray-900 mb-2 tracking-tight">{cat.label}</div>
+            <p className="text-sm text-gray-500 leading-relaxed mb-5">{cat.description}</p>
+            <div className="grid grid-cols-2 gap-2.5 mb-5">
+              <div className="bg-gray-50 rounded-xl p-3">
+                <div className="text-xs text-gray-400 font-medium">POs</div>
+                <div className="text-base font-bold text-gray-900 mt-0.5">{cat.count}</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <div className="text-xs text-gray-400 font-medium">Total Value</div>
+                <div className="text-base font-bold text-gray-900 mt-0.5">{fmt(cat.value)}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: cat.accentColor }}>
+              View {cat.label} POs <span className="text-base">→</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <CreatePoDialog open={showCreate} onClose={() => setShowCreate(false)} defaultType={createType} onCreated={() => refetch()} />
     </div>
   );
+}
+
+function PoSubView({ poType, label, onBack }: { poType: PoType; label: string; onBack: () => void }) {
+  const [search, setSearch] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const { data: pos = [], refetch } = trpc.purchaseOrder.list.useQuery({ poType });
+  const retryMutation = trpc.purchaseOrder.retryPush.useMutation({
+    onSuccess: () => { toast.success("Retry queued"); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const q = search.toLowerCase();
+  const filtered = pos.filter((p) =>
+    !q || p.poNumber.toLowerCase().includes(q) || p.customerName.toLowerCase().includes(q) ||
+    (p.sku ?? "").toLowerCase().includes(q) || (p.skuDescription ?? "").toLowerCase().includes(q) ||
+    (p.employeeName ?? "").toLowerCase().includes(q) || (p.employeeRole ?? "").toLowerCase().includes(q) ||
+    (p.itemName ?? "").toLowerCase().includes(q) || (p.vendorName ?? "").toLowerCase().includes(q) ||
+    p.warehouse.toLowerCase().includes(q)
+  );
+  const totalValue = filtered.reduce((s, p) => s + parseFloat(p.totalCharge ?? "0"), 0);
+  const pendingOrOrdered = filtered.filter((p) => p.poStatus === "pending" || p.poStatus === "ordered").length;
+
+  const kpiLabel = poType === "kitting" ? "Pending Approval" : poType === "labor" ? "Pending Approval" : "Awaiting Receipt";
+  const totalLabel = poType === "labor" ? "Total Labor Cost" : "Total Value";
+
+  const kittingCols = ["PO #", "Date", "Customer", "Warehouse", "SKU", "Description", "Qty", "Unit Cost", "Total", "Status", ""];
+  const laborCols   = ["PO #", "Date", "Customer", "Warehouse", "Employee", "Role", "Hours", "Rate/hr", "Total", "Status", ""];
+  const materialCols= ["PO #", "Date", "Customer", "Warehouse", "Item", "Vendor", "Qty", "Unit Cost", "Total", "Status", ""];
+  const cols = poType === "kitting" ? kittingCols : poType === "labor" ? laborCols : materialCols;
+
+  return (
+    <div className="p-8 bg-gray-50 min-h-full">
+      <div className="flex items-start justify-between mb-7">
+        <div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium mb-1">
+            <button onClick={onBack} className="text-[#5da032] font-semibold flex items-center gap-1 hover:underline">
+              <ChevronLeft className="w-3.5 h-3.5" /> Purchase Orders
+            </button>
+            <span>/ {label}</span>
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{label} Purchase Orders</h1>
+        </div>
+        <Button className="bg-[#5da032] hover:bg-[#4a8828] text-white font-semibold rounded-xl flex items-center gap-1.5" onClick={() => setShowCreate(true)}>
+          <Plus className="w-4 h-4" /> New {label} PO
+        </Button>
+      </div>
+      <div className="grid grid-cols-3 gap-4 mb-7">
+        <SimpleKpiCard label="Total POs" value={filtered.length} />
+        <SimpleKpiCard label={kpiLabel} value={pendingOrOrdered} />
+        <SimpleKpiCard label={totalLabel} value={fmt(totalValue)} />
+      </div>
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100">
+          <h3 className="text-base font-bold text-gray-900">{label} PO List</h3>
+          <input className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56 focus:outline-none focus:border-[#5da032]"
+            placeholder="Search POs…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-gray-50">
+              <tr>{cols.map((h) => <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 whitespace-nowrap">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={cols.length} className="text-center py-10 text-gray-400">No POs found</td></tr>
+              ) : filtered.map((p) => (
+                <tr key={p.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                  <td className="px-4 py-3 font-bold text-[#5da032] font-mono text-sm whitespace-nowrap">{p.poNumber}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{p.poDate}</td>
+                  <td className="px-4 py-3 text-sm">{p.customerName}</td>
+                  <td className="px-4 py-3"><WarehouseBadge warehouse={p.warehouse} /></td>
+                  {poType === "kitting" && <>
+                    <td className="px-4 py-3 text-xs text-gray-500 font-mono">{p.sku ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm">{p.skuDescription ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{p.qty != null ? p.qty.toLocaleString() : "—"}</td>
+                    <td className="px-4 py-3 text-sm">{p.unitCost != null ? fmt(parseFloat(p.unitCost)) : "—"}</td>
+                  </>}
+                  {poType === "labor" && <>
+                    <td className="px-4 py-3 text-sm font-semibold">{p.employeeName ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{p.employeeRole ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{p.hoursWorked != null ? `${p.hoursWorked}h` : "—"}</td>
+                    <td className="px-4 py-3 text-sm">{p.hourlyRate != null ? fmt(parseFloat(p.hourlyRate)) : "—"}</td>
+                  </>}
+                  {poType === "materials" && <>
+                    <td className="px-4 py-3 text-sm font-medium">{p.itemName ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{p.vendorName ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{p.qty != null ? p.qty.toLocaleString() : "—"}</td>
+                    <td className="px-4 py-3 text-sm">{p.unitCost != null ? fmt(parseFloat(p.unitCost)) : "—"}</td>
+                  </>}
+                  <td className="px-4 py-3 text-sm font-bold">{fmt(parseFloat(p.totalCharge ?? "0"))}</td>
+                  <td className="px-4 py-3"><StatusBadge status={p.poStatus ?? "pending"} /></td>
+                  <td className="px-4 py-3">
+                    {(p.opfiPushStatus === "failed" || p.opfiPushStatus === "pending") && (
+                      <button onClick={() => retryMutation.mutate({ id: p.id })} title="Retry OpFi push">
+                        <RotateCcw className="w-3.5 h-3.5 text-gray-400 hover:text-gray-700" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <CreatePoDialog open={showCreate} onClose={() => setShowCreate(false)} defaultType={poType} onCreated={() => refetch()} />
+    </div>
+  );
+}
+
+export default function PurchaseOrders() {
+  const [view, setView] = useState<View>("landing");
+  if (view === "kitting")   return <PoSubView poType="kitting"   label="Kitting"   onBack={() => setView("landing")} />;
+  if (view === "labor")     return <PoSubView poType="labor"     label="Labor"     onBack={() => setView("landing")} />;
+  if (view === "materials") return <PoSubView poType="materials" label="Materials" onBack={() => setView("landing")} />;
+  return <LandingView onNavigate={(v) => setView(v)} />;
 }

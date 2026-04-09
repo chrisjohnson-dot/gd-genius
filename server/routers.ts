@@ -7348,6 +7348,63 @@ const smallParcelRouter = router({
       return { highValue };
     }),
 
+  /**
+   * Resolve a scanned barcode (UPC/EAN/GTIN) to a SKU by looking up the
+   * Extensiv item master for the given client. Returns the matched SKU string
+   * or null if no match found.
+   */
+  resolveUpcToSku: protectedProcedure
+    .input(z.object({
+      configId: z.number().int(),
+      clientId: z.number().int(),
+      barcode: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) return { sku: null };
+      const { getExtensivToken } = await import('./extensiv/client.js');
+      const token = await getExtensivToken(config);
+      const baseUrl = config.baseUrl || 'https://secure-wms.com';
+      const normalised = input.barcode.trim().toUpperCase();
+      interface RawItemUom {
+        UnitOfMeasureType?: string;
+        PrimaryUpc?: string;
+        Upc?: string;
+      }
+      interface RawItemForUpc {
+        Sku?: string;
+        PrimaryUpc?: string;
+        Upc?: string;
+        UnitsOfMeasure?: RawItemUom[];
+      }
+      let pg = 1;
+      while (true) {
+        const res = await fetch(
+          `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}&detail=all`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+        );
+        if (!res.ok) break;
+        const data = await res.json() as { TotalResults?: number; ResourceList?: RawItemForUpc[] };
+        const list = data.ResourceList ?? [];
+        for (const item of list) {
+          if (!item.Sku) continue;
+          // Check top-level UPC fields
+          if (item.PrimaryUpc && item.PrimaryUpc.trim().toUpperCase() === normalised) return { sku: item.Sku };
+          if (item.Upc && item.Upc.trim().toUpperCase() === normalised) return { sku: item.Sku };
+          // Check UnitsOfMeasure array (where Primary UPC lives per Extensiv item master)
+          if (Array.isArray(item.UnitsOfMeasure)) {
+            for (const uom of item.UnitsOfMeasure) {
+              if (uom.PrimaryUpc && uom.PrimaryUpc.trim().toUpperCase() === normalised) return { sku: item.Sku };
+              if (uom.Upc && uom.Upc.trim().toUpperCase() === normalised) return { sku: item.Sku };
+            }
+          }
+        }
+        if (list.length === 0 || list.length >= (data.TotalResults ?? 0)) break;
+        pg++;
+      }
+      return { sku: null };
+    }),
+
   /** Get a small parcel setting by key */
   getSetting: protectedProcedure
     .input(z.object({ key: z.string() }))

@@ -380,6 +380,8 @@ function Step3ScanItems({
   sessionId,
   extensivOrderId,
   clientName,
+  clientId,
+  configId,
   items,
   onComplete,
   onBack,
@@ -387,6 +389,8 @@ function Step3ScanItems({
   sessionId: number;
   extensivOrderId?: number;
   clientName?: string;
+  clientId?: number;
+  configId?: number;
   items: ScannedItem[];
   onComplete: (items: ScannedItem[]) => void;
   onBack?: () => void;
@@ -439,28 +443,58 @@ function Step3ScanItems({
   const allDone = scannedItems.every((item) => item.scanned >= item.qty);
   const hasManualOverrides = manualOverrides.size > 0;
 
-  const handleScan = useCallback(() => {
-    const sku = scanInput.trim().toUpperCase();
-    if (!sku) return;
+  const handleScan = useCallback(async () => {
+    const rawInput = scanInput.trim().toUpperCase();
+    if (!rawInput) return;
 
-    const idx = scannedItems.findIndex(
-      (item) => item.sku.toUpperCase() === sku && item.scanned < item.qty
-    );
+    // Helper: attempt to match a resolved SKU against the order items
+    const tryMatch = (resolvedSku: string) => {
+      const idx = scannedItems.findIndex(
+        (item) => item.sku.toUpperCase() === resolvedSku && item.scanned < item.qty
+      );
+      return idx;
+    };
+
+    // 1. Try direct SKU match first
+    let idx = tryMatch(rawInput);
+    let resolvedSku = rawInput;
+
+    // 2. If no direct match and we have configId/clientId, try UPC->SKU lookup
+    if (idx === -1 && configId && clientId) {
+      try {
+        const result = await utils.smallParcel.resolveUpcToSku.fetch({
+          configId,
+          clientId,
+          barcode: rawInput,
+        });
+        if (result.sku) {
+          resolvedSku = result.sku.toUpperCase();
+          idx = tryMatch(resolvedSku);
+        }
+      } catch {
+        // UPC lookup failed - fall through to error handling
+      }
+    }
 
     if (idx === -1) {
-      const knownSku = scannedItems.find((item) => item.sku.toUpperCase() === sku);
+      const knownSku = scannedItems.find((item) => item.sku.toUpperCase() === resolvedSku);
       if (knownSku) {
-        toast.warning(`${sku} already fully scanned (${knownSku.qty}/${knownSku.qty})`);
+        toast.warning(`${resolvedSku} already fully scanned (${knownSku.qty}/${knownSku.qty})`);
       } else {
-        toast.error(`SKU "${sku}" not found on this order`);
-        // Log scan error
+        // Show a more helpful message if we tried UPC lookup and still failed
+        const msg = resolvedSku !== rawInput
+          ? `Barcode resolved to SKU "${resolvedSku}" but it's not on this order`
+          : `SKU "${rawInput}" not found on this order - try scanning the SKU label directly`;
+        toast.error(msg);
         logAuditMutation.mutate({
           sessionId,
           extensivOrderId,
           clientName,
           eventType: "scan_error",
-          sku,
-          notes: "SKU not found on order",
+          sku: rawInput,
+          notes: resolvedSku !== rawInput
+            ? `UPC ${rawInput} resolved to SKU ${resolvedSku} but not on order`
+            : "SKU not found on order",
         });
       }
       setScanInput("");
@@ -472,18 +506,15 @@ function Step3ScanItems({
     );
     setScannedItems(updated);
     updateMutation.mutate({ id: sessionId, scannedItems: updated });
-
     const item = updated[idx];
     if (item.scanned >= item.qty) {
-      toast.success(`${sku} — all ${item.qty} scanned ✓`);
+      toast.success(`${resolvedSku} - all ${item.qty} scanned`);
     } else {
-      toast.info(`${sku} — ${item.scanned}/${item.qty}`);
+      toast.info(`${resolvedSku} - ${item.scanned}/${item.qty}`);
     }
-
     setScanInput("");
     scanInputRef.current?.focus();
-  }, [scanInput, scannedItems, sessionId, updateMutation, logAuditMutation, extensivOrderId, clientName]);
-
+   }, [scanInput, scannedItems, sessionId, updateMutation, logAuditMutation, extensivOrderId, clientName, configId, clientId, utils]);
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleScan();
   };
@@ -1796,6 +1827,8 @@ export default function SmallParcel() {
               sessionId={sessionId}
               extensivOrderId={orderData.extensivOrderId}
               clientName={orderData.clientName}
+              clientId={orderData.clientId}
+              configId={configId}
               items={orderData.orderItems.map((item) => ({ sku: item.sku, qty: item.qty, scanned: 0 }))}
               onComplete={handleScanComplete}
               onBack={() => {

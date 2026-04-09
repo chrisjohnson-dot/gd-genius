@@ -990,16 +990,6 @@ function WarehouseCard({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-foreground">{facility.facilityName}</h2>
-                {hasHigh && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                    <AlertTriangle className="h-2.5 w-2.5" /> HIGH
-                  </span>
-                )}
-                {hasUrgent && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
-                    <ShieldAlert className="h-2.5 w-2.5" /> URGENT
-                  </span>
-                )}
               </div>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 {facility.orders.length} order{facility.orders.length !== 1 ? "s" : ""} · {clientOptions.length} client{clientOptions.length !== 1 ? "s" : ""}
@@ -1079,7 +1069,7 @@ function WarehouseCard({
                   o.assignedAssociate ?? "",
                   o.notes ?? "",
                 ]);
-                const header = ["Status","Order #","PO #","Client","Ship To","City","Create Date","Age","Pieces","SKUs","Associate","Notes"];
+                const header = ["Status","Transaction ID","PO #","Client","Ship To","City","Create Date","Age","Pieces","SKUs","Associate","Notes"];
                 const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
                 const blob = new Blob([csv], { type: "text/csv" });
                 const a = document.createElement("a");
@@ -1105,7 +1095,7 @@ function WarehouseCard({
                 doc.text(`Exported ${new Date().toLocaleString()} · ${filteredOrders.length} orders`, 40, 52);
                 autoTable(doc, {
                   startY: 64,
-                  head: [["Status","Order #","PO #","Client","Ship To","City","Date","Age","Pcs","SKUs","Associate"]],
+                  head: [["Status","Transaction ID","PO #","Client","Ship To","City","Date","Age","Pcs","SKUs","Associate"]],
                   body: filteredOrders.map((o) => [
                     LIFECYCLE_CONFIG[o.lifecycleStatus]?.label ?? o.lifecycleStatus,
                     o.referenceNum ?? "",
@@ -1298,16 +1288,6 @@ function WarehouseCard({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-foreground">{facility.facilityName}</h3>
-                {hasHigh && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                    <AlertTriangle className="h-2.5 w-2.5" /> HIGH
-                  </span>
-                )}
-                {hasUrgent && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
-                    <ShieldAlert className="h-2.5 w-2.5" /> URGENT
-                  </span>
-                )}
               </div>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 {facility.orders.length} order{facility.orders.length !== 1 ? "s" : ""} · {clientOptions.length} client{clientOptions.length !== 1 ? "s" : ""}

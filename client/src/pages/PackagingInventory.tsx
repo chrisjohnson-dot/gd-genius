@@ -255,14 +255,14 @@ function ItemDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. 12×10×8 Box"
-              className="bg-[#1e2130] border-white/10"
+              className="bg-card border-border"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium text-slate-300 mb-1 block">Category</label>
               <Select value={category} onValueChange={(v) => setCategory(v as typeof category)}>
-                <SelectTrigger className="bg-[#1e2130] border-white/10">
+                <SelectTrigger className="bg-card border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -278,7 +278,7 @@ function ItemDialog({
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
                 placeholder="each"
-                className="bg-[#1e2130] border-white/10"
+                className="bg-card border-border"
               />
             </div>
           </div>
@@ -290,7 +290,7 @@ function ItemDialog({
                 min={0}
                 value={onHandQty}
                 onChange={(e) => setOnHandQty(e.target.value)}
-                className="bg-[#1e2130] border-white/10"
+                className="bg-card border-border"
               />
             </div>
             <div>
@@ -300,21 +300,21 @@ function ItemDialog({
                 min={0}
                 value={minStockLevel}
                 onChange={(e) => setMinStockLevel(e.target.value)}
-                className="bg-[#1e2130] border-white/10"
+                className="bg-card border-border"
               />
             </div>
           </div>
 
           {/* Burn rate section */}
-          <div className="rounded-lg border border-white/10 bg-[#1e2130] px-4 py-3 space-y-3">
+          <div className="rounded-lg border border-border bg-card px-4 py-3 space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <label className="text-sm font-medium text-slate-300 block">Weekly Consumption</label>
-                <p className="text-[11px] text-slate-500 mt-0.5">How many {unit || "units"} used per week on average</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">How many {unit || "units"} used per week on average</p>
               </div>
               {previewDays !== null && (
                 <div className="text-right">
-                  <p className="text-[11px] text-slate-500">Est. days remaining</p>
+                  <p className="text-[11px] text-muted-foreground">Est. days remaining</p>
                   <p className={`text-sm font-bold ${previewDays < 7 ? "text-red-400" : previewDays < 14 ? "text-amber-400" : "text-emerald-400"}`}>
                     {previewDays} days
                   </p>
@@ -327,7 +327,7 @@ function ItemDialog({
               value={weeklyConsumption}
               onChange={(e) => setWeeklyConsumption(e.target.value)}
               placeholder="0 = unknown"
-              className="bg-[#161925] border-white/10"
+              className="bg-background border-border"
             />
           </div>
 
@@ -337,7 +337,7 @@ function ItemDialog({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. supplier, SKU, storage location"
-              className="bg-[#1e2130] border-white/10"
+              className="bg-card border-border"
             />
           </div>
         </div>
@@ -386,7 +386,7 @@ function OnHandCell({ item, configId }: { item: InventoryItem; configId: number 
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
           onBlur={commit}
           autoFocus
-          className="w-20 h-7 text-sm bg-[#1e2130] border-white/10 px-2"
+          className="w-20 h-7 text-sm bg-card border-border px-2"
         />
         {update.isPending && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
       </div>
@@ -473,7 +473,7 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
         </DialogHeader>
         <div className="space-y-4 py-2">
           {/* Item summary */}
-          <div className="rounded-lg bg-[#1e2130] border border-white/10 px-4 py-3 space-y-1.5">
+          <div className="rounded-lg bg-card border border-border px-4 py-3 space-y-1.5">
             <p className="text-sm font-medium text-slate-200">{item.name}</p>
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <span>On hand: <span className="text-slate-300 font-mono">{item.onHandQty}</span> {item.unit}</span>
@@ -525,10 +525,10 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
               min={1}
               value={qty}
               onChange={(e) => { setQty(e.target.value); setQtyEdited(true); }}
-              className={`bg-[#1e2130] border-white/10 ${isSuggested ? "ring-1 ring-indigo-500/30" : ""}`}
+              className={`bg-card border-border ${isSuggested ? "ring-1 ring-indigo-500/30" : ""}`}
             />
             {parsedQty !== suggestion.qty && qtyEdited && (
-              <p className="text-[11px] text-slate-500 mt-1">
+              <p className="text-[11px] text-muted-foreground mt-1">
                 Suggested: {suggestion.qty} — you entered {parsedQty}
               </p>
             )}
@@ -540,10 +540,10 @@ function ReorderDialog({ item, configId, onClose }: { item: InventoryItem; confi
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Urgency, supplier preference, etc."
-              className="bg-[#1e2130] border-white/10"
+              className="bg-card border-border"
             />
           </div>
-          <p className="text-xs text-slate-500">Submitting this request will notify accounting to place the order.</p>
+          <p className="text-xs text-muted-foreground">Submitting this request will notify accounting to place the order.</p>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={create.isPending}>Cancel</Button>
@@ -577,7 +577,7 @@ function StockTable({
 }) {
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Package className="w-10 h-10 mb-3 opacity-30" />
         <p className="text-sm">No packaging items yet. Add one to get started.</p>
       </div>
@@ -588,7 +588,7 @@ function StockTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-500">
+          <tr className="border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground">
             <th className="text-left py-2 px-3 font-medium">Name</th>
             <th className="text-left py-2 px-3 font-medium">Category</th>
             <th className="text-right py-2 px-3 font-medium">On Hand</th>
@@ -632,7 +632,7 @@ function StockTable({
             return (
               <tr
                 key={item.id}
-                className={`border-b border-white/5 hover:bg-white/[0.02] transition-colors ${rowHighlight}`}
+                className={`border-b border-border hover:bg-muted/30 transition-colors ${rowHighlight}`}
               >
                 <td className="py-2.5 px-3">
                   <div className="flex items-center gap-2">
@@ -644,7 +644,7 @@ function StockTable({
                     )}
                     <span className="text-slate-200 font-medium">{item.name}</span>
                   </div>
-                  {item.notes && <p className="text-[11px] text-slate-500 mt-0.5 pl-5">{item.notes}</p>}
+                  {item.notes && <p className="text-[11px] text-muted-foreground mt-0.5 pl-5">{item.notes}</p>}
                 </td>
                 <td className="py-2.5 px-3">
                   <Badge className={`text-[11px] border ${categoryColor(item.category)}`}>
@@ -654,7 +654,7 @@ function StockTable({
                 <td className="py-2.5 px-3 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <OnHandCell item={item} configId={configId} />
-                    <span className="text-slate-500 text-xs">{item.unit}</span>
+                    <span className="text-muted-foreground text-xs">{item.unit}</span>
                   </div>
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono text-slate-400">{item.minStockLevel}</td>
@@ -742,7 +742,7 @@ function RequestsTab({
 
   if (requests.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <CheckCircle2 className="w-10 h-10 mb-3 opacity-30" />
         <p className="text-sm">No reorder requests yet.</p>
       </div>
@@ -755,7 +755,7 @@ function RequestsTab({
   function RequestRow({ req }: { req: ReorderRequest }) {
     const item = itemMap.get(req.inventoryItemId);
     return (
-      <tr className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+      <tr className="border-b border-border hover:bg-muted/30 transition-colors">
         <td className="py-2.5 px-3">
           <p className="text-slate-200 font-medium text-sm">{item?.name ?? `Item #${req.inventoryItemId}`}</p>
           {item && (
@@ -771,7 +771,7 @@ function RequestsTab({
         </td>
         <td className="py-2.5 px-3">{reorderStatusBadge(req.status)}</td>
         <td className="py-2.5 px-3">
-          {req.notes && <p className="text-xs text-slate-500 max-w-[180px] truncate" title={req.notes}>{req.notes}</p>}
+          {req.notes && <p className="text-xs text-muted-foreground max-w-[180px] truncate" title={req.notes}>{req.notes}</p>}
         </td>
         <td className="py-2.5 px-3">
           <div className="flex items-center justify-end gap-1">
@@ -818,11 +818,11 @@ function RequestsTab({
     <div className="space-y-6">
       {open.length > 0 && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Open Requests ({open.length})</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Open Requests ({open.length})</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-500">
+                <tr className="border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground">
                   <th className="text-left py-2 px-3 font-medium">Item</th>
                   <th className="text-right py-2 px-3 font-medium">Qty</th>
                   <th className="text-left py-2 px-3 font-medium">Requested By</th>
@@ -841,11 +841,11 @@ function RequestsTab({
       )}
       {closed.length > 0 && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Fulfilled / Cancelled ({closed.length})</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fulfilled / Cancelled ({closed.length})</p>
           <div className="overflow-x-auto opacity-60">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-500">
+                <tr className="border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground">
                   <th className="text-left py-2 px-3 font-medium">Item</th>
                   <th className="text-right py-2 px-3 font-medium">Qty</th>
                   <th className="text-left py-2 px-3 font-medium">Requested By</th>
@@ -956,29 +956,29 @@ export default function PackagingInventory() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="rounded-xl bg-[#1a1d2e] border border-white/10 px-5 py-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Items</p>
+        <div className="rounded-xl bg-[#1a1d2e] border border-border px-5 py-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Items</p>
           <p className="text-2xl font-bold text-slate-100">{items.length}</p>
         </div>
-        <div className={`rounded-xl border px-5 py-4 ${criticalCount > 0 ? "bg-red-500/10 border-red-500/20" : "bg-[#1a1d2e] border-white/10"}`}>
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Below Min Stock</p>
+        <div className={`rounded-xl border px-5 py-4 ${criticalCount > 0 ? "bg-red-500/10 border-red-500/20" : "bg-[#1a1d2e] border-border"}`}>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Below Min Stock</p>
           <p className={`text-2xl font-bold ${criticalCount > 0 ? "text-red-400" : "text-slate-100"}`}>{criticalCount}</p>
         </div>
-        <div className={`rounded-xl border px-5 py-4 ${burnCritical > 0 ? "bg-red-500/10 border-red-500/20" : burnWarning > 0 ? "bg-amber-500/10 border-amber-500/20" : "bg-[#1a1d2e] border-white/10"}`}>
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Burn Rate Alerts</p>
+        <div className={`rounded-xl border px-5 py-4 ${burnCritical > 0 ? "bg-red-500/10 border-red-500/20" : burnWarning > 0 ? "bg-amber-500/10 border-amber-500/20" : "bg-[#1a1d2e] border-border"}`}>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Burn Rate Alerts</p>
           <p className={`text-2xl font-bold ${burnCritical > 0 ? "text-red-400" : burnWarning > 0 ? "text-amber-400" : "text-slate-100"}`}>
             {burnCritical + burnWarning}
           </p>
           {(burnCritical > 0 || burnWarning > 0) && (
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-[11px] text-muted-foreground mt-0.5">
               {burnCritical > 0 && `${burnCritical} critical`}
               {burnCritical > 0 && burnWarning > 0 && " · "}
               {burnWarning > 0 && `${burnWarning} low`}
             </p>
           )}
         </div>
-        <div className={`rounded-xl border px-5 py-4 ${openRequests > 0 ? "bg-amber-500/10 border-amber-500/20" : "bg-[#1a1d2e] border-white/10"}`}>
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Open Reorder Requests</p>
+        <div className={`rounded-xl border px-5 py-4 ${openRequests > 0 ? "bg-amber-500/10 border-amber-500/20" : "bg-[#1a1d2e] border-border"}`}>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Open Reorder Requests</p>
           <p className={`text-2xl font-bold ${openRequests > 0 ? "text-amber-400" : "text-slate-100"}`}>{openRequests}</p>
         </div>
       </div>
@@ -986,7 +986,7 @@ export default function PackagingInventory() {
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex items-center justify-between mb-4">
-          <TabsList className="bg-[#1a1d2e] border border-white/10">
+          <TabsList className="bg-[#1a1d2e] border border-border">
             <TabsTrigger value="stock" className="data-[state=active]:bg-white/10">
               Stock
               {totalAlerts > 0 && (
@@ -1007,7 +1007,7 @@ export default function PackagingInventory() {
 
           {tab === "stock" && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Filter:</span>
+              <span className="text-xs text-muted-foreground">Filter:</span>
               {(["all", "envelope", "box", "pallet"] as const).map((cat) => (
                 <button
                   key={cat}
@@ -1015,7 +1015,7 @@ export default function PackagingInventory() {
                   className={`text-xs px-3 py-1 rounded-full border transition-colors ${
                     categoryFilter === cat
                       ? "bg-white/10 border-white/20 text-slate-200"
-                      : "border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20"
+                      : "border-border text-muted-foreground hover:text-slate-300 hover:border-white/20"
                   }`}
                 >
                   {cat === "all" ? "All" : categoryLabel(cat)}
@@ -1026,9 +1026,9 @@ export default function PackagingInventory() {
         </div>
 
         <TabsContent value="stock">
-          <div className="rounded-xl bg-[#1a1d2e] border border-white/10 overflow-hidden">
+          <div className="rounded-xl bg-[#1a1d2e] border border-border overflow-hidden">
             {isLoading ? (
-              <div className="flex items-center justify-center py-16 text-slate-500">
+              <div className="flex items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading inventory…
               </div>
             ) : (
@@ -1044,9 +1044,9 @@ export default function PackagingInventory() {
         </TabsContent>
 
         <TabsContent value="requests">
-          <div className="rounded-xl bg-[#1a1d2e] border border-white/10 p-4">
+          <div className="rounded-xl bg-[#1a1d2e] border border-border p-4">
             {requestsLoading ? (
-              <div className="flex items-center justify-center py-16 text-slate-500">
+              <div className="flex items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading requests…
               </div>
             ) : (

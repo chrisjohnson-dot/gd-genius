@@ -116,7 +116,7 @@ function WarehouseSection({ facilityName, orders, onEdit }: {
   const urgentCount = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 3).length;
 
   return (
-    <div className="rounded-xl border border-white/[0.07] bg-[#1a1d24] overflow-hidden mb-4">
+    <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
       <button
         className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left"
         onClick={() => setCollapsed((c) => !c)}
@@ -279,7 +279,7 @@ function B2BShipmentsSection() {
     : { label: "Awaiting Pickup", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
 
   return (
-    <div className="rounded-xl border border-white/[0.07] bg-[#1a1d24] overflow-hidden mb-4">
+    <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
       <button
         className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left"
         onClick={() => setCollapsed((c) => !c)}
@@ -410,7 +410,7 @@ export default function ShippingDashboard() {
           { label: "Aging (3+ days)",   value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-orange-400" : "text-emerald-400" },
           { label: "Critical (5+ days)",value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-400"    : "text-emerald-400" },
         ] as const).map(({ label, value, Icon, color }) => (
-          <div key={label} className="rounded-xl border border-white/[0.07] bg-[#1a1d24] px-5 py-4 flex items-center gap-3">
+          <div key={label} className="rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-3">
             <Icon className={cn("h-8 w-8 shrink-0 opacity-80", color)} />
             <div>
               <div className="text-2xl font-bold text-white tabular-nums">{value}</div>

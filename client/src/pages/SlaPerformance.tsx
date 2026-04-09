@@ -554,42 +554,31 @@ function WarehouseSlaCard({ facilityId, facilityName, orders, drillDown = false,
                   ))}
                 </div>
               </div>
-              {/* Four stat boxes: B2B In SLA, B2B OOS, D2C In SLA, D2C OOS — clickable filters */}
-              <div className="hidden md:flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                {(() => {
-                  function StatBox({ ch, st, bg, border: bdr, textColor, labelColor, icon, label, count }: {
-                    ch: ChannelFilter; st: "in_sla" | "out_of_sla"; bg: string; border: string;
-                    textColor: string; labelColor: string; icon: React.ReactNode; label: string; count: number;
-                  }) {
-                    const active = channelFilter === ch && filterStatus === st;
-                    function handleClick() {
-                      if (active) { setChannelFilter("all"); setFilterStatus("all"); }
-                      else { setChannelFilter(ch); setFilterStatus(st); setExpanded(true); }
-                    }
-                    return (
-                      <button
-                        className={`rounded-lg px-3 py-1.5 text-center border cursor-pointer transition-all select-none ${
-                          active ? "ring-2 ring-offset-1 ring-blue-400 scale-105" : "hover:scale-105 hover:shadow-md"
-                        }`}
-                        style={{ background: bg, border: `1px solid ${bdr}`, width: 72, height: 64, flexShrink: 0 }}
-                        onClick={handleClick}
-                        title={active ? "Click to clear filter" : `Filter: ${label} ${ch.toUpperCase()}`}
-                      >
-                        <div className="flex items-center justify-center gap-1 mb-0.5">{icon}<span className={`text-[8px] font-bold uppercase tracking-wide ${labelColor}`}>{ch.toUpperCase()}</span></div>
-                        <p className={`text-[17px] font-extrabold leading-none ${textColor}`}>{count}</p>
-                        <p className={`text-[8px] mt-0.5 font-semibold uppercase tracking-wide ${labelColor}`}>{label}</p>
-                      </button>
-                    );
-                  }
+              {/* Four stat pills: B2B In SLA, B2B OOS, D2C In SLA, D2C OOS — clickable filters */}
+              <div className="hidden xl:flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                {([
+                  { ch: "b2b" as ChannelFilter, st: "in_sla" as const,     bg: "#dcfce7", bdr: "#bbf7d0", tc: "text-green-700", lc: "text-green-600", icon: <Truck       className="h-2.5 w-2.5 text-green-600" />, label: "In SLA",  count: b2bInSla },
+                  { ch: "b2b" as ChannelFilter, st: "out_of_sla" as const, bg: "#fee2e2", bdr: "#fecaca", tc: "text-red-700",   lc: "text-red-600",   icon: <Truck       className="h-2.5 w-2.5 text-red-600" />,   label: "OOS",    count: b2bOos },
+                  { ch: "d2c" as ChannelFilter, st: "in_sla" as const,     bg: "#dcfce7", bdr: "#bbf7d0", tc: "text-green-700", lc: "text-green-600", icon: <ShoppingCart className="h-2.5 w-2.5 text-green-600" />, label: "In SLA",  count: d2cInSla },
+                  { ch: "d2c" as ChannelFilter, st: "out_of_sla" as const, bg: "#fee2e2", bdr: "#fecaca", tc: "text-red-700",   lc: "text-red-600",   icon: <ShoppingCart className="h-2.5 w-2.5 text-red-600" />,   label: "OOS",    count: d2cOos },
+                ] as Array<{ ch: ChannelFilter; st: "in_sla" | "out_of_sla"; bg: string; bdr: string; tc: string; lc: string; icon: React.ReactNode; label: string; count: number }>).map(({ ch, st, bg, bdr, tc, lc, icon, label, count }) => {
+                  const active = channelFilter === ch && filterStatus === st;
                   return (
-                    <>
-                      <StatBox ch="b2b" st="in_sla"      bg="#dcfce7" border="#bbf7d0" textColor="text-green-700" labelColor="text-green-600" icon={<Truck       className="h-2 w-2 text-green-600" />} label="In SLA"     count={b2bInSla} />
-                      <StatBox ch="b2b" st="out_of_sla"  bg="#fee2e2" border="#fecaca" textColor="text-red-700"   labelColor="text-red-600"   icon={<Truck       className="h-2 w-2 text-red-600" />}   label="Out of SLA" count={b2bOos} />
-                      <StatBox ch="d2c" st="in_sla"      bg="#dcfce7" border="#bbf7d0" textColor="text-green-700" labelColor="text-green-600" icon={<ShoppingCart className="h-2 w-2 text-green-600" />} label="In SLA"     count={d2cInSla} />
-                      <StatBox ch="d2c" st="out_of_sla"  bg="#fee2e2" border="#fecaca" textColor="text-red-700"   labelColor="text-red-600"   icon={<ShoppingCart className="h-2 w-2 text-red-600" />}   label="Out of SLA" count={d2cOos} />
-                    </>
+                    <button
+                      key={`${ch}-${st}`}
+                      className={`rounded-md px-2 py-1 text-center border cursor-pointer transition-all select-none flex flex-col items-center gap-0.5 ${
+                        active ? "ring-2 ring-offset-1 ring-blue-400" : "hover:shadow-md"
+                      }`}
+                      style={{ background: bg, border: `1px solid ${bdr}`, minWidth: 52 }}
+                      onClick={() => { if (active) { setChannelFilter("all"); setFilterStatus("all"); } else { setChannelFilter(ch); setFilterStatus(st); setExpanded(true); } }}
+                      title={active ? "Click to clear filter" : `Filter: ${label} ${ch.toUpperCase()}`}
+                    >
+                      <div className="flex items-center gap-0.5">{icon}<span className={`text-[8px] font-bold uppercase ${lc}`}>{ch.toUpperCase()}</span></div>
+                      <p className={`text-sm font-extrabold leading-none ${tc}`}>{count}</p>
+                      <p className={`text-[8px] font-semibold uppercase ${lc}`}>{label}</p>
+                    </button>
                   );
-                })()}
+                })}
               </div>
               {!onDrillDown && (
                 <button className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground" onClick={(e) => { e.stopPropagation(); setIsFullScreen((f) => !f); }} title={isFullScreen ? "Exit full screen" : "Full screen"}>
@@ -757,7 +746,44 @@ function SlaRequirementsTab() {
   }, [allClients, search]);
   if (isLoading) return <div className="flex items-center justify-center py-16 text-muted-foreground gap-2"><RefreshCw className="h-5 w-5 animate-spin" /><span>Loading…</span></div>;
   return (
-    <Card>
+    <div className="space-y-4">
+      {/* ── General Parameters ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-primary" />
+            General Parameters
+            <span className="text-sm font-normal text-muted-foreground">— applies to all clients &amp; all SLAs</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {([
+              { icon: "📅", label: "Weekend days excluded", desc: "Saturday and Sunday are never counted toward SLA business days" },
+              { icon: "🏖️", label: "Staff holidays excluded", desc: "Statutory and GD-observed holidays do not count as SLA days" },
+              { icon: "⏰", label: "Day starts at 08:00 local", desc: "SLA clock begins at 08:00 on the first qualifying business day after receipt" },
+              { icon: "🌙", label: "Day ends at 17:00 local", desc: "Orders received after 17:00 start their SLA clock the next business day" },
+              { icon: "📦", label: "Receipt day is day zero", desc: "The day inventory is received counts as day 0; SLA days begin the following business day" },
+              { icon: "✅", label: "SLA met on ship-ready", desc: "An order is considered SLA-compliant once it reaches Ship Ready status" },
+            ] as { icon: string; label: string; desc: string }[]).map(({ icon, label, desc }) => (
+              <div key={label} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                <span className="text-lg shrink-0 mt-0.5">{icon}</span>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            These parameters are system-wide defaults. Per-client SLA day counts are configured in the table below.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ── Per-client SLA table ── */}
+      <Card>
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4 text-primary" />SLA Requirements<span className="text-sm font-normal text-muted-foreground">— {allClients.length} clients</span></CardTitle>
@@ -804,6 +830,7 @@ function SlaRequirementsTab() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
 
@@ -992,27 +1019,7 @@ export default function SlaPerformance() {
 
           {/* ── Live Dashboard ── */}
           <TabsContent value="dashboard" className="space-y-4 mt-4">
-            {/* Company-wide summary removed per user request */}
-            {!isLoading && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl">
-                <Card>
-                  <CardHeader className="pb-1 pt-4 px-4"><CardTitle className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">In SLA</CardTitle></CardHeader>
-                  <CardContent className="px-4 pb-4"><p className="text-3xl font-bold text-green-600">{totalInSla}</p><p className="text-xs text-muted-foreground mt-0.5">orders on track</p></CardContent>
-                </Card>
-                <Card style={{ border: totalOutOfSla > 0 ? "2px solid #ef4444" : undefined }}>
-                  <CardHeader className="pb-1 pt-4 px-4"><CardTitle className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Out of SLA</CardTitle></CardHeader>
-                  <CardContent className="px-4 pb-4"><p className={`text-3xl font-bold ${totalOutOfSla > 0 ? "text-red-600" : "text-muted-foreground"}`}>{totalOutOfSla}</p><p className="text-xs text-muted-foreground mt-0.5">orders breached</p></CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-1 pt-4 px-4"><CardTitle className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Waived</CardTitle></CardHeader>
-                  <CardContent className="px-4 pb-4"><p className="text-3xl font-bold text-purple-600">{totalWaived}</p><p className="text-xs text-muted-foreground mt-0.5">excluded from SLA</p></CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-1 pt-4 px-4"><CardTitle className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Compliance</CardTitle></CardHeader>
-                  <CardContent className="px-4 pb-4"><p className={`text-3xl font-bold ${complianceColor(liveCompliancePct)}`}>{activeOrders.length > 0 ? `${liveCompliancePct}%` : "—"}</p><p className="text-xs text-muted-foreground mt-0.5">live rate</p></CardContent>
-                </Card>
-              </div>
-            )}
+            {/* Company-wide summary removed — only per-warehouse SLA cards shown */}
             {isLoading ? (
               <div className="flex items-center justify-center py-16 text-muted-foreground gap-2"><RefreshCw className="h-5 w-5 animate-spin" /><span>Loading SLA data…</span></div>
             ) : facilityGroups.length === 0 ? (

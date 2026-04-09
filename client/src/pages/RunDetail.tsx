@@ -663,7 +663,7 @@ export default function RunDetail() {
               <table className="w-full data-table">
                 <thead>
                   <tr>
-                    <th>Order #</th>
+                    <th>Transaction ID</th>
                     <th>Customer Ref</th>
                     <th>PO #</th>
                     <th>Status</th>

@@ -1058,3 +1058,21 @@
 - [x] Wire all carrier fetchers into getRates procedure — run in parallel, replace mock fallback when credentials present
 - [x] Update Rate Wizard overview page — show live API status per carrier (connected / not configured)
 - [x] Write vitest tests for carrier rate fetcher modules
+
+## Bug Fixes & Feature Requests (Batch Apr 9)
+- [x] Item 1: Receiving — pallet capture workflow (standard/oversize/other per pallet, non-conforming hours), push to OpFi on session complete
+- [x] Item 2: SLA Summary — fix warehouse box overflow (boxes don't fit in warehouse area)
+- [x] Item 3: SLA Summary — remove company-wide summary, show only per-warehouse SLAs
+- [x] Item 4: SLA Requirements — add general parameters section (no weekends, staff holidays, etc.)
+- [x] Item 5: Open Orders — fix column alignment across different warehouses
+- [x] Item 6: Standardise order numbers — show Transaction ID everywhere; customer PO only beside Transaction ID on open orders detail
+- [x] Item 7: SLA — investigate and remove spurious "urgent" badge on some warehouses
+- [x] Item 8: Open Orders — show all orders up to closed (not just unallocated)
+- [x] Item 9: Rate Wizard — show only final marked-up total; base carrier cost must never appear in frontend
+- [x] Item 10: QC Scanner — pack-out list scan view should match printed pack-out list format with running total and green checkmarks
+- [x] Item 11: Shipping Dashboard — remove dark boxes with white writing, match dashboard style
+- [x] Item 12: Shipping Dashboard — move pallet scanning into order row button; remove standalone pallet scanning menu item
+- [x] Item 13: Inventory section — remove dark boxes, match dashboard style
+- [x] Item 14: Shipwell — poll for live load status updates on in-transit GD Genius shipments, auto-update status field
+- [x] Item 15: Location Config — warehouse dropdown should show Columbus, Reno, Toronto, Calgary (not "Go Direct")
+- [x] Item 16: Warehouse Location Config — add aisle, bay (with left/right), and level fields; start with example location

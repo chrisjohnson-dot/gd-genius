@@ -231,10 +231,18 @@
     @apply text-xs text-muted-foreground mb-1;
   }
 
-  /* ── Table styles ─────────────────────────────────────────────────────── */
+  /* ── Table styles ─────────────────────────────────────────────────────────────────── */
+  /* Consistent column layout across all warehouse cards */
+  .data-table {
+    table-layout: fixed;
+    width: 100%;
+  }
   .data-table thead th {
     @apply text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted border-y border-border;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .data-table tbody td {
     @apply px-3 py-2 text-sm border-b border-border/60 align-middle;

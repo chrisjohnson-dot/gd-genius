@@ -382,7 +382,7 @@ function WarehouseSlaCard({
               size="sm"
               className="gap-1.5 text-xs"
               onClick={() => {
-                const header = ["SLA Status","Order #","PO #","Client","Ship To","Create Date","Age","Stage","SLA Days","Notes"];
+                const header = ["SLA Status","Transaction ID","PO #","Client","Ship To","Create Date","Age","Stage","SLA Days","Notes"];
                 const rows = filtered.map((o) => [
                   o.slaStatus === "in_sla" ? "In SLA" : "Out of SLA",
                   o.referenceNum ?? "",
@@ -420,7 +420,7 @@ function WarehouseSlaCard({
                 doc.text(`Exported ${new Date().toLocaleString()} · ${filtered.length} orders`, 40, 52);
                 autoTable(doc, {
                   startY: 64,
-                  head: [["SLA Status","Order #","PO #","Client","Ship To","Create Date","Age","Stage","SLA Days"]],
+                  head: [["SLA Status","Transaction ID","PO #","Client","Ship To","Create Date","Age","Stage","SLA Days"]],
                   body: filtered.map((o) => [
                     o.slaStatus === "in_sla" ? "In SLA" : "Out of SLA",
                     o.referenceNum ?? "",
@@ -470,7 +470,7 @@ function WarehouseSlaCard({
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("slaStatus")}>SLA Status <SortIcon col="slaStatus" /></th>
-                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("referenceNum")}>Order # <SortIcon col="referenceNum" /></th>
+                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("referenceNum")}>Transaction ID <SortIcon col="referenceNum" /></th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">PO #</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("clientName")}>Client <SortIcon col="clientName" /></th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("shipToName")}>Ship To <SortIcon col="shipToName" /></th>
@@ -664,7 +664,7 @@ function WarehouseSlaCard({
                   SLA Status <SortIcon col="slaStatus" />
                 </th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("referenceNum")}>
-                  Order # <SortIcon col="referenceNum" />
+                  Transaction ID <SortIcon col="referenceNum" />
                 </th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">PO #</th>
                 <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground uppercase tracking-wider text-[10px] cursor-pointer whitespace-nowrap" onClick={() => handleSort("clientName")}>

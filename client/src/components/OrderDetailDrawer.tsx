@@ -225,7 +225,7 @@ export function OrderDetailDrawer({ orderId, onClose }: Props) {
               <>
                 <p className="text-xs text-muted-foreground mb-0.5">{order.clientName} · {order.facilityName}</p>
                 <h2 className="text-base font-bold truncate">
-                  Order #{order.extensivOrderId}
+                  Transaction ID{order.extensivOrderId}
                   {order.referenceNum && (
                     <span className="ml-2 text-sm font-normal text-muted-foreground">ref {order.referenceNum}</span>
                   )}

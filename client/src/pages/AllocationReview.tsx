@@ -472,7 +472,7 @@ export default function AllocationReview() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-4 py-3 font-medium">Order #</th>
+                        <th className="text-left px-4 py-3 font-medium">Transaction ID</th>
                         <th className="text-left px-4 py-3 font-medium">PO</th>
                         <th className="text-left px-4 py-3 font-medium">SKU</th>
                         <th className="text-left px-4 py-3 font-medium">Description</th>

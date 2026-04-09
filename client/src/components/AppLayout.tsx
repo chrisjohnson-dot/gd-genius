@@ -91,9 +91,8 @@ const qcItems = [
 ];
 
 const shippingItems = [
-  { href: "/shipping",              label: "Shipping Dashboard", icon: Ship },
-  { href: "/shipping/pallet-scan",  label: "Pallet Scanner",      icon: ScanBarcode },
-  { href: "/shipping/history", label: "Shipping History",    icon: ScrollText },
+  { href: "/shipping",         label: "Shipping Dashboard", icon: Ship },
+  { href: "/shipping/history", label: "Shipping History",   icon: ScrollText },
 ];
 
 const returnsItems = [

@@ -127,12 +127,41 @@ export async function syncShipwellStatusNow(): Promise<{
         await removeTrackedOrder(order.extensivOrderId);
         removed++;
         console.log(`[ShipwellSync] Order ${order.extensivOrderId} (${order.referenceNum}) delivered — removed from tracking`);
+        // Mirror delivered status to unified shipments table
+        try {
+          const deliveredRow = await findShipmentByShipwellId(order.shipwellShipmentId!);
+          if (deliveredRow && deliveredRow.status !== "delivered") {
+            await updateShipment(deliveredRow.id, { status: "delivered", deliveredAt: new Date() });
+            void pushShipmentToClearSight(deliveredRow.id, "shipment.delivered");
+            console.log(`[ShipwellSync] Mirrored delivered status to unified shipment #${deliveredRow.id}`);
+          }
+        } catch (err) {
+          console.warn(`[ShipwellSync] Failed to mirror delivered status for ${order.shipwellShipmentId}:`, err);
+        }
       } else {
-        // Update the live status
+        // Update the live status in order_tracking
         const newStatus = result.normalizedStatus;
         if (newStatus !== order.shipwellStatus) {
           await updateShipwellStatus(order.extensivOrderId, newStatus);
           updated++;
+          // Mirror to unified shipments table: map Shipwell status → shipments.status
+          const mappedStatus: string | null =
+            newStatus === "in_transit" ? "in_transit" :
+            newStatus === "carrier_confirmed" || newStatus === "tendered" ? "booked" :
+            newStatus === "exception" ? "exception" :
+            null;
+          if (mappedStatus) {
+            try {
+              const transitRow = await findShipmentByShipwellId(order.shipwellShipmentId!);
+              if (transitRow && transitRow.status !== mappedStatus) {
+                await updateShipment(transitRow.id, { status: mappedStatus });
+                void pushShipmentToClearSight(transitRow.id, "shipment.updated");
+                console.log(`[ShipwellSync] Mirrored status '${mappedStatus}' to unified shipment #${transitRow.id}`);
+              }
+            } catch (err) {
+              console.warn(`[ShipwellSync] Failed to mirror status ${mappedStatus} for ${order.shipwellShipmentId}:`, err);
+            }
+          }
         }
         // If the order is in Quoting status, fetch the current bid count
         if (newStatus === "quoting" && order.shipwellShipmentId) {

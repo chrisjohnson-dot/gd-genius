@@ -388,7 +388,7 @@ export default function ShippingHistory() {
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tracking #</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Platform</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Mode</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Order #</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Transaction ID</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Customer</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ship To</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Carrier / Service</th>
@@ -461,7 +461,7 @@ export default function ShippingHistory() {
                     )}
                   </td>
 
-                  {/* Order # */}
+                  {/* Transaction ID */}
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
                     {row.orderNumber ?? <span className="italic opacity-50">—</span>}
                   </td>
@@ -605,7 +605,7 @@ export default function ShippingHistory() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs mb-1 block">Order Number</Label>
+                <Label className="text-xs mb-1 block">Transaction ID</Label>
                 <Input value={form.orderNumber} onChange={(e) => setForm(f => ({ ...f, orderNumber: e.target.value }))} placeholder="e.g. 143355885" className="h-8 text-sm" />
               </div>
               <div>

@@ -1031,7 +1031,7 @@ function WarehouseCard({
     ]);
     const header = [
       "Status",
-      "Order #",
+      "Transaction ID",
       "PO #",
       "Client",
       "Ship To",
@@ -1080,7 +1080,7 @@ function WarehouseCard({
       head: [
         [
           "Status",
-          "Order #",
+          "Transaction ID",
           "PO #",
           "Client",
           "Ship To",

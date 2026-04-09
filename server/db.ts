@@ -113,6 +113,17 @@ import type { MuLabel, InsertMuLabel, ReceiptItemConfirmation, InsertReceiptItem
 import type { PutAwayPriority, InsertPutAwayPriority } from "../drizzle/schema";
 import type { PackagingInventoryItem, InsertPackagingInventoryItem, PackagingReorderRequest, InsertPackagingReorderRequest } from "../drizzle/schema";
 import { packagingInventory, packagingReorderRequests } from "../drizzle/schema";
+import {
+  rateWizardCarrierAccounts,
+  RateWizardCarrierAccount,
+  InsertRateWizardCarrierAccount,
+  customerShippingRules,
+  CustomerShippingRule,
+  InsertCustomerShippingRule,
+  rateWizardShipments,
+  RateWizardShipment,
+  InsertRateWizardShipment,
+} from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -3843,4 +3854,118 @@ export async function getPackagingWeeklyUsage(
 ): Promise<{ weeksAgo: number; usedQty: number }[]> {
   // Placeholder: return empty — burn rate will be manually set or derived from future usage tracking
   return [];
+}
+
+// ─── Rate Wizard DB Helpers ───────────────────────────────────────────────────
+
+export async function listCarrierAccounts(locationId?: string): Promise<RateWizardCarrierAccount[]> {
+  const db = await getDb();
+  if (!db) return [];
+  if (locationId) {
+    return db.select().from(rateWizardCarrierAccounts)
+      .where(eq(rateWizardCarrierAccounts.locationId, locationId))
+      .orderBy(rateWizardCarrierAccounts.carrierCode);
+  }
+  return db.select().from(rateWizardCarrierAccounts)
+    .orderBy(rateWizardCarrierAccounts.locationId, rateWizardCarrierAccounts.carrierCode);
+}
+
+export async function getCarrierAccount(id: number): Promise<RateWizardCarrierAccount | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(rateWizardCarrierAccounts).where(eq(rateWizardCarrierAccounts.id, id));
+  return row;
+}
+
+export async function upsertCarrierAccount(
+  data: InsertRateWizardCarrierAccount & { id?: number }
+): Promise<RateWizardCarrierAccount> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.id) {
+    const { id, ...rest } = data;
+    await db.update(rateWizardCarrierAccounts).set(rest).where(eq(rateWizardCarrierAccounts.id, id));
+    return (await getCarrierAccount(id))!;
+  }
+  const result = await db.insert(rateWizardCarrierAccounts).values(data);
+  const insertId = (result as unknown as { insertId: number }).insertId;
+  return (await getCarrierAccount(insertId))!
+}
+
+export async function deleteCarrierAccount(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(rateWizardCarrierAccounts).where(eq(rateWizardCarrierAccounts.id, id));
+}
+
+export async function getCustomerShippingRule(
+  configId: number,
+  customerId: number
+): Promise<CustomerShippingRule | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(customerShippingRules)
+    .where(and(eq(customerShippingRules.configId, configId), eq(customerShippingRules.customerId, customerId)));
+  return row;
+}
+
+export async function listCustomerShippingRules(configId: number): Promise<CustomerShippingRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(customerShippingRules)
+    .where(eq(customerShippingRules.configId, configId))
+    .orderBy(customerShippingRules.customerName);
+}
+
+export async function upsertCustomerShippingRule(
+  data: InsertCustomerShippingRule & { id?: number }
+): Promise<CustomerShippingRule> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.id) {
+    const { id, ...rest } = data;
+    await db.update(customerShippingRules).set(rest).where(eq(customerShippingRules.id, id));
+    const [row] = await db.select().from(customerShippingRules).where(eq(customerShippingRules.id, id));
+    return row;
+  }
+  const result = await db.insert(customerShippingRules).values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        integration: data.integration,
+        preferredCarrier: data.preferredCarrier ?? null,
+        maxTransitDays: data.maxTransitDays ?? null,
+        excludedCarriers: data.excludedCarriers ?? null,
+        notes: data.notes ?? null,
+      },
+    });
+  const insertId = (result as unknown as { insertId: number }).insertId;
+  if (insertId) {
+    const [row] = await db.select().from(customerShippingRules).where(eq(customerShippingRules.id, insertId));
+    return row;
+  }
+  return (await getCustomerShippingRule(data.configId, data.customerId))!;
+}
+
+export async function deleteCustomerShippingRule(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(customerShippingRules).where(eq(customerShippingRules.id, id));
+}
+
+export async function createRateWizardShipment(data: InsertRateWizardShipment): Promise<RateWizardShipment> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(rateWizardShipments).values(data);
+  const insertId = (result as unknown as { insertId: number }).insertId;
+  const [row] = await db.select().from(rateWizardShipments).where(eq(rateWizardShipments.id, insertId));
+  return row;
+}
+
+export async function listRateWizardShipments(configId: number, limit = 100): Promise<RateWizardShipment[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(rateWizardShipments)
+    .where(eq(rateWizardShipments.configId, configId))
+    .orderBy(desc(rateWizardShipments.createdAt))
+    .limit(limit);
 }

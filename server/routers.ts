@@ -184,6 +184,15 @@ import {
   upsertClientPackagingEnabled,
   getLastOrderDatePerClient,
   getCustomerPalletDefaultFromDb,
+  listCarrierAccounts,
+  getCarrierAccount,
+  upsertCarrierAccount,
+  deleteCarrierAccount,
+  listCustomerShippingRules,
+  getCustomerShippingRule,
+  upsertCustomerShippingRule,
+  deleteCustomerShippingRule,
+  listRateWizardShipments,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -7143,6 +7152,126 @@ const shippingIntegrationRouter = router({
     }),
 });
 
+// ─── Rate Wizard Router ───────────────────────────────────────────────────────
+const CARRIER_LABELS: Record<string, string> = {
+  usps: "USPS",
+  fedex: "FedEx",
+  ups: "UPS",
+  ontrac: "OnTrac",
+  dhl_express: "DHL Express",
+  canpar: "Canpar",
+  purolator: "Purolator",
+  canada_post: "Canada Post",
+  gls_canada: "GLS Canada",
+  other: "Other",
+};
+
+const rateWizardRouter = router({
+  // ── Carrier Accounts ──────────────────────────────────────────────────────
+  listCarrierAccounts: protectedProcedure
+    .input(z.object({ locationId: z.string().optional() }))
+    .query(async ({ input }) => {
+      const accounts = await listCarrierAccounts(input.locationId);
+      // Mask credentials — never return raw API keys to the frontend
+      return accounts.map((a) => ({
+        ...a,
+        credentials: "••••••••",
+        carrierLabel: CARRIER_LABELS[a.carrierCode] ?? a.carrierCode,
+      }));
+    }),
+
+  getCarrierAccount: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const a = await getCarrierAccount(input.id);
+      if (!a) throw new TRPCError({ code: "NOT_FOUND" });
+      return { ...a, credentials: "••••••••", carrierLabel: CARRIER_LABELS[a.carrierCode] ?? a.carrierCode };
+    }),
+
+  upsertCarrierAccount: protectedProcedure
+    .input(
+      z.object({
+        id: z.number().optional(),
+        name: z.string().min(1),
+        locationId: z.string().min(1),
+        country: z.string().length(2).default("US"),
+        carrierCode: z.string().min(1),
+        credentials: z.string().optional(), // raw JSON — only update if provided and not masked
+        originName: z.string().optional(),
+        originAddress1: z.string().optional(),
+        originCity: z.string().optional(),
+        originState: z.string().optional(),
+        originPostal: z.string().optional(),
+        originCountry: z.string().optional(),
+        isActive: z.boolean().default(true),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { id, credentials, ...rest } = input;
+      // If credentials is masked or empty, fetch existing and keep them
+      let finalCredentials = credentials ?? "{}";
+      if (id && (!credentials || credentials.includes("•"))) {
+        const existing = await getCarrierAccount(id);
+        finalCredentials = existing?.credentials ?? "{}";
+      }
+      const saved = await upsertCarrierAccount({ ...rest, credentials: finalCredentials, id });
+      return { ...saved, credentials: "••••••••", carrierLabel: CARRIER_LABELS[saved.carrierCode] ?? saved.carrierCode };
+    }),
+
+  deleteCarrierAccount: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteCarrierAccount(input.id);
+      return { success: true };
+    }),
+
+  // ── Customer Shipping Rules ───────────────────────────────────────────────
+  listCustomerShippingRules: protectedProcedure
+    .input(z.object({ configId: z.number() }))
+    .query(async ({ input }) => listCustomerShippingRules(input.configId)),
+
+  upsertCustomerShippingRule: protectedProcedure
+    .input(
+      z.object({
+        id: z.number().optional(),
+        configId: z.number(),
+        customerId: z.number(),
+        customerName: z.string(),
+        integration: z.enum(["rate_wizard", "veeqo", "techship"]).default("rate_wizard"),
+        preferredCarrier: z.string().optional(),
+        maxTransitDays: z.number().optional(),
+        excludedCarriers: z.string().optional(), // JSON array string
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => upsertCustomerShippingRule(input)),
+
+  deleteCustomerShippingRule: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteCustomerShippingRule(input.id);
+      return { success: true };
+    }),
+
+  // ── Shipment History ──────────────────────────────────────────────────────
+  listShipments: protectedProcedure
+    .input(z.object({ configId: z.number(), limit: z.number().default(100) }))
+    .query(async ({ input }) => listRateWizardShipments(input.configId, input.limit)),
+
+  // ── Carrier Metadata ──────────────────────────────────────────────────────
+  getCarrierOptions: publicProcedure.query(() => {
+    const US_CARRIERS = ["usps", "fedex", "ups", "ontrac", "dhl_express", "other"];
+    const CA_CARRIERS = ["fedex", "ups", "dhl_express", "canpar", "purolator", "canada_post", "gls_canada", "other"];
+    return {
+      us: US_CARRIERS.map((c) => ({ code: c, label: CARRIER_LABELS[c] ?? c })),
+      ca: CA_CARRIERS.map((c) => ({ code: c, label: CARRIER_LABELS[c] ?? c })),
+      all: Object.entries(CARRIER_LABELS).map(([code, label]) => ({ code, label })),
+    };
+  }),
+});
+
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -7150,5 +7279,6 @@ export const appRouterV4 = router({
   smallParcel: smallParcelRouter,
   techship: techshipRouter,
   shippingIntegration: shippingIntegrationRouter,
+  rateWizard: rateWizardRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

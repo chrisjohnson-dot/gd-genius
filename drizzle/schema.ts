@@ -1332,3 +1332,116 @@ export const packagingReorderRequests = mysqlTable("packaging_reorder_requests",
 });
 export type PackagingReorderRequest = typeof packagingReorderRequests.$inferSelect;
 export type InsertPackagingReorderRequest = typeof packagingReorderRequests.$inferInsert;
+
+// ─── Rate Wizard ─────────────────────────────────────────────────────────────
+// Supported carrier codes. US-only carriers are marked; CA carriers include
+// Canadian-specific options (Canpar, Purolator, Canada Post, GLS Canada).
+export const rateWizardCarrierEnum = mysqlEnum("carrier_code", [
+  "usps", "fedex", "ups", "ontrac", "dhl_express",
+  "canpar", "purolator", "canada_post", "gls_canada",
+  "other",
+]);
+
+/**
+ * Carrier accounts — one row per carrier per warehouse location.
+ * Credentials are stored encrypted-at-rest by the DB; never returned to the
+ * frontend in plain text (the tRPC procedure masks them).
+ */
+export const rateWizardCarrierAccounts = mysqlTable("rate_wizard_carrier_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Human-readable name, e.g. "FedEx — Calgary" */
+  name: varchar("name", { length: 120 }).notNull(),
+  /** Warehouse location identifier matching techship_configs.location_name */
+  locationId: varchar("location_id", { length: 100 }).notNull(),
+  /** ISO 3166-1 alpha-2 country of the origin address, e.g. "US" or "CA" */
+  country: varchar("country", { length: 2 }).notNull().default("US"),
+  carrierCode: varchar("carrier_code", { length: 30 }).notNull(),
+  /** JSON blob of carrier-specific credentials (account number, API key, etc.) */
+  credentials: text("credentials").notNull().default("{}"),
+  /** Origin address used for rate requests */
+  originName: varchar("origin_name", { length: 120 }),
+  originAddress1: varchar("origin_address1", { length: 255 }),
+  originCity: varchar("origin_city", { length: 100 }),
+  originState: varchar("origin_state", { length: 50 }),
+  originPostal: varchar("origin_postal", { length: 20 }),
+  originCountry: varchar("origin_country", { length: 2 }).default("US"),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type RateWizardCarrierAccount = typeof rateWizardCarrierAccounts.$inferSelect;
+export type InsertRateWizardCarrierAccount = typeof rateWizardCarrierAccounts.$inferInsert;
+
+/**
+ * Per-customer shipping integration routing.
+ * Determines whether a customer's orders go through Rate Wizard, Veeqo, or
+ * Techship. Defaults to Rate Wizard when no row exists.
+ */
+export const customerShippingRules = mysqlTable("customer_shipping_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Extensiv config ID */
+  configId: int("config_id").notNull(),
+  /** Extensiv customer ID */
+  customerId: int("customer_id").notNull(),
+  /** Customer display name (denormalised) */
+  customerName: varchar("customer_name", { length: 255 }).notNull(),
+  /** 'rate_wizard' | 'veeqo' | 'techship' */
+  integration: varchar("integration", { length: 30 }).notNull().default("rate_wizard"),
+  /** Optional: preferred carrier code for this customer (null = rate shop all) */
+  preferredCarrier: varchar("preferred_carrier", { length: 30 }),
+  /** Optional: max transit days allowed for this customer */
+  maxTransitDays: int("max_transit_days"),
+  /** Optional: carriers explicitly excluded for this customer (JSON array of codes) */
+  excludedCarriers: text("excluded_carriers").default("[]"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type CustomerShippingRule = typeof customerShippingRules.$inferSelect;
+export type InsertCustomerShippingRule = typeof customerShippingRules.$inferInsert;
+
+/**
+ * Rate Wizard shipment log — records every rate request and label booking
+ * for reporting, billing, and audit purposes.
+ */
+export const rateWizardShipments = mysqlTable("rate_wizard_shipments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Extensiv order ID */
+  orderId: varchar("order_id", { length: 100 }),
+  /** Extensiv config ID */
+  configId: int("config_id"),
+  /** Extensiv customer ID */
+  customerId: int("customer_id"),
+  customerName: varchar("customer_name", { length: 255 }),
+  locationId: varchar("location_id", { length: 100 }),
+  /** Carrier account used */
+  carrierAccountId: int("carrier_account_id"),
+  carrierCode: varchar("carrier_code", { length: 30 }),
+  serviceCode: varchar("service_code", { length: 60 }),
+  serviceName: varchar("service_name", { length: 120 }),
+  /** Quoted rate in cents */
+  rateAmountCents: int("rate_amount_cents"),
+  currency: varchar("currency", { length: 3 }).default("USD"),
+  transitDays: int("transit_days"),
+  /** Tracking number after label is booked */
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  /** Label URL or S3 key */
+  labelUrl: text("label_url"),
+  /** 'rated' | 'booked' | 'voided' | 'error' */
+  status: varchar("status", { length: 20 }).notNull().default("rated"),
+  /** Package weight in oz */
+  weightOz: int("weight_oz"),
+  /** Package dimensions in inches */
+  lengthIn: int("length_in"),
+  widthIn: int("width_in"),
+  heightIn: int("height_in"),
+  /** User who booked the label */
+  bookedByUserId: int("booked_by_user_id"),
+  bookedByName: varchar("booked_by_name", { length: 255 }),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type RateWizardShipment = typeof rateWizardShipments.$inferSelect;
+export type InsertRateWizardShipment = typeof rateWizardShipments.$inferInsert;

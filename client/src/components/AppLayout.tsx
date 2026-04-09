@@ -43,6 +43,8 @@ import {
   Printer,
   ShieldAlert,
   Boxes,
+  Wand2,
+  UserCog,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -69,6 +71,7 @@ const allocationItems = [
 
 const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
+  { href: "/small-parcel/rate-wizard", label: "Rate Wizard", icon: Wand2 },
   { href: "/small-parcel/history", label: "Labels Printed", icon: ScrollText },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
 ];
@@ -119,6 +122,7 @@ const configItems = [
   { href: "/small-parcel/high-value-skus", label: "High-Value SKUs",   icon: ShieldAlert },
   { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs",   icon: ShieldCheck },
   { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
+  { href: "/small-parcel/customer-shipping-rules", label: "Customer Shipping Rules", icon: UserCog },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

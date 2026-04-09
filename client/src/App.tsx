@@ -59,6 +59,8 @@ import SmallParcelHighValueSkus from "@/pages/SmallParcelHighValueSkus";
 import SmallParcelSettings from "@/pages/SmallParcelSettings";
 import PackagingInventory from "@/pages/PackagingInventory";
 import WhLocationConfig from "@/pages/WhLocationConfig";
+import RateWizard from "@/pages/RateWizard";
+import CustomerShippingRules from "@/pages/CustomerShippingRules";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -129,6 +131,8 @@ function AppRoutes() {
         <Route path="/small-parcel/high-value-skus" component={SmallParcelHighValueSkus} />
         <Route path="/small-parcel/settings" component={SmallParcelSettings} />
         <Route path="/small-parcel/packaging" component={PackagingInventory} />
+        <Route path="/small-parcel/rate-wizard" component={RateWizard} />
+        <Route path="/small-parcel/customer-shipping-rules" component={CustomerShippingRules} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

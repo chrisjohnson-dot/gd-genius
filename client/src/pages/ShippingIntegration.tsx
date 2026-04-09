@@ -1,12 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import {
@@ -23,6 +22,7 @@ import {
   TestTube2,
   Trash2,
   Truck,
+  Wand2,
   Zap,
 } from "lucide-react";
 import { useState } from "react";
@@ -235,6 +235,277 @@ function VeeqoPanel() {
   );
 }
 
+// ─── Rate Wizard Carrier Panel ────────────────────────────────────────────────
+type CarrierAccount = {
+  id: number;
+  name: string;
+  locationId: string;
+  country: string;
+  carrierCode: string;
+  carrierLabel: string;
+  credentials: string;
+  originName: string | null;
+  originAddress1: string | null;
+  originCity: string | null;
+  originState: string | null;
+  originPostal: string | null;
+  originCountry: string | null;
+  isActive: boolean | null;
+  notes: string | null;
+};
+
+type CarrierOption = { code: string; label: string };
+
+type AccountFormState = {
+  name: string;
+  locationId: string;
+  country: string;
+  carrierCode: string;
+  credentials: string;
+  originName: string;
+  originAddress1: string;
+  originCity: string;
+  originState: string;
+  originPostal: string;
+  originCountry: string;
+  isActive: boolean;
+  notes: string;
+};
+
+const EMPTY_ACCT: AccountFormState = {
+  name: "", locationId: "", country: "US", carrierCode: "usps",
+  credentials: "", originName: "", originAddress1: "", originCity: "",
+  originState: "", originPostal: "", originCountry: "US", isActive: true, notes: "",
+};
+
+const LOCATIONS = [
+  { id: "CAL", label: "Calgary (CAL)", country: "CA" },
+  { id: "COL", label: "Columbus (COL)", country: "US" },
+  { id: "MIS", label: "Mississauga (MIS)", country: "CA" },
+  { id: "REN", label: "Renous (REN)", country: "CA" },
+  { id: "TOR", label: "Toronto (TOR)", country: "CA" },
+  { id: "OTHER", label: "Other", country: "US" },
+];
+
+function RateWizardCarrierPanel() {
+  const { data: accounts = [], isLoading, refetch } = trpc.rateWizard.listCarrierAccounts.useQuery({});
+  const { data: carrierOptions } = trpc.rateWizard.getCarrierOptions.useQuery();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState<AccountFormState>(EMPTY_ACCT);
+  const [showCreds, setShowCreds] = useState(false);
+
+  const upsert = trpc.rateWizard.upsertCarrierAccount.useMutation({
+    onSuccess: () => { toast.success("Carrier account saved."); setDialogOpen(false); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const del = trpc.rateWizard.deleteCarrierAccount.useMutation({
+    onSuccess: () => { toast.success("Deleted."); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const openCreate = () => { setEditingId(null); setForm(EMPTY_ACCT); setShowCreds(false); setDialogOpen(true); };
+  const openEdit = (a: CarrierAccount) => {
+    setEditingId(a.id);
+    setForm({
+      name: a.name, locationId: a.locationId, country: a.country,
+      carrierCode: a.carrierCode, credentials: "",
+      originName: a.originName ?? "", originAddress1: a.originAddress1 ?? "",
+      originCity: a.originCity ?? "", originState: a.originState ?? "",
+      originPostal: a.originPostal ?? "", originCountry: a.originCountry ?? a.country,
+      isActive: a.isActive ?? true, notes: a.notes ?? "",
+    });
+    setShowCreds(false);
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!form.name.trim() || !form.locationId || !form.carrierCode) {
+      toast.error("Name, location, and carrier are required.");
+      return;
+    }
+    upsert.mutate({
+      id: editingId ?? undefined,
+      name: form.name.trim(),
+      locationId: form.locationId,
+      country: form.country,
+      carrierCode: form.carrierCode,
+      credentials: form.credentials || undefined,
+      originName: form.originName || undefined,
+      originAddress1: form.originAddress1 || undefined,
+      originCity: form.originCity || undefined,
+      originState: form.originState || undefined,
+      originPostal: form.originPostal || undefined,
+      originCountry: form.originCountry || undefined,
+      isActive: form.isActive,
+      notes: form.notes || undefined,
+    });
+  };
+
+  // Group accounts by location
+  const byLocation = (accounts as CarrierAccount[]).reduce<Record<string, CarrierAccount[]>>((acc, a) => {
+    if (!acc[a.locationId]) acc[a.locationId] = [];
+    acc[a.locationId].push(a);
+    return acc;
+  }, {});
+
+  const getCarriersForCountry = (country: string): CarrierOption[] => {
+    if (!carrierOptions) return [];
+    return country === "CA" ? carrierOptions.ca : carrierOptions.us;
+  };
+
+  if (isLoading) return <div className="flex items-center gap-2 text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+
+  return (
+    <div className="space-y-4">
+      {/* Info banner */}
+      <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 p-3 text-xs text-blue-800 dark:text-blue-300">
+        <Wand2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
+        <span>
+          <strong>Rate Wizard</strong> replaces TechShip with direct carrier API connections. Configure one account per carrier per location. API credentials are provided by your transportation office.
+        </span>
+      </div>
+
+      <div className="flex justify-end">
+        <Button size="sm" onClick={openCreate} className="gap-1.5"><Plus className="h-3.5 w-3.5" /> Add Carrier Account</Button>
+      </div>
+
+      {(accounts as CarrierAccount[]).length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Wand2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm font-medium">No carrier accounts configured</p>
+          <p className="text-xs mt-1">Add carrier API credentials from your transportation office to get started.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(byLocation).map(([locId, locAccounts]) => {
+            const locDef = LOCATIONS.find((l) => l.id === locId);
+            return (
+              <div key={locId}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  {locDef?.label ?? locId}
+                </p>
+                <div className="space-y-2">
+                  {locAccounts.map((a) => (
+                    <div key={a.id} className="flex items-center gap-3 rounded-lg border p-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-medium">{a.name}</span>
+                          <Badge variant="secondary" className="text-xs">{a.carrierLabel}</Badge>
+                          <Badge variant={a.isActive ? "default" : "outline"} className={a.isActive ? "bg-green-600 text-white text-xs" : "text-xs text-muted-foreground"}>
+                            {a.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                        {a.originCity && (
+                          <p className="text-xs text-muted-foreground">
+                            Origin: {[a.originCity, a.originState, a.originCountry].filter(Boolean).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
+                        <Button size="sm" variant="outline" onClick={() => openEdit(a)} className="h-7 px-2"><Pencil className="h-3 w-3" /></Button>
+                        <Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete "${a.name}"?`)) del.mutate({ id: a.id }); }} className="h-7 px-2 text-red-500 hover:text-red-600"><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Carrier Account" : "Add Carrier Account"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs">Account Name</Label>
+                <Input placeholder="e.g. FedEx Calgary" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Location</Label>
+                <Select value={form.locationId} onValueChange={(v) => {
+                  const loc = LOCATIONS.find((l) => l.id === v);
+                  setForm((f) => ({ ...f, locationId: v, country: loc?.country ?? "US", originCountry: loc?.country ?? "US" }));
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+                  <SelectContent>
+                    {LOCATIONS.map((l) => <SelectItem key={l.id} value={l.id}>{l.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Carrier</Label>
+                <Select value={form.carrierCode} onValueChange={(v) => setForm((f) => ({ ...f, carrierCode: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select carrier" /></SelectTrigger>
+                  <SelectContent>
+                    {getCarriersForCountry(form.country).map((c) => <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Credentials */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">API Credentials (JSON)</Label>
+                <button type="button" onClick={() => setShowCreds((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  {showCreds ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  {showCreds ? "Hide" : "Show"}
+                </button>
+              </div>
+              <Textarea
+                rows={3}
+                placeholder={editingId ? '{"apiKey":"..."} — leave blank to keep existing' : '{"apiKey":"...", "accountNumber":"..."}'}
+                value={showCreds ? form.credentials : (form.credentials ? "••••••••" : "")}
+                onChange={(e) => { if (showCreds) setForm((f) => ({ ...f, credentials: e.target.value })); }}
+                onFocus={() => setShowCreds(true)}
+                className="font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">Enter credentials as JSON. Format varies by carrier — your transportation office will provide these.</p>
+            </div>
+
+            {/* Origin address */}
+            <div className="border-t pt-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Origin Address (optional)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5 col-span-2"><Label className="text-xs">Company / Warehouse Name</Label><Input placeholder="Go Direct Logistics — Calgary" value={form.originName} onChange={(e) => setForm((f) => ({ ...f, originName: e.target.value }))} /></div>
+                <div className="space-y-1.5 col-span-2"><Label className="text-xs">Address Line 1</Label><Input value={form.originAddress1} onChange={(e) => setForm((f) => ({ ...f, originAddress1: e.target.value }))} /></div>
+                <div className="space-y-1.5"><Label className="text-xs">City</Label><Input value={form.originCity} onChange={(e) => setForm((f) => ({ ...f, originCity: e.target.value }))} /></div>
+                <div className="space-y-1.5"><Label className="text-xs">State / Province</Label><Input value={form.originState} onChange={(e) => setForm((f) => ({ ...f, originState: e.target.value }))} /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Postal Code</Label><Input value={form.originPostal} onChange={(e) => setForm((f) => ({ ...f, originPostal: e.target.value }))} /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Country</Label>
+                  <Select value={form.originCountry} onValueChange={(v) => setForm((f) => ({ ...f, originCountry: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="US">United States</SelectItem>
+                      <SelectItem value="CA">Canada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5"><Label className="text-xs">Notes (optional)</Label><Textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></div>
+            <div className="flex items-center gap-2"><Switch id="rw-active" checked={form.isActive} onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))} /><Label htmlFor="rw-active" className="text-xs">Active</Label></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={upsert.isPending} className="gap-1.5">
+              {upsert.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 // ─── Integration Card ─────────────────────────────────────────────────────────
 type IntegrationDef = {
   key: string;
@@ -345,6 +616,13 @@ export default function ShippingIntegration() {
   ];
 
   const smallParcelIntegrations: IntegrationDef[] = [
+    {
+      key: "rate_wizard",
+      label: "Rate Wizard",
+      description: "Native GD Genius rate shopping with direct carrier API connections (USPS, FedEx, UPS, OnTrac, DHL + Canadian carriers).",
+      icon: <Wand2 className="h-4 w-4 text-blue-500" />,
+      panel: <RateWizardCarrierPanel />,
+    },
     {
       key: "techship",
       label: "TechShip",

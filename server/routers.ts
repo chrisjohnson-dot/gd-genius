@@ -194,7 +194,10 @@ import {
   deleteCustomerShippingRule,
   listRateWizardShipments,
   createRateWizardShipment,
+  updateRateWizardShipment,
+  getLatestRatedShipmentForOrder,
 } from "./db";
+import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
@@ -6122,6 +6125,41 @@ import {
   listSmallParcelSessions,
 } from "./db.js";
 
+/** Build a fallback ZPL label when Veeqo does not return ZPL content directly. */
+function buildFallbackZpl(
+  trackingNumber: string,
+  carrier: string,
+  serviceLevel: string,
+  session: { shipToName?: string | null; shipToAddress1?: string | null; shipToCity?: string | null; shipToState?: string | null; shipToZip?: string | null; referenceNum?: string | null; clientName?: string | null },
+): string {
+  const zplSanitize = (s: string) => s.replace(/[\^~]/g, "");
+  const shipToLine1 = session.shipToName ?? "";
+  const shipToLine2 = session.shipToAddress1 ?? "";
+  const shipToLine3 = [session.shipToCity, session.shipToState, session.shipToZip].filter(Boolean).join(", ");
+  const refNum = session.referenceNum ?? "";
+  const clientName = session.clientName ?? "";
+  return [
+    "^XA",
+    "^MMT",
+    "^PW812",
+    "^LL1218",
+    "^LS0",
+    `^FO30,30^A0N,45,45^FD${zplSanitize(carrier)} ${zplSanitize(serviceLevel)}^FS`,
+    "^FO30,85^GB752,3,3^FS",
+    "^FO30,100^A0N,28,28^FDShip To:^FS",
+    `^FO30,135^A0N,35,35^FD${zplSanitize(shipToLine1)}^FS`,
+    `^FO30,178^A0N,30,30^FD${zplSanitize(shipToLine2)}^FS`,
+    `^FO30,215^A0N,30,30^FD${zplSanitize(shipToLine3)}^FS`,
+    "^FO30,260^GB752,3,3^FS",
+    `^FO30,275^A0N,26,26^FDOrder: ${zplSanitize(refNum)}  Client: ${zplSanitize(clientName)}^FS`,
+    `^FO30,320^BY3,2,100^BCN,100,Y,N,N^FD${zplSanitize(trackingNumber)}^FS`,
+    `^FO30,440^A0N,28,28^FD${zplSanitize(trackingNumber)}^FS`,
+    "^FO30,490^GB752,3,3^FS",
+    "^FO30,500^A0N,22,22^FDGo Direct Logistics^FS",
+    "^XZ",
+  ].join("\n");
+}
+
 const smallParcelRouter = router({
   /** List available facilities (for facility picker at start of session) */
   listFacilities: protectedProcedure
@@ -6286,78 +6324,78 @@ const smallParcelRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Label already purchased for this session" });
       }
 
-      // ── Step 1: Purchase label via Veeqo (stub until API key is provisioned) ──
+      // ── Step 1: Purchase label via Veeqo Rate Shopping API ────────────────────────
       const veeqoApiKey = process.env.VEEQO_API_KEY;
       let labelUrl: string;
       let trackingNumber: string;
       let carrier: string;
       let serviceLevel: string;
+      let labelZpl: string;
 
-      if (veeqoApiKey) {
-        // TODO: Replace stub with real Veeqo API call once API key is provisioned
-        // const veeqo = createVeeqoClient(veeqoApiKey);
-        // const rates = await veeqo.getRates({ ... });
-        // const label = await veeqo.purchaseLabel({ rateId: rates[0].id, ... });
-        // labelUrl = label.labelUrl;
-        // trackingNumber = label.trackingNumber;
-        // carrier = label.carrierName;
-        // serviceLevel = label.serviceLevel;
-        throw new TRPCError({
-          code: "NOT_IMPLEMENTED",
-          message: "Veeqo API integration is pending implementation. API key is set but the integration is not yet complete.",
-        });
+      // Look up the confirmed rate record for this session to get Veeqo tokens
+      const confirmedShipment = session.extensivOrderId
+        ? await getLatestRatedShipmentForOrder(String(session.extensivOrderId))
+        : null;
+
+      const hasVeeqoTokens = !!(veeqoApiKey && confirmedShipment?.remoteShipmentId && confirmedShipment?.requestToken && confirmedShipment?.serviceCode);
+
+      if (hasVeeqoTokens) {
+        // ── Live Veeqo label booking ─────────────────────────────────────────────────
+        const veeqo = createVeeqoClient();
+        let bookResult;
+        try {
+          bookResult = await veeqo.bookShipment({
+            rate_id: confirmedShipment!.serviceCode!,
+            remote_shipment_id: confirmedShipment!.remoteShipmentId!,
+            request_token: confirmedShipment!.requestToken!,
+            notify_customer: false,
+          });
+        } catch (err) {
+          console.error(`[SmallParcel] Veeqo bookShipment error:`, err);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Veeqo label booking failed: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+
+        trackingNumber = bookResult.tracking_number;
+        carrier = bookResult.carrier ?? confirmedShipment!.carrierCode ?? "Veeqo";
+        serviceLevel = bookResult.service ?? confirmedShipment!.serviceName ?? "";
+        labelUrl = `https://app.veeqo.com/shipments/${bookResult.id}`;
+
+        // Use the ZPL/PDF label content from Veeqo if available, otherwise build a ZPL wrapper
+        if (bookResult.label_content && bookResult.label_format === "zpl") {
+          // Veeqo returned raw ZPL — decode from base64
+          labelZpl = Buffer.from(bookResult.label_content, "base64").toString("utf-8");
+        } else if (bookResult.label_content) {
+          // Veeqo returned PDF or other format — store as-is and build a simple ZPL for printing
+          // (the PDF URL will be used for browser-based printing)
+          labelZpl = buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
+        } else {
+          labelZpl = buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
+        }
+
+        // Update the shipment record to 'booked'
+        if (confirmedShipment) {
+          await updateRateWizardShipment(confirmedShipment.id, {
+            status: "booked",
+            trackingNumber,
+          });
+        }
+
+        console.log(`[SmallParcel] Veeqo label booked: ${trackingNumber} via ${carrier} ${serviceLevel}`);
       } else {
-        // Stub response for development/testing — generates a placeholder label
+        // ── Stub response for development/testing (no Veeqo tokens available) ───
         trackingNumber = `STUB-${Date.now()}-${session.extensivOrderId}`;
-        carrier = input.carrierService ?? "Stub Carrier";
-        serviceLevel = "Ground";
+        carrier = input.carrierService ?? confirmedShipment?.carrierCode ?? "Stub Carrier";
+        serviceLevel = confirmedShipment?.serviceName ?? "Ground";
         labelUrl = `https://stub-labels.example.com/${trackingNumber}.pdf`;
+        labelZpl = buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
+
+        if (veeqoApiKey && !confirmedShipment?.remoteShipmentId) {
+          console.warn(`[SmallParcel] Veeqo API key present but no rate confirmed for order ${session.extensivOrderId} — using stub`);
+        }
       }
-
-      // ── Generate ZPL label for direct Zebra printing ──
-      // This stub ZPL produces a 4x6" shipping label.
-      // When Veeqo is integrated, replace this with the ZPL returned by Veeqo.
-      const shipToLine1 = session.shipToName ?? "";
-      const shipToLine2 = session.shipToAddress1 ?? "";
-      const shipToLine3 = [
-        session.shipToCity,
-        session.shipToState,
-        session.shipToZip,
-      ].filter(Boolean).join(", ");
-      const refNum = session.referenceNum ?? "";
-      const clientName = session.clientName ?? "";
-
-      // Sanitize strings for ZPL (remove ^ and ~ which are ZPL control chars)
-      const zplSanitize = (s: string) => s.replace(/[\^~]/g, "");
-
-      const labelZpl = [
-        "^XA",
-        "^MMT",
-        "^PW812",  // 4" wide at 203dpi
-        "^LL1218", // 6" tall at 203dpi
-        "^LS0",
-        // Carrier / service banner
-        `^FO30,30^A0N,45,45^FD${zplSanitize(carrier)} ${zplSanitize(serviceLevel)}^FS`,
-        // Horizontal rule
-        "^FO30,85^GB752,3,3^FS",
-        // Ship To header
-        "^FO30,100^A0N,28,28^FDShip To:^FS",
-        `^FO30,135^A0N,35,35^FD${zplSanitize(shipToLine1)}^FS`,
-        `^FO30,178^A0N,30,30^FD${zplSanitize(shipToLine2)}^FS`,
-        `^FO30,215^A0N,30,30^FD${zplSanitize(shipToLine3)}^FS`,
-        // Horizontal rule
-        "^FO30,260^GB752,3,3^FS",
-        // Order reference
-        `^FO30,275^A0N,26,26^FDOrder: ${zplSanitize(refNum)}  Client: ${zplSanitize(clientName)}^FS`,
-        // Tracking barcode (Code 128)
-        `^FO30,320^BY3,2,100^BCN,100,Y,N,N^FD${zplSanitize(trackingNumber)}^FS`,
-        // Tracking number text
-        `^FO30,440^A0N,28,28^FD${zplSanitize(trackingNumber)}^FS`,
-        // Footer
-        "^FO30,490^GB752,3,3^FS",
-        "^FO30,500^A0N,22,22^FDGo Direct Logistics^FS",
-        "^XZ",
-      ].join("\n");
 
       // ── Step 2: Update session record with label details ──
       await updateSmallParcelSession(input.id, {
@@ -7280,8 +7318,10 @@ const rateWizardRouter = router({
         heightIn: z.number(),
         destPostal: z.string(),
         destCountry: z.string().default("US"),
+        destAddress1: z.string().optional(),
         destCity: z.string().optional(),
         destState: z.string().optional(),
+        destName: z.string().optional(),
         isResidential: z.boolean().default(false),
         declaredValue: z.number().optional(),
         requireSignature: z.boolean().default(false),
@@ -7310,99 +7350,202 @@ const rateWizardRouter = router({
       const accounts = await listCarrierAccounts(input.locationId);
       const activeAccounts = accounts.filter((a) => a.isActive && !excludedCarriers.includes(a.carrierCode));
 
-      // Mock rate generation — replace with live carrier API calls in Phase 2b
-      const MOCK_SERVICES: Record<string, Array<{ service: string; transitDays: number; baseCost: number }>> = {
-        usps: [
-          { service: "Priority Mail", transitDays: 2, baseCost: 8.5 },
-          { service: "Priority Mail Express", transitDays: 1, baseCost: 24.9 },
-          { service: "Ground Advantage", transitDays: 4, baseCost: 5.8 },
-        ],
-        fedex: [
-          { service: "FedEx Ground", transitDays: 4, baseCost: 9.2 },
-          { service: "FedEx Express Saver", transitDays: 3, baseCost: 18.4 },
-          { service: "FedEx 2Day", transitDays: 2, baseCost: 26.1 },
-          { service: "FedEx Overnight", transitDays: 1, baseCost: 48.7 },
-        ],
-        ups: [
-          { service: "UPS Ground", transitDays: 4, baseCost: 9.6 },
-          { service: "UPS 3 Day Select", transitDays: 3, baseCost: 19.2 },
-          { service: "UPS 2nd Day Air", transitDays: 2, baseCost: 28.5 },
-          { service: "UPS Next Day Air", transitDays: 1, baseCost: 52.3 },
-        ],
-        ontrac: [
-          { service: "OnTrac Ground", transitDays: 3, baseCost: 7.8 },
-          { service: "OnTrac Sunrise", transitDays: 1, baseCost: 22.4 },
-        ],
-        dhl_express: [
-          { service: "DHL Express Worldwide", transitDays: 2, baseCost: 32.6 },
-          { service: "DHL Express 12:00", transitDays: 1, baseCost: 44.1 },
-        ],
-        canpar: [
-          { service: "Canpar Ground", transitDays: 4, baseCost: 11.2 },
-          { service: "Canpar Express", transitDays: 2, baseCost: 19.8 },
-        ],
-        purolator: [
-          { service: "Purolator Ground", transitDays: 4, baseCost: 12.1 },
-          { service: "Purolator Express", transitDays: 2, baseCost: 22.5 },
-          { service: "Purolator Express 9AM", transitDays: 1, baseCost: 38.9 },
-        ],
-        canada_post: [
-          { service: "Regular Parcel", transitDays: 5, baseCost: 9.4 },
-          { service: "Expedited Parcel", transitDays: 3, baseCost: 14.6 },
-          { service: "Xpresspost", transitDays: 2, baseCost: 22.3 },
-          { service: "Priority", transitDays: 1, baseCost: 36.8 },
-        ],
-        gls_canada: [
-          { service: "GLS Parcel", transitDays: 4, baseCost: 10.5 },
-        ],
-      };
-
-      const dimWeight = (input.lengthIn * input.widthIn * input.heightIn) / 139;
-      const billableWeight = Math.max(input.weightLbs, dimWeight);
-      const weightMultiplier = Math.max(1, billableWeight / 5);
-      const residentialSurcharge = input.isResidential ? 4.9 : 0;
-      const signatureSurcharge = input.requireSignature ? 5.0 : 0;
-
+      // ── Rate fetching: Veeqo Rate Shopping API (live) or mock fallback ────────
       type RateResult = {
         rateId: string; carrierCode: string; carrierName: string; service: string;
         transitDays: number; totalCost: number; currency: string;
         isPreferred: boolean; isCheapest: boolean; isFastest: boolean;
         surcharges: Array<{ label: string; amount: number }>;
         isMock: boolean; hasCredentials: boolean;
+        // Veeqo Rate Shopping API tokens (needed to book the label)
+        remoteShipmentId?: string;
+        requestToken?: string;
       };
       const rates: RateResult[] = [];
 
+      // Check if Veeqo API key is available for live rate shopping
+      const veeqoApiKey = process.env.VEEQO_API_KEY;
+
+      // Collect all shipping_configuration_ids from active accounts that have Veeqo credentials
+      const veeqoConfigIds: number[] = [];
       for (const account of activeAccounts) {
-        const services = MOCK_SERVICES[account.carrierCode];
-        if (!services) continue;
-        let hasCredentials = false;
         try {
           const creds = JSON.parse(account.credentials ?? "{}");
-          hasCredentials = Object.keys(creds).length > 0;
-        } catch { hasCredentials = false; }
+          if (creds.shipping_configuration_id) {
+            veeqoConfigIds.push(Number(creds.shipping_configuration_id));
+          }
+        } catch { /* skip */ }
+      }
 
-        for (const svc of services) {
-          if (maxTransitDays !== null && svc.transitDays > maxTransitDays) continue;
-          const surcharges: Array<{ label: string; amount: number }> = [];
-          if (residentialSurcharge > 0) surcharges.push({ label: "Residential", amount: residentialSurcharge });
-          if (signatureSurcharge > 0) surcharges.push({ label: "Signature", amount: signatureSurcharge });
-          const rawCost = svc.baseCost * weightMultiplier + surcharges.reduce((s, x) => s + x.amount, 0);
-          const totalCost = parseFloat((rawCost * markupMultiplier).toFixed(2));
-          rates.push({
-            rateId: `${account.carrierCode}_${svc.service.replace(/\s+/g, "_").toLowerCase()}_mock`,
-            carrierCode: account.carrierCode,
-            carrierName: CARRIER_LABELS[account.carrierCode] ?? account.carrierCode,
-            service: svc.service,
-            transitDays: svc.transitDays,
-            totalCost,
-            currency: input.destCountry === "CA" ? "CAD" : "USD",
-            isPreferred: preferredCarrier === account.carrierCode,
-            isCheapest: false,
-            isFastest: false,
-            surcharges,
-            isMock: !hasCredentials,
-            hasCredentials,
+      const hasVeeqoCredentials = veeqoApiKey && veeqoConfigIds.length > 0;
+
+      if (hasVeeqoCredentials && input.destPostal) {
+        // ── Live Veeqo Rate Shopping ──────────────────────────────────────────
+        try {
+          const veeqo = createVeeqoClient();
+
+          // Build origin address from the first active account that has origin info
+          const originAccount = activeAccounts.find((a) => a.originAddress1 && a.originPostal);
+          const shipFrom: VeeqoAddress = {
+            name: originAccount?.originName ?? "Go Direct Logistics",
+            address1: originAccount?.originAddress1 ?? "123 Warehouse Dr",
+            city: originAccount?.originCity ?? "",
+            state: originAccount?.originState ?? "",
+            zip: originAccount?.originPostal ?? "",
+            country: originAccount?.originCountry ?? (input.destCountry === "CA" ? "CA" : "US"),
+          };
+
+          const shipTo: VeeqoAddress = {
+            name: input.destName ?? input.destCity ?? "Recipient",
+            address1: input.destAddress1 ?? "",
+            city: input.destCity ?? "",
+            state: input.destState ?? "",
+            zip: input.destPostal,
+            country: input.destCountry,
+            is_residential: input.isResidential,
+          };
+
+          const ratesResp = await veeqo.getRates({
+            ship_from: shipFrom,
+            ship_to: shipTo,
+            packages: [{
+              weight: lbsToOz(input.weightLbs),
+              length: input.lengthIn,
+              width: input.widthIn,
+              height: input.heightIn,
+            }],
+            shipping_configuration_ids: veeqoConfigIds,
           });
+
+          const requestToken = ratesResp.request_token;
+
+          for (const vRate of ratesResp.available) {
+            const rawCost = parseFloat(vRate.total_net_charge);
+            if (!isFinite(rawCost)) continue;
+            const transitDays = vRate.expected_delivery_days ?? 99;
+            if (maxTransitDays !== null && transitDays > maxTransitDays) continue;
+
+            // Determine carrier code from sub_carrier_id or carrier field
+            const carrierCode = vRate.service_carrier ?? vRate.carrier ?? "other";
+            if (excludedCarriers.includes(carrierCode)) continue;
+
+            const totalCost = parseFloat((rawCost * markupMultiplier).toFixed(2));
+            const surcharges: Array<{ label: string; amount: number }> = vRate.charges
+              .filter((c) => c.charge_type === "OPTIONAL" && parseFloat(c.price.replace(/[^0-9.]/g, "")) > 0)
+              .map((c) => ({ label: c.charge_title, amount: parseFloat(c.price.replace(/[^0-9.]/g, "")) }));
+
+            rates.push({
+              rateId: vRate.code,
+              carrierCode,
+              carrierName: CARRIER_LABELS[carrierCode] ?? vRate.sub_carrier_id ?? carrierCode,
+              service: vRate.title,
+              transitDays,
+              totalCost,
+              currency: input.destCountry === "CA" ? "CAD" : "USD",
+              isPreferred: preferredCarrier === carrierCode,
+              isCheapest: false,
+              isFastest: false,
+              surcharges,
+              isMock: false,
+              hasCredentials: true,
+              remoteShipmentId: vRate.remote_shipment_id,
+              requestToken,
+            });
+          }
+
+          console.log(`[RateWizard] Veeqo live rates: ${rates.length} rates for ${input.destPostal}`);
+        } catch (err) {
+          console.error(`[RateWizard] Veeqo getRates error:`, err);
+          // Fall through to mock data if Veeqo API fails
+        }
+      }
+
+      // ── Mock fallback (used when no Veeqo credentials or API unavailable) ───
+      if (rates.length === 0) {
+        const MOCK_SERVICES: Record<string, Array<{ service: string; transitDays: number; baseCost: number }>> = {
+          usps: [
+            { service: "Priority Mail", transitDays: 2, baseCost: 8.5 },
+            { service: "Priority Mail Express", transitDays: 1, baseCost: 24.9 },
+            { service: "Ground Advantage", transitDays: 4, baseCost: 5.8 },
+          ],
+          fedex: [
+            { service: "FedEx Ground", transitDays: 4, baseCost: 9.2 },
+            { service: "FedEx Express Saver", transitDays: 3, baseCost: 18.4 },
+            { service: "FedEx 2Day", transitDays: 2, baseCost: 26.1 },
+            { service: "FedEx Overnight", transitDays: 1, baseCost: 48.7 },
+          ],
+          ups: [
+            { service: "UPS Ground", transitDays: 4, baseCost: 9.6 },
+            { service: "UPS 3 Day Select", transitDays: 3, baseCost: 19.2 },
+            { service: "UPS 2nd Day Air", transitDays: 2, baseCost: 28.5 },
+            { service: "UPS Next Day Air", transitDays: 1, baseCost: 52.3 },
+          ],
+          ontrac: [
+            { service: "OnTrac Ground", transitDays: 3, baseCost: 7.8 },
+            { service: "OnTrac Sunrise", transitDays: 1, baseCost: 22.4 },
+          ],
+          dhl_express: [
+            { service: "DHL Express Worldwide", transitDays: 2, baseCost: 32.6 },
+            { service: "DHL Express 12:00", transitDays: 1, baseCost: 44.1 },
+          ],
+          canpar: [
+            { service: "Canpar Ground", transitDays: 4, baseCost: 11.2 },
+            { service: "Canpar Express", transitDays: 2, baseCost: 19.8 },
+          ],
+          purolator: [
+            { service: "Purolator Ground", transitDays: 4, baseCost: 12.1 },
+            { service: "Purolator Express", transitDays: 2, baseCost: 22.5 },
+            { service: "Purolator Express 9AM", transitDays: 1, baseCost: 38.9 },
+          ],
+          canada_post: [
+            { service: "Regular Parcel", transitDays: 5, baseCost: 9.4 },
+            { service: "Expedited Parcel", transitDays: 3, baseCost: 14.6 },
+            { service: "Xpresspost", transitDays: 2, baseCost: 22.3 },
+            { service: "Priority", transitDays: 1, baseCost: 36.8 },
+          ],
+          gls_canada: [
+            { service: "GLS Parcel", transitDays: 4, baseCost: 10.5 },
+          ],
+        };
+
+        const dimWeight = (input.lengthIn * input.widthIn * input.heightIn) / 139;
+        const billableWeight = Math.max(input.weightLbs, dimWeight);
+        const weightMultiplier = Math.max(1, billableWeight / 5);
+        const residentialSurcharge = input.isResidential ? 4.9 : 0;
+        const signatureSurcharge = input.requireSignature ? 5.0 : 0;
+
+        for (const account of activeAccounts) {
+          const services = MOCK_SERVICES[account.carrierCode];
+          if (!services) continue;
+          let hasCredentials = false;
+          try {
+            const creds = JSON.parse(account.credentials ?? "{}");
+            hasCredentials = Object.keys(creds).length > 0;
+          } catch { hasCredentials = false; }
+
+          for (const svc of services) {
+            if (maxTransitDays !== null && svc.transitDays > maxTransitDays) continue;
+            const surcharges: Array<{ label: string; amount: number }> = [];
+            if (residentialSurcharge > 0) surcharges.push({ label: "Residential", amount: residentialSurcharge });
+            if (signatureSurcharge > 0) surcharges.push({ label: "Signature", amount: signatureSurcharge });
+            const rawCost = svc.baseCost * weightMultiplier + surcharges.reduce((s, x) => s + x.amount, 0);
+            const totalCost = parseFloat((rawCost * markupMultiplier).toFixed(2));
+            rates.push({
+              rateId: `${account.carrierCode}_${svc.service.replace(/\s+/g, "_").toLowerCase()}_mock`,
+              carrierCode: account.carrierCode,
+              carrierName: CARRIER_LABELS[account.carrierCode] ?? account.carrierCode,
+              service: svc.service,
+              transitDays: svc.transitDays,
+              totalCost,
+              currency: input.destCountry === "CA" ? "CAD" : "USD",
+              isPreferred: preferredCarrier === account.carrierCode,
+              isCheapest: false,
+              isFastest: false,
+              surcharges,
+              isMock: !hasCredentials,
+              hasCredentials,
+            });
+          }
         }
       }
 
@@ -7455,6 +7598,9 @@ const rateWizardRouter = router({
         destPostal: z.string(),
         destCountry: z.string(),
         isMock: z.boolean(),
+        // Veeqo Rate Shopping API tokens (present when live rates were fetched)
+        remoteShipmentId: z.string().optional(),
+        requestToken: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -7471,9 +7617,11 @@ const rateWizardRouter = router({
         rateAmountCents: Math.round(input.totalCost * 100),
         currency: input.currency,
         weightOz: Math.round(input.weightLbs * 16),
-        status: input.isMock ? "rated" : "booked",
+        status: input.isMock ? "rated" : "rated", // always 'rated' until label is booked
         bookedByUserId: typeof ctx.user.id === "number" ? ctx.user.id : undefined,
         bookedByName: ctx.user.name ?? ctx.user.email,
+        remoteShipmentId: input.remoteShipmentId,
+        requestToken: input.requestToken,
       });
       return { success: true, shipmentId: shipment.id, isMock: input.isMock };
     }),

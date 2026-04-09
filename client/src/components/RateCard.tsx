@@ -27,8 +27,10 @@ export interface RateCardInput {
   heightIn: number;
   destPostal: string;
   destCountry?: string;
+  destAddress1?: string;
   destCity?: string;
   destState?: string;
+  destName?: string;
   isResidential?: boolean;
   declaredValue?: number;
   requireSignature?: boolean;
@@ -48,6 +50,9 @@ export interface RateRow {
   surcharges: Array<{ label: string; amount: number }>;
   isMock: boolean;
   hasCredentials: boolean;
+  // Veeqo Rate Shopping API tokens (present when live rates are fetched)
+  remoteShipmentId?: string;
+  requestToken?: string;
 }
 
 type SortKey = "cost" | "transit" | "carrier";
@@ -194,6 +199,9 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
         destPostal: input.destPostal,
         destCountry: input.destCountry ?? "US",
         isMock: selectedRate.isMock,
+        // Pass Veeqo Rate Shopping API tokens for live label booking
+        remoteShipmentId: selectedRate.remoteShipmentId,
+        requestToken: selectedRate.requestToken,
       });
       onConfirm?.(selectedRate);
     } finally {

@@ -1436,6 +1436,10 @@ export const rateWizardShipments = mysqlTable("rate_wizard_shipments", {
   lengthIn: int("length_in"),
   widthIn: int("width_in"),
   heightIn: int("height_in"),
+  /** Veeqo Rate Shopping API: remote_shipment_id from rates response (needed to book) */
+  remoteShipmentId: varchar("remote_shipment_id", { length: 100 }),
+  /** Veeqo Rate Shopping API: request_token from rates response (for validation) */
+  requestToken: varchar("request_token", { length: 255 }),
   /** User who booked the label */
   bookedByUserId: int("booked_by_user_id"),
   bookedByName: varchar("booked_by_name", { length: 255 }),

@@ -1114,13 +1114,17 @@ function Step4PackShip({
     heightIn: heightIn > 0 ? heightIn : 6,
     destPostal,
     destCountry,
+    destAddress1: order.shipTo?.address1,
     destCity: order.shipTo?.city,
     destState: order.shipTo?.state,
+    destName: order.shipTo?.companyName ?? order.shipTo?.name,
+    isResidential: false,
   // Recompute when dimensions or destination change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [configId, order.extensivOrderId, order.referenceNum, locationId, order.clientId, order.clientName,
     weightLbs, lengthIn, widthIn, heightIn, destPostal, destCountry,
-    order.shipTo?.city, order.shipTo?.state]);
+    order.shipTo?.address1, order.shipTo?.city, order.shipTo?.state,
+    order.shipTo?.companyName, order.shipTo?.name]);
 
   const updateDimsMutation = trpc.smallParcel.updateDimensions.useMutation();
   const purchaseMutation = trpc.smallParcel.purchaseLabel.useMutation({
@@ -1541,8 +1545,10 @@ export default function SmallParcel() {
       heightIn,
       destPostal,
       destCountry,
+      destAddress1: order.shipTo?.address1,
       destCity: order.shipTo?.city,
       destState: order.shipTo?.state,
+      destName: order.shipTo?.companyName ?? order.shipTo?.name,
       isResidential: false,
       requireSignature: false,
     });

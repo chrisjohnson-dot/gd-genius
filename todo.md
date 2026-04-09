@@ -927,8 +927,8 @@
 - [x] Small Parcel: build High-Value SKU config page (/small-parcel/high-value-skus)
 - [x] Small Parcel: add both new pages to sidebar nav
 - [x] Store VEEQO_API_KEY as project secret
-- [ ] Replace stub purchaseLabel with real Veeqo API call (rate-shop, purchase label, return tracking + ZPL)
-- [ ] Wire Veeqo carrier/service list into Pack & Ship carrier dropdown
+- [x] Replace stub purchaseLabel with real Veeqo API call (rate-shop, purchase label, return tracking + ZPL)
+- [x] Wire Veeqo Rate Shopping API into Pack & Ship RateCard — getRates calls live Veeqo API when shipping_configuration_ids are set; bookShipment called in purchaseLabel
 - [x] Config: rename "Ship Well Settings" nav item to "Shipping Integration"
 - [x] Config: restructure Shipping Integration page into tabs: Ship Well / Veeqo / TechShip
 - [x] Config: add TechShip DB table (techship_configs) with location name, base URL, API key, API secret

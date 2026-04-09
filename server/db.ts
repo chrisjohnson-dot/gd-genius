@@ -3969,3 +3969,32 @@ export async function listRateWizardShipments(configId: number, limit = 100): Pr
     .orderBy(desc(rateWizardShipments.createdAt))
     .limit(limit);
 }
+
+export async function updateRateWizardShipment(
+  id: number,
+  data: Partial<InsertRateWizardShipment>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(rateWizardShipments).set(data).where(eq(rateWizardShipments.id, id));
+}
+
+export async function getRateWizardShipmentById(id: number): Promise<RateWizardShipment | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(rateWizardShipments).where(eq(rateWizardShipments.id, id));
+  return row ?? null;
+}
+
+/** Get the most recent 'rated' shipment record for a given order ID (used to look up tokens for label booking). */
+export async function getLatestRatedShipmentForOrder(orderId: string): Promise<RateWizardShipment | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select()
+    .from(rateWizardShipments)
+    .where(eq(rateWizardShipments.orderId, orderId))
+    .orderBy(desc(rateWizardShipments.createdAt))
+    .limit(1);
+  return row ?? null;
+}

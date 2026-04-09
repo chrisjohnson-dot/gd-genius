@@ -193,6 +193,7 @@ import {
   upsertCustomerShippingRule,
   deleteCustomerShippingRule,
   listRateWizardShipments,
+  createRateWizardShipment,
 } from "./db";
 import { fireCortexWebhook } from "./cortex/webhook";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
@@ -7258,6 +7259,216 @@ const rateWizardRouter = router({
   listShipments: protectedProcedure
     .input(z.object({ configId: z.number(), limit: z.number().default(100) }))
     .query(async ({ input }) => listRateWizardShipments(input.configId, input.limit)),
+
+  // ── Rate Shopping ─────────────────────────────────────────────────────────
+  getRates: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        orderId: z.number().optional(),
+        orderNumber: z.string().optional(),
+        locationId: z.string(),
+        customerId: z.number().optional(),
+        customerName: z.string().optional(),
+        weightLbs: z.number(),
+        lengthIn: z.number(),
+        widthIn: z.number(),
+        heightIn: z.number(),
+        destPostal: z.string(),
+        destCountry: z.string().default("US"),
+        destCity: z.string().optional(),
+        destState: z.string().optional(),
+        isResidential: z.boolean().default(false),
+        declaredValue: z.number().optional(),
+        requireSignature: z.boolean().default(false),
+      })
+    )
+    .query(async ({ input }) => {
+      // Customer routing rule
+      let customerRule: Awaited<ReturnType<typeof listCustomerShippingRules>>[number] | null = null;
+      if (input.customerId && input.configId) {
+        const rules = await listCustomerShippingRules(input.configId);
+        customerRule = rules.find((r) => r.customerId === input.customerId) ?? null;
+      }
+      const integration = customerRule?.integration ?? "rate_wizard";
+      const preferredCarrier = customerRule?.preferredCarrier ?? null;
+      const excludedCarriers: string[] = (() => {
+        try { return JSON.parse(customerRule?.excludedCarriers ?? "[]"); } catch { return []; }
+      })();
+      const maxTransitDays = customerRule?.maxTransitDays ?? null;
+
+      // Active carrier accounts for this location
+      const accounts = await listCarrierAccounts(input.locationId);
+      const activeAccounts = accounts.filter((a) => a.isActive && !excludedCarriers.includes(a.carrierCode));
+
+      // Mock rate generation — replace with live carrier API calls in Phase 2b
+      const MOCK_SERVICES: Record<string, Array<{ service: string; transitDays: number; baseCost: number }>> = {
+        usps: [
+          { service: "Priority Mail", transitDays: 2, baseCost: 8.5 },
+          { service: "Priority Mail Express", transitDays: 1, baseCost: 24.9 },
+          { service: "Ground Advantage", transitDays: 4, baseCost: 5.8 },
+        ],
+        fedex: [
+          { service: "FedEx Ground", transitDays: 4, baseCost: 9.2 },
+          { service: "FedEx Express Saver", transitDays: 3, baseCost: 18.4 },
+          { service: "FedEx 2Day", transitDays: 2, baseCost: 26.1 },
+          { service: "FedEx Overnight", transitDays: 1, baseCost: 48.7 },
+        ],
+        ups: [
+          { service: "UPS Ground", transitDays: 4, baseCost: 9.6 },
+          { service: "UPS 3 Day Select", transitDays: 3, baseCost: 19.2 },
+          { service: "UPS 2nd Day Air", transitDays: 2, baseCost: 28.5 },
+          { service: "UPS Next Day Air", transitDays: 1, baseCost: 52.3 },
+        ],
+        ontrac: [
+          { service: "OnTrac Ground", transitDays: 3, baseCost: 7.8 },
+          { service: "OnTrac Sunrise", transitDays: 1, baseCost: 22.4 },
+        ],
+        dhl_express: [
+          { service: "DHL Express Worldwide", transitDays: 2, baseCost: 32.6 },
+          { service: "DHL Express 12:00", transitDays: 1, baseCost: 44.1 },
+        ],
+        canpar: [
+          { service: "Canpar Ground", transitDays: 4, baseCost: 11.2 },
+          { service: "Canpar Express", transitDays: 2, baseCost: 19.8 },
+        ],
+        purolator: [
+          { service: "Purolator Ground", transitDays: 4, baseCost: 12.1 },
+          { service: "Purolator Express", transitDays: 2, baseCost: 22.5 },
+          { service: "Purolator Express 9AM", transitDays: 1, baseCost: 38.9 },
+        ],
+        canada_post: [
+          { service: "Regular Parcel", transitDays: 5, baseCost: 9.4 },
+          { service: "Expedited Parcel", transitDays: 3, baseCost: 14.6 },
+          { service: "Xpresspost", transitDays: 2, baseCost: 22.3 },
+          { service: "Priority", transitDays: 1, baseCost: 36.8 },
+        ],
+        gls_canada: [
+          { service: "GLS Parcel", transitDays: 4, baseCost: 10.5 },
+        ],
+      };
+
+      const dimWeight = (input.lengthIn * input.widthIn * input.heightIn) / 139;
+      const billableWeight = Math.max(input.weightLbs, dimWeight);
+      const weightMultiplier = Math.max(1, billableWeight / 5);
+      const residentialSurcharge = input.isResidential ? 4.9 : 0;
+      const signatureSurcharge = input.requireSignature ? 5.0 : 0;
+
+      type RateResult = {
+        rateId: string; carrierCode: string; carrierName: string; service: string;
+        transitDays: number; totalCost: number; currency: string;
+        isPreferred: boolean; isCheapest: boolean; isFastest: boolean;
+        surcharges: Array<{ label: string; amount: number }>;
+        isMock: boolean; hasCredentials: boolean;
+      };
+      const rates: RateResult[] = [];
+
+      for (const account of activeAccounts) {
+        const services = MOCK_SERVICES[account.carrierCode];
+        if (!services) continue;
+        let hasCredentials = false;
+        try {
+          const creds = JSON.parse(account.credentials ?? "{}");
+          hasCredentials = Object.keys(creds).length > 0;
+        } catch { hasCredentials = false; }
+
+        for (const svc of services) {
+          if (maxTransitDays !== null && svc.transitDays > maxTransitDays) continue;
+          const surcharges: Array<{ label: string; amount: number }> = [];
+          if (residentialSurcharge > 0) surcharges.push({ label: "Residential", amount: residentialSurcharge });
+          if (signatureSurcharge > 0) surcharges.push({ label: "Signature", amount: signatureSurcharge });
+          const totalCost = parseFloat(
+            (svc.baseCost * weightMultiplier + surcharges.reduce((s, x) => s + x.amount, 0)).toFixed(2)
+          );
+          rates.push({
+            rateId: `${account.carrierCode}_${svc.service.replace(/\s+/g, "_").toLowerCase()}_mock`,
+            carrierCode: account.carrierCode,
+            carrierName: CARRIER_LABELS[account.carrierCode] ?? account.carrierCode,
+            service: svc.service,
+            transitDays: svc.transitDays,
+            totalCost,
+            currency: input.destCountry === "CA" ? "CAD" : "USD",
+            isPreferred: preferredCarrier === account.carrierCode,
+            isCheapest: false,
+            isFastest: false,
+            surcharges,
+            isMock: !hasCredentials,
+            hasCredentials,
+          });
+        }
+      }
+
+      if (rates.length > 0) {
+        const minCost = Math.min(...rates.map((r) => r.totalCost));
+        const minTransit = Math.min(...rates.map((r) => r.transitDays));
+        rates.forEach((r) => {
+          r.isCheapest = r.totalCost === minCost;
+          r.isFastest = r.transitDays === minTransit;
+        });
+      }
+
+      rates.sort((a, b) => {
+        if (a.isPreferred && !b.isPreferred) return -1;
+        if (!a.isPreferred && b.isPreferred) return 1;
+        return a.totalCost - b.totalCost;
+      });
+
+      const autoSelected = rates.find((r) => r.isPreferred) ?? rates.find((r) => r.isCheapest) ?? null;
+
+      return {
+        rates,
+        integration,
+        customerRule: customerRule
+          ? { integration: customerRule.integration, preferredCarrier: customerRule.preferredCarrier, maxTransitDays: customerRule.maxTransitDays }
+          : null,
+        autoSelectedRateId: autoSelected?.rateId ?? null,
+        isMockData: rates.length > 0 && rates.every((r) => r.isMock),
+        activeCarrierCount: activeAccounts.length,
+      };
+    }),
+
+  confirmRate: protectedProcedure
+    .input(
+      z.object({
+        configId: z.number(),
+        orderId: z.number().optional(),
+        orderNumber: z.string().optional(),
+        locationId: z.string(),
+        customerId: z.number().optional(),
+        customerName: z.string().optional(),
+        rateId: z.string(),
+        carrierCode: z.string(),
+        carrierName: z.string(),
+        service: z.string(),
+        transitDays: z.number(),
+        totalCost: z.number(),
+        currency: z.string(),
+        weightLbs: z.number(),
+        destPostal: z.string(),
+        destCountry: z.string(),
+        isMock: z.boolean(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const shipment = await createRateWizardShipment({
+        configId: input.configId,
+        orderId: input.orderId ? String(input.orderId) : undefined,
+        locationId: input.locationId,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        carrierCode: input.carrierCode,
+        serviceCode: input.rateId,
+        serviceName: `${input.carrierName} ${input.service}`,
+        transitDays: input.transitDays,
+        rateAmountCents: Math.round(input.totalCost * 100),
+        currency: input.currency,
+        weightOz: Math.round(input.weightLbs * 16),
+        status: input.isMock ? "rated" : "booked",
+        bookedByUserId: typeof ctx.user.id === "number" ? ctx.user.id : undefined,
+        bookedByName: ctx.user.name ?? ctx.user.email,
+      });
+      return { success: true, shipmentId: shipment.id, isMock: input.isMock };
+    }),
 
   // ── Carrier Metadata ──────────────────────────────────────────────────────
   getCarrierOptions: publicProcedure.query(() => {

@@ -122,7 +122,7 @@ export default function RateWizard() {
           <div>
             <h1 className="text-xl font-semibold flex items-center gap-2">
               Rate Wizard
-              <Badge className="bg-blue-600 text-white text-xs">Phase 1</Badge>
+              <Badge className="bg-green-600 text-white text-xs">Phase 2 Active</Badge>
             </h1>
             <p className="text-sm text-muted-foreground">
               Native GD Genius rate shopping — USPS, FedEx, UPS, OnTrac, DHL + Canadian carriers.
@@ -281,45 +281,57 @@ export default function RateWizard() {
         </Card>
       )}
 
-      {/* Phase 2 preview */}
-      <Card className="border-dashed border-slate-300 dark:border-slate-700">
+      {/* Phase 2 status */}
+      <Card className="border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-950/20">
         <CardHeader className="pb-2 pt-4 px-5">
-          <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Phase 2 — Live Rate Shopping (coming after credentials)
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            Phase 2 — Rate Card Active in Pack &amp; Ship
           </CardTitle>
         </CardHeader>
         <CardContent className="px-5 pb-5">
           <p className="text-xs text-muted-foreground mb-4">
-            Once carrier API credentials are provided by your transportation office, Phase 2 will add:
+            The Rate Wizard rate card is now live in the Pack &amp; Ship workflow. Operators see carrier rates after entering dimensions.
+            Currently using <strong>estimated rates</strong> — add API credentials to see your negotiated rates.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               {
                 icon: DollarSign,
-                title: "Real-Time Rate Card",
-                desc: "Side-by-side rates from all 5 carriers in Pack & Ship. Auto-select cheapest or apply customer rules.",
+                title: "Rate Card",
+                desc: "Side-by-side rates from all configured carriers. Auto-select cheapest or apply customer rules.",
                 color: "text-green-500",
+                done: true,
               },
               {
                 icon: Package,
                 title: "Label Booking",
-                desc: "Select a rate and book the label directly from Genius. No Techship login required.",
+                desc: "Select a rate and book the label directly from Genius. Requires live carrier API credentials.",
                 color: "text-blue-500",
+                done: false,
               },
               {
                 icon: Truck,
                 title: "Tracking & Void",
                 desc: "Pull tracking status back into Genius. Void or cancel labels without leaving the app.",
                 color: "text-purple-500",
+                done: false,
               },
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.title} className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-3 space-y-1.5 opacity-60">
+                <div key={item.title} className={`rounded-lg border p-3 space-y-1.5 ${
+                  item.done
+                    ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30"
+                    : "border-dashed border-slate-200 dark:border-slate-700 opacity-60"
+                }`}>
                   <div className="flex items-center gap-2">
-                    <Icon className={`h-4 w-4 ${item.color}`} />
+                    {item.done
+                      ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      : <Icon className={`h-4 w-4 ${item.color}`} />
+                    }
                     <span className="text-xs font-semibold">{item.title}</span>
+                    {item.done && <Badge className="text-xs bg-green-600 text-white ml-auto">Live</Badge>}
                   </div>
                   <p className="text-xs text-muted-foreground">{item.desc}</p>
                 </div>
@@ -329,12 +341,74 @@ export default function RateWizard() {
           <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             <span>
-              Provide carrier API credentials from your transportation office to unlock Phase 2.
-              TechShip remains active as fallback until Phase 2 is fully deployed.
+              Provide carrier API credentials from your transportation office to enable live rates and label booking.
+              TechShip remains active as fallback for customers not yet routed to Rate Wizard.
             </span>
           </div>
         </CardContent>
       </Card>
+
+      {/* Recent shipments */}
+      {(shipments as unknown[]).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Package className="h-4 w-4 text-blue-500" />
+              Recent Rate Wizard Shipments
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4">
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/50 border-b text-muted-foreground">
+                    <th className="px-3 py-2 text-left">Order</th>
+                    <th className="px-3 py-2 text-left">Customer</th>
+                    <th className="px-3 py-2 text-left">Carrier / Service</th>
+                    <th className="px-3 py-2 text-right">Cost</th>
+                    <th className="px-3 py-2 text-center">Status</th>
+                    <th className="px-3 py-2 text-right">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(shipments as Array<{
+                    id: number; orderId: string | null; customerName: string | null;
+                    carrierCode: string | null; serviceName: string | null;
+                    rateAmountCents: number | null; currency: string | null;
+                    status: string; createdAt: Date;
+                  }>).map((s) => (
+                    <tr key={s.id} className="border-b last:border-0 hover:bg-muted/20">
+                      <td className="px-3 py-2 font-mono">{s.orderId ?? "—"}</td>
+                      <td className="px-3 py-2 max-w-[120px] truncate">{s.customerName ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold text-white ${
+                            CARRIER_COLORS[s.carrierCode ?? ""] ?? "bg-slate-500"
+                          }`}>{(s.carrierCode ?? "").toUpperCase().replace("_", " ")}</span>
+                          <span className="truncate max-w-[100px]">{s.serviceName ?? "—"}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {s.rateAmountCents != null
+                          ? `${s.currency ?? "USD"} $${(s.rateAmountCents / 100).toFixed(2)}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <Badge variant={s.status === "booked" ? "default" : "secondary"} className="text-xs">
+                          {s.status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right text-muted-foreground">
+                        {new Date(s.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick links */}
       <div className="flex flex-wrap gap-2">

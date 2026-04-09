@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,10 @@ import {
   RefreshCw,
   AlertTriangle,
   Timer,
+  Truck,
 } from "lucide-react";
 import { useBrowserPrint } from "@/hooks/useBrowserPrint";
+import { RateCard, type RateCardInput, type RateRow } from "@/components/RateCard";
 import { Link } from "wouter";
 import {
   Dialog,
@@ -988,17 +990,41 @@ function PrintStatusBanner({
   return null;
 }
 
+// ─── Location ID mapping ─────────────────────────────────────────────────────
+/** Maps Extensiv facility names to Rate Wizard location IDs */
+const FACILITY_LOCATION_MAP: Record<string, string> = {
+  Calgary: "CAL",
+  Columbus: "COL",
+  Mississauga: "MIS",
+  Renous: "REN",
+};
+
+function facilityToLocationId(facilityName: string): string {
+  // Try exact match first, then partial match
+  const exact = FACILITY_LOCATION_MAP[facilityName];
+  if (exact) return exact;
+  for (const [key, id] of Object.entries(FACILITY_LOCATION_MAP)) {
+    if (facilityName.toLowerCase().includes(key.toLowerCase())) return id;
+  }
+  // Fallback: use first 3 chars uppercased
+  return facilityName.slice(0, 3).toUpperCase();
+}
+
 // ─── Step 4: Pack & Ship ──────────────────────────────────────────────────────
 function Step4PackShip({
   sessionId,
   order,
   selectedSizeName,
+  selectedSize,
+  configId,
   onReset,
   onBack,
 }: {
   sessionId: number;
   order: OrderData;
   selectedSizeName?: string | null;
+  selectedSize?: { lengthCm: string | null; widthCm: string | null; heightCm: string | null; weightKg: string | null } | null;
+  configId: number;
   onReset: () => void;
   onBack?: () => void;
 }) {
@@ -1024,6 +1050,58 @@ function Step4PackShip({
   });
 
   const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useBrowserPrint();
+
+  // ── Rate Wizard state ──────────────────────────────────────────────────────
+  const [rateConfirmed, setRateConfirmed] = useState(false);
+  const [confirmedRate, setConfirmedRate] = useState<RateRow | null>(null);
+
+  // Compute Rate Wizard input from dimensions (convert cm/kg → in/lbs)
+  // Prefer manually entered values; fall back to selected package size defaults
+  const weightLbs = (() => {
+    const w = weight ? parseFloat(weight) : selectedSize?.weightKg ? parseFloat(selectedSize.weightKg) : 0;
+    return parseFloat((w * 2.20462).toFixed(2));
+  })();
+  const lengthIn = (() => {
+    const l = length ? parseFloat(length) : selectedSize?.lengthCm ? parseFloat(selectedSize.lengthCm) : 0;
+    return parseFloat((l / 2.54).toFixed(2));
+  })();
+  const widthIn = (() => {
+    const w = width ? parseFloat(width) : selectedSize?.widthCm ? parseFloat(selectedSize.widthCm) : 0;
+    return parseFloat((w / 2.54).toFixed(2));
+  })();
+  const heightIn = (() => {
+    const h = height ? parseFloat(height) : selectedSize?.heightCm ? parseFloat(selectedSize.heightCm) : 0;
+    return parseFloat((h / 2.54).toFixed(2));
+  })();
+
+  const locationId = facilityToLocationId(order.facilityName);
+  const destPostal = order.shipTo?.zip ?? "";
+  const destCountry = order.shipTo?.country?.toUpperCase() === "CA" ? "CA" : "US";
+
+  // Rate Wizard is available when we have a destination postal code
+  const rateWizardAvailable = !!destPostal && configId > 0;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const rateCardInput: RateCardInput = useMemo(() => ({
+    configId,
+    orderId: order.extensivOrderId,
+    orderNumber: order.referenceNum,
+    locationId,
+    customerId: order.clientId,
+    customerName: order.clientName,
+    weightLbs: weightLbs > 0 ? weightLbs : 1, // default to 1 lb if no weight
+    lengthIn: lengthIn > 0 ? lengthIn : 12,
+    widthIn: widthIn > 0 ? widthIn : 9,
+    heightIn: heightIn > 0 ? heightIn : 6,
+    destPostal,
+    destCountry,
+    destCity: order.shipTo?.city,
+    destState: order.shipTo?.state,
+  // Recompute when dimensions or destination change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [configId, order.extensivOrderId, order.referenceNum, locationId, order.clientId, order.clientName,
+    weightLbs, lengthIn, widthIn, heightIn, destPostal, destCountry,
+    order.shipTo?.city, order.shipTo?.state]);
 
   const updateDimsMutation = trpc.smallParcel.updateDimensions.useMutation();
   const purchaseMutation = trpc.smallParcel.purchaseLabel.useMutation({
@@ -1214,6 +1292,68 @@ function Step4PackShip({
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Rate Wizard rate card ─────────────────────────────────────────── */}
+      {rateWizardAvailable && !rateConfirmed && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Truck className="w-4 h-4 text-blue-600" />
+              Rate Wizard — Select Carrier
+              <Badge variant="secondary" className="text-xs ml-1">Rate Shopping</Badge>
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Shipping from <strong>{order.facilityName}</strong> ({locationId}) to {destPostal} {destCountry}
+              {weightLbs > 0 && ` · ${weightLbs.toFixed(1)} lb`}
+            </p>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <RateCard
+              input={rateCardInput}
+              onConfirm={(rate) => {
+                setConfirmedRate(rate);
+                setRateConfirmed(true);
+              }}
+              onSkip={() => setRateConfirmed(true)}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Rate confirmed banner */}
+      {rateConfirmed && confirmedRate && (
+        <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3">
+          <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0" />
+          <div className="flex-1 min-w-0 text-sm">
+            <p className="font-semibold text-blue-800 dark:text-blue-300">
+              {confirmedRate.carrierName} — {confirmedRate.service}
+            </p>
+            <p className="text-blue-700 dark:text-blue-400">
+              {confirmedRate.currency} ${confirmedRate.totalCost.toFixed(2)} · {confirmedRate.transitDays}d transit
+              {confirmedRate.isMock && " · estimated rate"}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setRateConfirmed(false); setConfirmedRate(null); }}
+            className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
+          >
+            Change
+          </Button>
+        </div>
+      )}
+
+      {/* No destination postal — Rate Wizard unavailable */}
+      {!destPostal && (
+        <div className="flex items-start gap-3 bg-muted/40 border rounded-lg px-4 py-3">
+          <Truck className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold text-muted-foreground">Rate Wizard unavailable</p>
+            <p className="text-muted-foreground text-xs">No destination postal code on this order. Rate shopping requires a postal code.</p>
+          </div>
+        </div>
+      )}
 
       {/* Veeqo not configured notice */}
       <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
@@ -1469,6 +1609,8 @@ export default function SmallParcel() {
               sessionId={sessionId}
               order={orderData}
               selectedSizeName={selectedSize?.name ?? null}
+              selectedSize={selectedSize}
+              configId={configId}
               onReset={handleReset}
               onBack={() => setStep(3)}
             />

@@ -9,7 +9,7 @@
  * API docs: https://developer.dhl.com/api-reference/dhl-ecommerce-solutions-americas
  */
 
-import type { CarrierRateInput, CarrierRate } from "./types";
+import type { CarrierRateInput, CarrierRate, CarrierLabelInput, CarrierLabelResult } from "./types";
 
 const DHL_BASE = "https://api.dhlecs.com";
 
@@ -165,5 +165,126 @@ export async function fetchDHLRates(input: CarrierRateInput): Promise<CarrierRat
   } catch (err) {
     console.error("[DHL] fetchDHLRates error:", err);
     return [];
+  }
+}
+
+/**
+ * Purchase a DHL eCommerce shipping label via the DHL eCommerce API v4.
+ * Returns ZPL label content ready for Zebra printing.
+ * Docs: https://developer.dhlecs.com/
+ */
+export async function buyDHLLabel(input: CarrierLabelInput): Promise<CarrierLabelResult> {
+  const clientId = process.env.DHL_USER_KEY;
+  const clientSecret = process.env.DHL_PASSWORD;
+  if (!clientId || !clientSecret) {
+    return { success: false, trackingNumber: "", carrierCode: "dhl_express", carrierName: "DHL eCommerce", service: input.serviceCode, error: "DHL_USER_KEY or DHL_PASSWORD not configured" };
+  }
+
+  const token = await getDHLToken(clientId, clientSecret);
+  if (!token) {
+    return { success: false, trackingNumber: "", carrierCode: "dhl_express", carrierName: "DHL eCommerce", service: input.serviceCode, error: "Failed to obtain DHL access token" };
+  }
+
+  const serviceInfo = DHL_SERVICES[input.serviceCode] ?? { label: `DHL ${input.serviceCode}`, transitDays: 5 };
+  const weightOz = Math.max(Math.ceil(input.weightLbs * 16), 1);
+  const pickupAccount = input.pickupAccount || clientId;
+  const distributionCenter = input.distributionCenter || "USRDU1";
+
+  try {
+    const body = {
+      pickupAccount,
+      distributionCenter,
+      orderedProductId: input.serviceCode,
+      packageDetail: {
+        weight: weightOz,
+        weightUom: "oz",
+        length: Math.ceil(input.lengthIn),
+        width: Math.ceil(input.widthIn),
+        height: Math.ceil(input.heightIn),
+        dimensionUom: "in",
+        packageDescription: "Parcel",
+      },
+      sender: {
+        name: input.originName,
+        companyName: input.originCompany || input.originName,
+        address1: input.originAddress1,
+        address2: input.originAddress2 || undefined,
+        city: input.originCity,
+        state: input.originState,
+        postalCode: input.originPostal.slice(0, 5),
+        country: input.originCountry || "US",
+        phone: (input.originPhone ?? "8005551234").replace(/\D/g, ""),
+      },
+      recipient: {
+        name: input.destName,
+        companyName: input.destCompany || undefined,
+        address1: input.destAddress1,
+        address2: input.destAddress2 || undefined,
+        city: input.destCity,
+        state: input.destState,
+        postalCode: input.destPostal.slice(0, 5),
+        country: input.destCountry || "US",
+        phone: (input.destPhone ?? "8005551234").replace(/\D/g, ""),
+      },
+      ...(input.orderNumber ? { customerReference: input.orderNumber } : {}),
+      labelFormat: "ZPL",
+      labelSize: "4x6",
+    };
+
+    const resp = await fetch(`${DHL_BASE}/shipping/v4/labels`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      console.error(`[DHL] Label API error ${resp.status}: ${errText.slice(0, 400)}`);
+      return { success: false, trackingNumber: "", carrierCode: "dhl_express", carrierName: "DHL eCommerce", service: serviceInfo.label, error: `DHL API ${resp.status}: ${errText.slice(0, 200)}` };
+    }
+
+    const data = await resp.json() as {
+      trackingId?: string;
+      packageId?: string;
+      label?: string;
+      labelFormat?: string;
+      rate?: { totalPrice?: number; currency?: string };
+      estimatedDeliveryDate?: string;
+      error?: string;
+    };
+
+    if (data.error) {
+      console.error(`[DHL] Label error: ${data.error}`);
+      return { success: false, trackingNumber: "", carrierCode: "dhl_express", carrierName: "DHL eCommerce", service: serviceInfo.label, error: data.error };
+    }
+
+    const trackingNumber = data.trackingId ?? data.packageId ?? "";
+    const labelBase64 = data.label ?? "";
+    const labelFormat = (data.labelFormat ?? "ZPL").toLowerCase() as "zpl" | "pdf";
+    const labelZpl = labelFormat === "zpl" && labelBase64 ? Buffer.from(labelBase64, "base64").toString("utf-8") : undefined;
+
+    console.log(`[DHL] Label purchased: ${trackingNumber} via ${serviceInfo.label}`);
+    return {
+      success: true,
+      trackingNumber,
+      carrierCode: "dhl_express",
+      carrierName: "DHL eCommerce",
+      service: serviceInfo.label,
+      labelZpl,
+      labelBase64,
+      labelFormat,
+      labelUrl: trackingNumber ? `https://webtrack.dhlglobalmail.com/?trackingnumber=${trackingNumber}` : undefined,
+      totalCost: data.rate?.totalPrice,
+      currency: data.rate?.currency ?? "USD",
+      estimatedDelivery: data.estimatedDeliveryDate,
+    };
+  } catch (err) {
+    console.error("[DHL] buyDHLLabel error:", err);
+    return { success: false, trackingNumber: "", carrierCode: "dhl_express", carrierName: "DHL eCommerce", service: serviceInfo.label, error: err instanceof Error ? err.message : String(err) };
   }
 }

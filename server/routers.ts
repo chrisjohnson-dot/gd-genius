@@ -210,7 +210,7 @@ import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
 import { purchaseOrders } from "../drizzle/schema";
-import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, type CarrierRateInput } from "./carriers";
+import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
   createProductionRun,
@@ -6804,17 +6804,75 @@ const smallParcelRouter = router({
         }
 
         console.log(`[SmallParcel] Veeqo label booked: ${trackingNumber} via ${carrier} ${serviceLevel}`);
+       } else if (confirmedShipment?.carrierCode && hasAnyCarrierCredentials()) {
+        // ── Direct carrier label purchase (no Veeqo) ─────────────────────────────
+        // Build origin from carrier account or fall back to env defaults
+        const allAccounts = await listCarrierAccounts();
+        const activeAccounts = allAccounts.filter((a) => a.isActive);
+        const originAccount = activeAccounts.find(
+          (a) => a.carrierCode.toLowerCase() === confirmedShipment!.carrierCode!.toLowerCase() && a.originAddress1 && a.originPostal
+        ) ?? activeAccounts.find((a) => a.originAddress1 && a.originPostal);
+
+        // Parse credentials JSON for account-specific overrides
+        let credentials: Record<string, string> = {};
+        try { credentials = JSON.parse(originAccount?.credentials ?? "{}"); } catch { /* ignore */ }
+
+        const weightLbs = session.weightKg ? parseFloat(String(session.weightKg)) * 2.20462 : 1;
+        const lengthIn = session.lengthCm ? parseFloat(String(session.lengthCm)) / 2.54 : 12;
+        const widthIn = session.widthCm ? parseFloat(String(session.widthCm)) / 2.54 : 8;
+        const heightIn = session.heightCm ? parseFloat(String(session.heightCm)) / 2.54 : 4;
+
+        const labelInput: CarrierLabelInput = {
+          originName: originAccount?.originName ?? "Go Direct Logistics",
+          originAddress1: originAccount?.originAddress1 ?? "123 Warehouse Dr",
+          originCity: originAccount?.originCity ?? "",
+          originState: originAccount?.originState ?? "",
+          originPostal: originAccount?.originPostal ?? "",
+          originCountry: originAccount?.originCountry ?? "US",
+          destName: session.shipToName ?? "",
+          destAddress1: session.shipToAddress1 ?? "",
+          destCity: session.shipToCity ?? "",
+          destState: session.shipToState ?? "",
+          destPostal: session.shipToZip ?? "",
+          destCountry: session.shipToCountry ?? "US",
+          weightLbs: Math.max(weightLbs, 0.1),
+          lengthIn: Math.max(lengthIn, 1),
+          widthIn: Math.max(widthIn, 1),
+          heightIn: Math.max(heightIn, 1),
+          serviceCode: confirmedShipment.serviceCode ?? input.carrierService ?? "",
+          orderNumber: session.referenceNum ?? undefined,
+          referenceNum: session.referenceNum ?? undefined,
+          accountNumber: credentials.accountNumber ?? credentials.account_number ?? undefined,
+          meterNumber: credentials.meterNumber ?? credentials.meter_number ?? undefined,
+          pickupAccount: credentials.pickupAccount ?? undefined,
+          distributionCenter: credentials.distributionCenter ?? undefined,
+        };
+
+        console.log(`[SmallParcel] Purchasing direct carrier label: ${confirmedShipment.carrierCode} ${labelInput.serviceCode}`);
+        const labelResult = await buyCarrierLabel(confirmedShipment.carrierCode!, labelInput);
+
+        if (!labelResult.success) {
+          console.error(`[SmallParcel] Direct carrier label failed: ${labelResult.error}`);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Label purchase failed (${labelResult.carrierName}): ${labelResult.error}`,
+          });
+        }
+
+        trackingNumber = labelResult.trackingNumber;
+        carrier = labelResult.carrierName;
+        serviceLevel = labelResult.service;
+        labelUrl = labelResult.labelUrl ?? "";
+        labelZpl = labelResult.labelZpl ?? buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
+        console.log(`[SmallParcel] Direct carrier label purchased: ${trackingNumber} via ${carrier} ${serviceLevel}`);
       } else {
-        // ── Stub response for development/testing (no Veeqo tokens available) ───
+        // ── Stub response for development/testing (no carrier configured) ─────────
         trackingNumber = `STUB-${Date.now()}-${session.extensivOrderId}`;
         carrier = input.carrierService ?? confirmedShipment?.carrierCode ?? "Stub Carrier";
         serviceLevel = confirmedShipment?.serviceName ?? "Ground";
         labelUrl = `https://stub-labels.example.com/${trackingNumber}.pdf`;
         labelZpl = buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
-
-        if (veeqoApiKey && !confirmedShipment?.remoteShipmentId) {
-          console.warn(`[SmallParcel] Veeqo API key present but no rate confirmed for order ${session.extensivOrderId} — using stub`);
-        }
+        console.warn(`[SmallParcel] No carrier credentials configured — using stub label for order ${session.extensivOrderId}`);
       }
 
       // ── Step 2: Update session record with label details ──

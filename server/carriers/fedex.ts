@@ -12,7 +12,7 @@
  * Endpoint: https://ws.fedex.com:443/web-services
  */
 
-import type { CarrierRateInput, CarrierRate } from "./types";
+import type { CarrierRateInput, CarrierRate, CarrierLabelInput, CarrierLabelResult } from "./types";
 
 const FEDEX_WSDL_ENDPOINT = "https://ws.fedex.com:443/web-services";
 
@@ -257,4 +257,187 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
     console.error("[FedEx] fetchFedExRates error:", err);
     return [];
   }
+}
+
+/**
+ * Purchase a FedEx shipping label via FedEx Web Services SOAP ProcessShipment.
+ * Returns ZPL label content ready for Zebra printing.
+ * Docs: https://www.fedex.com/en-us/developer/web-services.html
+ */
+export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLabelResult> {
+  const userKey = process.env.FEDEX_USER_KEY;
+  const password = process.env.FEDEX_PASSWORD;
+  const accountNumber = input.accountNumber || process.env.FEDEX_ACCOUNT_NUMBER || "";
+  const meterNumber = input.meterNumber || process.env.FEDEX_METER_NUMBER || "";
+
+  if (!userKey || !password) {
+    return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: input.serviceCode, error: "FEDEX_USER_KEY or FEDEX_PASSWORD not configured" };
+  }
+
+  const serviceInfo = FEDEX_SERVICES[input.serviceCode] ?? { label: `FedEx ${input.serviceCode}`, transitDays: 5 };
+  const weightLbs = Math.max(input.weightLbs, 0.1);
+  const shipDate = new Date().toISOString().slice(0, 10);
+
+  const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:v26="http://fedex.com/ws/ship/v26">
+  <SOAP-ENV:Body>
+    <v26:ProcessShipmentRequest>
+      <v26:WebAuthenticationDetail>
+        <v26:UserCredential>
+          <v26:Key>${userKey}</v26:Key>
+          <v26:Password>${password}</v26:Password>
+        </v26:UserCredential>
+      </v26:WebAuthenticationDetail>
+      <v26:ClientDetail>
+        <v26:AccountNumber>${accountNumber}</v26:AccountNumber>
+        <v26:MeterNumber>${meterNumber}</v26:MeterNumber>
+      </v26:ClientDetail>
+      <v26:TransactionDetail>
+        <v26:CustomerTransactionId>${input.orderNumber ?? "GD-Genius"}</v26:CustomerTransactionId>
+      </v26:TransactionDetail>
+      <v26:Version>
+        <v26:ServiceId>ship</v26:ServiceId>
+        <v26:Major>26</v26:Major>
+        <v26:Intermediate>0</v26:Intermediate>
+        <v26:Minor>0</v26:Minor>
+      </v26:Version>
+      <v26:RequestedShipment>
+        <v26:ShipTimestamp>${shipDate}T12:00:00</v26:ShipTimestamp>
+        <v26:DropoffType>REGULAR_PICKUP</v26:DropoffType>
+        <v26:ServiceType>${input.serviceCode}</v26:ServiceType>
+        <v26:PackagingType>YOUR_PACKAGING</v26:PackagingType>
+        <v26:Shipper>
+          <v26:Contact>
+            <v26:PersonName>${escapeXml(input.originName)}</v26:PersonName>
+            <v26:CompanyName>${escapeXml(input.originCompany || input.originName)}</v26:CompanyName>
+            <v26:PhoneNumber>${(input.originPhone ?? "8005551234").replace(/\D/g, "")}</v26:PhoneNumber>
+          </v26:Contact>
+          <v26:Address>
+            <v26:StreetLines>${escapeXml(input.originAddress1)}</v26:StreetLines>
+            ${input.originAddress2 ? `<v26:StreetLines>${escapeXml(input.originAddress2)}</v26:StreetLines>` : ""}
+            <v26:City>${escapeXml(input.originCity)}</v26:City>
+            <v26:StateOrProvinceCode>${input.originState}</v26:StateOrProvinceCode>
+            <v26:PostalCode>${input.originPostal.replace(/\D/g, "").slice(0, 5)}</v26:PostalCode>
+            <v26:CountryCode>${input.originCountry || "US"}</v26:CountryCode>
+          </v26:Address>
+        </v26:Shipper>
+        <v26:Recipient>
+          <v26:Contact>
+            <v26:PersonName>${escapeXml(input.destName)}</v26:PersonName>
+            <v26:CompanyName>${escapeXml(input.destCompany || input.destName)}</v26:CompanyName>
+            <v26:PhoneNumber>${(input.destPhone ?? "8005551234").replace(/\D/g, "")}</v26:PhoneNumber>
+          </v26:Contact>
+          <v26:Address>
+            <v26:StreetLines>${escapeXml(input.destAddress1)}</v26:StreetLines>
+            ${input.destAddress2 ? `<v26:StreetLines>${escapeXml(input.destAddress2)}</v26:StreetLines>` : ""}
+            <v26:City>${escapeXml(input.destCity)}</v26:City>
+            <v26:StateOrProvinceCode>${input.destState}</v26:StateOrProvinceCode>
+            <v26:PostalCode>${input.destPostal.replace(/\D/g, "").slice(0, 5)}</v26:PostalCode>
+            <v26:CountryCode>${input.destCountry || "US"}</v26:CountryCode>
+            <v26:Residential>${input.isResidential ? "true" : "false"}</v26:Residential>
+          </v26:Address>
+        </v26:Recipient>
+        <v26:ShippingChargesPayment>
+          <v26:PaymentType>SENDER</v26:PaymentType>
+          <v26:Payor>
+            <v26:ResponsibleParty>
+              <v26:AccountNumber>${accountNumber}</v26:AccountNumber>
+            </v26:ResponsibleParty>
+          </v26:Payor>
+        </v26:ShippingChargesPayment>
+        <v26:LabelSpecification>
+          <v26:LabelFormatType>COMMON2D</v26:LabelFormatType>
+          <v26:ImageType>ZPLII</v26:ImageType>
+          <v26:LabelStockType>STOCK_4X6</v26:LabelStockType>
+        </v26:LabelSpecification>
+        <v26:RateRequestTypes>ACCOUNT</v26:RateRequestTypes>
+        <v26:PackageCount>1</v26:PackageCount>
+        <v26:RequestedPackageLineItems>
+          <v26:SequenceNumber>1</v26:SequenceNumber>
+          <v26:GroupPackageCount>1</v26:GroupPackageCount>
+          <v26:Weight>
+            <v26:Units>LB</v26:Units>
+            <v26:Value>${weightLbs.toFixed(1)}</v26:Value>
+          </v26:Weight>
+          <v26:Dimensions>
+            <v26:Length>${Math.ceil(input.lengthIn)}</v26:Length>
+            <v26:Width>${Math.ceil(input.widthIn)}</v26:Width>
+            <v26:Height>${Math.ceil(input.heightIn)}</v26:Height>
+            <v26:Units>IN</v26:Units>
+          </v26:Dimensions>
+          ${input.orderNumber ? `<v26:CustomerReferences><v26:CustomerReferenceType>P_O_NUMBER</v26:CustomerReferenceType><v26:Value>${escapeXml(input.orderNumber)}</v26:Value></v26:CustomerReferences>` : ""}
+        </v26:RequestedPackageLineItems>
+      </v26:RequestedShipment>
+    </v26:ProcessShipmentRequest>
+  </SOAP-ENV:Body>
+</SOAP-ENV:Envelope>`;
+
+  try {
+    const resp = await fetch(FEDEX_WSDL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml; charset=UTF-8",
+        "SOAPAction": "http://fedex.com/ws/ship/v26/ProcessShipment",
+      },
+      body: soapBody,
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const xmlText = await resp.text();
+
+    if (!resp.ok) {
+      console.error(`[FedEx] Label API error ${resp.status}: ${xmlText.slice(0, 400)}`);
+      return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: serviceInfo.label, error: `FedEx API ${resp.status}` };
+    }
+
+    // Extract tracking number
+    const trackingMatch = xmlText.match(/<TrackingNumber>([^<]+)<\/TrackingNumber>/);
+    const trackingNumber = trackingMatch?.[1] ?? "";
+
+    // Extract label ZPL (base64 encoded)
+    const labelMatch = xmlText.match(/<Image>([^<]+)<\/Image>/);
+    const labelBase64 = labelMatch?.[1] ?? "";
+    const labelZpl = labelBase64 ? Buffer.from(labelBase64, "base64").toString("utf-8") : undefined;
+
+    // Extract total cost
+    const costMatch = xmlText.match(/<TotalNetCharge>[\s\S]*?<Amount>([^<]+)<\/Amount>/);
+    const totalCost = costMatch?.[1] ? parseFloat(costMatch[1]) : undefined;
+
+    // Check for errors in response
+    const severityMatch = xmlText.match(/<HighestSeverity>([^<]+)<\/HighestSeverity>/);
+    const severity = severityMatch?.[1] ?? "";
+    if (severity === "ERROR" || severity === "FAILURE") {
+      const descMatch = xmlText.match(/<Message>([^<]+)<\/Message>/);
+      const errMsg = descMatch?.[1] ?? "FedEx processing error";
+      console.error(`[FedEx] Label error: ${errMsg}`);
+      return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: serviceInfo.label, error: errMsg };
+    }
+
+    if (!trackingNumber) {
+      console.error("[FedEx] No tracking number in response:", xmlText.slice(0, 400));
+      return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: serviceInfo.label, error: "No tracking number returned" };
+    }
+
+    console.log(`[FedEx] Label purchased: ${trackingNumber} via ${serviceInfo.label}`);
+    return {
+      success: true,
+      trackingNumber,
+      carrierCode: "fedex",
+      carrierName: "FedEx",
+      service: serviceInfo.label,
+      labelZpl,
+      labelBase64,
+      labelFormat: "zpl",
+      labelUrl: `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`,
+      totalCost,
+      currency: "USD",
+    };
+  } catch (err) {
+    console.error("[FedEx] buyFedExLabel error:", err);
+    return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: serviceInfo.label, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function escapeXml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }

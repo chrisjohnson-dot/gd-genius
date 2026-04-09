@@ -7,7 +7,7 @@
  * API docs: https://developer.usps.com/api/68
  */
 
-import type { CarrierRateInput, CarrierRate } from "./types";
+import type { CarrierRateInput, CarrierRate, CarrierLabelInput, CarrierLabelResult } from "./types";
 
 const USPS_BASE = "https://api.usps.com";
 
@@ -117,5 +117,128 @@ export async function fetchUSPSRates(input: CarrierRateInput): Promise<CarrierRa
   } catch (err) {
     console.error("[USPS] fetchUSPSRates error:", err);
     return [];
+  }
+}
+
+/**
+ * Purchase a USPS shipping label via the eHub Shipments API v3.
+ * Returns ZPL label content ready for Zebra printing.
+ */
+export async function buyUSPSLabel(input: CarrierLabelInput): Promise<CarrierLabelResult> {
+  const apiKey = process.env.USPS_EHUB_API_KEY;
+  if (!apiKey) {
+    return { success: false, trackingNumber: "", carrierCode: "usps", carrierName: "USPS", service: input.serviceCode, error: "USPS_EHUB_API_KEY not configured" };
+  }
+
+  const serviceInfo = USPS_SERVICES[input.serviceCode] ?? { label: input.serviceCode, transitDays: 5 };
+
+  try {
+    const body = {
+      imageInfo: {
+        imageType: "ZPL",
+        labelType: "4X6LABEL",
+      },
+      toAddress: {
+        firstName: input.destName.split(" ")[0] ?? input.destName,
+        lastName: input.destName.split(" ").slice(1).join(" ") || undefined,
+        firm: input.destCompany || undefined,
+        streetAddress: input.destAddress1,
+        secondaryAddress: input.destAddress2 || undefined,
+        city: input.destCity,
+        state: input.destState,
+        ZIPCode: input.destPostal.replace(/\D/g, "").slice(0, 5),
+        ZIPPlus4: input.destPostal.includes("-") ? input.destPostal.split("-")[1] : undefined,
+      },
+      fromAddress: {
+        firstName: input.originName.split(" ")[0] ?? input.originName,
+        lastName: input.originName.split(" ").slice(1).join(" ") || undefined,
+        firm: input.originCompany || undefined,
+        streetAddress: input.originAddress1,
+        secondaryAddress: input.originAddress2 || undefined,
+        city: input.originCity,
+        state: input.originState,
+        ZIPCode: input.originPostal.replace(/\D/g, "").slice(0, 5),
+        phone: input.originPhone || undefined,
+      },
+      packageDescription: {
+        mailClass: input.serviceCode,
+        processingCategory: "NON_MACHINABLE",
+        destinationEntryFacilityType: "NONE",
+        rateIndicator: "DR",
+        weightUOM: "lb",
+        weight: input.weightLbs,
+        length: input.lengthIn,
+        width: input.widthIn,
+        height: input.heightIn,
+        mailingDate: new Date().toISOString().slice(0, 10),
+        ...(input.declaredValue ? { insuranceAmount: input.declaredValue } : {}),
+        ...(input.requireSignature ? { signatureConfirmation: "STANDARD" } : {}),
+      },
+      ...(input.orderNumber ? { labelMetadata: { reference1: input.orderNumber } } : {}),
+    };
+
+    const resp = await fetch(`${USPS_BASE}/shipments/v3/label`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      console.error(`[USPS] Label API error ${resp.status}: ${errText.slice(0, 400)}`);
+      return {
+        success: false,
+        trackingNumber: "",
+        carrierCode: "usps",
+        carrierName: "USPS",
+        service: serviceInfo.label,
+        error: `USPS API ${resp.status}: ${errText.slice(0, 200)}`,
+      };
+    }
+
+    const data = await resp.json() as {
+      labelImage?: string;
+      labelMetadata?: {
+        trackingNumber?: string;
+        postage?: number;
+        promisedDeliveryDate?: string;
+      };
+    };
+
+    const trackingNumber = data.labelMetadata?.trackingNumber ?? "";
+    const labelBase64 = data.labelImage ?? "";
+    // ZPL from USPS is base64-encoded — decode it
+    const labelZpl = labelBase64 ? Buffer.from(labelBase64, "base64").toString("utf-8") : undefined;
+
+    console.log(`[USPS] Label purchased: ${trackingNumber} via ${serviceInfo.label}`);
+
+    return {
+      success: true,
+      trackingNumber,
+      carrierCode: "usps",
+      carrierName: "USPS",
+      service: serviceInfo.label,
+      labelZpl,
+      labelBase64,
+      labelFormat: "zpl",
+      totalCost: data.labelMetadata?.postage,
+      currency: "USD",
+      estimatedDelivery: data.labelMetadata?.promisedDeliveryDate,
+    };
+  } catch (err) {
+    console.error("[USPS] buyUSPSLabel error:", err);
+    return {
+      success: false,
+      trackingNumber: "",
+      carrierCode: "usps",
+      carrierName: "USPS",
+      service: serviceInfo.label,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }

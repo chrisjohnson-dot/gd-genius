@@ -5,14 +5,14 @@
  * Each fetcher is independent — a failure in one does not block others.
  */
 
-import type { CarrierRateInput, CarrierRate } from "./types";
-import { fetchUSPSRates } from "./usps";
-import { fetchFedExRates } from "./fedex";
-import { fetchUPSRates } from "./ups";
-import { fetchOnTracRates } from "./ontrac";
-import { fetchDHLRates } from "./dhl";
+import type { CarrierRateInput, CarrierRate, CarrierLabelInput, CarrierLabelResult } from "./types";
+import { fetchUSPSRates, buyUSPSLabel } from "./usps";
+import { fetchFedExRates, buyFedExLabel } from "./fedex";
+import { fetchUPSRates, buyUPSLabel } from "./ups";
+import { fetchOnTracRates, buyOnTracLabel } from "./ontrac";
+import { fetchDHLRates, buyDHLLabel } from "./dhl";
 
-export type { CarrierRateInput, CarrierRate } from "./types";
+export type { CarrierRateInput, CarrierRate, CarrierLabelInput, CarrierLabelResult } from "./types";
 
 /**
  * Returns true if at least one carrier API credential is configured.
@@ -80,4 +80,28 @@ export async function fetchAllCarrierRates(input: CarrierRateInput): Promise<Car
   }
 
   return rates;
+}
+
+/**
+ * Purchase a shipping label from a specific carrier.
+ * Routes to the correct carrier buyLabel function based on carrierCode.
+ * @param carrierCode  The carrier to use: 'usps' | 'fedex' | 'ups' | 'ontrac' | 'dhl' | 'dhl_express'
+ */
+export async function buyCarrierLabel(carrierCode: string, input: CarrierLabelInput): Promise<CarrierLabelResult> {
+  const code = carrierCode.toLowerCase();
+
+  if (code === "usps") return buyUSPSLabel(input);
+  if (code === "fedex") return buyFedExLabel(input);
+  if (code === "ups") return buyUPSLabel(input);
+  if (code === "ontrac") return buyOnTracLabel(input);
+  if (code === "dhl_express" || code === "dhl") return buyDHLLabel(input);
+
+  return {
+    success: false,
+    trackingNumber: "",
+    carrierCode: code,
+    carrierName: code,
+    service: input.serviceCode,
+    error: `Unknown carrier code: ${code}`,
+  };
 }

@@ -7928,6 +7928,7 @@ const smallParcelRouter = router({
         { name: 'USPS Priority Mail Large Flat Rate Box', category: 'box', unit: 'each', notes: '12.25×12.25×6 in' },
         // ── Pallets ──
         { name: 'GMA Standard Pallet (48x40)', category: 'pallet', unit: 'each', notes: '48×40 in — most common North American pallet' },
+        { name: 'GMA Standard Pallet - Heat Treated (48x40)', category: 'pallet', unit: 'each', notes: '48×40 in — ISPM 15 heat treated, required for international shipments' },
         { name: 'Half Pallet (48x20)', category: 'pallet', unit: 'each', notes: '48×20 in' },
         { name: 'Quarter Pallet (24x20)', category: 'pallet', unit: 'each', notes: '24×20 in' },
         { name: 'Euro Pallet (47x31.5)', category: 'pallet', unit: 'each', notes: '1200×800 mm / 47×31.5 in' },

@@ -340,7 +340,12 @@ function CategoryPanel({
           <div key={item.id} className={`flex items-center gap-4 px-4 py-3 ${rowBg} hover:bg-gray-50/80 transition-colors`}>
             {/* Name + notes */}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                {/heat.?treated/i.test(item.name) && (
+                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-amber-100 text-amber-700 border border-amber-200">HT</span>
+                )}
+              </div>
               {item.notes && <p className="text-xs text-gray-400 truncate">{item.notes}</p>}
             </div>
 

@@ -7056,10 +7056,6 @@ const smallParcelRouter = router({
       const config = await getExtensivConfigById(input.configId);
       if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
 
-      const { createExtensivClient } = await import("./extensiv/client.js");
-      const client = createExtensivClient(config);
-
-      // Fetch all items for this customer using plain JSON Accept header
       const { getExtensivToken } = await import("./extensiv/client.js");
       const token = await getExtensivToken(config);
       const baseUrl = config.baseUrl || "https://secure-wms.com";
@@ -7081,45 +7077,36 @@ const smallParcelRouter = router({
       }
       interface RawItem { Sku?: string; Description?: string; Options?: ItemOptions; }
 
+      // Fetch all items for this customer (paginated, plain JSON)
       let allItems: RawItem[] = [];
       let pg = 1;
       while (true) {
-        // Use plain JSON (Accept: application/json) — HAL+JSON returns camelCase keys which
-        // don't match our PascalCase interface, and detail=all is not supported by this endpoint.
         const res = await fetch(
           `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}`,
           { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
         );
         if (!res.ok) break;
-        const data = await res.json() as {
-          TotalResults?: number;
-          ResourceList?: RawItem[];
-        };
+        const data = await res.json() as { TotalResults?: number; ResourceList?: RawItem[] };
         const list = data.ResourceList ?? [];
         allItems = allItems.concat(list);
-        // Stop when page is not full (last page), empty, or we've hit TotalResults
         const total = data.TotalResults;
         if (list.length === 0 || list.length < 200 || (total !== undefined && allItems.length >= total)) break;
         pg++;
       }
 
-      // Aggregate unique PackageUnit types
-      const pkgMap = new Map<string, {
-        unitId: number;
-        unitName: string;
-        inventoryUnitsPerUnit: number | null;
-        isPrepackaged: boolean;
+      // Collect ALL unique package type names from both PackageUnit and Pallets fields.
+      // We return a flat list so the frontend can assign categories freely.
+      type PackageTypeEntry = {
+        name: string;            // display name (e.g. "Carton", "Master carton", "Pallet")
+        sourceField: "packageUnit" | "pallet"; // which Extensiv field it came from
+        unitId: number;          // UnitIdentifier.Id or TypeIdentifier.Id
+        inventoryUnitsPerUnit: number | null; // only for packageUnit
+        isPrepackaged: boolean;  // only for packageUnit
         imperial: { length: number | null; width: number | null; height: number | null; weight: number | null };
-        skuCount: number;
-      }>();
+        skuCount: number;        // number of SKUs using this type
+      };
 
-      const palletMap = new Map<string, {
-        palletId: number;
-        palletName: string;
-        qtyPerPallet: number | null;
-        imperial: { length: number | null; width: number | null; height: number | null; weight: number | null };
-        skuCount: number;
-      }>();
+      const typeMap = new Map<string, PackageTypeEntry>();
 
       for (const item of allItems) {
         const pkg = item.Options?.PackageUnit;
@@ -7127,10 +7114,12 @@ const smallParcelRouter = router({
 
         if (pkg?.UnitIdentifier?.Name) {
           const name = pkg.UnitIdentifier.Name;
-          if (!pkgMap.has(name)) {
-            pkgMap.set(name, {
+          const key = `pkg:${name}`;
+          if (!typeMap.has(key)) {
+            typeMap.set(key, {
+              name,
+              sourceField: "packageUnit",
               unitId: pkg.UnitIdentifier.Id ?? 0,
-              unitName: name,
               inventoryUnitsPerUnit: pkg.InventoryUnitsPerUnit ?? null,
               isPrepackaged: pkg.IsPrepackaged ?? false,
               imperial: {
@@ -7142,16 +7131,19 @@ const smallParcelRouter = router({
               skuCount: 0,
             });
           }
-          pkgMap.get(name)!.skuCount++;
+          typeMap.get(key)!.skuCount++;
         }
 
         if (pallet?.TypeIdentifier?.Name) {
           const name = pallet.TypeIdentifier.Name;
-          if (!palletMap.has(name)) {
-            palletMap.set(name, {
-              palletId: pallet.TypeIdentifier.Id ?? 0,
-              palletName: name,
-              qtyPerPallet: pallet.Qty ?? null,
+          const key = `pallet:${name}`;
+          if (!typeMap.has(key)) {
+            typeMap.set(key, {
+              name,
+              sourceField: "pallet",
+              unitId: pallet.TypeIdentifier.Id ?? 0,
+              inventoryUnitsPerUnit: null,
+              isPrepackaged: false,
               imperial: {
                 length: pallet.Imperial?.Length ?? null,
                 width: pallet.Imperial?.Width ?? null,
@@ -7161,15 +7153,36 @@ const smallParcelRouter = router({
               skuCount: 0,
             });
           }
-          palletMap.get(name)!.skuCount++;
+          typeMap.get(key)!.skuCount++;
         }
       }
 
-      // Sort by skuCount desc, then name
-      const packageUnits = Array.from(pkgMap.values()).sort((a, b) => b.skuCount - a.skuCount || a.unitName.localeCompare(b.unitName));
-      const palletTypes = Array.from(palletMap.values()).sort((a, b) => b.skuCount - a.skuCount || a.palletName.localeCompare(b.palletName));
+      // Sort: pallet-sourced entries first (they're usually pallets), then by skuCount desc, then name
+      const allPackageTypes = Array.from(typeMap.values()).sort((a, b) => {
+        if (a.sourceField !== b.sourceField) return a.sourceField === "pallet" ? -1 : 1;
+        return b.skuCount - a.skuCount || a.name.localeCompare(b.name);
+      });
 
-      return { totalItems: allItems.length, packageUnits, palletTypes };
+      // Also keep the legacy shape for backward compatibility with existing frontend code
+      const packageUnits = allPackageTypes
+        .filter(t => t.sourceField === "packageUnit")
+        .map(t => ({
+          unitName: t.name,
+          inventoryUnitsPerUnit: t.inventoryUnitsPerUnit,
+          isPrepackaged: t.isPrepackaged,
+          imperial: t.imperial,
+          skuCount: t.skuCount,
+        }));
+      const palletTypes = allPackageTypes
+        .filter(t => t.sourceField === "pallet")
+        .map(t => ({
+          palletName: t.name,
+          qtyPerPallet: null as number | null,
+          imperial: t.imperial,
+          skuCount: t.skuCount,
+        }));
+
+      return { totalItems: allItems.length, allPackageTypes, packageUnits, palletTypes };
     }),
 
   /** Debug: return raw first item from Extensiv to inspect field structure */

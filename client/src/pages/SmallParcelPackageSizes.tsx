@@ -243,7 +243,12 @@ function CategoryDetailPanel({
   clientId: number;
   clientName: string;
   category: CategoryView;
-  extData: { packageUnits: Array<{ unitName: string; inventoryUnitsPerUnit: number | null; isPrepackaged: boolean; imperial: { length: number | null; width: number | null; height: number | null; weight: number | null }; skuCount: number }>; palletTypes: Array<{ palletName: string; qtyPerPallet: number | null; imperial: { length: number | null; width: number | null; height: number | null; weight: number | null }; skuCount: number }>; totalItems: number } | undefined;
+  extData: {
+    allPackageTypes?: Array<{ name: string; sourceField: "packageUnit" | "pallet"; unitId: number; inventoryUnitsPerUnit: number | null; isPrepackaged: boolean; imperial: { length: number | null; width: number | null; height: number | null; weight: number | null }; skuCount: number }>;
+    packageUnits: Array<{ unitName: string; inventoryUnitsPerUnit: number | null; isPrepackaged: boolean; imperial: { length: number | null; width: number | null; height: number | null; weight: number | null }; skuCount: number }>;
+    palletTypes: Array<{ palletName: string; qtyPerPallet: number | null; imperial: { length: number | null; width: number | null; height: number | null; weight: number | null }; skuCount: number }>;
+    totalItems: number;
+  } | undefined;
   extLoading: boolean;
   extError: unknown;
   extRefetch: () => void;
@@ -304,24 +309,76 @@ function CategoryDetailPanel({
     const seen = new Set<string>();
     const result: ItemEntry[] = [];
 
-    if (category === "pallet") {
-      if (extData) {
-        for (const p of extData.palletTypes) {
-          if (!seen.has(p.palletName)) {
-            seen.add(p.palletName);
-            const extraParts: string[] = [];
-            if (p.qtyPerPallet && p.qtyPerPallet > 0) extraParts.push(`${p.qtyPerPallet} units/pallet`);
-            extraParts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
-            result.push({
-              typeName: p.palletName,
-              dbCategory: "pallet",
-              fromExtensiv: true,
-              imperial: { l: p.imperial.length, w: p.imperial.width, h: p.imperial.height, wt: p.imperial.weight },
-              extra: extraParts.join(" · "),
-            });
+    if (extData) {
+      // Prefer allPackageTypes (flat list from new API) — fall back to legacy packageUnits/palletTypes
+      const allTypes = extData.allPackageTypes;
+      if (allTypes) {
+        // allPackageTypes: classify each entry by name + sourceField
+        for (const t of allTypes) {
+          // Determine which UI category this entry belongs to
+          let uiCategory: "envelope" | "box" | "pallet";
+          if (t.sourceField === "pallet") {
+            uiCategory = "pallet";
+          } else {
+            uiCategory = classifyPackageUnit(t.name);
+          }
+          if (uiCategory !== category) continue;
+          if (seen.has(t.name)) continue;
+          seen.add(t.name);
+          const dbCat: "package_unit" | "pallet" = t.sourceField === "pallet" ? "pallet" : "package_unit";
+          const extraParts: string[] = [];
+          if (t.inventoryUnitsPerUnit && t.inventoryUnitsPerUnit > 0) extraParts.push(`${t.inventoryUnitsPerUnit} units/pkg`);
+          extraParts.push(`${t.skuCount} SKU${t.skuCount !== 1 ? "s" : ""}`);
+          result.push({
+            typeName: t.name,
+            dbCategory: dbCat,
+            fromExtensiv: true,
+            imperial: { l: t.imperial.length, w: t.imperial.width, h: t.imperial.height, wt: t.imperial.weight },
+            extra: extraParts.join(" · "),
+          });
+        }
+      } else {
+        // Legacy fallback: use packageUnits + palletTypes
+        if (category === "pallet") {
+          for (const p of extData.palletTypes) {
+            if (!seen.has(p.palletName)) {
+              seen.add(p.palletName);
+              const extraParts: string[] = [];
+              if (p.qtyPerPallet && p.qtyPerPallet > 0) extraParts.push(`${p.qtyPerPallet} units/pallet`);
+              extraParts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
+              result.push({
+                typeName: p.palletName,
+                dbCategory: "pallet",
+                fromExtensiv: true,
+                imperial: { l: p.imperial.length, w: p.imperial.width, h: p.imperial.height, wt: p.imperial.weight },
+                extra: extraParts.join(" · "),
+              });
+            }
+          }
+        } else {
+          for (const p of extData.packageUnits) {
+            const cls = classifyPackageUnit(p.unitName);
+            if (cls !== category) continue;
+            if (!seen.has(p.unitName)) {
+              seen.add(p.unitName);
+              const extraParts: string[] = [];
+              if (p.inventoryUnitsPerUnit && p.inventoryUnitsPerUnit > 0) extraParts.push(`${p.inventoryUnitsPerUnit} units/pkg`);
+              extraParts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
+              result.push({
+                typeName: p.unitName,
+                dbCategory: "package_unit",
+                fromExtensiv: true,
+                imperial: { l: p.imperial.length, w: p.imperial.width, h: p.imperial.height, wt: p.imperial.weight },
+                extra: extraParts.join(" · "),
+              });
+            }
           }
         }
       }
+    }
+
+    // Always supplement with global catalogue entries not already seen
+    if (category === "pallet") {
       for (const g of globalTypeNames) {
         if (g.category === "pallet" && !seen.has(g.typeName)) {
           seen.add(g.typeName);
@@ -329,25 +386,6 @@ function CategoryDetailPanel({
         }
       }
     } else {
-      if (extData) {
-        for (const p of extData.packageUnits) {
-          const cls = classifyPackageUnit(p.unitName);
-          if (cls !== category) continue;
-          if (!seen.has(p.unitName)) {
-            seen.add(p.unitName);
-            const extraParts: string[] = [];
-            if (p.inventoryUnitsPerUnit && p.inventoryUnitsPerUnit > 0) extraParts.push(`${p.inventoryUnitsPerUnit} units/pkg`);
-            extraParts.push(`${p.skuCount} SKU${p.skuCount !== 1 ? "s" : ""}`);
-            result.push({
-              typeName: p.unitName,
-              dbCategory: "package_unit",
-              fromExtensiv: true,
-              imperial: { l: p.imperial.length, w: p.imperial.width, h: p.imperial.height, wt: p.imperial.weight },
-              extra: extraParts.join(" · "),
-            });
-          }
-        }
-      }
       for (const g of globalTypeNames) {
         if (g.category !== "package_unit") continue;
         const cls = classifyPackageUnit(g.typeName);
@@ -638,14 +676,25 @@ function ExtensivPackagingSection({
     const seen = { envelope: new Set<string>(), box: new Set<string>(), pallet: new Set<string>() };
     const enabled = { envelope: 0, box: 0, pallet: 0 };
 
-    // From Extensiv
+    // From Extensiv — prefer allPackageTypes (new flat list), fall back to legacy fields
     if (extData) {
-      for (const p of extData.packageUnits) {
-        const cls = classifyPackageUnit(p.unitName);
-        seen[cls].add(p.unitName);
-      }
-      for (const p of extData.palletTypes) {
-        seen.pallet.add(p.palletName);
+      if (extData.allPackageTypes) {
+        for (const t of extData.allPackageTypes) {
+          if (t.sourceField === "pallet") {
+            seen.pallet.add(t.name);
+          } else {
+            const cls = classifyPackageUnit(t.name);
+            seen[cls].add(t.name);
+          }
+        }
+      } else {
+        for (const p of extData.packageUnits) {
+          const cls = classifyPackageUnit(p.unitName);
+          seen[cls].add(p.unitName);
+        }
+        for (const p of extData.palletTypes) {
+          seen.pallet.add(p.palletName);
+        }
       }
     }
     // From global catalogue

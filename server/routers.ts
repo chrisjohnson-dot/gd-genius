@@ -8729,7 +8729,7 @@ const rateWizardRouter = router({
       };
       // Service level → Rate Wizard service code mapping
       const serviceCodeMap: Record<string, string> = {
-        "Two Day One Rate": "FEDEX_2_DAY",
+        "Two Day One Rate": "FEDEX_2_DAY_ONE_RATE",
         "Ground": "GROUND_HOME_DELIVERY",
         "Ontrac Ground Service": "ONTRAC_GROUND",
       };

@@ -1100,3 +1100,5 @@
 - [x] Feature: Metric/imperial toggle on Package Sizes settings page and Step 2 package selector
 - [x] Feature: Metric/imperial toggle on Package Sizes settings page — shared useUnitSystem hook (localStorage), toggle button in page header, dimensions display in cm/kg or in/lbs
 - [x] Bug: getExtensivPackaging returns 0 options for all clients -- fixed: HAL+JSON uses camelCase and detail=all is unsupported; switched to plain JSON which returns PascalCase Options.PackageUnit and Options.Pallets correctly; also fixed resolveUpcToSku to use same approach with correct UPC field paths (item.Upc and item.Options.PackageUnit.Upc)
+- [x] Reprint button in Small Parcel History — fetch stored ZPL and send to Zebra printer without reprocessing
+- [x] Fix FedEx One Rate not appearing in Rate Wizard rate list — routing guide recommends it but it's not selectable

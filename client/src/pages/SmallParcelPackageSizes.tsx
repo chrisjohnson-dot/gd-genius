@@ -413,6 +413,9 @@ function CategoryDetailPanel({
         onAdded={(newName) => {
           const key = `${dbCat}:${newName}`;
           setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+          // Invalidate inventory so the new type appears in the grid immediately
+          utils.smallParcel.listPackagingInventory.invalidate({ configId });
+          utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
         }}
       />
     </div>
@@ -786,9 +789,6 @@ export default function SmallParcelPackageSizes() {
     return d;
   }, []);
 
-  // Fetch custom package sizes from DB
-  const { data: allSizes = [] } = trpc.smallParcel.listAllPackageSizes.useQuery();
-
   // Sort customers alphabetically
   const sortedCustomers = useMemo(() => {
     return [...customers].sort((a, b) => a.name.localeCompare(b.name));
@@ -803,12 +803,6 @@ export default function SmallParcelPackageSizes() {
 
   // Selected customer info
   const selectedCustomer = customers.find((c) => c.id === selectedClientId) ?? null;
-
-  // Custom sizes for selected client
-  const customSizesForSelected = useMemo(() => {
-    if (selectedClientId === null) return [];
-    return allSizes.filter((s) => s.clientId === selectedClientId);
-  }, [allSizes, selectedClientId]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
@@ -849,23 +843,18 @@ export default function SmallParcelPackageSizes() {
               const isSelected = customer.id === selectedClientId;
               const lastOrder = lastOrderMap.get(customer.id);
               const isActive = lastOrder != null && lastOrder >= cutoff;
-              const customCount = allSizes.filter((s) => s.clientId === customer.id).length;
 
               return (
                 <button
                   key={customer.id}
                   className={`w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/60
                     ${isSelected ? "bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-600" : ""}
-                    
                   `}
                   onClick={() => setSelectedClientId(customer.id)}
                 >
                   <span className={`flex-1 text-sm truncate ${isSelected ? "font-semibold text-blue-700 dark:text-blue-400" : ""}`}>
                     {customer.name}
                   </span>
-                  {customCount > 0 && (
-                    <Badge variant="secondary" className="text-xs shrink-0">{customCount}</Badge>
-                  )}
                   {isSelected && <ChevronRight className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
                 </button>
               );
@@ -899,15 +888,7 @@ export default function SmallParcelPackageSizes() {
               <p className="text-sm text-muted-foreground">No Extensiv config found.</p>
             )}
 
-            {/* Divider */}
-            <div className="border-t" />
 
-            {/* Custom Pack & Ship sizes from DB */}
-            <CustomPackageSizesSection
-              clientId={selectedCustomer.id}
-              clientName={selectedCustomer.name}
-              sizes={customSizesForSelected}
-            />
           </div>
         )}
       </div>

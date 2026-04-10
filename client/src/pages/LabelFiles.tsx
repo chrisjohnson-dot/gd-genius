@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   Upload,
   Trash2,
@@ -15,9 +14,13 @@ import {
   Search,
   Tag,
   RefreshCw,
-  AlertCircle,
-  CheckCircle2,
   FolderOpen,
+  CheckCircle2,
+  AlertCircle,
+  Building2,
+  Hash,
+  MapPin,
+  Package,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,26 +33,32 @@ const LABEL_TYPE_LABELS: Record<LabelType, string> = {
 };
 
 const LABEL_TYPE_COLORS: Record<LabelType, string> = {
-  ucc128: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  fba: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-  other: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  ucc128: "bg-blue-100 text-blue-700",
+  fba: "bg-orange-100 text-orange-700",
+  other: "bg-gray-100 text-gray-700",
+};
+
+type OrderInfo = {
+  transactionId: string;
+  orderRef: string;
+  clientName: string;
+  expectedCartons?: number;
+  poNum?: string;
+  shipToName: string;
 };
 
 export default function LabelFiles() {
   const [search, setSearch] = useState("");
-  const [batchFilter, setBatchFilter] = useState("");
   const [uploadBarcode, setUploadBarcode] = useState("");
-  const [uploadBatch, setUploadBatch] = useState("");
-  const [uploadClient, setUploadClient] = useState("");
   const [uploadType, setUploadType] = useState<LabelType>("ucc128");
   const [uploadTransactionId, setUploadTransactionId] = useState("");
+  const [orderInfo, setOrderInfo] = useState<OrderInfo | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: files = [], isLoading, refetch } = trpc.labelScan.listLabelFiles.useQuery({
-    batchName: batchFilter || undefined,
-  });
+  const { data: files = [], isLoading, refetch } = trpc.labelScan.listLabelFiles.useQuery({});
 
   const deleteMutation = trpc.labelScan.deleteLabelFile.useMutation({
     onSuccess: () => {
@@ -60,14 +69,44 @@ export default function LabelFiles() {
   });
 
   const uploadMutation = trpc.labelScan.uploadLabelFile.useMutation({
-    onSuccess: () => {
-      refetch();
-    },
+    onSuccess: () => { refetch(); },
     onError: (err) => toast.error(`Upload failed: ${err.message}`),
   });
 
-  // Get unique batch names for filter
-  const batchNames = Array.from(new Set(files.map((f) => f.batchName).filter(Boolean))) as string[];
+  const lookupMutation = trpc.labelScan.lookupOrderByTransactionId.useMutation({
+    onSuccess: (data) => {
+      setOrderInfo(data);
+      setLookupError(null);
+    },
+    onError: (err) => {
+      setOrderInfo(null);
+      setLookupError(err.message);
+    },
+  });
+
+  // Trigger lookup when user presses Enter in the transaction ID field
+  function handleTransactionIdKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && uploadTransactionId.trim()) {
+      handleLookup();
+    }
+  }
+
+  function handleLookup() {
+    const id = uploadTransactionId.trim();
+    if (!id) return;
+    setOrderInfo(null);
+    setLookupError(null);
+    lookupMutation.mutate({ transactionId: id });
+  }
+
+  function handleTransactionIdChange(val: string) {
+    setUploadTransactionId(val);
+    // Clear order info if user edits the ID
+    if (orderInfo && val.trim() !== orderInfo.transactionId) {
+      setOrderInfo(null);
+      setLookupError(null);
+    }
+  }
 
   // Filter by search
   const filtered = files.filter((f) => {
@@ -77,7 +116,8 @@ export default function LabelFiles() {
       f.barcode.toLowerCase().includes(q) ||
       f.filename.toLowerCase().includes(q) ||
       (f.clientName ?? "").toLowerCase().includes(q) ||
-      (f.batchName ?? "").toLowerCase().includes(q)
+      (f.extensivTransactionId ?? "").toLowerCase().includes(q) ||
+      (f.orderRef ?? "").toLowerCase().includes(q)
     );
   });
 
@@ -97,7 +137,6 @@ export default function LabelFiles() {
         bytes.forEach((b) => (binary += String.fromCharCode(b)));
         const b64 = btoa(binary);
 
-        // Derive barcode from filename (strip extension)
         const barcodeFromFile = file.name.replace(/\.[^.]+$/, "");
         const barcode = selectedFiles.length === 1 && uploadBarcode.trim()
           ? uploadBarcode.trim()
@@ -107,10 +146,10 @@ export default function LabelFiles() {
           barcode,
           filename: file.name,
           fileBase64: b64,
-          batchName: uploadBatch.trim() || undefined,
-          clientName: uploadClient.trim() || undefined,
           labelType: uploadType,
           extensivTransactionId: uploadTransactionId.trim() || undefined,
+          clientName: orderInfo?.clientName || undefined,
+          orderRef: orderInfo?.orderRef || undefined,
         });
         successCount++;
         setUploadedCount(successCount);
@@ -124,7 +163,6 @@ export default function LabelFiles() {
       toast.success(`Uploaded ${successCount} label file${successCount > 1 ? "s" : ""}`);
       setUploadBarcode("");
     }
-    // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = "";
     refetch();
   }
@@ -149,38 +187,88 @@ export default function LabelFiles() {
             Upload Label Files
           </CardTitle>
           <CardDescription>
-            Upload one or more .zpl files. Each file's name (without extension) is used as the matching barcode unless you specify one below.
+            Enter the Extensiv Transaction ID to auto-fill order details, then upload one or more .zpl files.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Extensiv Transaction ID</Label>
+
+          {/* Extensiv Transaction ID with lookup */}
+          <div className="space-y-1.5">
+            <Label>Extensiv Transaction ID</Label>
+            <div className="flex gap-2">
               <Input
-                placeholder="e.g. 12345678 (from pack sheet)"
+                placeholder="e.g. 12345678 — press Enter to look up order"
                 value={uploadTransactionId}
-                onChange={(e) => setUploadTransactionId(e.target.value)}
+                onChange={(e) => handleTransactionIdChange(e.target.value)}
+                onKeyDown={handleTransactionIdKeyDown}
+                className="flex-1"
               />
-              <p className="text-xs text-muted-foreground">Links these labels to a specific order session</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Client Name</Label>
-              <Input
-                placeholder="e.g. Walmart"
-                value={uploadClient}
-                onChange={(e) => setUploadClient(e.target.value)}
-              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleLookup}
+                disabled={!uploadTransactionId.trim() || lookupMutation.isPending}
+                className="shrink-0 gap-1.5 bg-white"
+              >
+                {lookupMutation.isPending
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Search className="h-4 w-4" />}
+                Look Up
+              </Button>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label>Batch Name</Label>
-              <Input
-                placeholder="e.g. Walmart-PO-4821"
-                value={uploadBatch}
-                onChange={(e) => setUploadBatch(e.target.value)}
-              />
+
+          {/* Order info chips — shown after successful lookup */}
+          {orderInfo && (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-green-700">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Order found
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {orderInfo.clientName && (
+                  <div className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <Building2 className="h-3.5 w-3.5 text-gray-400" />
+                    <span className="font-medium">{orderInfo.clientName}</span>
+                  </div>
+                )}
+                {orderInfo.orderRef && (
+                  <div className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <Hash className="h-3.5 w-3.5 text-gray-400" />
+                    <span>Ref: <span className="font-mono font-medium">{orderInfo.orderRef}</span></span>
+                  </div>
+                )}
+                {orderInfo.poNum && (
+                  <div className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <Package className="h-3.5 w-3.5 text-gray-400" />
+                    <span>PO: <span className="font-mono font-medium">{orderInfo.poNum}</span></span>
+                  </div>
+                )}
+                {orderInfo.shipToName && (
+                  <div className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                    <span>{orderInfo.shipToName}</span>
+                  </div>
+                )}
+                {orderInfo.expectedCartons != null && (
+                  <div className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <Tag className="h-3.5 w-3.5 text-gray-400" />
+                    <span>{orderInfo.expectedCartons} carton{orderInfo.expectedCartons !== 1 ? "s" : ""} expected</span>
+                  </div>
+                )}
+              </div>
             </div>
+          )}
+
+          {/* Lookup error */}
+          {lookupError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{lookupError}</span>
+            </div>
+          )}
+
+          {/* Label Type + Barcode Override */}
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Label Type</Label>
               <Select value={uploadType} onValueChange={(v) => setUploadType(v as LabelType)}>
@@ -195,7 +283,7 @@ export default function LabelFiles() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Barcode Override (single file only)</Label>
+              <Label>Barcode Override <span className="text-muted-foreground font-normal">(single file only)</span></Label>
               <Input
                 placeholder="Leave blank to use filename"
                 value={uploadBarcode}
@@ -204,6 +292,7 @@ export default function LabelFiles() {
             </div>
           </div>
 
+          {/* Drop zone */}
           <div
             className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
             onClick={() => fileInputRef.current?.click()}
@@ -248,30 +337,14 @@ export default function LabelFiles() {
             </Button>
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-2 mt-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by barcode, filename, client…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            {batchNames.length > 0 && (
-              <Select value={batchFilter} onValueChange={setBatchFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="All batches" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All batches</SelectItem>
-                  {batchNames.map((b) => (
-                    <SelectItem key={b} value={b}>{b}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+          <div className="relative mt-2">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by barcode, filename, client, transaction ID…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
           </div>
         </CardHeader>
 
@@ -299,16 +372,17 @@ export default function LabelFiles() {
                       >
                         {LABEL_TYPE_LABELS[file.labelType as LabelType] ?? file.labelType}
                       </Badge>
-                      {file.batchName && (
-                        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                          {file.batchName}
+                      {file.extensivTransactionId && (
+                        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                          TX#{file.extensivTransactionId}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
                       {file.filename}
                       {file.clientName ? ` — ${file.clientName}` : ""}
-                      {file.uploadedBy ? ` — uploaded by ${file.uploadedBy}` : ""}
+                      {file.orderRef ? ` — ${file.orderRef}` : ""}
+                      {file.uploadedBy ? ` — ${file.uploadedBy}` : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

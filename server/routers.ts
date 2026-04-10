@@ -211,7 +211,7 @@ import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
 import { purchaseOrders, carrierRoutingTable } from "../drizzle/schema";
-import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
+import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, voidFedExLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
   createProductionRun,
@@ -7019,7 +7019,7 @@ const smallParcelRouter = router({
   listSessions: protectedProcedure
     .input(z.object({
       facilityId: z.number().optional(),
-      status: z.enum(["scanning", "ready", "label_purchased", "cancelled"]).optional(),
+      status: z.enum(["scanning", "ready", "label_purchased", "cancelled", "voided"]).optional(),
       limit: z.number().int().min(1).max(200).optional(),
     }).optional())
     .query(async ({ input }) => {
@@ -7034,6 +7034,75 @@ const smallParcelRouter = router({
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
       if (!session.labelZpl) throw new TRPCError({ code: "NOT_FOUND", message: "No ZPL label stored for this session" });
       return { labelZpl: session.labelZpl, trackingNumber: session.veeqoTrackingNumber, carrier: session.veeqoCarrierService };
+    }),
+
+  /**
+   * Void a purchased FedEx label via the FedEx REST Cancel Shipment API.
+   * Marks the session as 'voided' in the DB and records the void timestamp.
+   * Must be called before carrier pickup (same business day).
+   */
+  voidLabel: protectedProcedure
+    .input(z.object({
+      id: z.number().int(),
+      reason: z.string().max(512).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const session = await getSmallParcelSession(input.id);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+
+      // Only label_purchased sessions can be voided
+      if (session.status !== "label_purchased") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot void a session with status '${session.status}'. Only label_purchased sessions can be voided.`,
+        });
+      }
+
+      // Already voided guard
+      if (session.voidedAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This label has already been voided." });
+      }
+
+      const trackingNumber = session.veeqoTrackingNumber ?? "";
+      const reason = input.reason ?? "Voided by operator";
+
+      // Attempt to void at FedEx (best-effort — we still mark the DB even if FedEx returns an error)
+      let fedexResult: { success: boolean; message: string } = { success: false, message: "No tracking number" };
+      if (trackingNumber) {
+        fedexResult = await voidFedExLabel(trackingNumber);
+      }
+
+      // Mark the session as voided in the DB regardless of FedEx response
+      // (operator may need to void manually at FedEx.com if the API call fails)
+      await updateSmallParcelSession(input.id, {
+        status: "voided",
+        voidedAt: new Date(),
+        voidReason: fedexResult.success
+          ? reason
+          : `${reason} [FedEx API: ${fedexResult.message}]`,
+      });
+
+      // Audit log entry (eventType is varchar, not enum, so any string is valid)
+      await logSmallParcelAuditEvent({
+        sessionId: input.id,
+        extensivOrderId: session.extensivOrderId ?? undefined,
+        clientName: session.clientName ?? undefined,
+        eventType: "label_voided",
+        trackingNumber,
+        carrier: session.veeqoCarrierService ?? undefined,
+        notes: `Voided by ${ctx.user.name ?? ctx.user.email ?? ctx.user.openId}. FedEx: ${fedexResult.message}`,
+        userId: ctx.user.openId,
+        userName: ctx.user.name ?? ctx.user.email ?? ctx.user.openId,
+      });
+
+      console.log(`[SmallParcel] Label voided: session ${input.id}, tracking ${trackingNumber}, FedEx: ${fedexResult.success ? "accepted" : "failed"} — ${fedexResult.message}`);
+
+      return {
+        success: true,
+        fedexVoided: fedexResult.success,
+        fedexMessage: fedexResult.message,
+        trackingNumber,
+      };
     }),
 
   // ── Package Size Config ───────────────────────────────────────────────────────────────────────────

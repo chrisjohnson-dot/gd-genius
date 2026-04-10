@@ -429,6 +429,70 @@ export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLa
   }
 }
 
+/**
+ * Void a FedEx shipment via the FedEx REST Cancel Shipment API.
+ * Must be called before carrier pickup (typically same business day).
+ *
+ * @param trackingNumber  - Master tracking number returned at label creation
+ * @returns { success, message } — success=true means FedEx accepted the void
+ */
+export async function voidFedExLabel(
+  trackingNumber: string,
+): Promise<{ success: boolean; message: string }> {
+  const clientId = process.env.FEDEX_USER_KEY;
+  const clientSecret = process.env.FEDEX_PASSWORD;
+  const accountNumber = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
+
+  if (!clientId || !clientSecret || !accountNumber) {
+    return { success: false, message: "FedEx REST credentials not configured (FEDEX_USER_KEY, FEDEX_PASSWORD, FEDEX_ACCOUNT_NUMBER required)" };
+  }
+
+  if (!trackingNumber) {
+    return { success: false, message: "No tracking number provided" };
+  }
+
+  try {
+    const token = await getAccessToken(clientId, clientSecret);
+
+    const payload = {
+      accountNumber: { value: accountNumber },
+      trackingNumber,
+      scheduledDate: new Date().toISOString().split("T")[0],
+      comments: "Voided by GD Allocation Agent",
+    };
+
+    const res = await fetch(`${FEDEX_BASE}/ship/v1/shipments/cancel`, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-locale": "en_US",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    const data = await res.json() as {
+      output?: { cancelledShipment?: boolean; successMessage?: string };
+      errors?: Array<{ code: string; message: string }>;
+    };
+
+    if (data.errors?.length) {
+      const msg = data.errors.map(e => `${e.code}: ${e.message}`).join("; ");
+      return { success: false, message: msg };
+    }
+
+    const cancelled = data.output?.cancelledShipment ?? false;
+    const successMsg = data.output?.successMessage ?? (cancelled ? "Shipment voided successfully" : "Void request submitted");
+
+    console.log(`[FedEx] Void ${cancelled ? "accepted" : "submitted"} for tracking ${trackingNumber}: ${successMsg}`);
+    return { success: true, message: successMsg };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, message: `FedEx void error: ${msg}` };
+  }
+}
+
 /** Quick connectivity check — returns true if we can get a token. */
 export async function checkFedExConnection(): Promise<{ connected: boolean; label: string; error?: string }> {
   const clientId = process.env.FEDEX_USER_KEY;

@@ -7,12 +7,13 @@
 
 import type { CarrierRateInput, CarrierRate, CarrierLabelInput, CarrierLabelResult } from "./types";
 import { fetchUSPSRates, buyUSPSLabel } from "./usps";
-import { fetchFedExRates, buyFedExLabel } from "./fedex";
+import { fetchFedExRates, buyFedExLabel, voidFedExLabel } from "./fedex";
 import { fetchUPSRates, buyUPSLabel } from "./ups";
 import { fetchOnTracRates, buyOnTracLabel } from "./ontrac";
 import { fetchDHLRates, buyDHLLabel } from "./dhl";
 
 export type { CarrierRateInput, CarrierRate, CarrierLabelInput, CarrierLabelResult } from "./types";
+export { voidFedExLabel } from "./fedex";
 
 /**
  * Returns true if at least one carrier API credential is configured.

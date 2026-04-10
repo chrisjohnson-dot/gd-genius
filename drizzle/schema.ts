@@ -1157,9 +1157,12 @@ export const smallParcelSessions = mysqlTable("small_parcel_sessions", {
   widthCm: decimal("widthCm", { precision: 8, scale: 2 }),
   heightCm: decimal("heightCm", { precision: 8, scale: 2 }),
   // Session lifecycle
-  status: mysqlEnum("status", ["scanning", "ready", "label_purchased", "cancelled"]).notNull().default("scanning"),
+  status: mysqlEnum("status", ["scanning", "ready", "label_purchased", "cancelled", "voided"]).notNull().default("scanning"),
   packedAt: timestamp("packedAt"),
   labelPurchasedAt: timestamp("labelPurchasedAt"),
+  // Void tracking — populated when a purchased label is voided at the carrier
+  voidedAt: timestamp("voidedAt"),
+  voidReason: varchar("voidReason", { length: 512 }),
   // Extensiv write-back status
   extensivPackedAt: timestamp("extensivPackedAt"),
   extensivShippedAt: timestamp("extensivShippedAt"),

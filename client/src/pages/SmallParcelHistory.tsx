@@ -3,6 +3,16 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   Package,
@@ -16,6 +26,7 @@ import {
   Hash,
   Search,
   X,
+  Ban,
 } from "lucide-react";
 import { useDirectPrint } from "@/hooks/useDirectPrint";
 import { Link } from "wouter";
@@ -32,14 +43,14 @@ interface Session {
   shipToState: string | null;
   veeqoTrackingNumber: string | null;
   veeqoCarrierService: string | null;
-  status: "scanning" | "ready" | "label_purchased" | "cancelled";
+  status: "scanning" | "ready" | "label_purchased" | "cancelled" | "voided";
   labelPurchasedAt: Date | null;
   createdAt: Date;
   labelZpl: string | null;
 }
 
 // ─── Reprint Button ───────────────────────────────────────────────────────────
-function ReprintButton({ sessionId, hasZpl }: { sessionId: number; hasZpl: boolean }) {
+function ReprintButton({ sessionId, hasZpl, disabled }: { sessionId: number; hasZpl: boolean; disabled?: boolean }) {
   const [reprinting, setReprinting] = useState(false);
   const { selectedPrinter, printZpl } = useDirectPrint();
 
@@ -105,8 +116,9 @@ function ReprintButton({ sessionId, hasZpl }: { sessionId: number; hasZpl: boole
       size="sm"
       variant="outline"
       onClick={handleReprint}
-      disabled={reprinting}
+      disabled={reprinting || disabled}
       className="gap-1.5"
+      title={disabled ? "Cannot reprint a voided label" : undefined}
     >
       {reprinting ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -126,6 +138,107 @@ function addDuplicateWatermark(zpl: string): string {
   // Insert a bold DUPLICATE label near the top-right of the 4x6" label
   const watermark = "^FO480,30^A0N,28,28^FDDUPLICATE^FS\n";
   return zpl.replace(/(\^XA\n?)/, `$1${watermark}`);
+}
+
+// ─── Void Label Button ────────────────────────────────────────────────────────
+function VoidLabelButton({ session, onVoided }: { session: Session; onVoided: () => void }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const voidMutation = trpc.smallParcel.voidLabel.useMutation({
+    onSuccess: (data) => {
+      setDialogOpen(false);
+      setReason("");
+      onVoided();
+      if (data.fedexVoided) {
+        toast.success("Label voided", {
+          description: `FedEx confirmed void for tracking ${data.trackingNumber}. The label is no longer valid for shipping.`,
+        });
+      } else {
+        toast.warning("Label marked voided (FedEx API issue)", {
+          description: `The session is marked voided in GD, but FedEx returned: ${data.fedexMessage}. You may need to void manually at FedEx.com.`,
+          duration: 8000,
+        });
+      }
+    },
+    onError: (err) => {
+      toast.error("Void failed", { description: err.message });
+    },
+  });
+
+  const handleConfirm = () => {
+    voidMutation.mutate({ id: session.id, reason: reason.trim() || undefined });
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setDialogOpen(true)}
+        className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-red-900 dark:hover:bg-red-950"
+      >
+        <Ban className="w-3.5 h-3.5" />
+        Void
+      </Button>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Ban className="w-5 h-5" />
+              Void Label
+            </DialogTitle>
+            <DialogDescription>
+              This will cancel the FedEx shipment for tracking number{" "}
+              <span className="font-mono font-semibold">{session.veeqoTrackingNumber ?? "—"}</span>.
+              {" "}The label will be marked as voided and cannot be used for shipping.
+              <br /><br />
+              <strong>This action cannot be undone.</strong> Void requests must be submitted before carrier pickup.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-2 py-2">
+            <Label htmlFor="void-reason" className="text-sm font-medium">
+              Reason (optional)
+            </Label>
+            <Textarea
+              id="void-reason"
+              placeholder="e.g. Wrong carrier selected, mispacked box, order cancelled…"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              maxLength={512}
+              className="resize-none text-sm"
+            />
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setDialogOpen(false); setReason(""); }}
+              disabled={voidMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirm}
+              disabled={voidMutation.isPending}
+              className="gap-1.5"
+            >
+              {voidMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Ban className="w-4 h-4" />
+              )}
+              {voidMutation.isPending ? "Voiding…" : "Void Label"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -157,6 +270,13 @@ function StatusBadge({ status }: { status: Session["status"] }) {
         <Badge variant="secondary" className="gap-1">
           <AlertCircle className="w-3 h-3" />
           Cancelled
+        </Badge>
+      );
+    case "voided":
+      return (
+        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0 gap-1">
+          <Ban className="w-3 h-3" />
+          Voided
         </Badge>
       );
   }
@@ -195,7 +315,7 @@ export default function SmallParcelHistory() {
           <div>
             <h1 className="text-2xl font-bold">Label is Printed</h1>
             <p className="text-muted-foreground text-sm">
-              Recent Pack &amp; Ship sessions — reprint any label directly to your Zebra printer.
+              Recent Pack &amp; Ship sessions — reprint or void labels before carrier pickup.
             </p>
           </div>
         </div>
@@ -223,7 +343,7 @@ export default function SmallParcelHistory() {
 
       {/* Filter tabs */}
       <div className="flex gap-2 flex-wrap">
-        {(["all", "label_purchased", "scanning", "ready", "cancelled"] as const).map((s) => (
+        {(["all", "label_purchased", "scanning", "ready", "cancelled", "voided"] as const).map((s) => (
           <Button
             key={s}
             size="sm"
@@ -231,7 +351,11 @@ export default function SmallParcelHistory() {
             onClick={() => setStatusFilter(s)}
             className="capitalize text-xs"
           >
-            {s === "all" ? "All" : s === "label_purchased" ? "Label Purchased" : s.charAt(0).toUpperCase() + s.slice(1)}
+            {s === "all"
+              ? "All"
+              : s === "label_purchased"
+              ? "Label Purchased"
+              : s.charAt(0).toUpperCase() + s.slice(1)}
           </Button>
         ))}
       </div>
@@ -256,66 +380,89 @@ export default function SmallParcelHistory() {
             </div>
           ) : (
             <div className="divide-y">
-              {filtered.map((session) => (
-                <div
-                  key={session.id}
-                  className="flex flex-col sm:flex-row sm:items-center gap-3 px-6 py-4"
-                >
-                  {/* Left: order info */}
-                  <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {/* Reference + status */}
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1.5">
-                        <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="font-mono font-semibold text-sm truncate">
-                          {session.referenceNum ?? "—"}
-                        </span>
-                      </div>
-                      <StatusBadge status={session.status} />
-                    </div>
-
-                    {/* Client + carrier */}
-                    <div className="flex flex-col gap-1 text-sm">
-                      <span className="font-medium truncate">{session.clientName ?? "—"}</span>
-                      {session.veeqoCarrierService && (
-                        <span className="text-muted-foreground text-xs truncate">
-                          {session.veeqoCarrierService}
-                        </span>
-                      )}
-                      {session.veeqoTrackingNumber && (
-                        <span className="font-mono text-xs text-muted-foreground truncate">
-                          {session.veeqoTrackingNumber}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Ship-to + date */}
-                    <div className="flex flex-col gap-1 text-sm">
-                      {(session.shipToName || session.shipToCity) && (
+              {filtered.map((session) => {
+                const isVoided = session.status === "voided";
+                return (
+                  <div
+                    key={session.id}
+                    className={`flex flex-col sm:flex-row sm:items-center gap-3 px-6 py-4 ${
+                      isVoided ? "opacity-60 bg-red-50/40 dark:bg-red-950/10" : ""
+                    }`}
+                  >
+                    {/* Left: order info */}
+                    <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {/* Reference + status */}
+                      <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <span className="truncate text-muted-foreground">
-                            {[session.shipToName, session.shipToCity, session.shipToState]
-                              .filter(Boolean)
-                              .join(", ")}
+                          <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <span className={`font-mono font-semibold text-sm truncate ${isVoided ? "line-through text-muted-foreground" : ""}`}>
+                            {session.referenceNum ?? "—"}
                           </span>
                         </div>
+                        <StatusBadge status={session.status} />
+                      </div>
+
+                      {/* Client + carrier */}
+                      <div className="flex flex-col gap-1 text-sm">
+                        <span className="font-medium truncate">{session.clientName ?? "—"}</span>
+                        {session.veeqoCarrierService && (
+                          <span className="text-muted-foreground text-xs truncate">
+                            {session.veeqoCarrierService}
+                          </span>
+                        )}
+                        {session.veeqoTrackingNumber && (
+                          <span className={`font-mono text-xs truncate ${isVoided ? "line-through text-muted-foreground" : "text-muted-foreground"}`}>
+                            {session.veeqoTrackingNumber}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Ship-to + date */}
+                      <div className="flex flex-col gap-1 text-sm">
+                        {(session.shipToName || session.shipToCity) && (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate text-muted-foreground">
+                              {[session.shipToName, session.shipToCity, session.shipToState]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </span>
+                          </div>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(session.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Right: action buttons */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Reprint — disabled for voided labels */}
+                      <ReprintButton
+                        sessionId={session.id}
+                        hasZpl={!!session.labelZpl}
+                        disabled={isVoided}
+                      />
+
+                      {/* Void — only shown for label_purchased sessions */}
+                      {session.status === "label_purchased" && (
+                        <VoidLabelButton
+                          session={session}
+                          onVoided={() => refetch()}
+                        />
                       )}
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(session.createdAt).toLocaleString()}
-                      </span>
+
+                      {/* Voided indicator chip */}
+                      {isVoided && (
+                        <span className="text-xs text-red-500 font-medium flex items-center gap-1">
+                          <Ban className="w-3 h-3" />
+                          Voided
+                        </span>
+                      )}
                     </div>
                   </div>
-
-                  {/* Right: reprint button */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <ReprintButton
-                      sessionId={session.id}
-                      hasZpl={!!session.labelZpl}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

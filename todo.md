@@ -1109,3 +1109,11 @@
 - [ ] Fix FedEx One Rate weight: cap at actual package weight (not dim weight) for One Rate packaging types so flat FE1 rate is returned correctly
 - [x] Install GD Cortex Hub integration package — DB migration, schema, tRPC router, Settings UI
 - [ ] Add FedEx account 942412380 as dedicated One Rate carrier account with new credentials (l7954a1cd3b78847b183f2262ce8396c47 / e4cfd793afb2498aa0358768dfab8c63)
+
+## Void Label Feature
+- [x] DB: add voidedAt column and voidReason column to small_parcel_sessions table
+- [x] Server: add voidFedExLabel() function to server/carriers/fedex.ts
+- [x] Server: add voidLabel tRPC procedure to smallParcelRouter
+- [x] UI: add Void button to SmallParcelHistory with confirmation dialog
+- [x] UI: show voided state styling (strikethrough, red badge) and disable Reprint on voided labels
+- [x] Tests: add vitest tests for voidLabel procedure

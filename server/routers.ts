@@ -7863,6 +7863,102 @@ const smallParcelRouter = router({
 
       return { inserted, skipped, total: nameSet.size };
     }),
+
+  /**
+   * Seed the packaging inventory with a standard list of real-world packaging sizes.
+   * Skips any names already present. Safe to call multiple times.
+   */
+  seedStandardPackagingTypes: protectedProcedure
+    .input(z.object({ configId: z.number().int(), facilityId: z.number().int().default(0) }))
+    .mutation(async ({ input }) => {
+      const { upsertPackagingInventoryItem, listPackagingInventory } = await import('./db.js');
+
+      const STANDARD_TYPES: Array<{ name: string; category: 'envelope' | 'box' | 'pallet'; unit: string; notes?: string }> = [
+        // ── Envelopes / Mailers ──
+        { name: 'FedEx Letter Envelope', category: 'envelope', unit: 'each', notes: '9.5×12.5 in' },
+        { name: 'FedEx Padded Pak', category: 'envelope', unit: 'each', notes: '11.75×14.75 in' },
+        { name: 'FedEx Small Pak', category: 'envelope', unit: 'each', notes: '10.25×12.75 in' },
+        { name: 'FedEx Large Pak', category: 'envelope', unit: 'each', notes: '12×15.5 in' },
+        { name: 'UPS Letter Envelope', category: 'envelope', unit: 'each', notes: '9.5×12.5 in' },
+        { name: 'UPS Padded Pak', category: 'envelope', unit: 'each', notes: '11×13.25 in' },
+        { name: 'USPS Priority Mail Flat Rate Envelope', category: 'envelope', unit: 'each', notes: '12.5×9.5 in' },
+        { name: 'USPS Priority Mail Padded Flat Rate Envelope', category: 'envelope', unit: 'each', notes: '12.5×9.5 in' },
+        { name: 'Poly Mailer 6x9', category: 'envelope', unit: 'each', notes: '6×9 in' },
+        { name: 'Poly Mailer 9x12', category: 'envelope', unit: 'each', notes: '9×12 in' },
+        { name: 'Poly Mailer 10x13', category: 'envelope', unit: 'each', notes: '10×13 in' },
+        { name: 'Poly Mailer 12x15.5', category: 'envelope', unit: 'each', notes: '12×15.5 in' },
+        { name: 'Poly Mailer 14.5x19', category: 'envelope', unit: 'each', notes: '14.5×19 in' },
+        { name: 'Bubble Mailer #000 (4x8)', category: 'envelope', unit: 'each', notes: '4×8 in' },
+        { name: 'Bubble Mailer #00 (5x10)', category: 'envelope', unit: 'each', notes: '5×10 in' },
+        { name: 'Bubble Mailer #0 (6x10)', category: 'envelope', unit: 'each', notes: '6×10 in' },
+        { name: 'Bubble Mailer #2 (8.5x12)', category: 'envelope', unit: 'each', notes: '8.5×12 in' },
+        { name: 'Bubble Mailer #4 (9.5x14.5)', category: 'envelope', unit: 'each', notes: '9.5×14.5 in' },
+        { name: 'Bubble Mailer #5 (10.5x16)', category: 'envelope', unit: 'each', notes: '10.5×16 in' },
+        { name: 'Bubble Mailer #7 (14.25x20)', category: 'envelope', unit: 'each', notes: '14.25×20 in' },
+        // ── Boxes ──
+        { name: 'Box 6x6x6', category: 'box', unit: 'each', notes: '6×6×6 in' },
+        { name: 'Box 8x6x4', category: 'box', unit: 'each', notes: '8×6×4 in' },
+        { name: 'Box 8x8x8', category: 'box', unit: 'each', notes: '8×8×8 in' },
+        { name: 'Box 10x8x6', category: 'box', unit: 'each', notes: '10×8×6 in' },
+        { name: 'Box 10x10x10', category: 'box', unit: 'each', notes: '10×10×10 in' },
+        { name: 'Box 12x9x6', category: 'box', unit: 'each', notes: '12×9×6 in' },
+        { name: 'Box 12x12x8', category: 'box', unit: 'each', notes: '12×12×8 in' },
+        { name: 'Box 12x12x12', category: 'box', unit: 'each', notes: '12×12×12 in' },
+        { name: 'Box 14x10x8', category: 'box', unit: 'each', notes: '14×10×8 in' },
+        { name: 'Box 14x14x14', category: 'box', unit: 'each', notes: '14×14×14 in' },
+        { name: 'Box 16x12x8', category: 'box', unit: 'each', notes: '16×12×8 in' },
+        { name: 'Box 16x12x12', category: 'box', unit: 'each', notes: '16×12×12 in' },
+        { name: 'Box 18x12x12', category: 'box', unit: 'each', notes: '18×12×12 in' },
+        { name: 'Box 18x14x12', category: 'box', unit: 'each', notes: '18×14×12 in' },
+        { name: 'Box 18x18x16', category: 'box', unit: 'each', notes: '18×18×16 in' },
+        { name: 'Box 20x14x14', category: 'box', unit: 'each', notes: '20×14×14 in' },
+        { name: 'Box 20x16x12', category: 'box', unit: 'each', notes: '20×16×12 in' },
+        { name: 'Box 20x20x20', category: 'box', unit: 'each', notes: '20×20×20 in' },
+        { name: 'Box 24x18x18', category: 'box', unit: 'each', notes: '24×18×18 in' },
+        { name: 'Box 24x24x24', category: 'box', unit: 'each', notes: '24×24×24 in' },
+        { name: 'FedEx Small Box', category: 'box', unit: 'each', notes: '10.875×1.5×12.375 in' },
+        { name: 'FedEx Medium Box (Top Load)', category: 'box', unit: 'each', notes: '11.5×2.375×13.25 in' },
+        { name: 'FedEx Large Box', category: 'box', unit: 'each', notes: '12.375×3×17.5 in' },
+        { name: 'FedEx Extra Large Box', category: 'box', unit: 'each', notes: '11.875×10.75×11 in' },
+        { name: 'UPS Small Box', category: 'box', unit: 'each', notes: '13×11×2 in' },
+        { name: 'UPS Medium Box', category: 'box', unit: 'each', notes: '15×11×3 in' },
+        { name: 'UPS Large Box', category: 'box', unit: 'each', notes: '17×12×3.5 in' },
+        { name: 'USPS Priority Mail Small Flat Rate Box', category: 'box', unit: 'each', notes: '8.625×5.375×1.625 in' },
+        { name: 'USPS Priority Mail Medium Flat Rate Box', category: 'box', unit: 'each', notes: '11×8.5×5.5 in' },
+        { name: 'USPS Priority Mail Large Flat Rate Box', category: 'box', unit: 'each', notes: '12.25×12.25×6 in' },
+        // ── Pallets ──
+        { name: 'GMA Standard Pallet (48x40)', category: 'pallet', unit: 'each', notes: '48×40 in — most common North American pallet' },
+        { name: 'Half Pallet (48x20)', category: 'pallet', unit: 'each', notes: '48×20 in' },
+        { name: 'Quarter Pallet (24x20)', category: 'pallet', unit: 'each', notes: '24×20 in' },
+        { name: 'Euro Pallet (47x31.5)', category: 'pallet', unit: 'each', notes: '1200×800 mm / 47×31.5 in' },
+        { name: 'Chep Pallet (48x40)', category: 'pallet', unit: 'each', notes: '48×40 in — blue CHEP rental pallet' },
+        { name: 'Plastic Pallet (48x40)', category: 'pallet', unit: 'each', notes: '48×40 in' },
+        { name: 'Display Pallet (24x24)', category: 'pallet', unit: 'each', notes: '24×24 in — retail display' },
+      ];
+
+      const existing = await listPackagingInventory(input.configId);
+      const existingNames = new Set(existing.map((e) => e.name.toLowerCase()));
+
+      let inserted = 0;
+      let skipped = 0;
+      for (const t of STANDARD_TYPES) {
+        if (existingNames.has(t.name.toLowerCase())) { skipped++; continue; }
+        await upsertPackagingInventoryItem({
+          configId: input.configId,
+          facilityId: input.facilityId,
+          name: t.name,
+          category: t.category,
+          unit: t.unit,
+          onHandQty: 0,
+          minStockLevel: 0,
+          weeklyConsumption: 0,
+          notes: t.notes ?? null,
+        } as any);
+        inserted++;
+      }
+
+      return { inserted, skipped, total: STANDARD_TYPES.length };
+    }),
 });
 
 // Re-export appRouter augmented with all feature routers including SLA

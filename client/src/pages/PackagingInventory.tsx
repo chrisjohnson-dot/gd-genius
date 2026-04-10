@@ -25,44 +25,21 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   Plus,
   Pencil,
   Trash2,
   ShoppingCart,
   Loader2,
   AlertTriangle,
-  CheckCircle2,
-  TrendingDown,
-  Flame,
-  Info,
   RefreshCw,
   Warehouse,
   Package,
   Mail,
-  Box as BoxIcon,
-  LayoutGrid as PalletIcon,
+  Box,
+  LayoutGrid,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
-
-// ─── Classify packaging type name into category ───────────────────────────────
-
-function classifyPackageType(name: string, sourceField: "packageUnit" | "pallet"): "envelope" | "box" | "pallet" {
-  if (sourceField === "pallet") return "pallet";
-  const lower = name.toLowerCase();
-  if (
-    lower.includes("envelope") ||
-    lower.includes("mailer") ||
-    lower.includes("poly") ||
-    lower.includes("flat") ||
-    lower.includes("padded") ||
-    lower.includes("bubble")
-  ) return "envelope";
-  return "box";
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,98 +58,22 @@ type InventoryItem = {
   createdAt: Date;
 };
 
-// A packaging type from the DB (from Package Sizes config)
-type KnownPackageType = {
-  typeName: string;
-  category: string; // "envelope" | "box" | "pallet"
-  clientCount: number;
-};
+type StockStatus = "ok" | "low" | "critical" | "out" | "unset";
 
-// A merged row: either tracked in DB or only known from Package Sizes config
-type MergedRow = {
-  name: string;
-  category: "envelope" | "box" | "pallet";
-  dbItem: InventoryItem | null;       // null = not yet in inventory DB
-  knownType: KnownPackageType | null; // null = manually added
-};
+function getStockStatus(item: InventoryItem): StockStatus {
+  if (item.minStockLevel === 0 && item.onHandQty === 0) return "unset";
+  if (item.onHandQty === 0) return "out";
+  if (item.minStockLevel > 0 && item.onHandQty < item.minStockLevel) return "critical";
+  if (item.minStockLevel > 0 && item.onHandQty < item.minStockLevel * 1.5) return "low";
+  return "ok";
+}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function daysRemaining(item: InventoryItem): number | null {
-  if (!item.weeklyConsumption || item.weeklyConsumption === 0) return null;
+function daysLeft(item: InventoryItem): number | null {
+  if (!item.weeklyConsumption) return null;
   return Math.round((item.onHandQty / item.weeklyConsumption) * 7);
 }
 
-function burnUrgency(days: number | null): "unknown" | "critical" | "warning" | "ok" {
-  if (days === null) return "unknown";
-  if (days < 7) return "critical";
-  if (days < 14) return "warning";
-  return "ok";
-}
-
-function stockStatus(item: InventoryItem): "ok" | "low" | "critical" | "out" {
-  if (item.onHandQty === 0) return "out";
-  if (item.onHandQty < item.minStockLevel) return "critical";
-  if (item.minStockLevel > 0 && item.onHandQty < item.minStockLevel * 2) return "low";
-  return "ok";
-}
-
-// ─── Warehouse Selector ───────────────────────────────────────────────────────
-
-function WarehouseSelector({
-  configId,
-  selectedFacilityId,
-  onSelect,
-}: {
-  configId: number;
-  selectedFacilityId: number | null;
-  onSelect: (id: number, name: string) => void;
-}) {
-  const { data: facilities = [], isLoading } = trpc.smallParcel.listFacilities.useQuery(
-    { configId },
-    { enabled: configId > 0, staleTime: 5 * 60 * 1000 }
-  );
-
-  return (
-    <div className="flex flex-col items-center justify-center py-20 gap-6">
-      <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-        <Warehouse className="w-8 h-8 text-blue-500" />
-      </div>
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-gray-900">Select a Warehouse</h2>
-        <p className="text-sm text-gray-500 mt-1">Choose which warehouse to view packaging inventory for</p>
-      </div>
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-gray-400">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading warehouses…
-        </div>
-      ) : facilities.length === 0 ? (
-        <p className="text-sm text-gray-400">No warehouses found in Extensiv</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-2xl">
-          {facilities.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => onSelect(f.id, f.name)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                selectedFacilityId === f.id
-                  ? "border-blue-500 bg-blue-50 shadow-sm"
-                  : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/50"
-              }`}
-            >
-              <Warehouse className={`w-5 h-5 shrink-0 ${selectedFacilityId === f.id ? "text-blue-500" : "text-gray-400"}`} />
-              <span className={`text-sm font-medium ${selectedFacilityId === f.id ? "text-blue-700" : "text-gray-700"}`}>
-                {f.name}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Add / Edit Item Dialog ───────────────────────────────────────────────────
+// ─── Item Dialog ──────────────────────────────────────────────────────────────
 
 function ItemDialog({
   configId,
@@ -191,28 +92,30 @@ function ItemDialog({
 }) {
   const utils = trpc.useUtils();
   const [name, setName] = useState(item?.name ?? prefillName ?? "");
-  const [category, setCategory] = useState<"envelope" | "box" | "pallet">(item?.category ?? prefillCategory ?? "box");
+  const [category, setCategory] = useState<"envelope" | "box" | "pallet">(
+    item?.category ?? prefillCategory ?? "box"
+  );
   const [unit, setUnit] = useState(item?.unit ?? "each");
   const [onHandQty, setOnHandQty] = useState(String(item?.onHandQty ?? 0));
-  const [minStockLevel, setMinStockLevel] = useState(String(item?.minStockLevel ?? 0));
-  const [weeklyConsumption, setWeeklyConsumption] = useState(String(item?.weeklyConsumption ?? 0));
+  const [minStock, setMinStock] = useState(String(item?.minStockLevel ?? 0));
+  const [weekly, setWeekly] = useState(String(item?.weeklyConsumption ?? 0));
   const [notes, setNotes] = useState(item?.notes ?? "");
 
   const upsert = trpc.smallParcel.upsertPackagingInventoryItem.useMutation({
     onSuccess: () => {
       utils.smallParcel.listPackagingInventory.invalidate({ configId, facilityId });
-      toast.success(item ? "Item updated" : "Item added");
+      toast.success(item ? "Updated" : "Added");
       onClose();
     },
     onError: (e) => toast.error(e.message),
   });
 
-  const handleSubmit = () => {
+  const handleSave = () => {
     const qty = parseInt(onHandQty, 10);
-    const min = parseInt(minStockLevel, 10);
-    const weekly = parseInt(weeklyConsumption, 10);
+    const min = parseInt(minStock, 10);
+    const wk = parseInt(weekly, 10);
     if (!name.trim()) return toast.error("Name is required");
-    if (isNaN(qty) || qty < 0) return toast.error("On-hand quantity must be ≥ 0");
+    if (isNaN(qty) || qty < 0) return toast.error("On-hand qty must be ≥ 0");
     upsert.mutate({
       id: item?.id,
       configId,
@@ -222,7 +125,7 @@ function ItemDialog({
       unit: unit.trim() || "each",
       onHandQty: qty,
       minStockLevel: isNaN(min) ? 0 : min,
-      weeklyConsumption: isNaN(weekly) ? 0 : weekly,
+      weeklyConsumption: isNaN(wk) ? 0 : wk,
       notes: notes.trim() || undefined,
     });
   };
@@ -233,10 +136,10 @@ function ItemDialog({
         <DialogHeader>
           <DialogTitle>{item ? "Edit Packaging Item" : "Add Packaging Item"}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-3 py-1">
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Medium Brown Box" className="bg-white" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Box 12x12x12" className="bg-white" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -244,8 +147,8 @@ function ItemDialog({
               <Select value={category} onValueChange={(v) => setCategory(v as typeof category)}>
                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="envelope">Envelope</SelectItem>
-                  <SelectItem value="box">Box</SelectItem>
+                  <SelectItem value="envelope">Envelope / Mailer</SelectItem>
+                  <SelectItem value="box">Box / Carton</SelectItem>
                   <SelectItem value="pallet">Pallet</SelectItem>
                 </SelectContent>
               </Select>
@@ -262,22 +165,22 @@ function ItemDialog({
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">Min Stock</label>
-              <Input type="number" min={0} value={minStockLevel} onChange={(e) => setMinStockLevel(e.target.value)} className="bg-white" />
+              <Input type="number" min={0} value={minStock} onChange={(e) => setMinStock(e.target.value)} className="bg-white" />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">Weekly Use</label>
-              <Input type="number" min={0} value={weeklyConsumption} onChange={(e) => setWeeklyConsumption(e.target.value)} className="bg-white" />
+              <Input type="number" min={0} value={weekly} onChange={(e) => setWeekly(e.target.value)} className="bg-white" />
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Notes (optional)</label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any notes…" className="bg-white" />
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Notes / Dimensions</label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. 12×12×12 in" className="bg-white" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={upsert.isPending}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={upsert.isPending}>
-            {upsert.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={upsert.isPending}>
+            {upsert.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
             {item ? "Save Changes" : "Add Item"}
           </Button>
         </DialogFooter>
@@ -291,20 +194,24 @@ function ItemDialog({
 function ReorderDialog({
   item,
   configId,
+  userId,
+  userName,
   onClose,
 }: {
   item: InventoryItem;
   configId: number;
+  userId: number;
+  userName: string;
   onClose: () => void;
 }) {
   const utils = trpc.useUtils();
-  const [qty, setQty] = useState("50");
+  const [qty, setQty] = useState(String(Math.max(item.minStockLevel - item.onHandQty, 1)));
   const [notes, setNotes] = useState("");
 
-  const createRequest = trpc.smallParcel.createPackagingReorderRequest.useMutation({
+  const create = trpc.smallParcel.createPackagingReorderRequest.useMutation({
     onSuccess: () => {
       utils.smallParcel.listPackagingReorderRequests.invalidate({ configId });
-      toast.success("Reorder request submitted");
+      toast.success("Reorder request created");
       onClose();
     },
     onError: (e) => toast.error(e.message),
@@ -316,10 +223,10 @@ function ReorderDialog({
         <DialogHeader>
           <DialogTitle>Request Reorder</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-3 py-1">
           <p className="text-sm text-gray-600">
-            Requesting reorder for <span className="font-semibold text-gray-900">{item.name}</span>
-            {item.onHandQty === 0 && <span className="ml-1 text-red-500">(out of stock)</span>}
+            <span className="font-medium">{item.name}</span>
+            <span className="text-gray-400 ml-2">On hand: {item.onHandQty}</span>
           </p>
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Quantity to Order</label>
@@ -327,17 +234,13 @@ function ReorderDialog({
           </div>
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Notes (optional)</label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any notes for accounting…" className="bg-white" />
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Urgency, supplier, etc." className="bg-white" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={createRequest.isPending}>Cancel</Button>
-          <Button onClick={() => {
-            const q = parseInt(qty, 10);
-            if (isNaN(q) || q < 1) return toast.error("Quantity must be at least 1");
-            createRequest.mutate({ inventoryItemId: item.id, configId, requestedQty: q, notes: notes.trim() || undefined });
-          }} disabled={createRequest.isPending}>
-            {createRequest.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => create.mutate({ configId, inventoryItemId: item.id, requestedQty: parseInt(qty, 10) || 1, notes: notes.trim() || undefined })} disabled={create.isPending}>
+            {create.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
             Submit Request
           </Button>
         </DialogFooter>
@@ -346,323 +249,160 @@ function ReorderDialog({
   );
 }
 
-// ─── On-Hand Inline Edit ──────────────────────────────────────────────────────
+// ─── Delete Confirm Dialog ────────────────────────────────────────────────────
 
-function OnHandCell({ item, configId, facilityId }: { item: InventoryItem; configId: number; facilityId: number }) {
+function DeleteDialog({ item, configId, facilityId, onClose }: { item: InventoryItem; configId: number; facilityId: number; onClose: () => void }) {
   const utils = trpc.useUtils();
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(String(item.onHandQty));
-
-  const update = trpc.smallParcel.updatePackagingOnHand.useMutation({
+  const del = trpc.smallParcel.deletePackagingInventoryItem.useMutation({
     onSuccess: () => {
       utils.smallParcel.listPackagingInventory.invalidate({ configId, facilityId });
-      setEditing(false);
+      toast.success("Deleted");
+      onClose();
     },
-    onError: (e) => { toast.error(e.message); setEditing(false); },
+    onError: (e) => toast.error(e.message),
   });
-
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1">
-        <Input
-          type="number"
-          min={0}
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          className="h-7 w-20 text-sm bg-white"
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              const n = parseInt(val, 10);
-              if (!isNaN(n) && n >= 0) update.mutate({ id: item.id, configId, onHandQty: n });
-            }
-            if (e.key === "Escape") setEditing(false);
-          }}
-        />
-        <Button size="sm" variant="ghost" className="h-7 px-1.5 text-green-600 hover:text-green-700" onClick={() => {
-          const n = parseInt(val, 10);
-          if (!isNaN(n) && n >= 0) update.mutate({ id: item.id, configId, onHandQty: n });
-        }}>✓</Button>
-        <Button size="sm" variant="ghost" className="h-7 px-1.5 text-gray-400" onClick={() => setEditing(false)}>✕</Button>
-      </div>
-    );
-  }
-
   return (
-    <button
-      onClick={() => { setVal(String(item.onHandQty)); setEditing(true); }}
-      className="font-mono text-sm text-gray-800 hover:text-blue-600 hover:underline cursor-pointer"
-      title="Click to edit on-hand quantity"
-    >
-      {item.onHandQty}
-    </button>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm bg-white">
+        <DialogHeader><DialogTitle>Delete Item</DialogTitle></DialogHeader>
+        <p className="text-sm text-gray-600 py-2">Remove <span className="font-medium">{item.name}</span> from inventory? This cannot be undone.</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={() => del.mutate({ id: item.id, configId })} disabled={del.isPending}>
+            {del.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-// ─── Packaging Row ────────────────────────────────────────────────────────────
+// ─── Stock Badge ──────────────────────────────────────────────────────────────
 
-function PackagingRow({
-  row,
-  configId,
-  facilityId,
-  onEdit,
-  onDelete,
-  onReorder,
-  onAddToInventory,
-}: {
-  row: MergedRow;
-  configId: number;
-  facilityId: number;
-  onEdit: (item: InventoryItem) => void;
-  onDelete: (item: InventoryItem) => void;
-  onReorder: (item: InventoryItem) => void;
-  onAddToInventory: (name: string, category: "envelope" | "box" | "pallet") => void;
-}) {
-  const db = row.dbItem;
-  const isTracked = db !== null;
-  const isOutOfStock = isTracked && db!.onHandQty === 0;
-  const status = isTracked ? stockStatus(db!) : null;
-  const days = isTracked ? daysRemaining(db!) : null;
-  const urgency = burnUrgency(days);
-
-  // Row background: out-of-stock = red tint, low = amber tint, untracked = gray/muted
-  const rowBg = !isTracked
-    ? "bg-gray-50 opacity-70"
-    : isOutOfStock
-    ? "bg-red-50 border-l-2 border-l-red-400"
-    : status === "critical"
-    ? "bg-red-50"
-    : status === "low" || urgency === "warning"
-    ? "bg-amber-50"
-    : "bg-white";
-
-  return (
-    <tr className={`border-b border-gray-100 transition-colors hover:bg-blue-50/30 ${rowBg}`}>
-      {/* Name */}
-      <td className="py-2.5 px-4">
-        <div className="flex items-center gap-2">
-          {!isTracked && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0 inline-block" />
-              </TooltipTrigger>
-              <TooltipContent>Not yet tracked in inventory — click "Add" to start tracking</TooltipContent>
-            </Tooltip>
-          )}
-          {isTracked && isOutOfStock && <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-          {isTracked && status === "low" && !isOutOfStock && <TrendingDown className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-          <span className={`text-sm font-medium ${!isTracked ? "text-gray-400" : "text-gray-800"}`}>{row.name}</span>
-          {!isTracked && (
-            <Badge className="text-[10px] bg-gray-100 text-gray-400 border-gray-200 ml-1">Not tracked</Badge>
-          )}
-          {isTracked && isOutOfStock && (
-            <Badge className="text-[10px] bg-red-100 text-red-600 border-red-200 ml-1">Out of stock</Badge>
-          )}
-        </div>
-        {isTracked && db!.notes && (
-          <p className="text-[11px] text-gray-400 mt-0.5 pl-5">{db!.notes}</p>
-        )}
-        {row.knownType && (
-          <p className="text-[11px] text-gray-400 mt-0.5 pl-5">
-            Used by {row.knownType.clientCount} client{row.knownType.clientCount !== 1 ? "s" : ""}
-          </p>
-        )}
-      </td>
-
-      {/* On Hand */}
-      <td className="py-2.5 px-4 text-right">
-        {isTracked ? (
-          <div className="flex items-center justify-end gap-1">
-            <OnHandCell item={db!} configId={configId} facilityId={facilityId} />
-            <span className="text-xs text-gray-400">{db!.unit}</span>
-          </div>
-        ) : (
-          <span className="text-xs text-gray-300">—</span>
-        )}
-      </td>
-
-      {/* Min Stock */}
-      <td className="py-2.5 px-4 text-right">
-        {isTracked ? (
-          <span className="text-sm font-mono text-gray-500">{db!.minStockLevel}</span>
-        ) : (
-          <span className="text-xs text-gray-300">—</span>
-        )}
-      </td>
-
-      {/* Days Left */}
-      <td className="py-2.5 px-4">
-        {isTracked ? (
-          days === null ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-gray-300 text-xs flex items-center gap-1 cursor-default">
-                  <Info className="w-3 h-3" /> —
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Set weekly consumption to calculate days remaining</TooltipContent>
-            </Tooltip>
-          ) : urgency === "critical" ? (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 border border-red-200 rounded px-2 py-0.5">
-              <Flame className="w-3 h-3" /> {days}d
-            </span>
-          ) : urgency === "warning" ? (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              <AlertTriangle className="w-3 h-3" /> {days}d
-            </span>
-          ) : (
-            <span className="text-xs text-green-600 font-mono">{days}d</span>
-          )
-        ) : (
-          <span className="text-xs text-gray-300">—</span>
-        )}
-      </td>
-
-      {/* Status */}
-      <td className="py-2.5 px-4">
-        {isTracked ? (
-          isOutOfStock ? (
-            <Badge className="text-[11px] bg-red-100 text-red-600 border-red-200">Out of Stock</Badge>
-          ) : status === "critical" ? (
-            <Badge className="text-[11px] bg-red-100 text-red-600 border-red-200">Below Min</Badge>
-          ) : status === "low" ? (
-            <Badge className="text-[11px] bg-amber-100 text-amber-600 border-amber-200">Low Stock</Badge>
-          ) : (
-            <Badge className="text-[11px] bg-green-100 text-green-600 border-green-200">OK</Badge>
-          )
-        ) : (
-          <span className="text-xs text-gray-300">—</span>
-        )}
-      </td>
-
-      {/* Actions */}
-      <td className="py-2.5 px-4">
-        <div className="flex items-center justify-end gap-1">
-          {isTracked ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                onClick={() => onReorder(db!)}
-                title="Request reorder"
-              >
-                <ShoppingCart className="w-3.5 h-3.5 mr-1" /> Reorder
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-                onClick={() => onEdit(db!)}
-                title="Edit"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-red-400 hover:text-red-600 hover:bg-red-50"
-                onClick={() => onDelete(db!)}
-                title="Delete"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-3 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 bg-white"
-              onClick={() => onAddToInventory(row.name, row.category)}
-            >
-              <Plus className="w-3 h-3 mr-1" /> Add
-            </Button>
-          )}
-        </div>
-      </td>
-    </tr>
-  );
+function StockBadge({ item }: { item: InventoryItem }) {
+  const status = getStockStatus(item);
+  if (status === "unset") return <span className="text-xs text-gray-400">—</span>;
+  if (status === "out") return <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">Out of Stock</Badge>;
+  if (status === "critical") return <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs">Critical</Badge>;
+  if (status === "low") return <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">Low</Badge>;
+  return <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">In Stock</Badge>;
 }
 
-// ─── Category Tab Panel ───────────────────────────────────────────────────────
+// ─── Category Panel ───────────────────────────────────────────────────────────
 
 function CategoryPanel({
-  category,
-  rows,
+  items,
   configId,
   facilityId,
+  userId,
+  userName,
   onEdit,
   onDelete,
   onReorder,
-  onAddToInventory,
 }: {
-  category: "envelope" | "box" | "pallet";
-  rows: MergedRow[];
+  items: InventoryItem[];
   configId: number;
   facilityId: number;
+  userId: number;
+  userName: string;
   onEdit: (item: InventoryItem) => void;
   onDelete: (item: InventoryItem) => void;
   onReorder: (item: InventoryItem) => void;
-  onAddToInventory: (name: string, category: "envelope" | "box" | "pallet") => void;
 }) {
-  const catRows = rows.filter((r) => r.category === category);
-  const tracked = catRows.filter((r) => r.dbItem !== null);
-  const untracked = catRows.filter((r) => r.dbItem === null);
+  const utils = trpc.useUtils();
+  const updateQty = trpc.smallParcel.updatePackagingOnHand.useMutation({
+    onSuccess: () => utils.smallParcel.listPackagingInventory.invalidate({ configId, facilityId }),
+    onError: (e) => toast.error(e.message),
+  });
 
-  // Sort: out-of-stock first, then low, then ok, then untracked
-  const sorted = [
-    ...tracked.filter((r) => r.dbItem!.onHandQty === 0),
-    ...tracked.filter((r) => r.dbItem!.onHandQty > 0 && stockStatus(r.dbItem!) !== "ok"),
-    ...tracked.filter((r) => r.dbItem!.onHandQty > 0 && stockStatus(r.dbItem!) === "ok"),
-    ...untracked,
-  ];
-
-  if (sorted.length === 0) {
+  if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-gray-400">
         <Package className="w-10 h-10 mb-3 opacity-30" />
-        <p className="text-sm">No {category} types found for this warehouse.</p>
-        <p className="text-xs mt-1 text-gray-300">Packaging types are pulled from Extensiv item records.</p>
+        <p className="text-sm">No items in this category yet.</p>
+        <p className="text-xs mt-1">Use the "Add Item" button to add one manually.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-            <th className="text-left py-2.5 px-4 font-medium">Name</th>
-            <th className="text-right py-2.5 px-4 font-medium">On Hand</th>
-            <th className="text-right py-2.5 px-4 font-medium">Min Stock</th>
-            <th className="text-left py-2.5 px-4 font-medium">Days Left</th>
-            <th className="text-left py-2.5 px-4 font-medium">Status</th>
-            <th className="text-right py-2.5 px-4 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row) => (
-            <PackagingRow
-              key={row.name}
-              row={row}
-              configId={configId}
-              facilityId={facilityId}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onReorder={onReorder}
-              onAddToInventory={onAddToInventory}
-            />
-          ))}
-        </tbody>
-      </table>
-      {untracked.length > 0 && (
-        <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
-            <Info className="w-3 h-3 inline mr-1" />
-            {untracked.length} type{untracked.length !== 1 ? "s" : ""} from Extensiv not yet tracked — click <strong>Add</strong> to start tracking stock.
-          </p>
-        </div>
-      )}
+    <div className="divide-y divide-gray-100">
+      {items.map((item) => {
+        const status = getStockStatus(item);
+        const days = daysLeft(item);
+        const rowBg =
+          status === "out" ? "bg-red-50/60" :
+          status === "critical" ? "bg-orange-50/60" :
+          status === "low" ? "bg-amber-50/40" :
+          "bg-white";
+
+        return (
+          <div key={item.id} className={`flex items-center gap-4 px-4 py-3 ${rowBg} hover:bg-gray-50/80 transition-colors`}>
+            {/* Name + notes */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+              {item.notes && <p className="text-xs text-gray-400 truncate">{item.notes}</p>}
+            </div>
+
+            {/* On Hand — inline editable */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                className="w-6 h-6 rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 text-sm font-bold flex items-center justify-center"
+                onClick={() => updateQty.mutate({ id: item.id, configId, onHandQty: Math.max(0, item.onHandQty - 1) })}
+              >−</button>
+              <span className="w-12 text-center text-sm font-mono font-semibold text-gray-800">
+                {item.onHandQty}
+              </span>
+              <button
+                className="w-6 h-6 rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 text-sm font-bold flex items-center justify-center"
+                onClick={() => updateQty.mutate({ id: item.id, configId, onHandQty: item.onHandQty + 1 })}
+              >+</button>
+              <span className="text-xs text-gray-400 ml-0.5">{item.unit}</span>
+            </div>
+
+            {/* Status badge */}
+            <div className="w-24 shrink-0 text-right">
+              <StockBadge item={item} />
+            </div>
+
+            {/* Days left */}
+            <div className="w-20 shrink-0 text-right">
+              {days !== null ? (
+                <span className={`text-xs font-mono ${days < 7 ? "text-red-600 font-semibold" : days < 14 ? "text-amber-600" : "text-gray-400"}`}>
+                  {days}d left
+                </span>
+              ) : (
+                <span className="text-xs text-gray-300">—</span>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => onReorder(item)}
+                className="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                title="Request reorder"
+              >
+                <ShoppingCart className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onEdit(item)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                title="Edit"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onDelete(item)}
+                className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                title="Delete"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -671,29 +411,30 @@ function CategoryPanel({
 
 export default function PackagingInventory() {
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
-  const [selectedFacilityName, setSelectedFacilityName] = useState<string>("");
+  const [selectedFacilityName, setSelectedFacilityName] = useState("");
   const [tab, setTab] = useState("box");
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [reorderItem, setReorderItem] = useState<InventoryItem | null>(null);
   const [deleteItem, setDeleteItem] = useState<InventoryItem | null>(null);
-  const [addDialog, setAddDialog] = useState<{ name: string; category: "envelope" | "box" | "pallet" } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [addCategory, setAddCategory] = useState<"envelope" | "box" | "pallet">("box");
 
   const { data: configs } = trpc.config.list.useQuery();
   const configId = configs?.[0]?.id ?? 0;
 
-  // DB inventory for selected facility
-  const { data: dbItems = [], isLoading: dbLoading } = trpc.smallParcel.listPackagingInventory.useQuery(
+  const { data: me } = trpc.auth.me.useQuery();
+  const userId = me?.id ?? 0;
+  const userName = me?.name ?? "Unknown";
+
+  const { data: facilities = [], isLoading: facilitiesLoading } = trpc.smallParcel.listFacilities.useQuery(
+    { configId },
+    { enabled: configId > 0, staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: allItems = [], isLoading: itemsLoading, refetch } = trpc.smallParcel.listPackagingInventory.useQuery(
     { configId, facilityId: selectedFacilityId ?? 0 },
     { enabled: configId > 0 && selectedFacilityId !== null, staleTime: 30_000 }
   );
-
-  // All known packaging types from Package Sizes DB config (fast, no Extensiv API call needed)
-  const { data: knownTypes = [], isLoading: knownLoading } =
-    trpc.smallParcel.getAllPackagingTypeNames.useQuery(
-      { configId },
-      { enabled: configId > 0, staleTime: 5 * 60 * 1000 }
-    );
 
   const { data: requests = [] } = trpc.smallParcel.listPackagingReorderRequests.useQuery(
     { configId },
@@ -702,260 +443,273 @@ export default function PackagingInventory() {
 
   const utils = trpc.useUtils();
 
-  const deleteItem_ = trpc.smallParcel.deletePackagingInventoryItem.useMutation({
-    onSuccess: () => {
+  const seed = trpc.smallParcel.seedStandardPackagingTypes.useMutation({
+    onSuccess: (res) => {
       utils.smallParcel.listPackagingInventory.invalidate({ configId, facilityId: selectedFacilityId ?? 0 });
-      toast.success("Item deleted");
-      setDeleteItem(null);
+      toast.success(`Loaded ${res.inserted} standard packaging types${res.skipped > 0 ? ` (${res.skipped} already existed)` : ""}`);
     },
     onError: (e) => toast.error(e.message),
   });
 
-  // Merge known package types (from Package Sizes config) with DB inventory items
-  const mergedRows = useMemo((): MergedRow[] => {
-    const dbMap = new Map<string, InventoryItem>();
-    for (const item of dbItems as InventoryItem[]) {
-      dbMap.set(item.name.toLowerCase().trim(), item);
-    }
+  const items = allItems as InventoryItem[];
 
-    const seen = new Set<string>();
-    const rows: MergedRow[] = [];
+  const envelopes = useMemo(() => items.filter((i) => i.category === "envelope"), [items]);
+  const boxes = useMemo(() => items.filter((i) => i.category === "box"), [items]);
+  const pallets = useMemo(() => items.filter((i) => i.category === "pallet"), [items]);
 
-    // First: all known types from Package Sizes config
-    for (const t of knownTypes as KnownPackageType[]) {
-      const key = t.typeName.toLowerCase().trim();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const cat = (t.category === "envelope" || t.category === "box" || t.category === "pallet")
-        ? t.category as "envelope" | "box" | "pallet"
-        : classifyPackageType(t.typeName, "packageUnit");
-      rows.push({
-        name: t.typeName,
-        category: cat,
-        dbItem: dbMap.get(key) ?? null,
-        knownType: t,
-      });
-    }
+  const outCount = items.filter((i) => getStockStatus(i) === "out").length;
+  const lowCount = items.filter((i) => getStockStatus(i) === "low" || getStockStatus(i) === "critical").length;
+  const openRequests = (requests as { status: string }[]).filter((r) => r.status === "pending" || r.status === "ordered").length;
 
-    // Then: DB inventory items not in the known list (manually added)
-    for (const item of dbItems as InventoryItem[]) {
-      const key = item.name.toLowerCase().trim();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push({
-        name: item.name,
-        category: item.category,
-        dbItem: item,
-        knownType: null,
-      });
-    }
+  const isLoading = itemsLoading;
 
-    return rows;
-  }, [dbItems, knownTypes]);
-
-  // Summary counts
-  const outOfStock = mergedRows.filter((r) => r.dbItem && r.dbItem.onHandQty === 0).length;
-  const lowStock = mergedRows.filter((r) => r.dbItem && stockStatus(r.dbItem) === "low").length;
-  const untracked = mergedRows.filter((r) => r.dbItem === null).length;
-  const openRequests = requests.filter((r: { status: string }) => r.status === "pending" || r.status === "ordered").length;
-
-  const envelopeCount = mergedRows.filter((r) => r.category === "envelope").length;
-  const boxCount = mergedRows.filter((r) => r.category === "box").length;
-  const palletCount = mergedRows.filter((r) => r.category === "pallet").length;
-
-  const isLoading = dbLoading || knownLoading;
-
-  return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+  // ── Warehouse selector screen ──
+  if (selectedFacilityId === null) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="mb-8">
           <h1 className="text-xl font-semibold text-gray-900">Packaging Inventory</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {selectedFacilityId
-              ? `Viewing ${selectedFacilityName} — track on-hand stock, burn rate, and reorder requests`
-              : "Select a warehouse to view packaging inventory"}
-          </p>
+          <p className="text-sm text-gray-500 mt-1">Select a warehouse to view and manage packaging stock</p>
         </div>
-        <div className="flex items-center gap-2">
-          {selectedFacilityId && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                onClick={() => utils.smallParcel.getAllPackagingTypeNames.invalidate({ configId })}
+
+        {facilitiesLoading ? (
+          <div className="flex items-center gap-2 text-gray-400 py-8">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading warehouses…
+          </div>
+        ) : facilities.length === 0 ? (
+          <div className="text-sm text-gray-400 py-8">No warehouses found. Check your Extensiv configuration.</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {facilities.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => { setSelectedFacilityId(f.id); setSelectedFacilityName(f.name); }}
+                className="flex items-center gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-blue-400 hover:shadow-sm text-left transition-all group"
               >
-                <RefreshCw className="w-4 h-4" />
-                Refresh Types
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                onClick={() => setSelectedFacilityId(null)}
-              >
-                <Warehouse className="w-4 h-4" /> Change Warehouse
-              </Button>
-              <Button onClick={() => setAddOpen(true)} size="sm" className="gap-1.5">
-                <Plus className="w-4 h-4" /> Add Item
-              </Button>
-            </>
+                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
+                  <Warehouse className="w-5 h-5 text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{f.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Click to view inventory</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Inventory view ──
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedFacilityId(null)}
+              className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
+            >
+              ← All Warehouses
+            </button>
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900 mt-0.5">{selectedFacilityName} — Packaging Inventory</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{items.length} items tracked</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {items.length === 0 && (
+            <Button
+              onClick={() => seed.mutate({ configId, facilityId: selectedFacilityId })}
+              disabled={seed.isPending}
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+              size="sm"
+            >
+              {seed.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Load Standard Packaging Types
+            </Button>
           )}
+          <Button variant="outline" size="sm" className="gap-1.5 bg-white" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={() => { setAddCategory(tab as "envelope" | "box" | "pallet"); setAddOpen(true); }}
+          >
+            <Plus className="w-4 h-4" /> Add Item
+          </Button>
         </div>
       </div>
 
-      {/* Warehouse selector or inventory view */}
-      {!selectedFacilityId ? (
-        <div className="rounded-xl bg-white border border-gray-200 shadow-sm">
-          <WarehouseSelector
-            configId={configId}
-            selectedFacilityId={selectedFacilityId}
-            onSelect={(id, name) => {
-              setSelectedFacilityId(id);
-              setSelectedFacilityName(name);
-            }}
-          />
+      {/* Summary pills */}
+      {items.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {outCount > 0 && (
+            <div className="flex items-center gap-1.5 text-xs bg-red-50 text-red-700 border border-red-200 rounded-full px-3 py-1">
+              <AlertTriangle className="w-3.5 h-3.5" /> {outCount} out of stock
+            </div>
+          )}
+          {lowCount > 0 && (
+            <div className="flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-3 py-1">
+              <AlertTriangle className="w-3.5 h-3.5" /> {lowCount} low / critical
+            </div>
+          )}
+          {openRequests > 0 && (
+            <div className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-1">
+              <ShoppingCart className="w-3.5 h-3.5" /> {openRequests} open reorder{openRequests !== 1 ? "s" : ""}
+            </div>
+          )}
+          {outCount === 0 && lowCount === 0 && (
+            <div className="flex items-center gap-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-3 py-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> All stock levels OK
+            </div>
+          )}
         </div>
-      ) : (
-        <>
-          {/* Summary cards */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="rounded-xl bg-white border border-gray-200 shadow-sm px-5 py-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Types</p>
-              <p className="text-2xl font-bold text-gray-900">{mergedRows.length}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{untracked} not yet tracked</p>
-            </div>
-            <div className={`rounded-xl border shadow-sm px-5 py-4 ${outOfStock > 0 ? "bg-red-50 border-red-200" : "bg-white border-gray-200"}`}>
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Out of Stock</p>
-              <p className={`text-2xl font-bold ${outOfStock > 0 ? "text-red-600" : "text-gray-900"}`}>{outOfStock}</p>
-            </div>
-            <div className={`rounded-xl border shadow-sm px-5 py-4 ${lowStock > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Low Stock</p>
-              <p className={`text-2xl font-bold ${lowStock > 0 ? "text-amber-600" : "text-gray-900"}`}>{lowStock}</p>
-            </div>
-            <div className={`rounded-xl border shadow-sm px-5 py-4 ${openRequests > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Open Reorders</p>
-              <p className={`text-2xl font-bold ${openRequests > 0 ? "text-amber-600" : "text-gray-900"}`}>{openRequests}</p>
-            </div>
+      )}
+
+      {/* Empty state with seed button */}
+      {!isLoading && items.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center">
+            <Package className="w-7 h-7 text-blue-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-700">No packaging items yet for this warehouse</p>
+            <p className="text-xs text-gray-400 mt-1 max-w-xs">
+              Load the standard list of envelopes, boxes, and pallets to get started — or add items manually.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => seed.mutate({ configId, facilityId: selectedFacilityId })}
+              disabled={seed.isPending}
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+            >
+              {seed.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Load Standard Packaging Types
+            </Button>
+            <Button variant="outline" onClick={() => { setAddCategory("box"); setAddOpen(true); }} className="gap-1.5 bg-white">
+              <Plus className="w-4 h-4" /> Add Manually
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-16 text-gray-400">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading inventory…
+        </div>
+      )}
+
+      {/* Tabs */}
+      {!isLoading && items.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          {/* Column headers */}
+          <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-500">
+            <span className="flex-1">Name</span>
+            <span className="w-32 text-center">On Hand</span>
+            <span className="w-24 text-right">Status</span>
+            <span className="w-20 text-right">Burn Rate</span>
+            <span className="w-24 text-right">Actions</span>
           </div>
 
-          {/* Category Tabs */}
-          <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-            <Tabs value={tab} onValueChange={setTab}>
-              <div className="border-b border-gray-200 px-4 pt-3">
-                <TabsList className="bg-gray-100 border border-gray-200 h-9">
-                  <TabsTrigger value="envelope" className="gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs">
-                    <Mail className="w-3.5 h-3.5" />
-                    Envelopes
-                    <span className="ml-1 text-[10px] bg-gray-200 text-gray-600 rounded-full px-1.5 py-0.5 font-mono">{envelopeCount}</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="box" className="gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs">
-                    <BoxIcon className="w-3.5 h-3.5" />
-                    Boxes
-                    <span className="ml-1 text-[10px] bg-gray-200 text-gray-600 rounded-full px-1.5 py-0.5 font-mono">{boxCount}</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="pallet" className="gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs">
-                    <PalletIcon className="w-3.5 h-3.5" />
-                    Pallets
-                    <span className="ml-1 text-[10px] bg-gray-200 text-gray-600 rounded-full px-1.5 py-0.5 font-mono">{palletCount}</span>
-                  </TabsTrigger>
-                </TabsList>
-              </div>
+          <Tabs value={tab} onValueChange={setTab}>
+            <div className="px-4 pt-3 border-b border-gray-100">
+              <TabsList className="bg-gray-100 h-8">
+                <TabsTrigger value="envelope" className="text-xs gap-1.5 h-7">
+                  <Mail className="w-3.5 h-3.5" />
+                  Envelopes
+                  <span className="ml-1 text-[10px] bg-gray-200 text-gray-600 rounded-full px-1.5 font-mono">{envelopes.length}</span>
+                </TabsTrigger>
+                <TabsTrigger value="box" className="text-xs gap-1.5 h-7">
+                  <Box className="w-3.5 h-3.5" />
+                  Boxes
+                  <span className="ml-1 text-[10px] bg-gray-200 text-gray-600 rounded-full px-1.5 font-mono">{boxes.length}</span>
+                </TabsTrigger>
+                <TabsTrigger value="pallet" className="text-xs gap-1.5 h-7">
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  Pallets
+                  <span className="ml-1 text-[10px] bg-gray-200 text-gray-600 rounded-full px-1.5 font-mono">{pallets.length}</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-              {isLoading ? (
-                <div className="flex items-center justify-center py-16 text-gray-400">
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  {knownLoading ? "Loading packaging types…" : "Loading inventory…"}
-                </div>
-              ) : (
-                <>
-                  <TabsContent value="envelope" className="mt-0">
-                    <CategoryPanel
-                      category="envelope"
-                      rows={mergedRows}
-                      configId={configId}
-                      facilityId={selectedFacilityId}
-                      onEdit={setEditItem}
-                      onDelete={setDeleteItem}
-                      onReorder={setReorderItem}
-                      onAddToInventory={(name, cat) => setAddDialog({ name, category: cat })}
-                    />
-                  </TabsContent>
-                  <TabsContent value="box" className="mt-0">
-                    <CategoryPanel
-                      category="box"
-                      rows={mergedRows}
-                      configId={configId}
-                      facilityId={selectedFacilityId}
-                      onEdit={setEditItem}
-                      onDelete={setDeleteItem}
-                      onReorder={setReorderItem}
-                      onAddToInventory={(name, cat) => setAddDialog({ name, category: cat })}
-                    />
-                  </TabsContent>
-                  <TabsContent value="pallet" className="mt-0">
-                    <CategoryPanel
-                      category="pallet"
-                      rows={mergedRows}
-                      configId={configId}
-                      facilityId={selectedFacilityId}
-                      onEdit={setEditItem}
-                      onDelete={setDeleteItem}
-                      onReorder={setReorderItem}
-                      onAddToInventory={(name, cat) => setAddDialog({ name, category: cat })}
-                    />
-                  </TabsContent>
-                </>
-              )}
-            </Tabs>
-          </div>
-        </>
+            <TabsContent value="envelope" className="mt-0">
+              <CategoryPanel
+                items={envelopes}
+                configId={configId}
+                facilityId={selectedFacilityId}
+                userId={userId}
+                userName={userName}
+                onEdit={setEditItem}
+                onDelete={setDeleteItem}
+                onReorder={setReorderItem}
+              />
+            </TabsContent>
+            <TabsContent value="box" className="mt-0">
+              <CategoryPanel
+                items={boxes}
+                configId={configId}
+                facilityId={selectedFacilityId}
+                userId={userId}
+                userName={userName}
+                onEdit={setEditItem}
+                onDelete={setDeleteItem}
+                onReorder={setReorderItem}
+              />
+            </TabsContent>
+            <TabsContent value="pallet" className="mt-0">
+              <CategoryPanel
+                items={pallets}
+                configId={configId}
+                facilityId={selectedFacilityId}
+                userId={userId}
+                userName={userName}
+                onEdit={setEditItem}
+                onDelete={setDeleteItem}
+                onReorder={setReorderItem}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
       )}
 
       {/* Dialogs */}
-      {addOpen && selectedFacilityId && (
-        <ItemDialog configId={configId} facilityId={selectedFacilityId} onClose={() => setAddOpen(false)} />
-      )}
-      {addDialog && selectedFacilityId && (
+      {addOpen && (
         <ItemDialog
           configId={configId}
           facilityId={selectedFacilityId}
-          prefillName={addDialog.name}
-          prefillCategory={addDialog.category}
-          onClose={() => setAddDialog(null)}
+          prefillCategory={addCategory}
+          onClose={() => setAddOpen(false)}
         />
       )}
-      {editItem && selectedFacilityId && (
-        <ItemDialog configId={configId} facilityId={selectedFacilityId} item={editItem} onClose={() => setEditItem(null)} />
+      {editItem && (
+        <ItemDialog
+          configId={configId}
+          facilityId={selectedFacilityId}
+          item={editItem}
+          onClose={() => setEditItem(null)}
+        />
       )}
       {reorderItem && (
-        <ReorderDialog item={reorderItem} configId={configId} onClose={() => setReorderItem(null)} />
+        <ReorderDialog
+          item={reorderItem}
+          configId={configId}
+          userId={userId}
+          userName={userName}
+          onClose={() => setReorderItem(null)}
+        />
       )}
-
-      {/* Delete confirmation */}
       {deleteItem && (
-        <Dialog open onOpenChange={(o) => { if (!o) setDeleteItem(null); }}>
-          <DialogContent className="max-w-sm bg-white">
-            <DialogHeader>
-              <DialogTitle>Delete Item?</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-gray-500 py-2">
-              Are you sure you want to delete <span className="text-gray-900 font-medium">{deleteItem.name}</span>? This cannot be undone.
-            </p>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setDeleteItem(null)} disabled={deleteItem_.isPending}>Cancel</Button>
-              <Button
-                variant="destructive"
-                onClick={() => deleteItem_.mutate({ id: deleteItem.id, configId })}
-                disabled={deleteItem_.isPending}
-              >
-                {deleteItem_.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <DeleteDialog
+          item={deleteItem}
+          configId={configId}
+          facilityId={selectedFacilityId}
+          onClose={() => setDeleteItem(null)}
+        />
       )}
     </div>
   );

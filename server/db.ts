@@ -3817,6 +3817,15 @@ export async function listPackagingInventory(configId: number): Promise<Packagin
     .orderBy(packagingInventory.category, packagingInventory.name);
 }
 
+export async function listPackagingInventoryByFacility(configId: number, facilityId: number): Promise<PackagingInventoryItem[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(packagingInventory)
+    .where(and(eq(packagingInventory.configId, configId), eq(packagingInventory.facilityId, facilityId)))
+    .orderBy(packagingInventory.category, packagingInventory.name);
+}
+
 export async function upsertPackagingInventoryItem(
   data: InsertPackagingInventoryItem
 ): Promise<PackagingInventoryItem> {

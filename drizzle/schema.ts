@@ -1323,6 +1323,7 @@ export type InsertClientPackagingEnabled = typeof clientPackagingEnabled.$inferI
 export const packagingInventory = mysqlTable("packaging_inventory", {
   id: int("id").autoincrement().primaryKey(),
   configId: int("configId").notNull(),
+  facilityId: int("facilityId").notNull().default(0),
   name: varchar("name", { length: 255 }).notNull(),
   category: mysqlEnum("category", ["envelope", "box", "pallet"]).notNull(),
   unit: varchar("unit", { length: 64 }).notNull().default("each"),

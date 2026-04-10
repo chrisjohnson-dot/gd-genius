@@ -7559,16 +7559,103 @@ const smallParcelRouter = router({
 
   // ─── Packaging Inventory ─────────────────────────────────────────────────
   listPackagingInventory: protectedProcedure
-    .input(z.object({ configId: z.number().int() }))
+    .input(z.object({ configId: z.number().int(), facilityId: z.number().int().optional() }))
     .query(async ({ input }) => {
+      if (input.facilityId && input.facilityId > 0) {
+        const { listPackagingInventoryByFacility } = await import('./db.js');
+        return listPackagingInventoryByFacility(input.configId, input.facilityId);
+      }
       const { listPackagingInventory } = await import('./db.js');
       return listPackagingInventory(input.configId);
+    }),
+
+  /**
+   * Fetch all unique packaging types across all customers in a facility.
+   * Used by the Packaging Inventory page to show every known pack type
+   * (even those not yet in the inventory DB) for a given warehouse.
+   */
+  getExtensivPackagingForFacility: protectedProcedure
+    .input(z.object({ configId: z.number().int(), facilityId: z.number().int() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+
+      const { getExtensivToken } = await import("./extensiv/client.js");
+      const { fetchCustomersForFacility } = await import("./extensiv/api.js");
+      const token = await getExtensivToken(config);
+      const baseUrl = config.baseUrl || "https://secure-wms.com";
+
+      // Get all customers for this facility
+      const customers = await fetchCustomersForFacility(config, input.facilityId);
+
+      interface ItemOptions {
+        PackageUnit?: { UnitIdentifier?: { Name?: string; Id?: number }; InventoryUnitsPerUnit?: number; IsPrepackaged?: boolean; Imperial?: { Length?: number; Width?: number; Height?: number; Weight?: number } };
+        Pallets?: { TypeIdentifier?: { Name?: string; Id?: number }; Qty?: number; Imperial?: { Length?: number; Width?: number; Height?: number; Weight?: number } };
+      }
+      interface RawItem { Options?: ItemOptions; }
+
+      type PackageTypeEntry = {
+        name: string;
+        sourceField: "packageUnit" | "pallet";
+        unitId: number;
+        inventoryUnitsPerUnit: number | null;
+        isPrepackaged: boolean;
+        imperial: { length: number | null; width: number | null; height: number | null; weight: number | null };
+        skuCount: number;
+      };
+
+      const typeMap = new Map<string, PackageTypeEntry>();
+
+      // Fetch items for each customer and collect unique package types
+      for (const customer of customers) {
+        let pg = 1;
+        while (true) {
+          const res = await fetch(
+            `${baseUrl}/customers/${customer.id}/items?pgsiz=200&pgnum=${pg}`,
+            { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+          );
+          if (!res.ok) break;
+          const data = await res.json() as { TotalResults?: number; ResourceList?: RawItem[] };
+          const list = data.ResourceList ?? [];
+          for (const item of list) {
+            const pkg = item.Options?.PackageUnit;
+            const pallet = item.Options?.Pallets;
+            if (pkg?.UnitIdentifier?.Name) {
+              const name = pkg.UnitIdentifier.Name;
+              const key = `pkg:${name}`;
+              if (!typeMap.has(key)) {
+                typeMap.set(key, { name, sourceField: "packageUnit", unitId: pkg.UnitIdentifier.Id ?? 0, inventoryUnitsPerUnit: pkg.InventoryUnitsPerUnit ?? null, isPrepackaged: pkg.IsPrepackaged ?? false, imperial: { length: pkg.Imperial?.Length ?? null, width: pkg.Imperial?.Width ?? null, height: pkg.Imperial?.Height ?? null, weight: pkg.Imperial?.Weight ?? null }, skuCount: 0 });
+              }
+              typeMap.get(key)!.skuCount++;
+            }
+            if (pallet?.TypeIdentifier?.Name) {
+              const name = pallet.TypeIdentifier.Name;
+              const key = `pallet:${name}`;
+              if (!typeMap.has(key)) {
+                typeMap.set(key, { name, sourceField: "pallet", unitId: pallet.TypeIdentifier.Id ?? 0, inventoryUnitsPerUnit: null, isPrepackaged: false, imperial: { length: pallet.Imperial?.Length ?? null, width: pallet.Imperial?.Width ?? null, height: pallet.Imperial?.Height ?? null, weight: pallet.Imperial?.Weight ?? null }, skuCount: 0 });
+              }
+              typeMap.get(key)!.skuCount++;
+            }
+          }
+          const total = data.TotalResults;
+          if (list.length === 0 || list.length < 200 || (total !== undefined && list.length + (pg - 1) * 200 >= total)) break;
+          pg++;
+        }
+      }
+
+      const allPackageTypes = Array.from(typeMap.values()).sort((a, b) => {
+        if (a.sourceField !== b.sourceField) return a.sourceField === "pallet" ? -1 : 1;
+        return b.skuCount - a.skuCount || a.name.localeCompare(b.name);
+      });
+
+      return { allPackageTypes, customerCount: customers.length };
     }),
 
   upsertPackagingInventoryItem: protectedProcedure
     .input(z.object({
       id: z.number().int().optional(),
       configId: z.number().int(),
+      facilityId: z.number().int().default(0),
       name: z.string().min(1),
       category: z.enum(['envelope', 'box', 'pallet']),
       unit: z.string().default('each'),

@@ -17,7 +17,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useBrowserPrint } from "@/hooks/useBrowserPrint";
+import { useDirectPrint } from "@/hooks/useDirectPrint";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 
@@ -41,7 +41,7 @@ interface Session {
 // ─── Reprint Button ───────────────────────────────────────────────────────────
 function ReprintButton({ sessionId, hasZpl }: { sessionId: number; hasZpl: boolean }) {
   const [reprinting, setReprinting] = useState(false);
-  const { selectedPrinter, printZpl } = useBrowserPrint();
+  const { selectedPrinter, printZpl } = useDirectPrint();
 
   // Fetch ZPL on demand (lazy query)
   const zplQuery = trpc.smallParcel.getSessionZpl.useQuery(

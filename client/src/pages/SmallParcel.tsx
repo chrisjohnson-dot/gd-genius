@@ -31,7 +31,7 @@ import {
   PinOff,
   Zap,
 } from "lucide-react";
-import { useBrowserPrint } from "@/hooks/useBrowserPrint";
+import { useDirectPrint } from "@/hooks/useDirectPrint";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useUnitSystem } from "@/hooks/useUnitSystem";
 import { RateCard, type RateCardInput, type RateRow } from "@/components/RateCard";
@@ -1150,7 +1150,7 @@ function Step4PackShip({
     onError: (err) => toast.error(`Failed: ${err.message}`),
   });
 
-  const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useBrowserPrint();
+  const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useDirectPrint();
 
   // ── Rate Wizard state ──────────────────────────────────────────────────────
   const [rateConfirmed, setRateConfirmed] = useState(false);

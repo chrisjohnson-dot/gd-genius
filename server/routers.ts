@@ -8007,16 +8007,95 @@ const smallParcelRouter = router({
           unit: t.unit,
           onHandQty: 0,
           minStockLevel: 0,
-          weeklyConsumption: 0,
+           weeklyConsumption: 0,
           notes: t.notes ?? null,
         } as any);
         inserted++;
       }
-
       return { inserted, skipped, total: STANDARD_TYPES.length };
     }),
-});
 
+  // ── Direct TCP/IP Printer Config ─────────────────────────────────────────
+  /** Get the configured direct printer IP and port from small_parcel_settings */
+  getPrinterConfig: protectedProcedure.query(async () => {
+    const [ip, port] = await Promise.all([
+      getSmallParcelSetting("printer_ip"),
+      getSmallParcelSetting("printer_port"),
+    ]);
+    return {
+      printerIp: ip ?? "",
+      printerPort: port ? parseInt(port, 10) : 9100,
+    };
+  }),
+
+  /** Save direct printer IP and port to small_parcel_settings */
+  setPrinterConfig: protectedProcedure
+    .input(z.object({
+      printerIp: z.string(),
+      printerPort: z.number().int().min(1).max(65535).default(9100),
+    }))
+    .mutation(async ({ input }) => {
+      await Promise.all([
+        setSmallParcelSetting("printer_ip", input.printerIp),
+        setSmallParcelSetting("printer_port", String(input.printerPort)),
+      ]);
+      return { success: true };
+    }),
+
+  /**
+   * Send a raw ZPL string directly to the configured Zebra network printer
+   * via a TCP socket on the server. This bypasses the need for Zebra BrowserPrint
+   * on the client workstation.
+   */
+  sendZpl: protectedProcedure
+    .input(z.object({
+      zpl: z.string().min(1),
+      /** Override printer IP — falls back to small_parcel_settings if omitted */
+      printerIp: z.string().optional(),
+      /** Override printer port — falls back to small_parcel_settings if omitted */
+      printerPort: z.number().int().min(1).max(65535).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const net = await import("net");
+      // Resolve printer IP/port: input override > DB setting > error
+      let printerIp = input.printerIp;
+      let printerPort = input.printerPort ?? 9100;
+      if (!printerIp) {
+        const [storedIp, storedPort] = await Promise.all([
+          getSmallParcelSetting("printer_ip"),
+          getSmallParcelSetting("printer_port"),
+        ]);
+        printerIp = storedIp ?? "";
+        if (storedPort) printerPort = parseInt(storedPort, 10);
+      }
+      if (!printerIp) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No printer IP configured. Go to Small Parcel → Printer Settings to set up your Zebra printer.",
+        });
+      }
+      const zplBuffer = Buffer.from(input.zpl, "utf-8");
+      await new Promise<void>((resolve, reject) => {
+        const socket = new net.Socket();
+        const timeout = setTimeout(() => {
+          socket.destroy();
+          reject(new Error(`Printer connection timed out after 8s (${printerIp}:${printerPort})`));
+        }, 8000);
+        socket.connect(printerPort, printerIp!, () => {
+          socket.write(zplBuffer, () => {
+            clearTimeout(timeout);
+            socket.end();
+            resolve();
+          });
+        });
+        socket.on("error", (err: Error) => {
+          clearTimeout(timeout);
+          reject(new Error(`Printer error (${printerIp}:${printerPort}): ${err.message}`));
+        });
+      });
+      return { success: true, printerIp, printerPort };
+    }),
+});
 // Re-export appRouter augmented with all feature routers including SLA
 const techshipRouter = router({
   list: protectedProcedure.query(async () => {

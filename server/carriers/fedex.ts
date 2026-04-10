@@ -151,6 +151,8 @@ function buildBaseShipment(input: CarrierRateInput, accountNumber: string) {
   };
 }
 
+const FEDEX_ONE_RATE_PACKAGING_SET = new Set(FEDEX_ONE_RATE_PACKAGING_TYPES);
+
 async function fetchRatesForPackaging(
   token: string,
   accountNumber: string,
@@ -158,9 +160,23 @@ async function fetchRatesForPackaging(
   packagingType?: string,
 ): Promise<CarrierRate[]> {
   const baseShipment = buildBaseShipment(input, accountNumber);
-  const requestedShipment = packagingType
-    ? { ...baseShipment, packagingType }
-    : baseShipment;
+  let requestedShipment: Record<string, unknown>;
+  if (packagingType && FEDEX_ONE_RATE_PACKAGING_SET.has(packagingType)) {
+    // One Rate pricing is flat — omit dimensions to prevent dim weight inflation.
+    // FedEx One Rate is priced by box type, not by weight or dimensions.
+    const { requestedPackageLineItems: _ignored, ...shipmentBase } = baseShipment;
+    requestedShipment = {
+      ...shipmentBase,
+      packagingType,
+      requestedPackageLineItems: [{
+        weight: { units: "LB", value: Math.max(input.weightLbs, 0.1) },
+      }],
+    };
+  } else {
+    requestedShipment = packagingType
+      ? { ...baseShipment, packagingType }
+      : baseShipment;
+  }
 
   const payload = {
     accountNumber: accountNumber ? { value: accountNumber } : undefined,

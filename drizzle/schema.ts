@@ -1805,3 +1805,74 @@ export const directlyGopherLogs = mysqlTable("directly_gopher_logs", {
 });
 export type DirectlyGopherLog = typeof directlyGopherLogs.$inferSelect;
 export type InsertDirectlyGopherLog = typeof directlyGopherLogs.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// GD Cortex Hub Integration Tables
+// ---------------------------------------------------------------------------
+
+export const cortexHubConfig = mysqlTable("cortex_hub_config", {
+  id: int("id").autoincrement().primaryKey(),
+  cortexBaseUrl: varchar("cortexBaseUrl", { length: 512 }),
+  cortexApiKey: varchar("cortexApiKey", { length: 256 }),
+  geniusApiKey: varchar("geniusApiKey", { length: 256 }),
+  status: mysqlEnum("status", ["connected", "disconnected", "error"]).default("disconnected"),
+  syncIntervalMinutes: int("syncIntervalMinutes").default(5),
+  lastHealthCheck: timestamp("lastHealthCheck"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CortexHubConfig = typeof cortexHubConfig.$inferSelect;
+export type InsertCortexHubConfig = typeof cortexHubConfig.$inferInsert;
+
+export const geniusProductionJobs = mysqlTable("genius_production_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  extensivCustomerId: int("extensivCustomerId").notNull(),
+  jobNumber: varchar("jobNumber", { length: 64 }).notNull(),
+  jobType: mysqlEnum("jobType", ["returns_processing", "kitting", "labeling", "repackaging", "inspection", "other"]).notNull(),
+  status: mysqlEnum("status", ["queued", "in_progress", "completed", "on_hold", "cancelled"]).default("queued").notNull(),
+  priority: mysqlEnum("priority", ["low", "normal", "high", "urgent"]).default("normal"),
+  unitCount: int("unitCount").default(0),
+  completedUnits: int("completedUnits").default(0),
+  assignedTo: varchar("assignedTo", { length: 255 }),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  cortexNotified: boolean("cortexNotified").default(false),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GeniusProductionJob = typeof geniusProductionJobs.$inferSelect;
+export type InsertGeniusProductionJob = typeof geniusProductionJobs.$inferInsert;
+
+export const geniusMaterialsInventory = mysqlTable("genius_materials_inventory", {
+  id: int("id").autoincrement().primaryKey(),
+  extensivCustomerId: int("extensivCustomerId").notNull(),
+  sku: varchar("sku", { length: 128 }).notNull(),
+  description: varchar("description", { length: 512 }),
+  category: varchar("category", { length: 128 }),
+  quantityOnHand: int("quantityOnHand").default(0).notNull(),
+  quantityAllocated: int("quantityAllocated").default(0),
+  quantityAvailable: int("quantityAvailable").default(0),
+  unitOfMeasure: varchar("unitOfMeasure", { length: 32 }).default("each"),
+  reorderPoint: int("reorderPoint"),
+  reorderQuantity: int("reorderQuantity"),
+  location: varchar("location", { length: 128 }),
+  warehouseId: varchar("warehouseId", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GeniusMaterialsInventory = typeof geniusMaterialsInventory.$inferSelect;
+export type InsertGeniusMaterialsInventory = typeof geniusMaterialsInventory.$inferInsert;
+
+export const geniusCortexEvents = mysqlTable("genius_cortex_events", {
+  id: int("id").autoincrement().primaryKey(),
+  eventType: varchar("eventType", { length: 128 }).notNull(),
+  sourcePlatform: mysqlEnum("sourcePlatform", ["cortex", "clearsight", "opfi"]).notNull(),
+  payload: json("payload").notNull(),
+  status: mysqlEnum("status", ["received", "processed", "failed"]).default("received").notNull(),
+  processedAt: timestamp("processedAt"),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type GeniusCortexEvent = typeof geniusCortexEvents.$inferSelect;
+export type InsertGeniusCortexEvent = typeof geniusCortexEvents.$inferInsert;

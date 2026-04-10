@@ -1105,3 +1105,6 @@
 - [x] Add direct TCP/IP printing for Zebra ZT610 (10.90.1.218:9100) — bypass BrowserPrint with server-side raw socket proxy, update Printer Settings UI to support IP/port configuration
 - [x] Debug FedEx One Rate still not appearing — inspect raw FedEx API response for One Rate request
 - [x] Rate Wizard: auto-select cheapest rate (or routing guide recommendation) when rates load
+- [ ] Fix FedEx One Rate to pull FE1 negotiated rate tier — current rate too high, likely pulling LIST/ACCOUNT instead of FE1
+- [ ] Fix FedEx One Rate weight: cap at actual package weight (not dim weight) for One Rate packaging types so flat FE1 rate is returned correctly
+- [x] Install GD Cortex Hub integration package — DB migration, schema, tRPC router, Settings UI

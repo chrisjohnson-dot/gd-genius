@@ -8944,6 +8944,7 @@ const shippingHistoryRouter = router({
     }),
 });
 
+import { cortexHubRouter } from "./routers/cortex-hub";
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -8954,5 +8955,6 @@ export const appRouterV4 = router({
   rateWizard: rateWizardRouter,
   shippingHistory: shippingHistoryRouter,
   directly: directlyRouter,
+  cortexHub: cortexHubRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

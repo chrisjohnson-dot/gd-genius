@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   CheckCircle2, XCircle, RefreshCw, Copy, Eye, EyeOff,
-  Wifi, WifiOff, Clock, Package, AlertCircle, Info
+  Wifi, WifiOff, Clock, Package, AlertCircle, Info, Link2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -402,6 +402,154 @@ function InboundReturnsLog() {
   );
 }
 
+// ─── Cortex Hub Card ─────────────────────────────────────────────────────────
+function CortexHubCard() {
+  const utils = trpc.useUtils();
+  const { data: config, isLoading } = trpc.cortexHub.getConfig.useQuery();
+
+  const [form, setForm] = useState({
+    cortexBaseUrl: "",
+    cortexApiKey: "",
+    geniusApiKey: "",
+    syncIntervalMinutes: 5,
+  });
+  const [initialised, setInitialised] = useState(false);
+
+  if (config && !initialised) {
+    setForm({
+      cortexBaseUrl: config.cortexBaseUrl ?? "",
+      cortexApiKey: "", // masked — user must re-enter to change
+      geniusApiKey: "", // masked — user must re-enter to change
+      syncIntervalMinutes: config.syncIntervalMinutes ?? 5,
+    });
+    setInitialised(true);
+  }
+
+  const save = trpc.cortexHub.saveConfig.useMutation({
+    onSuccess: () => {
+      toast.success("Cortex Hub config saved.");
+      utils.cortexHub.getConfig.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const test = trpc.cortexHub.testConnection.useMutation({
+    onSuccess: (d) => {
+      toast.success(d.message);
+      utils.cortexHub.getConfig.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const statusColor =
+    config?.status === "connected" ? "bg-emerald-600" :
+    config?.status === "error" ? "bg-red-600" : "bg-muted-foreground";
+
+  return (
+    <div className="space-y-6">
+      {/* Status banner */}
+      {config && (
+        <div className="flex items-center gap-3 p-3 rounded-lg border">
+          <span className={`h-2.5 w-2.5 rounded-full ${statusColor}`} />
+          <span className="text-sm font-medium capitalize">{config.status ?? "disconnected"}</span>
+          {config.lastHealthCheck && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              Last checked: {new Date(config.lastHealthCheck).toLocaleString()}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Config form */}
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="hub-url">GD Cortex Base URL</Label>
+          <Input
+            id="hub-url"
+            placeholder="https://cortex.yourdomain.com"
+            value={form.cortexBaseUrl}
+            onChange={(e) => setForm((f) => ({ ...f, cortexBaseUrl: e.target.value }))}
+          />
+        </div>
+
+        <MaskedInput
+          id="hub-cortex-key"
+          label={config?.cortexApiKey ? `Cortex API Key (${config.cortexApiKey})` : "Cortex API Key"}
+          placeholder="Key Cortex uses to authenticate to Genius"
+          value={form.cortexApiKey}
+          onChange={(v) => setForm((f) => ({ ...f, cortexApiKey: v }))}
+        />
+
+        <MaskedInput
+          id="hub-genius-key"
+          label={config?.geniusApiKey ? `Genius API Key (${config.geniusApiKey})` : "Genius API Key"}
+          placeholder="Key Genius uses to authenticate to Cortex"
+          value={form.geniusApiKey}
+          onChange={(v) => setForm((f) => ({ ...f, geniusApiKey: v }))}
+        />
+
+        <div className="space-y-1.5">
+          <Label htmlFor="hub-interval">Sync Interval (minutes)</Label>
+          <Input
+            id="hub-interval"
+            type="number"
+            min={1}
+            max={60}
+            value={form.syncIntervalMinutes}
+            onChange={(e) => setForm((f) => ({ ...f, syncIntervalMinutes: Number(e.target.value) }))}
+            className="w-32"
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <Button
+          onClick={() => save.mutate(form)}
+          disabled={save.isPending || !form.cortexBaseUrl || !form.cortexApiKey || !form.geniusApiKey}
+        >
+          {save.isPending ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+          Save Config
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => test.mutate()}
+          disabled={test.isPending || !config?.cortexBaseUrl}
+        >
+          {test.isPending ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Wifi className="h-4 w-4 mr-2" />}
+          Test Connection
+        </Button>
+      </div>
+
+      {/* Endpoint reference */}
+      <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cortex Hub Endpoints (for Cortex config)</p>
+        <div className="space-y-1 font-mono text-xs">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px]">GET</Badge>
+            <span>/api/trpc/cortexHub.health</span>
+            <span className="text-muted-foreground">— health check (no auth)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px]">GET</Badge>
+            <span>/api/trpc/cortexHub.getProduction</span>
+            <span className="text-muted-foreground">— production jobs feed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px]">GET</Badge>
+            <span>/api/trpc/cortexHub.getMaterials</span>
+            <span className="text-muted-foreground">— materials inventory feed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px]">POST</Badge>
+            <span>/api/trpc/cortexHub.receiveEvent</span>
+            <span className="text-muted-foreground">— inbound events from Cortex</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CortexSettings() {
@@ -430,6 +578,7 @@ export default function CortexSettings() {
           <TabsTrigger value="clearsight">GD ClearSight</TabsTrigger>
           <TabsTrigger value="opfi">GD OpFi</TabsTrigger>
           <TabsTrigger value="inbound">Inbound Returns Log</TabsTrigger>
+          <TabsTrigger value="hub">Cortex Hub</TabsTrigger>
         </TabsList>
 
         <TabsContent value="clearsight">
@@ -470,6 +619,23 @@ export default function CortexSettings() {
             </CardHeader>
             <CardContent>
               <InboundReturnsLog />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="hub">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                GD Cortex Hub Connection
+              </CardTitle>
+              <CardDescription>
+                Configure the Genius side of the Cortex Hub integration. GD Cortex polls Genius for production jobs and materials inventory via these credentials.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CortexHubCard />
             </CardContent>
           </Card>
         </TabsContent>

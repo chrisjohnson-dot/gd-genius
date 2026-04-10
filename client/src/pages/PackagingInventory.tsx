@@ -81,22 +81,19 @@ type InventoryItem = {
   createdAt: Date;
 };
 
-type ExtensivPackageType = {
-  name: string;
-  sourceField: "packageUnit" | "pallet";
-  unitId: number;
-  inventoryUnitsPerUnit: number | null;
-  isPrepackaged: boolean;
-  imperial: { length: number | null; width: number | null; height: number | null; weight: number | null };
-  skuCount: number;
+// A packaging type from the DB (from Package Sizes config)
+type KnownPackageType = {
+  typeName: string;
+  category: string; // "envelope" | "box" | "pallet"
+  clientCount: number;
 };
 
-// A merged row: either tracked in DB or only known from Extensiv
+// A merged row: either tracked in DB or only known from Package Sizes config
 type MergedRow = {
   name: string;
   category: "envelope" | "box" | "pallet";
   dbItem: InventoryItem | null;       // null = not yet in inventory DB
-  extType: ExtensivPackageType | null; // null = manually added, not in Extensiv
+  knownType: KnownPackageType | null; // null = manually added
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -465,10 +462,9 @@ function PackagingRow({
         {isTracked && db!.notes && (
           <p className="text-[11px] text-gray-400 mt-0.5 pl-5">{db!.notes}</p>
         )}
-        {row.extType && (
+        {row.knownType && (
           <p className="text-[11px] text-gray-400 mt-0.5 pl-5">
-            {row.extType.skuCount} SKU{row.extType.skuCount !== 1 ? "s" : ""} in Extensiv
-            {row.extType.imperial.length && ` · ${row.extType.imperial.length}×${row.extType.imperial.width}×${row.extType.imperial.height} in`}
+            Used by {row.knownType.clientCount} client{row.knownType.clientCount !== 1 ? "s" : ""}
           </p>
         )}
       </td>
@@ -692,11 +688,11 @@ export default function PackagingInventory() {
     { enabled: configId > 0 && selectedFacilityId !== null, staleTime: 30_000 }
   );
 
-  // Extensiv packaging types for selected facility (all customers)
-  const { data: extData, isLoading: extLoading, refetch: extRefetch, isFetching: extFetching } =
-    trpc.smallParcel.getExtensivPackagingForFacility.useQuery(
-      { configId, facilityId: selectedFacilityId ?? 0 },
-      { enabled: configId > 0 && selectedFacilityId !== null && (selectedFacilityId ?? 0) > 0, staleTime: 10 * 60 * 1000 }
+  // All known packaging types from Package Sizes DB config (fast, no Extensiv API call needed)
+  const { data: knownTypes = [], isLoading: knownLoading } =
+    trpc.smallParcel.getAllPackagingTypeNames.useQuery(
+      { configId },
+      { enabled: configId > 0, staleTime: 5 * 60 * 1000 }
     );
 
   const { data: requests = [] } = trpc.smallParcel.listPackagingReorderRequests.useQuery(
@@ -715,7 +711,7 @@ export default function PackagingInventory() {
     onError: (e) => toast.error(e.message),
   });
 
-  // Merge Extensiv types with DB items
+  // Merge known package types (from Package Sizes config) with DB inventory items
   const mergedRows = useMemo((): MergedRow[] => {
     const dbMap = new Map<string, InventoryItem>();
     for (const item of dbItems as InventoryItem[]) {
@@ -725,22 +721,23 @@ export default function PackagingInventory() {
     const seen = new Set<string>();
     const rows: MergedRow[] = [];
 
-    // First: all Extensiv types
-    const extTypes = extData?.allPackageTypes ?? [];
-    for (const t of extTypes) {
-      const key = t.name.toLowerCase().trim();
+    // First: all known types from Package Sizes config
+    for (const t of knownTypes as KnownPackageType[]) {
+      const key = t.typeName.toLowerCase().trim();
       if (seen.has(key)) continue;
       seen.add(key);
-      const category = classifyPackageType(t.name, t.sourceField);
+      const cat = (t.category === "envelope" || t.category === "box" || t.category === "pallet")
+        ? t.category as "envelope" | "box" | "pallet"
+        : classifyPackageType(t.typeName, "packageUnit");
       rows.push({
-        name: t.name,
-        category,
+        name: t.typeName,
+        category: cat,
         dbItem: dbMap.get(key) ?? null,
-        extType: t,
+        knownType: t,
       });
     }
 
-    // Then: DB items not in Extensiv (manually added)
+    // Then: DB inventory items not in the known list (manually added)
     for (const item of dbItems as InventoryItem[]) {
       const key = item.name.toLowerCase().trim();
       if (seen.has(key)) continue;
@@ -749,12 +746,12 @@ export default function PackagingInventory() {
         name: item.name,
         category: item.category,
         dbItem: item,
-        extType: null,
+        knownType: null,
       });
     }
 
     return rows;
-  }, [dbItems, extData]);
+  }, [dbItems, knownTypes]);
 
   // Summary counts
   const outOfStock = mergedRows.filter((r) => r.dbItem && r.dbItem.onHandQty === 0).length;
@@ -766,7 +763,7 @@ export default function PackagingInventory() {
   const boxCount = mergedRows.filter((r) => r.category === "box").length;
   const palletCount = mergedRows.filter((r) => r.category === "pallet").length;
 
-  const isLoading = dbLoading || extLoading;
+  const isLoading = dbLoading || knownLoading;
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -787,11 +784,10 @@ export default function PackagingInventory() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5 bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                onClick={() => extRefetch()}
-                disabled={extFetching}
+                onClick={() => utils.smallParcel.getAllPackagingTypeNames.invalidate({ configId })}
               >
-                {extFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                Sync Extensiv
+                <RefreshCw className="w-4 h-4" />
+                Refresh Types
               </Button>
               <Button
                 variant="outline"
@@ -870,7 +866,7 @@ export default function PackagingInventory() {
               {isLoading ? (
                 <div className="flex items-center justify-center py-16 text-gray-400">
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  {extLoading ? "Loading Extensiv packaging types…" : "Loading inventory…"}
+                  {knownLoading ? "Loading packaging types…" : "Loading inventory…"}
                 </div>
               ) : (
                 <>

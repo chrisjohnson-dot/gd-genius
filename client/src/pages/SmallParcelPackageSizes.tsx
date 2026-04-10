@@ -453,6 +453,15 @@ function AddCustomTypeForm({
   const [dimUnit, setDimUnit] = useState<"in" | "cm">("in");
   const utils = trpc.useUtils();
 
+  // Read the live inventory cache to detect duplicates as the user types
+  const inventoryCache = utils.smallParcel.listPackagingInventory.getData({ configId }) ?? [];
+
+  // Build the full name the same way handleSave does (without dimensions, just the base name check)
+  const trimmedName = typeName.trim().toLowerCase();
+  const isDuplicate = trimmedName.length > 0 && inventoryCache.some(
+    (item) => item.category === invCategory && item.name.trim().toLowerCase() === trimmedName
+  );
+
   const reset = () => {
     setTypeName(""); setLength(""); setWidth(""); setHeight(""); setWeight(""); setDimUnit("in");
     setOpen(false);
@@ -572,12 +581,18 @@ function AddCustomTypeForm({
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-muted-foreground">Name <span className="text-red-500">*</span></label>
         <Input
-          className="h-9 text-sm bg-white"
+          className={`h-9 text-sm bg-white ${isDuplicate ? "border-red-400 focus-visible:ring-red-400" : ""}`}
           placeholder={`e.g. "Auto-Bagger Envelope" or "Custom 12×10×8 Box"`}
           value={typeName}
           onChange={(e) => setTypeName(e.target.value)}
           autoFocus
         />
+        {isDuplicate && (
+          <p className="text-xs text-red-600 flex items-center gap-1">
+            <X className="w-3 h-3 shrink-0" />
+            A {categoryLabel.toLowerCase().replace(/s$/, "")} with this name already exists — choose a different name.
+          </p>
+        )}
       </div>
 
       {/* Dimensions */}
@@ -628,7 +643,7 @@ function AddCustomTypeForm({
         <Button variant="outline" size="sm" onClick={reset} disabled={addMutation.isPending}>
           Cancel
         </Button>
-        <Button size="sm" onClick={handleSave} disabled={addMutation.isPending || !typeName.trim()} className="gap-1.5">
+        <Button size="sm" onClick={handleSave} disabled={addMutation.isPending || !typeName.trim() || isDuplicate} className="gap-1.5">
           {addMutation.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
           Save
         </Button>

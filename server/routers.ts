@@ -7543,7 +7543,20 @@ const smallParcelRouter = router({
       typeName: z.string().min(1),
     }))
     .mutation(async ({ input }) => {
-      const { upsertPackagingInventoryItem, upsertClientPackagingEnabled } = await import('./db.js');
+      const { upsertPackagingInventoryItem, upsertClientPackagingEnabled, listPackagingInventory } = await import('./db.js');
+      // 0. Duplicate check — reject if a type with the same name already exists in this category
+      const existing = await listPackagingInventory(input.configId);
+      const nameLower = input.typeName.trim().toLowerCase();
+      const duplicate = existing.find(
+        (item) => item.category === input.category && item.name.trim().toLowerCase() === nameLower
+      );
+      if (duplicate) {
+        const { TRPCError } = await import('@trpc/server');
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: `A ${input.category} named "${duplicate.name}" already exists in inventory. Please use a different name.`,
+        });
+      }
       // 1. Insert into packaging_inventory so it shows in the grid
       const item = await upsertPackagingInventoryItem({
         configId: input.configId,

@@ -229,24 +229,29 @@ function CategoryDetailPanel({
   clientId,
   clientName,
   category,
-  inventoryItems,
-  invLoading,
-  enabledRows,
-  enabledLoading,
   onBack,
 }: {
   configId: number;
   clientId: number;
   clientName: string;
   category: CategoryView;
-  inventoryItems: Array<{ id: number; name: string; category: string; onHandQty: number; minStockLevel: number }>;
-  invLoading: boolean;
-  enabledRows: Array<{ category: string; typeName: string; enabled: boolean }>;
-  enabledLoading: boolean;
   onBack: () => void;
 }) {
   const utils = trpc.useUtils();
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
+
+  // Own the queries directly so invalidation triggers immediate re-render
+  const { data: inventoryItems = [], isLoading: invLoading } =
+    trpc.smallParcel.listPackagingInventory.useQuery(
+      { configId },
+      { enabled: configId > 0 }
+    );
+
+  const { data: enabledRows = [], isLoading: enabledLoading } =
+    trpc.smallParcel.getClientPackagingEnabled.useQuery(
+      { configId, clientId },
+      { enabled: configId > 0 && clientId > 0 }
+    );
 
   const toggleMutation = trpc.smallParcel.setClientPackagingEnabled.useMutation({
     onSuccess: () => {
@@ -634,10 +639,6 @@ function ExtensivPackagingSection({
         clientId={clientId}
         clientName={clientName}
         category={categoryView}
-        inventoryItems={inventoryItems}
-        invLoading={invLoading}
-        enabledRows={enabledRows}
-        enabledLoading={enabledLoading}
         onBack={() => setCategoryView("root")}
       />
     );

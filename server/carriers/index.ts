@@ -38,8 +38,8 @@ export function getCarrierConnectionStatus(): Record<string, { connected: boolea
       connected: !!process.env.USPS_EHUB_API_KEY,
     },
     fedex: {
-      label: "FedEx",
-      connected: !!(process.env.FEDEX_USER_KEY && process.env.FEDEX_PASSWORD),
+      label: "FedEx (REST)",
+      connected: !!(process.env.FEDEX_USER_KEY && process.env.FEDEX_PASSWORD && process.env.FEDEX_ACCOUNT_NUMBER),
     },
     ups: {
       label: "UPS",

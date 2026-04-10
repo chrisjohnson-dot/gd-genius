@@ -441,11 +441,19 @@ function AddCustomTypeForm({
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
+  const [dimUnit, setDimUnit] = useState<"in" | "cm">("in");
   const utils = trpc.useUtils();
 
   const reset = () => {
-    setTypeName(""); setLength(""); setWidth(""); setHeight(""); setWeight("");
+    setTypeName(""); setLength(""); setWidth(""); setHeight(""); setWeight(""); setDimUnit("in");
     setOpen(false);
+  };
+
+  // Convert cm to inches for storage (we always store in inches)
+  const toInches = (val: string) => {
+    const n = parseFloat(val);
+    if (isNaN(n)) return "";
+    return dimUnit === "cm" ? (n / 2.54).toFixed(2) : val;
   };
 
   // First enable it for this client via setClientPackagingEnabled
@@ -464,8 +472,9 @@ function AddCustomTypeForm({
   const handleSave = () => {
     const name = typeName.trim();
     if (!name) { toast.error("Name is required"); return; }
-    // Build a descriptive name including dimensions if provided
-    const dims = [length, width, height].filter(Boolean);
+    // Build a descriptive name including dimensions if provided (always stored in inches)
+    const lIn = toInches(length); const wIn = toInches(width); const hIn = toInches(height);
+    const dims = [lIn, wIn, hIn].filter(Boolean);
     const dimSuffix = dims.length === 3 ? ` (${dims[0]}×${dims[1]}×${dims[2]} in)` : dims.length > 0 ? ` (${dims.join("×")} in)` : "";
     const fullName = name.includes("×") || name.includes("x") ? name : `${name}${dimSuffix}`;
     addMutation.mutate({ configId, clientId, clientName, category: dbCategory, typeName: fullName, enabled: true });
@@ -507,7 +516,25 @@ function AddCustomTypeForm({
 
       {/* Dimensions */}
       <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium text-muted-foreground">Dimensions (inches) — optional</label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-muted-foreground">Dimensions — optional</label>
+          <div className="flex rounded-md border border-border overflow-hidden text-xs">
+            <button
+              type="button"
+              onClick={() => setDimUnit("in")}
+              className={`px-2.5 py-1 font-medium transition-colors ${
+                dimUnit === "in" ? "bg-blue-500 text-white" : "bg-white text-muted-foreground hover:bg-muted"
+              }`}
+            >in</button>
+            <button
+              type="button"
+              onClick={() => setDimUnit("cm")}
+              className={`px-2.5 py-1 font-medium transition-colors ${
+                dimUnit === "cm" ? "bg-blue-500 text-white" : "bg-white text-muted-foreground hover:bg-muted"
+              }`}
+            >cm</button>
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-2">
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-muted-foreground text-center">Length</span>

@@ -7568,6 +7568,7 @@ const smallParcelRouter = router({
         minStockLevel: 0,
         weeklyConsumption: 0,
         notes: null,
+        isCustom: true,
       });
       // 2. Enable it for this client in clientPackagingEnabled
       const dbCategory = input.category === 'pallet' ? 'pallet' : 'package_unit';

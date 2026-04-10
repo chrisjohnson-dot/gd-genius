@@ -296,6 +296,32 @@ function CategoryDetailPanel({
   const dbCat = category === "pallet" ? "pallet" : "package_unit";
   const enabledCount = categoryItems.filter((i) => enabledMap.get(`${dbCat}:${i.name}`) ?? false).length;
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  const deleteMutation = trpc.smallParcel.deletePackagingInventoryItem.useMutation({
+    onMutate: async (variables) => {
+      // Optimistic: remove from inventory cache immediately
+      await utils.smallParcel.listPackagingInventory.cancel({ configId });
+      const prev = utils.smallParcel.listPackagingInventory.getData({ configId });
+      utils.smallParcel.listPackagingInventory.setData({ configId }, (old) =>
+        (old ?? []).filter((i) => i.id !== variables.id)
+      );
+      return { prev };
+    },
+    onSuccess: () => {
+      toast.success("Custom type deleted from inventory.");
+      utils.smallParcel.listPackagingInventory.invalidate({ configId });
+      utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
+    },
+    onError: (err, _vars, context) => {
+      toast.error(`Delete failed: ${err.message}`);
+      if (context?.prev !== undefined) {
+        utils.smallParcel.listPackagingInventory.setData({ configId }, context.prev);
+      }
+    },
+    onSettled: () => setConfirmDeleteId(null),
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -378,31 +404,72 @@ function CategoryDetailPanel({
             const stockBadge = item.onHandQty > 0
               ? <span className="text-xs text-green-600 font-medium">{item.onHandQty} in stock</span>
               : <span className="text-xs text-red-500 font-medium">Out of stock</span>;
+            const isConfirmingDelete = confirmDeleteId === item.id;
             return (
-              <button
-                key={key}
-                type="button"
-                disabled={isPending}
-                onClick={() => handleToggle(dbCat, item.name, isEnabled)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${
-                  isEnabled
-                    ? "border-blue-500 bg-blue-50 shadow-sm"
-                    : "border-border bg-white hover:border-blue-300 hover:bg-blue-50/40"
-                } ${isPending ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
-              >
-                <div className={`shrink-0 ${isEnabled ? "text-blue-600" : "text-muted-foreground"}`}>{icon}</div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${isEnabled ? "text-blue-900" : "text-foreground"}`}>{item.name}</p>
-                  <div className="mt-0.5">{stockBadge}</div>
-                </div>
-                {isEnabled && (
-                  <div className="shrink-0 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
+              <div key={key} className="relative group">
+                <button
+                  type="button"
+                  disabled={isPending || deleteMutation.isPending}
+                  onClick={() => !isConfirmingDelete && handleToggle(dbCat, item.name, isEnabled)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all w-full ${
+                    isEnabled
+                      ? "border-blue-500 bg-blue-50 shadow-sm"
+                      : "border-border bg-white hover:border-blue-300 hover:bg-blue-50/40"
+                  } ${isPending ? "opacity-60 cursor-wait" : "cursor-pointer"} ${item.isCustom ? "pr-10" : ""}`}
+                >
+                  <div className={`shrink-0 ${isEnabled ? "text-blue-600" : "text-muted-foreground"}`}>{icon}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className={`text-sm font-medium truncate ${isEnabled ? "text-blue-900" : "text-foreground"}`}>{item.name}</p>
+                      {item.isCustom && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 shrink-0">custom</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5">{stockBadge}</div>
+                  </div>
+                  {isEnabled && (
+                    <div className="shrink-0 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+
+                {/* Trash icon — only on custom items */}
+                {item.isCustom && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {isConfirmingDelete ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); deleteMutation.mutate({ id: item.id, configId }); }}
+                          disabled={deleteMutation.isPending}
+                          className="text-[10px] font-semibold px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
+                        >
+                          {deleteMutation.isPending ? "…" : "Delete"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                          className="text-[10px] font-semibold px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(item.id); }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50"
+                        title="Delete custom type"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
@@ -498,6 +565,7 @@ function AddCustomTypeForm({
           minStockLevel: 0,
           weeklyConsumption: 0,
           notes: null,
+          isCustom: true,
           createdAt: new Date(),
           updatedAt: new Date(),
         },

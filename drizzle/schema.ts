@@ -1331,6 +1331,7 @@ export const packagingInventory = mysqlTable("packaging_inventory", {
   minStockLevel: int("minStockLevel").notNull().default(0),
   weeklyConsumption: int("weeklyConsumption").notNull().default(0),
   notes: text("notes"),
+  isCustom: boolean("isCustom").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

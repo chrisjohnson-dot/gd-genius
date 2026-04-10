@@ -459,15 +459,16 @@ function AddCustomTypeForm({
     return dimUnit === "cm" ? (n / 2.54).toFixed(2) : val;
   };
 
-  // First enable it for this client via setClientPackagingEnabled
-  const addMutation = trpc.smallParcel.setClientPackagingEnabled.useMutation({
+  // Add custom type: inserts into packaging_inventory AND enables for this client
+  const addMutation = trpc.smallParcel.addCustomPackagingType.useMutation({
     onSuccess: (_data, variables) => {
       toast.success(`"${variables.typeName}" added and enabled for ${clientName}`);
       onAdded(variables.typeName);
       reset();
+      // Invalidate both queries so the grid refreshes with the new item selected
+      utils.smallParcel.listPackagingInventory.invalidate({ configId });
       utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
       utils.smallParcel.getAllPackagingTypeNames.invalidate({ configId });
-      utils.smallParcel.listPackagingInventory.invalidate({ configId });
     },
     onError: (err) => toast.error(`Failed: ${err.message}`),
   });
@@ -480,7 +481,11 @@ function AddCustomTypeForm({
     const dims = [lIn, wIn, hIn].filter(Boolean);
     const dimSuffix = dims.length === 3 ? ` (${dims[0]}×${dims[1]}×${dims[2]} in)` : dims.length > 0 ? ` (${dims.join("×")} in)` : "";
     const fullName = name.includes("×") || name.includes("x") ? name : `${name}${dimSuffix}`;
-    addMutation.mutate({ configId, clientId, clientName, category: dbCategory, typeName: fullName, enabled: true });
+    // Map dbCategory (package_unit/pallet) back to inventory category (envelope/box/pallet)
+    const invCategory: "envelope" | "box" | "pallet" =
+      dbCategory === "pallet" ? "pallet" :
+      fullName.toLowerCase().includes("envelope") || fullName.toLowerCase().includes("mailer") || fullName.toLowerCase().includes("poly") ? "envelope" : "box";
+    addMutation.mutate({ configId, clientId, clientName, category: invCategory, typeName: fullName });
   };
 
   if (!open) {

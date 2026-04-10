@@ -7530,6 +7530,46 @@ const smallParcelRouter = router({
       return { success: true };
     }),
 
+  /**
+   * Add a custom packaging type: inserts into packaging_inventory AND enables it for the client.
+   * This is the correct way to add a custom type so it appears in the grid immediately.
+   */
+  addCustomPackagingType: protectedProcedure
+    .input(z.object({
+      configId: z.number().int(),
+      clientId: z.number().int(),
+      clientName: z.string(),
+      category: z.enum(['envelope', 'box', 'pallet']),
+      typeName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const { upsertPackagingInventoryItem, upsertClientPackagingEnabled } = await import('./db.js');
+      // 1. Insert into packaging_inventory so it shows in the grid
+      const item = await upsertPackagingInventoryItem({
+        configId: input.configId,
+        facilityId: 0, // global (not facility-specific)
+        name: input.typeName,
+        category: input.category,
+        unit: 'each',
+        onHandQty: 0,
+        minStockLevel: 0,
+        weeklyConsumption: 0,
+        notes: null,
+      });
+      // 2. Enable it for this client in clientPackagingEnabled
+      const dbCategory = input.category === 'pallet' ? 'pallet' : 'package_unit';
+      await upsertClientPackagingEnabled({
+        configId: input.configId,
+        clientId: input.clientId,
+        clientName: input.clientName,
+        category: dbCategory,
+        typeName: input.typeName,
+        enabled: true,
+        sortOrder: 0,
+      });
+      return { success: true, item };
+    }),
+
   /** Return the most recent order date per clientId for a given configId (for graying out inactive clients) */
   getLastOrderDatesPerClient: protectedProcedure
     .input(z.object({ configId: z.number().int() }))

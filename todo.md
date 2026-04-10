@@ -1099,3 +1099,4 @@
 - [x] Bug: Package Sizes settings page does not show all ~200 Extensiv packaging types for a client -- fixed getExtensivPackaging to use HAL+JSON with detail=all and correct namespaced _embedded key so Options (PackageUnit, Pallets) are returned; also fixed resolveUpcToSku to use same approach
 - [x] Feature: Metric/imperial toggle on Package Sizes settings page and Step 2 package selector
 - [x] Feature: Metric/imperial toggle on Package Sizes settings page — shared useUnitSystem hook (localStorage), toggle button in page header, dimensions display in cm/kg or in/lbs
+- [x] Bug: getExtensivPackaging returns 0 options for all clients -- fixed: HAL+JSON uses camelCase and detail=all is unsupported; switched to plain JSON which returns PascalCase Options.PackageUnit and Options.Pallets correctly; also fixed resolveUpcToSku to use same approach with correct UPC field paths (item.Upc and item.Options.PackageUnit.Upc)

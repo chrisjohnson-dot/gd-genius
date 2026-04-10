@@ -7084,21 +7084,20 @@ const smallParcelRouter = router({
       let allItems: RawItem[] = [];
       let pg = 1;
       while (true) {
-        // Use HAL+JSON with detail=all to get full Options (PackageUnit, Pallets, UOM) per item
+        // Use plain JSON (Accept: application/json) — HAL+JSON returns camelCase keys which
+        // don't match our PascalCase interface, and detail=all is not supported by this endpoint.
         const res = await fetch(
-          `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}&detail=all`,
-          { headers: { Authorization: `Bearer ${token}`, Accept: "application/hal+json" } }
+          `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
         );
         if (!res.ok) break;
         const data = await res.json() as {
           TotalResults?: number;
           ResourceList?: RawItem[];
-          _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawItem[] };
         };
-        // HAL+JSON returns items under the namespaced rel key; plain JSON fallback uses ResourceList
-        const list = data._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? data.ResourceList ?? [];
+        const list = data.ResourceList ?? [];
         allItems = allItems.concat(list);
-        // Stop when page is not full (last page) or empty, or when we've hit TotalResults
+        // Stop when page is not full (last page), empty, or we've hit TotalResults
         const total = data.TotalResults;
         if (list.length === 0 || list.length < 200 || (total !== undefined && allItems.length >= total)) break;
         pg++;
@@ -7171,6 +7170,47 @@ const smallParcelRouter = router({
       const palletTypes = Array.from(palletMap.values()).sort((a, b) => b.skuCount - a.skuCount || a.palletName.localeCompare(b.palletName));
 
       return { totalItems: allItems.length, packageUnits, palletTypes };
+    }),
+
+  /** Debug: return raw first item from Extensiv to inspect field structure */
+  debugExtensivPackaging: protectedProcedure
+    .input(z.object({ configId: z.number(), clientId: z.number() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+      const { getExtensivToken } = await import("./extensiv/client.js");
+      const token = await getExtensivToken(config);
+      const baseUrl = config.baseUrl || "https://secure-wms.com";
+
+      // Try HAL+JSON with detail=all
+      const halRes = await fetch(
+        `${baseUrl}/customers/${input.clientId}/items?pgsiz=3&pgnum=1&detail=all`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: "application/hal+json" } }
+      );
+      const halData = await halRes.json();
+
+      // Try plain JSON with detail=all
+      const jsonRes = await fetch(
+        `${baseUrl}/customers/${input.clientId}/items?pgsiz=3&pgnum=1&detail=all`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+      );
+      const jsonData = await jsonRes.json();
+
+      // Try plain JSON without detail
+      const plainRes = await fetch(
+        `${baseUrl}/customers/${input.clientId}/items?pgsiz=3&pgnum=1`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+      );
+      const plainData = await plainRes.json();
+
+      return {
+        halStatus: halRes.status,
+        halData,
+        jsonStatus: jsonRes.status,
+        jsonData,
+        plainStatus: plainRes.status,
+        plainData,
+      };
     }),
 
   /** Create a new package size */
@@ -7375,42 +7415,36 @@ const smallParcelRouter = router({
       const token = await getExtensivToken(config);
       const baseUrl = config.baseUrl || 'https://secure-wms.com';
       const normalised = input.barcode.trim().toUpperCase();
-      interface RawItemUom {
-        UnitOfMeasureType?: string;
-        PrimaryUpc?: string;
-        Upc?: string;
-      }
+      // Actual Extensiv plain JSON response shape (PascalCase):
+      // item.Upc = item-level UPC
+      // item.Options.PackageUnit.Upc = package-level UPC (Primary UPC from Units of Measure tab)
       interface RawItemForUpc {
         Sku?: string;
-        PrimaryUpc?: string;
         Upc?: string;
-        UnitsOfMeasure?: RawItemUom[];
+        Options?: {
+          PackageUnit?: { Upc?: string };
+        };
       }
       let pg = 1;
       while (true) {
+        // Use plain JSON — HAL+JSON uses camelCase and detail=all is not supported
         const res = await fetch(
-          `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}&detail=all`,
-          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/hal+json' } }
+          `${baseUrl}/customers/${input.clientId}/items?pgsiz=200&pgnum=${pg}`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
         );
         if (!res.ok) break;
         const data = await res.json() as {
           TotalResults?: number;
           ResourceList?: RawItemForUpc[];
-          _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawItemForUpc[] };
         };
-        const list = data._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? data.ResourceList ?? [];
+        const list = data.ResourceList ?? [];
         for (const item of list) {
           if (!item.Sku) continue;
-          // Check top-level UPC fields
-          if (item.PrimaryUpc && item.PrimaryUpc.trim().toUpperCase() === normalised) return { sku: item.Sku };
+          // Check item-level UPC
           if (item.Upc && item.Upc.trim().toUpperCase() === normalised) return { sku: item.Sku };
-          // Check UnitsOfMeasure array (where Primary UPC lives per Extensiv item master)
-          if (Array.isArray(item.UnitsOfMeasure)) {
-            for (const uom of item.UnitsOfMeasure) {
-              if (uom.PrimaryUpc && uom.PrimaryUpc.trim().toUpperCase() === normalised) return { sku: item.Sku };
-              if (uom.Upc && uom.Upc.trim().toUpperCase() === normalised) return { sku: item.Sku };
-            }
-          }
+          // Check Options.PackageUnit.Upc (Primary UPC from Units of Measure tab in Extensiv)
+          const pkgUpc = item.Options?.PackageUnit?.Upc;
+          if (pkgUpc && pkgUpc.trim().toUpperCase() === normalised) return { sku: item.Sku };
         }
         // Stop when page is not full (last page), or TotalResults reached
         const total = data.TotalResults;

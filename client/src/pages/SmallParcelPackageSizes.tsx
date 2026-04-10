@@ -437,19 +437,39 @@ function AddCustomTypeForm({
 }) {
   const [open, setOpen] = useState(false);
   const [typeName, setTypeName] = useState("");
+  const [length, setLength] = useState("");
+  const [width, setWidth] = useState("");
+  const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
   const utils = trpc.useUtils();
 
+  const reset = () => {
+    setTypeName(""); setLength(""); setWidth(""); setHeight(""); setWeight("");
+    setOpen(false);
+  };
+
+  // First enable it for this client via setClientPackagingEnabled
   const addMutation = trpc.smallParcel.setClientPackagingEnabled.useMutation({
     onSuccess: (_data, variables) => {
-      toast.success(`"${variables.typeName}" added and enabled`);
+      toast.success(`"${variables.typeName}" added and enabled for ${clientName}`);
       onAdded(variables.typeName);
-      setTypeName("");
-      setOpen(false);
+      reset();
       utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
       utils.smallParcel.getAllPackagingTypeNames.invalidate({ configId });
+      utils.smallParcel.listPackagingInventory.invalidate({ configId });
     },
     onError: (err) => toast.error(`Failed: ${err.message}`),
   });
+
+  const handleSave = () => {
+    const name = typeName.trim();
+    if (!name) { toast.error("Name is required"); return; }
+    // Build a descriptive name including dimensions if provided
+    const dims = [length, width, height].filter(Boolean);
+    const dimSuffix = dims.length === 3 ? ` (${dims[0]}×${dims[1]}×${dims[2]} in)` : dims.length > 0 ? ` (${dims.join("×")} in)` : "";
+    const fullName = name.includes("×") || name.includes("x") ? name : `${name}${dimSuffix}`;
+    addMutation.mutate({ configId, clientId, clientName, category: dbCategory, typeName: fullName, enabled: true });
+  };
 
   if (!open) {
     return (
@@ -465,37 +485,61 @@ function AddCustomTypeForm({
   }
 
   return (
-    <div className="flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-blue-400 bg-blue-50 dark:bg-blue-900/20">
-      <Plus className="w-4 h-4 text-blue-600 shrink-0" />
-      <Input
-        className="h-8 text-sm flex-1"
-        placeholder={`e.g. "Custom 12×10×8 Box"`}
-        value={typeName}
-        onChange={(e) => setTypeName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            if (!typeName.trim()) return;
-            addMutation.mutate({ configId, clientId, clientName, category: dbCategory, typeName: typeName.trim(), enabled: true });
-          }
-          if (e.key === "Escape") { setOpen(false); setTypeName(""); }
-        }}
-        autoFocus
-      />
-      <Button
-        size="sm"
-        className="h-8 shrink-0"
-        onClick={() => {
-          if (!typeName.trim()) { toast.error("Type name is required"); return; }
-          addMutation.mutate({ configId, clientId, clientName, category: dbCategory, typeName: typeName.trim(), enabled: true });
-        }}
-        disabled={addMutation.isPending || !typeName.trim()}
-      >
-        {addMutation.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-      </Button>
-      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setOpen(false); setTypeName(""); }}>
-        <X className="w-4 h-4" />
-      </Button>
+    <div className="rounded-xl border-2 border-blue-400 bg-blue-50 p-4 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-blue-900">Add custom {categoryLabel.toLowerCase().replace(/s$/, "")} type</p>
+        <button type="button" onClick={reset} className="text-muted-foreground hover:text-foreground">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Name */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-muted-foreground">Name <span className="text-red-500">*</span></label>
+        <Input
+          className="h-9 text-sm bg-white"
+          placeholder={`e.g. "Auto-Bagger Envelope" or "Custom 12×10×8 Box"`}
+          value={typeName}
+          onChange={(e) => setTypeName(e.target.value)}
+          autoFocus
+        />
+      </div>
+
+      {/* Dimensions */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-muted-foreground">Dimensions (inches) — optional</label>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground text-center">Length</span>
+            <Input className="h-9 text-sm text-center bg-white" placeholder="L" value={length} onChange={(e) => setLength(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground text-center">Width</span>
+            <Input className="h-9 text-sm text-center bg-white" placeholder="W" value={width} onChange={(e) => setWidth(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground text-center">Height</span>
+            <Input className="h-9 text-sm text-center bg-white" placeholder="H" value={height} onChange={(e) => setHeight(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      {/* Weight */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-muted-foreground">Max weight (lbs) — optional</label>
+        <Input className="h-9 text-sm bg-white" placeholder="e.g. 2.5" value={weight} onChange={(e) => setWeight(e.target.value)} />
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" size="sm" onClick={reset} disabled={addMutation.isPending}>
+          Cancel
+        </Button>
+        <Button size="sm" onClick={handleSave} disabled={addMutation.isPending || !typeName.trim()} className="gap-1.5">
+          {addMutation.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+          Save
+        </Button>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { sql } from "drizzle-orm";
+import { directlyRouter } from "./routers/directly";
 import { getDb } from "./db";
 import { COOKIE_NAME } from "@shared/const";
 import { storagePut } from "./storage";
@@ -8754,5 +8755,6 @@ export const appRouterV4 = router({
   shippingIntegration: shippingIntegrationRouter,
   rateWizard: rateWizardRouter,
   shippingHistory: shippingHistoryRouter,
+  directly: directlyRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

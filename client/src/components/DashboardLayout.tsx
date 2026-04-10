@@ -21,8 +21,10 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, MessageSquare, PanelLeft, Users } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
+import { DirectlyPanel } from "./directly/DirectlyPanel";
+import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
@@ -114,6 +116,11 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+  const [directlyOpen, setDirectlyOpen] = useState(false);
+  const { data: unreadCount } = trpc.directly.totalUnread.useQuery(undefined, {
+    refetchInterval: 30_000,
+    enabled: !!user,
+  });
 
   useEffect(() => {
     if (isCollapsed) {
@@ -202,6 +209,24 @@ function DashboardLayoutContent({
           </SidebarContent>
 
           <SidebarFooter className="p-3">
+            <button
+              onClick={() => setDirectlyOpen(true)}
+              className="relative flex items-center gap-3 rounded-lg px-1 py-2 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center mb-1"
+              title="Directly Messenger"
+            >
+              <div className="relative h-9 w-9 flex items-center justify-center rounded-lg bg-accent/50 shrink-0">
+                <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                {(unreadCount?.count ?? 0) > 0 && (
+                  <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-500" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+                <p className="text-sm font-medium truncate leading-none">Directly</p>
+                <p className="text-xs text-muted-foreground truncate mt-1.5">
+                  {(unreadCount?.count ?? 0) > 0 ? `${unreadCount!.count} unread` : "Messenger"}
+                </p>
+              </div>
+            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -255,9 +280,20 @@ function DashboardLayoutContent({
                 </div>
               </div>
             </div>
+            <button
+              onClick={() => setDirectlyOpen(true)}
+              className="relative h-9 w-9 flex items-center justify-center rounded-lg hover:bg-accent transition-colors mr-1"
+              title="Directly Messenger"
+            >
+              <MessageSquare className="h-5 w-5 text-muted-foreground" />
+              {(unreadCount?.count ?? 0) > 0 && (
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
+              )}
+            </button>
           </div>
         )}
         <main className="flex-1 p-4">{children}</main>
+        <DirectlyPanel isOpen={directlyOpen} onClose={() => setDirectlyOpen(false)} />
       </SidebarInset>
     </>
   );

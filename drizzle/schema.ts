@@ -1720,3 +1720,69 @@ export const purchaseOrders = mysqlTable("purchase_orders", {
 });
 export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type InsertPurchaseOrder = typeof purchaseOrders.$inferInsert;
+
+// =============================================================================
+// DIRECTLY + GOPHER — Messenger & AI assistant tables
+// Shared across GD Cortex (Genius, ClearSight, OpFi)
+// =============================================================================
+
+export const directlyConversations = mysqlTable("directly_conversations", {
+  id:         varchar("id", { length: 36 }).primaryKey(),
+  type:       varchar("type", { length: 32 }).notNull(), // "dm" | "group" | "entity" | "gopher_dm"
+  name:       varchar("name", { length: 255 }),
+  entityType: varchar("entityType", { length: 64 }),
+  entityId:   varchar("entityId", { length: 128 }),
+  createdAt:  timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:  timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DirectlyConversation = typeof directlyConversations.$inferSelect;
+export type InsertDirectlyConversation = typeof directlyConversations.$inferInsert;
+
+export const directlyParticipants = mysqlTable("directly_participants", {
+  id:             varchar("id", { length: 36 }).primaryKey(),
+  conversationId: varchar("conversationId", { length: 36 }).notNull(),
+  userId:         int("userId").notNull(),
+  joinedAt:       timestamp("joinedAt").defaultNow().notNull(),
+  lastReadAt:     timestamp("lastReadAt").defaultNow().notNull(),
+});
+export type DirectlyParticipant = typeof directlyParticipants.$inferSelect;
+export type InsertDirectlyParticipant = typeof directlyParticipants.$inferInsert;
+
+export const directlyMessages = mysqlTable("directly_messages", {
+  id:                   varchar("id", { length: 36 }).primaryKey(),
+  conversationId:       varchar("conversationId", { length: 36 }).notNull(),
+  senderId:             int("senderId").notNull(),
+  body:                 text("body").notNull(),
+  isGopherMessage:      boolean("isGopherMessage").default(false).notNull(),
+  gopherInterceptionId: varchar("gopherInterceptionId", { length: 36 }),
+  editedAt:             timestamp("editedAt"),
+  deletedAt:            timestamp("deletedAt"),
+  createdAt:            timestamp("createdAt").defaultNow().notNull(),
+});
+export type DirectlyMessage = typeof directlyMessages.$inferSelect;
+export type InsertDirectlyMessage = typeof directlyMessages.$inferInsert;
+
+export const directlyPresence = mysqlTable("directly_presence", {
+  id:            varchar("id", { length: 36 }).primaryKey(),
+  userId:        int("userId").notNull().unique(),
+  status:        varchar("status", { length: 16 }).default("offline").notNull(),
+  lastSeenAt:    timestamp("lastSeenAt").defaultNow().notNull(),
+  currentApp:    varchar("currentApp", { length: 32 }).default("genius"),
+  statusMessage: varchar("statusMessage", { length: 255 }),
+});
+export type DirectlyPresence = typeof directlyPresence.$inferSelect;
+export type InsertDirectlyPresence = typeof directlyPresence.$inferInsert;
+
+export const directlyGopherLogs = mysqlTable("directly_gopher_logs", {
+  id:               varchar("id", { length: 36 }).primaryKey(),
+  conversationId:   varchar("conversationId", { length: 36 }).notNull(),
+  userId:           int("userId").notNull(),
+  questionCategory: varchar("questionCategory", { length: 64 }),
+  confidence:       int("confidence").default(0),
+  accepted:         boolean("accepted"),
+  walkthroughShown: varchar("walkthroughShown", { length: 128 }),
+  repeatCount:      int("repeatCount").default(0).notNull(),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+});
+export type DirectlyGopherLog = typeof directlyGopherLogs.$inferSelect;
+export type InsertDirectlyGopherLog = typeof directlyGopherLogs.$inferInsert;

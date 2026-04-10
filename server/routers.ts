@@ -7501,9 +7501,9 @@ const smallParcelRouter = router({
   // ── Client Packaging Enabled ────────────────────────────────────────────────
   /** Get all packaging type rows (enabled/disabled) for a given config+client */
   getClientPackagingEnabled: protectedProcedure
-    .input(z.object({ configId: z.number().int(), clientId: z.number().int() }))
+    .input(z.object({ configId: z.number().int(), clientId: z.number().int(), clientName: z.string().optional() }))
     .query(async ({ input }) => {
-      return getClientPackagingEnabled(input.configId, input.clientId);
+      return getClientPackagingEnabled(input.configId, input.clientId, input.clientName);
     }),
 
   /** Enable or disable a packaging type for a client */

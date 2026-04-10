@@ -3736,11 +3736,13 @@ export async function listPutAwayList(params: {
 /** Return all enabled packaging type rows for a given config+client. */
 export async function getClientPackagingEnabled(
   configId: number,
-  clientId: number
+  clientId: number,
+  clientName?: string
 ): Promise<ClientPackagingEnabled[]> {
   const db = await getDb();
   if (!db) return [];
-  return db
+  // Fetch rows matching by clientId (real Extensiv ID)
+  const byId = await db
     .select()
     .from(clientPackagingEnabled)
     .where(
@@ -3750,6 +3752,33 @@ export async function getClientPackagingEnabled(
       )
     )
     .orderBy(clientPackagingEnabled.sortOrder, clientPackagingEnabled.typeName);
+
+  // Also fetch rows imported offline (clientId=0) matched by clientName
+  const byName: ClientPackagingEnabled[] = clientName
+    ? await db
+        .select()
+        .from(clientPackagingEnabled)
+        .where(
+          and(
+            eq(clientPackagingEnabled.configId, configId),
+            eq(clientPackagingEnabled.clientId, 0),
+            sql`LOWER(${clientPackagingEnabled.clientName}) = LOWER(${clientName})`
+          )
+        )
+        .orderBy(clientPackagingEnabled.sortOrder, clientPackagingEnabled.typeName)
+    : [];
+
+  // Merge: prefer byId rows; add byName rows that aren't already covered
+  const seen = new Set(byId.map(r => `${r.category}:${r.typeName.toLowerCase()}`));
+  const merged = [...byId];
+  for (const r of byName) {
+    const key = `${r.category}:${r.typeName.toLowerCase()}`;
+    if (!seen.has(key)) {
+      merged.push(r);
+      seen.add(key);
+    }
+  }
+  return merged.sort((a, b) => a.typeName.localeCompare(b.typeName));
 }
 
 /** Upsert a packaging type row (insert or update enabled flag). */

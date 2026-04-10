@@ -249,7 +249,7 @@ function CategoryDetailPanel({
 
   const { data: enabledRows = [], isLoading: enabledLoading } =
     trpc.smallParcel.getClientPackagingEnabled.useQuery(
-      { configId, clientId },
+      { configId, clientId, clientName },
       { enabled: configId > 0 && clientId > 0 }
     );
 
@@ -742,7 +742,7 @@ function ExtensivPackagingSection({
   // Fetch enabled state from DB for this client
   const { data: enabledRows = [], isLoading: enabledLoading } =
     trpc.smallParcel.getClientPackagingEnabled.useQuery(
-      { configId, clientId },
+      { configId, clientId, clientName },
       { enabled: configId > 0 && clientId > 0 }
     );
 

@@ -413,14 +413,12 @@ function CategoryDetailPanel({
         configId={configId}
         clientId={clientId}
         clientName={clientName}
+        invCategory={category as "envelope" | "box" | "pallet"}
         dbCategory={dbCat}
         categoryLabel={categoryLabel}
         onAdded={(newName) => {
           const key = `${dbCat}:${newName}`;
           setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
-          // Invalidate inventory so the new type appears in the grid immediately
-          utils.smallParcel.listPackagingInventory.invalidate({ configId });
-          utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
         }}
       />
     </div>
@@ -432,6 +430,7 @@ function AddCustomTypeForm({
   configId,
   clientId,
   clientName,
+  invCategory,
   dbCategory,
   categoryLabel,
   onAdded,
@@ -439,6 +438,8 @@ function AddCustomTypeForm({
   configId: number;
   clientId: number;
   clientName: string;
+  /** The inventory category for this panel — always correct, never guessed from name */
+  invCategory: "envelope" | "box" | "pallet";
   dbCategory: "package_unit" | "pallet";
   categoryLabel: string;
   onAdded: (typeName: string) => void;
@@ -466,16 +467,71 @@ function AddCustomTypeForm({
 
   // Add custom type: inserts into packaging_inventory AND enables for this client
   const addMutation = trpc.smallParcel.addCustomPackagingType.useMutation({
+    onMutate: async (variables) => {
+      // Optimistic update: inject the new item directly into the cache immediately
+      await utils.smallParcel.listPackagingInventory.cancel({ configId });
+      await utils.smallParcel.getClientPackagingEnabled.cancel({ configId, clientId });
+
+      const prevInventory = utils.smallParcel.listPackagingInventory.getData({ configId });
+      const prevEnabled = utils.smallParcel.getClientPackagingEnabled.getData({ configId, clientId });
+
+      // Add item to inventory cache
+      utils.smallParcel.listPackagingInventory.setData({ configId }, (old) => [
+        ...(old ?? []),
+        {
+          id: -1, // temp id
+          configId,
+          facilityId: 0,
+          name: variables.typeName,
+          category: variables.category,
+          unit: "each",
+          onHandQty: 0,
+          minStockLevel: 0,
+          weeklyConsumption: 0,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      // Add enabled row to cache
+      utils.smallParcel.getClientPackagingEnabled.setData({ configId, clientId }, (old) => [
+        ...(old ?? []),
+        {
+          id: -1,
+          configId,
+          clientId,
+          clientName,
+          category: dbCategory,
+          typeName: variables.typeName,
+          enabled: true,
+          sortOrder: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      return { prevInventory, prevEnabled };
+    },
     onSuccess: (_data, variables) => {
       toast.success(`"${variables.typeName}" added and enabled for ${clientName}`);
       onAdded(variables.typeName);
       reset();
-      // Invalidate both queries so the grid refreshes with the new item selected
+      // Refetch to replace temp id with real id from DB
       utils.smallParcel.listPackagingInventory.invalidate({ configId });
       utils.smallParcel.getClientPackagingEnabled.invalidate({ configId, clientId });
       utils.smallParcel.getAllPackagingTypeNames.invalidate({ configId });
     },
-    onError: (err) => toast.error(`Failed: ${err.message}`),
+    onError: (err, _variables, context) => {
+      toast.error(`Failed: ${err.message}`);
+      // Roll back optimistic update
+      if (context?.prevInventory !== undefined) {
+        utils.smallParcel.listPackagingInventory.setData({ configId }, context.prevInventory);
+      }
+      if (context?.prevEnabled !== undefined) {
+        utils.smallParcel.getClientPackagingEnabled.setData({ configId, clientId }, context.prevEnabled);
+      }
+    },
   });
 
   const handleSave = () => {
@@ -486,10 +542,7 @@ function AddCustomTypeForm({
     const dims = [lIn, wIn, hIn].filter(Boolean);
     const dimSuffix = dims.length === 3 ? ` (${dims[0]}×${dims[1]}×${dims[2]} in)` : dims.length > 0 ? ` (${dims.join("×")} in)` : "";
     const fullName = name.includes("×") || name.includes("x") ? name : `${name}${dimSuffix}`;
-    // Map dbCategory (package_unit/pallet) back to inventory category (envelope/box/pallet)
-    const invCategory: "envelope" | "box" | "pallet" =
-      dbCategory === "pallet" ? "pallet" :
-      fullName.toLowerCase().includes("envelope") || fullName.toLowerCase().includes("mailer") || fullName.toLowerCase().includes("poly") ? "envelope" : "box";
+    // Use invCategory directly — it's the panel's category, always correct
     addMutation.mutate({ configId, clientId, clientName, category: invCategory, typeName: fullName });
   };
 

@@ -725,6 +725,8 @@ function ExtensivPackagingSection({
     };
   }, [extData, globalTypeNames, enabledMap]);
 
+  const { unit: rootUnit, toggle: rootToggle } = useUnitSystem();
+
   if (categoryView !== "root") {
     return (
       <CategoryDetailPanel
@@ -744,8 +746,6 @@ function ExtensivPackagingSection({
       />
     );
   }
-
-  const { unit: rootUnit, toggle: rootToggle } = useUnitSystem();
   // Root: three category tiles
   return (
     <div className="flex flex-col gap-5">
@@ -900,15 +900,10 @@ export default function SmallParcelPackageSizes() {
   // Fetch custom package sizes from DB
   const { data: allSizes = [] } = trpc.smallParcel.listAllPackageSizes.useQuery();
 
-  // Sort customers alphabetically, active first then inactive
+  // Sort customers alphabetically
   const sortedCustomers = useMemo(() => {
-    return [...customers].sort((a, b) => {
-      const aActive = (lastOrderMap.get(a.id) ?? new Date(0)) >= cutoff;
-      const bActive = (lastOrderMap.get(b.id) ?? new Date(0)) >= cutoff;
-      if (aActive !== bActive) return aActive ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [customers, lastOrderMap, cutoff]);
+    return [...customers].sort((a, b) => a.name.localeCompare(b.name));
+  }, [customers]);
 
   // Filter by search
   const filteredCustomers = useMemo(() => {
@@ -972,7 +967,7 @@ export default function SmallParcelPackageSizes() {
                   key={customer.id}
                   className={`w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/60
                     ${isSelected ? "bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-600" : ""}
-                    ${!isActive ? "opacity-40" : ""}
+                    
                   `}
                   onClick={() => setSelectedClientId(customer.id)}
                 >
@@ -992,8 +987,6 @@ export default function SmallParcelPackageSizes() {
         {/* Footer */}
         <div className="p-3 border-t text-xs text-muted-foreground text-center">
           {filteredCustomers.length} of {sortedCustomers.length} clients
-          {" · "}
-          <span className="opacity-50">faded = no orders in 60d</span>
         </div>
       </div>
 

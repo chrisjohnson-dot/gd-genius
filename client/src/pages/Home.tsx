@@ -410,7 +410,7 @@ function AdvanceButton({
           </DialogHeader>
           <div className="py-2 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Order <span className="font-semibold text-foreground">{order.referenceNum || `#${order.extensivOrderId}`}</span> is being given to an associate for picking.
+              Order <span className="font-semibold text-foreground">TX#{order.extensivOrderId}</span> is being given to an associate for picking.
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="associate-name" className="text-xs font-semibold">Associate Name</Label>
@@ -521,7 +521,7 @@ function SlaExtensionButton({
       utils.pickSchedule.listByChannel.invalidate();
       onChanged();
       setOpen(false);
-      toast.success(`SLA extended by ${days} day${days !== 1 ? "s" : ""} for order ${order.referenceNum ?? `#${order.extensivOrderId}`}`);
+      toast.success(`SLA extended by ${days} day${days !== 1 ? "s" : ""} for order TX#${order.extensivOrderId}`);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -530,7 +530,7 @@ function SlaExtensionButton({
     onSuccess: () => {
       utils.pickSchedule.listByChannel.invalidate();
       onChanged();
-      toast.success(`SLA extension cleared for order ${order.referenceNum ?? `#${order.extensivOrderId}`}`);
+      toast.success(`SLA extension cleared for order TX#${order.extensivOrderId}`);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -570,7 +570,7 @@ function SlaExtensionButton({
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Order <span className="font-semibold text-foreground">{order.referenceNum ?? `#${order.extensivOrderId}`}</span>
+              Order <span className="font-semibold text-foreground">TX#{order.extensivOrderId}</span>
             </p>
             <div className="space-y-1.5">
               <Label className="text-xs">Additional Days</Label>
@@ -1860,7 +1860,7 @@ function SlaBreachSummarySection({ onClientClick }: {
                             <span className="text-red-600 font-bold text-xs">{group.worstDaysOverdue}d overdue</span>
                           </td>
                           <td className="text-muted-foreground font-mono text-xs">
-                            {worst?.referenceNum ?? (worst ? `#${worst.extensivOrderId}` : "—")}
+                            {worst ? `TX#${worst.extensivOrderId}` : "—"}
                             {worst?.requiredShipDate && (
                               <span className="ml-1.5 text-[10px] text-muted-foreground/70">
                                 (req. {new Date(worst.requiredShipDate).toLocaleDateString()})

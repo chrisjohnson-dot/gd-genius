@@ -25,6 +25,7 @@ import { LayoutDashboard, LogOut, MessageSquare, PanelLeft, Users } from "lucide
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { DirectlyPanel } from "./directly/DirectlyPanel";
 import { trpc } from "@/lib/trpc";
+import { useDirectlyNotifications } from "@/hooks/useDirectlyNotifications";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
@@ -117,6 +118,12 @@ function DashboardLayoutContent({
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
   const [directlyOpen, setDirectlyOpen] = useState(false);
+
+  useDirectlyNotifications({
+    panelOpen: directlyOpen,
+    onOpen: () => setDirectlyOpen(true),
+  });
+
   const { data: unreadCount } = trpc.directly.totalUnread.useQuery(undefined, {
     refetchInterval: 30_000,
     enabled: !!user,

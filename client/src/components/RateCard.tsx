@@ -510,7 +510,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
                     {/* Transit */}
                     <td className="px-3 py-2.5 text-right">
                       <span className={`text-xs font-medium ${rate.transitDays === 1 ? "text-amber-600" : ""}`}>
-                        {rate.transitDays}d
+                        {isFinite(rate.transitDays) ? `${rate.transitDays}d` : "—"}
                       </span>
                     </td>
 

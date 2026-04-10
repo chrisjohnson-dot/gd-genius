@@ -151,9 +151,18 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
 
       const currency = rateDetail.currency ?? "USD";
 
-      // Transit days from operational detail
-      const transitStr = detail.operationalDetail?.transitDays;
-      const transitDays = transitStr ? parseInt(transitStr, 10) : serviceInfo.transitDays;
+      // Transit days from operational detail.
+      // FedEx REST returns transit days as word strings (e.g. "TWO_DAYS", "ONE_DAY")
+      // rather than integers — map them explicitly before falling back to the static default.
+      const TRANSIT_WORD_MAP: Record<string, number> = {
+        ONE_DAY: 1, TWO_DAYS: 2, THREE_DAYS: 3, FOUR_DAYS: 4,
+        FIVE_DAYS: 5, SIX_DAYS: 6, SEVEN_DAYS: 7, EIGHT_DAYS: 8,
+      };
+      const transitStr = detail.operationalDetail?.transitDays ?? "";
+      const transitDays =
+        TRANSIT_WORD_MAP[transitStr] !== undefined
+          ? TRANSIT_WORD_MAP[transitStr]
+          : (isFinite(parseInt(transitStr, 10)) ? parseInt(transitStr, 10) : serviceInfo.transitDays);
 
       // Surcharges
       const surcharges = (rateDetail.shipmentRateDetail?.surCharges ?? []).map(s => ({

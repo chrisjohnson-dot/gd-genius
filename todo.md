@@ -1108,3 +1108,4 @@
 - [ ] Fix FedEx One Rate to pull FE1 negotiated rate tier — current rate too high, likely pulling LIST/ACCOUNT instead of FE1
 - [ ] Fix FedEx One Rate weight: cap at actual package weight (not dim weight) for One Rate packaging types so flat FE1 rate is returned correctly
 - [x] Install GD Cortex Hub integration package — DB migration, schema, tRPC router, Settings UI
+- [ ] Add FedEx account 942412380 as dedicated One Rate carrier account with new credentials (l7954a1cd3b78847b183f2262ce8396c47 / e4cfd793afb2498aa0358768dfab8c63)

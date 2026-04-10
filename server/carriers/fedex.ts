@@ -71,13 +71,14 @@ const STANDARD_TO_ONE_RATE: Record<string, string> = {
   FIRST_OVERNIGHT:        "FIRST_OVERNIGHT_ONE_RATE",
 };
 
-// Simple in-memory token cache (valid for ~55 min)
-let _cachedToken: { token: string; expiresAt: number } | null = null;
+// Simple in-memory token cache keyed by clientId (valid for ~55 min)
+const _tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 async function getAccessToken(clientId: string, clientSecret: string): Promise<string> {
   const now = Date.now();
-  if (_cachedToken && _cachedToken.expiresAt > now + 60_000) {
-    return _cachedToken.token;
+  const cached = _tokenCache.get(clientId);
+  if (cached && cached.expiresAt > now + 60_000) {
+    return cached.token;
   }
   const res = await fetch(`${FEDEX_BASE}/oauth/token`, {
     method: "POST",
@@ -94,7 +95,7 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
     throw new Error(`FedEx token error ${res.status}: ${text.slice(0, 200)}`);
   }
   const data = await res.json() as { access_token: string; expires_in: number };
-  _cachedToken = { token: data.access_token, expiresAt: now + data.expires_in * 1000 };
+  _tokenCache.set(clientId, { token: data.access_token, expiresAt: now + data.expires_in * 1000 });
   return data.access_token;
 }
 
@@ -264,16 +265,24 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
     return [];
   }
 
+  // One Rate dedicated account (FE1 contract) — falls back to primary account if not set
+  const oneRateClientId = process.env.FEDEX_ONE_RATE_USER_KEY || clientId;
+  const oneRateClientSecret = process.env.FEDEX_ONE_RATE_PASSWORD || clientSecret;
+  const oneRateAccountNumber = process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER || accountNumber;
+
   try {
     const token = await getAccessToken(clientId, clientSecret);
 
     // ── 1. Standard rates (YOUR_PACKAGING) ──────────────────────────────────
     const standardRates = await fetchRatesForPackaging(token, accountNumber, input);
 
-    // ── 2. One Rate rates — run requests for each One Rate packaging type ───
+    // ── 2. One Rate rates — use dedicated One Rate account if configured ────
     // We deduplicate by serviceCode, keeping the cheapest price per service.
+    const oneRateToken = (oneRateClientId !== clientId)
+      ? await getAccessToken(oneRateClientId, oneRateClientSecret).catch(() => token)
+      : token;
     const oneRateRequests = FEDEX_ONE_RATE_PACKAGING_TYPES.map(pkg =>
-      fetchRatesForPackaging(token, accountNumber, input, pkg).catch(() => [] as CarrierRate[])
+      fetchRatesForPackaging(oneRateToken, oneRateAccountNumber, input, pkg).catch(() => [] as CarrierRate[])
     );
     const oneRateResults = await Promise.all(oneRateRequests);
 

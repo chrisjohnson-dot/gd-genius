@@ -56,6 +56,21 @@ const FEDEX_ONE_RATE_SERVICE_CODES = new Set([
  */
 const FEDEX_ONE_RATE_PACKAGING_TYPES = ["FEDEX_SMALL_BOX", "FEDEX_MEDIUM_BOX"];
 
+/**
+ * FedEx REST Rate API returns the same service codes (e.g. FEDEX_2_DAY) for
+ * both standard and One Rate requests — the pricing differs based on packagingType.
+ * This map renames standard codes → One Rate codes when a FedEx box is used.
+ */
+const STANDARD_TO_ONE_RATE: Record<string, string> = {
+  GROUND_HOME_DELIVERY:   "FEDEX_GROUND_HOME_DELIVERY_ONE_RATE",
+  FEDEX_EXPRESS_SAVER:    "FEDEX_EXPRESS_SAVER_ONE_RATE",
+  FEDEX_2_DAY:            "FEDEX_2_DAY_ONE_RATE",
+  FEDEX_2_DAY_AM:         "FEDEX_2_DAY_AM_ONE_RATE",
+  STANDARD_OVERNIGHT:     "STANDARD_OVERNIGHT_ONE_RATE",
+  PRIORITY_OVERNIGHT:     "PRIORITY_OVERNIGHT_ONE_RATE",
+  FIRST_OVERNIGHT:        "FIRST_OVERNIGHT_ONE_RATE",
+};
+
 // Simple in-memory token cache (valid for ~55 min)
 let _cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -198,14 +213,19 @@ async function fetchRatesForPackaging(
       amount: s.amount?.amount ?? 0,
     })).filter(s => s.amount > 0);
 
-    // Suffix the rateId with packaging type so One Rate and standard don't collide
-    const rateIdSuffix = packagingType ? `_${packagingType.toLowerCase()}` : "";
+    // When packaging is a FedEx box, remap service code to the One Rate variant
+    const isOneRatePackaging = packagingType && FEDEX_ONE_RATE_PACKAGING_TYPES.includes(packagingType);
+    const effectiveServiceCode = isOneRatePackaging
+      ? (STANDARD_TO_ONE_RATE[serviceType] ?? serviceType)
+      : serviceType;
+    const effectiveServiceInfo = FEDEX_SERVICES[effectiveServiceCode] ?? serviceInfo;
+    const rateIdSuffix = isOneRatePackaging ? "_one_rate" : "";
     rates.push({
-      rateId: `fedex_${serviceType.toLowerCase()}${rateIdSuffix}`,
+      rateId: `fedex_${effectiveServiceCode.toLowerCase()}${rateIdSuffix}`,
       carrierCode: "fedex",
       carrierName: "FedEx",
-      service: serviceInfo.label,
-      serviceCode: serviceType,
+      service: effectiveServiceInfo.label,
+      serviceCode: effectiveServiceCode,
       transitDays: isFinite(transitDays) ? transitDays : serviceInfo.transitDays,
       totalCost: parseFloat(totalCost.toFixed(2)),
       currency,
@@ -248,7 +268,7 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
         if (!FEDEX_ONE_RATE_SERVICE_CODES.has(rate.serviceCode)) continue;
         const existing = oneRateByService.get(rate.serviceCode);
         if (!existing || rate.totalCost < existing.totalCost) {
-          // Normalise rateId to not include packaging suffix for One Rate
+          // Normalise rateId — strip the _one_rate suffix added in fetchRatesForPackaging
           oneRateByService.set(rate.serviceCode, {
             ...rate,
             rateId: `fedex_${rate.serviceCode.toLowerCase()}`,

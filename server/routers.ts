@@ -8411,6 +8411,7 @@ const rateWizardRouter = router({
       // ── Rate fetching: Veeqo Rate Shopping API (live) or mock fallback ────────
       type RateResult = {
         rateId: string; carrierCode: string; carrierName: string; service: string;
+        serviceCode: string;
         transitDays: number; totalCost: number; currency: string;
         isPreferred: boolean; isCheapest: boolean; isFastest: boolean;
         surcharges: Array<{ label: string; amount: number }>;
@@ -8498,6 +8499,7 @@ const rateWizardRouter = router({
               carrierCode,
               carrierName: CARRIER_LABELS[carrierCode] ?? vRate.sub_carrier_id ?? carrierCode,
               service: vRate.title,
+              serviceCode: "",
               transitDays,
               totalCost,
               currency: input.destCountry === "CA" ? "CAD" : "USD",
@@ -8565,6 +8567,7 @@ const rateWizardRouter = router({
               carrierCode: dr.carrierCode,
               carrierName: dr.carrierName,
               service: dr.service,
+              serviceCode: dr.serviceCode ?? "",
               transitDays: dr.transitDays,
               totalCost,
               currency: dr.currency,
@@ -8663,6 +8666,7 @@ const rateWizardRouter = router({
               carrierCode: account.carrierCode,
               carrierName: CARRIER_LABELS[account.carrierCode] ?? account.carrierCode,
               service: svc.service,
+              serviceCode: "",
               transitDays: svc.transitDays,
               totalCost,
               currency: input.destCountry === "CA" ? "CAD" : "USD",

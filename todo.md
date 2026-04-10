@@ -1103,3 +1103,5 @@
 - [x] Reprint button in Small Parcel History — fetch stored ZPL and send to Zebra printer without reprocessing
 - [x] Fix FedEx One Rate not appearing in Rate Wizard rate list — routing guide recommends it but it's not selectable
 - [x] Add direct TCP/IP printing for Zebra ZT610 (10.90.1.218:9100) — bypass BrowserPrint with server-side raw socket proxy, update Printer Settings UI to support IP/port configuration
+- [x] Debug FedEx One Rate still not appearing — inspect raw FedEx API response for One Rate request
+- [x] Rate Wizard: auto-select cheapest rate (or routing guide recommendation) when rates load

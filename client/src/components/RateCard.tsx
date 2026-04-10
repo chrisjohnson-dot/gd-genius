@@ -42,6 +42,7 @@ export interface RateRow {
   carrierCode: string;
   carrierName: string;
   service: string;
+  serviceCode: string;
   transitDays: number;
   totalCost: number;
   currency: string;
@@ -142,14 +143,25 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
   useEffect(() => {
     if (!ratesQuery.data || selectedRateId) return;
     if (recommendedRoute && rates.length > 0) {
-      // Find the live rate that best matches the routing guide recommendation
-      const match = rates.find(r =>
+      // 1. Exact serviceCode match (most reliable — e.g. FEDEX_2_DAY_ONE_RATE)
+      const byCode = (recommendedRoute as { serviceCode?: string }).serviceCode
+        ? rates.find(r => r.serviceCode === (recommendedRoute as { serviceCode?: string }).serviceCode)
+        : null;
+      if (byCode) { setSelectedRateId(byCode.rateId); return; }
+      // 2. Carrier + service name fuzzy match
+      const byName = rates.find(r =>
         r.carrierCode === recommendedRoute.carrierCode &&
         r.service.toLowerCase().includes(recommendedRoute.serviceLevel.toLowerCase().split(" ")[0].toLowerCase())
       ) ?? rates.find(r => r.carrierCode === recommendedRoute.carrierCode);
-      if (match) { setSelectedRateId(match.rateId); return; }
+      if (byName) { setSelectedRateId(byName.rateId); return; }
     }
-    if (autoSelectedRateId) setSelectedRateId(autoSelectedRateId);
+    // 3. Server auto-selected rate (preferred carrier / SLA)
+    if (autoSelectedRateId) { setSelectedRateId(autoSelectedRateId); return; }
+    // 4. Fallback: cheapest rate overall
+    if (rates.length > 0) {
+      const cheapest = rates.reduce((a, b) => a.totalCost <= b.totalCost ? a : b);
+      setSelectedRateId(cheapest.rateId);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSelectedRateId, recommendedRoute, ratesQuery.data]);
 

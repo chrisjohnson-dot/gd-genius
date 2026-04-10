@@ -1093,6 +1093,20 @@ function facilityToLocationId(facilityName: string): string {
   return facilityName.slice(0, 3).toUpperCase();
 }
 
+/** Maps Extensiv facility names to routing table warehouse identifiers */
+const FACILITY_WAREHOUSE_MAP: Record<string, string> = {
+  Columbus: "COL-Columbus",
+  Reno: "RENO - Reno",
+};
+function facilityToWarehouse(facilityName: string): string | undefined {
+  const exact = FACILITY_WAREHOUSE_MAP[facilityName];
+  if (exact) return exact;
+  for (const [key, wh] of Object.entries(FACILITY_WAREHOUSE_MAP)) {
+    if (facilityName.toLowerCase().includes(key.toLowerCase())) return wh;
+  }
+  return undefined;
+}
+
 // ─── Step 4: Pack & Ship ──────────────────────────────────────────────────────
 function Step4PackShip({
   sessionId,
@@ -1174,6 +1188,7 @@ function Step4PackShip({
     orderId: order.extensivOrderId,
     orderNumber: order.referenceNum,
     locationId,
+    warehouse: facilityToWarehouse(order.facilityName ?? ""),
     customerId: order.clientId,
     customerName: order.clientName,
     weightLbs: weightLbs > 0 ? weightLbs : 1, // default to 1 lb if no weight

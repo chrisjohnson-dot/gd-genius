@@ -12,6 +12,24 @@ import {
   uniqueIndex,
 } from "drizzle-orm/mysql-core";
 
+// Carrier routing table — ZIP-level pre-computed routing guide
+// Tells the Rate Wizard which carrier/service to use (priority A=best) for each warehouse + ZIP
+export const carrierRoutingTable = mysqlTable("carrier_routing_table", {
+  id: int("id").autoincrement().primaryKey(),
+  warehouse: varchar("warehouse", { length: 64 }).notNull(),   // e.g. "COL-Columbus"
+  shippingMethod: varchar("shipping_method", { length: 64 }), // e.g. "Ground"
+  carrier: varchar("carrier", { length: 64 }).notNull(),       // e.g. "FEDEX ONE RATE"
+  serviceLevel: varchar("service_level", { length: 128 }),     // e.g. "Two Day One Rate"
+  zipCode: int("zip_code").notNull(),                          // 5-digit ZIP as integer
+  cost: decimal("cost", { precision: 8, scale: 2 }),           // pre-computed rate
+  priority: varchar("priority", { length: 4 }).notNull(),      // "A" | "B" | "C" | "D"
+  clientName: varchar("client_name", { length: 128 }),         // null = applies to all clients
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CarrierRoutingEntry = typeof carrierRoutingTable.$inferSelect;
+export type InsertCarrierRoutingEntry = typeof carrierRoutingTable.$inferInsert;
+
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),

@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Zap, DollarSign, Clock, Star, AlertTriangle, CheckCircle2,
   RefreshCw, ChevronUp, ChevronDown, Loader2, Info, Package,
-  Truck, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert,
+  Truck, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert, Navigation,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ export interface RateCardInput {
   locationId: string;
   customerId?: number;
   customerName?: string;
+  warehouse?: string; // warehouse name for routing table lookup (e.g. "COL-Columbus")
   weightLbs: number;
   lengthIn: number;
   widthIn: number;
@@ -93,6 +94,13 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
   const [showSurcharges, setShowSurcharges] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
+  // ── Routing table lookup (Threshold 2-day guide) ────────────────────────────────
+  const routeQuery = trpc.rateWizard.lookupRoute.useQuery(
+    { warehouse: input.warehouse ?? "", destPostal: input.destPostal, clientName: input.customerName },
+    { enabled: !!(input.warehouse && input.destPostal && input.destPostal.length >= 5), staleTime: 5 * 60_000 }
+  );
+  const recommendedRoute = routeQuery.data?.find(r => r.isRecommended) ?? null;
+
   // Track the input snapshot that was used to fetch the current rates
   // so we can detect when dimensions change and rates are stale
   const [fetchedInput, setFetchedInput] = useState<RateCardInput | null>(null);
@@ -130,13 +138,20 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
     return data.autoSelectedRateId;
   }, [data, rates, maxTransitDays]);
 
-  // Auto-select the best SLA-compliant rate when data first loads
+  // Auto-select: routing guide takes priority over SLA-based auto-select
   useEffect(() => {
-    if (ratesQuery.data && autoSelectedRateId && !selectedRateId) {
-      setSelectedRateId(autoSelectedRateId);
+    if (!ratesQuery.data || selectedRateId) return;
+    if (recommendedRoute && rates.length > 0) {
+      // Find the live rate that best matches the routing guide recommendation
+      const match = rates.find(r =>
+        r.carrierCode === recommendedRoute.carrierCode &&
+        r.service.toLowerCase().includes(recommendedRoute.serviceLevel.toLowerCase().split(" ")[0].toLowerCase())
+      ) ?? rates.find(r => r.carrierCode === recommendedRoute.carrierCode);
+      if (match) { setSelectedRateId(match.rateId); return; }
     }
+    if (autoSelectedRateId) setSelectedRateId(autoSelectedRateId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSelectedRateId]);
+  }, [autoSelectedRateId, recommendedRoute, ratesQuery.data]);
 
   // When the transit filter changes, clear the selection so the user picks from the new filtered list
   useEffect(() => {
@@ -351,6 +366,19 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
           </div>
         )}
 
+        {/* Routing guide recommendation banner */}
+        {recommendedRoute && (
+          <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-lg px-3 py-2 text-xs">
+            <Navigation className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+            <span>
+              <strong>Routing guide recommends:</strong>{" "}
+              <span className="font-semibold">{recommendedRoute.carrier}</span>{" "}
+              {recommendedRoute.serviceLevel && <span className="text-emerald-700">({recommendedRoute.serviceLevel})</span>}{" "}
+              {recommendedRoute.cost !== null && <span>— est. ${recommendedRoute.cost.toFixed(2)}</span>}
+              {" "}for ZIP {recommendedRoute.zipCode}
+            </span>
+          </div>
+        )}
         {/* Customer preferred carrier notice (no SLA set) */}
         {!maxTransitDays && data.customerRule?.preferredCarrier && (
           <div className="flex items-center gap-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs">

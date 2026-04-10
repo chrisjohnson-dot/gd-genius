@@ -210,7 +210,7 @@ import {
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
-import { purchaseOrders } from "../drizzle/schema";
+import { purchaseOrders, carrierRoutingTable } from "../drizzle/schema";
 import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
@@ -8701,9 +8701,70 @@ const rateWizardRouter = router({
   getCarrierStatus: protectedProcedure.query(() => {
     return getCarrierConnectionStatus();
   }),
+
+
+  // ── Routing Table Lookup ─────────────────────────────────────────────────
+  // Given a warehouse + destination ZIP, returns the pre-computed priority routes
+  // from the carrier routing table (e.g. Threshold 2-day guide).
+  lookupRoute: protectedProcedure
+    .input(z.object({
+      warehouse: z.string(),
+      destPostal: z.string(),
+      clientName: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const zipInt = parseInt(input.destPostal.replace(/\D/g, "").slice(0, 5), 10);
+      if (isNaN(zipInt)) return [];
+
+      // Carrier name → carrierCode mapping
+      const carrierCodeMap: Record<string, string> = {
+        "FEDEX": "fedex",
+        "FEDEX ONE RATE": "fedex",
+        "UPS": "ups",
+        "Ontrac": "ontrac",
+        "USPS": "usps",
+        "DHL": "dhl",
+      };
+      // Service level → Rate Wizard service code mapping
+      const serviceCodeMap: Record<string, string> = {
+        "Two Day One Rate": "FEDEX_2_DAY",
+        "Ground": "GROUND_HOME_DELIVERY",
+        "Ontrac Ground Service": "ONTRAC_GROUND",
+      };
+
+      const { eq, and, or, isNull, asc } = await import("drizzle-orm");
+      const rows = await db
+        .select()
+        .from(carrierRoutingTable)
+        .where(
+          and(
+            eq(carrierRoutingTable.zipCode, zipInt),
+            eq(carrierRoutingTable.warehouse, input.warehouse),
+            or(
+              eq(carrierRoutingTable.clientName, input.clientName ?? ""),
+              isNull(carrierRoutingTable.clientName)
+            )
+          )
+        )
+        .orderBy(asc(carrierRoutingTable.priority))
+        .limit(10);
+
+      return rows.map(r => ({
+        warehouse: r.warehouse,
+        carrier: r.carrier,
+        carrierCode: carrierCodeMap[r.carrier] ?? r.carrier.toLowerCase(),
+        serviceLevel: r.serviceLevel ?? "",
+        serviceCode: serviceCodeMap[r.serviceLevel ?? ""] ?? "",
+        zipCode: r.zipCode,
+        cost: r.cost ? parseFloat(r.cost) : null,
+        priority: r.priority,
+        clientName: r.clientName,
+        isRecommended: r.priority === "A",
+      }));
+    }),
 });
-
-
 // ─── Shipping History Router ─────────────────────────────────────────────────
 const shippingHistoryRouter = router({
   /** List unified shipments with optional filters and pagination */

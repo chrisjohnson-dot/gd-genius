@@ -18,14 +18,20 @@ export async function checkOverdueSessions(): Promise<number> {
   const settings = ((settingsResult as any[])[0] ?? []) as Array<{
     warehouse_id: string;
     threshold_minutes: number;
+    re_alert_multiplier: number;
   }>;
   if (settings.length === 0) return 0;
 
   const globalSetting = settings.find((s) => s.warehouse_id === "all");
   const globalThreshold = globalSetting?.threshold_minutes ?? 120;
+  const globalMultiplier = globalSetting?.re_alert_multiplier ?? 2;
   const warehouseThresholds: Record<string, number> = {};
+  const warehouseMultipliers: Record<string, number> = {};
   settings.forEach((s) => {
-    if (s.warehouse_id !== "all") warehouseThresholds[s.warehouse_id] = s.threshold_minutes;
+    if (s.warehouse_id !== "all") {
+      warehouseThresholds[s.warehouse_id] = s.threshold_minutes;
+      warehouseMultipliers[s.warehouse_id] = s.re_alert_multiplier ?? globalMultiplier;
+    }
   });
 
   // Fetch active sessions
@@ -60,30 +66,53 @@ export async function checkOverdueSessions(): Promise<number> {
     const elapsedMinutes = Math.floor((now - startedAtMs) / 60000);
     if (elapsedMinutes < threshold) continue;
 
-    // Skip if already alerted
+    const multiplier =
+      session.warehouse_id && warehouseMultipliers[session.warehouse_id] !== undefined
+        ? warehouseMultipliers[session.warehouse_id]
+        : globalMultiplier;
+    const escalationThreshold = threshold * multiplier;
+
+    // Determine what alert level should fire now
+    // level 1 = initial (elapsed >= threshold), level 2 = escalation (elapsed >= threshold * multiplier)
+    const targetLevel = elapsedMinutes >= escalationThreshold ? 2 : 1;
+
+    // Check existing alerts for this session
     const existingResult = await db.execute<any>(
-      sql`SELECT id FROM pull_session_alerts WHERE session_id = ${sessionId} LIMIT 1`
+      sql`SELECT alert_level FROM pull_session_alerts WHERE session_id = ${sessionId} ORDER BY alert_level DESC LIMIT 1`
     );
     const existingRows = (existingResult as any[])[0] ?? [];
-    if ((existingRows as any[]).length > 0) continue;
+    const highestExistingLevel: number = (existingRows as any[])[0]?.alert_level ?? 0;
+
+    // Skip if we've already fired an alert at this level or higher
+    if (highestExistingLevel >= targetLevel) continue;
+
+    const alertLevel = targetLevel;
+    const isEscalation = alertLevel >= 2;
 
     // Insert alert
     await db.execute(
       sql`INSERT INTO pull_session_alerts
           (session_id, pick_ticket, associate_id, associate_name, warehouse_id,
-           elapsed_minutes, threshold_minutes, alerted_at, acknowledged)
+           elapsed_minutes, threshold_minutes, alerted_at, acknowledged, alert_level)
          VALUES (${sessionId}, ${session.pick_ticket}, ${session.associate_id},
                  ${session.associate_name}, ${session.warehouse_id},
-                 ${elapsedMinutes}, ${threshold}, ${now}, 0)`
+                 ${elapsedMinutes}, ${threshold}, ${now}, 0, ${alertLevel})`
     );
 
     // Push owner notification
     const associateLabel = session.associate_name ?? session.associate_id ?? "Unknown";
     const warehouseLabel = session.warehouse_id ?? "Unknown warehouse";
-    await notifyOwner({
-      title: `⚠️ Overdue Pull Session — ${associateLabel}`,
-      content: `Pull session for **${associateLabel}** at **${warehouseLabel}** has been running for **${elapsedMinutes} minutes** (threshold: ${threshold} min). Pick ticket: ${session.pick_ticket ?? "N/A"}.`,
-    });
+    if (isEscalation) {
+      await notifyOwner({
+        title: `🚨 ESCALATION: Pull Session Still Running — ${associateLabel}`,
+        content: `Pull session for **${associateLabel}** at **${warehouseLabel}** has been running for **${elapsedMinutes} minutes** — that's ${multiplier}× the ${threshold}-min threshold. Immediate attention required. Pick ticket: ${session.pick_ticket ?? "N/A"}.`,
+      });
+    } else {
+      await notifyOwner({
+        title: `⚠️ Overdue Pull Session — ${associateLabel}`,
+        content: `Pull session for **${associateLabel}** at **${warehouseLabel}** has been running for **${elapsedMinutes} minutes** (threshold: ${threshold} min). Pick ticket: ${session.pick_ticket ?? "N/A"}.`,
+      });
+    }
 
     firedCount++;
   }
@@ -105,6 +134,7 @@ export const pullAlertsRouter = router({
       id: number;
       warehouse_id: string;
       threshold_minutes: number;
+      re_alert_multiplier: number;
       enabled: number;
       notify_email: string | null;
       updated_at: number;
@@ -112,6 +142,7 @@ export const pullAlertsRouter = router({
       id: s.id,
       warehouseId: s.warehouse_id,
       thresholdMinutes: s.threshold_minutes,
+      reAlertMultiplier: Number(s.re_alert_multiplier ?? 2),
       enabled: Boolean(s.enabled),
       notifyEmail: s.notify_email,
       updatedAt: s.updated_at,
@@ -124,6 +155,7 @@ export const pullAlertsRouter = router({
       z.object({
         warehouseId: z.string().default("all"),
         thresholdMinutes: z.number().int().min(1).max(1440),
+        reAlertMultiplier: z.number().min(1).max(10).default(2),
         enabled: z.boolean(),
         notifyEmail: z.string().email().optional().nullable(),
       })
@@ -134,12 +166,14 @@ export const pullAlertsRouter = router({
       const now = Date.now();
       const enabledVal = input.enabled ? 1 : 0;
       const emailVal = input.notifyEmail ?? null;
+      const multiplierVal = input.reAlertMultiplier ?? 2;
       await db.execute(
         sql`INSERT INTO pull_alert_settings
-              (warehouse_id, threshold_minutes, enabled, notify_email, created_at, updated_at)
-            VALUES (${input.warehouseId}, ${input.thresholdMinutes}, ${enabledVal}, ${emailVal}, ${now}, ${now})
+              (warehouse_id, threshold_minutes, re_alert_multiplier, enabled, notify_email, created_at, updated_at)
+            VALUES (${input.warehouseId}, ${input.thresholdMinutes}, ${multiplierVal}, ${enabledVal}, ${emailVal}, ${now}, ${now})
             ON DUPLICATE KEY UPDATE
               threshold_minutes = VALUES(threshold_minutes),
+              re_alert_multiplier = VALUES(re_alert_multiplier),
               enabled = VALUES(enabled),
               notify_email = VALUES(notify_email),
               updated_at = VALUES(updated_at)`
@@ -197,6 +231,7 @@ export const pullAlertsRouter = router({
         acknowledged: number;
         acknowledged_at: number | null;
         acknowledged_by: string | null;
+        alert_level: number;
       }>).map((a) => ({
         id: a.id,
         sessionId: a.session_id,
@@ -210,6 +245,7 @@ export const pullAlertsRouter = router({
         acknowledged: Boolean(a.acknowledged),
         acknowledgedAt: a.acknowledged_at,
         acknowledgedBy: a.acknowledged_by,
+        alertLevel: Number(a.alert_level ?? 1),
       }));
     }),
 

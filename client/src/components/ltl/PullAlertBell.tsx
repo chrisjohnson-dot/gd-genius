@@ -42,6 +42,9 @@ export function PullAlertBell() {
     { enabled: open, refetchInterval: open ? 30000 : false }
   );
 
+  // Count escalation alerts for bell color
+  const escalationCount = alerts.filter((a) => (a as any).alertLevel >= 2).length;
+
   const acknowledge = trpc.pullAlerts.acknowledge.useMutation({
     onSuccess: () => {
       utils.pullAlerts.getUnreadCount.invalidate();
@@ -71,12 +74,12 @@ export function PullAlertBell() {
           aria-label="Pull session alerts"
         >
           {unreadCount > 0 ? (
-            <BellRing className="h-5 w-5 text-orange-500" />
+            <BellRing className={`h-5 w-5 ${escalationCount > 0 ? "text-red-500" : "text-orange-500"}`} />
           ) : (
             <Bell className="h-5 w-5 text-muted-foreground" />
           )}
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">
+            <span className={`absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white ${escalationCount > 0 ? "bg-red-500" : "bg-orange-500"}`}>
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
@@ -125,15 +128,30 @@ export function PullAlertBell() {
                   key={alert.id}
                   className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
                 >
-                  <div className="mt-0.5 flex-shrink-0 h-8 w-8 rounded-full bg-orange-500/10 flex items-center justify-center">
-                    <Clock className="h-4 w-4 text-orange-500" />
+                  <div className={`mt-0.5 flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
+                    (alert as any).alertLevel >= 2 ? "bg-red-500/10" : "bg-orange-500/10"
+                  }`}>
+                    {(alert as any).alertLevel >= 2 ? (
+                      <span className="text-base leading-none">🚨</span>
+                    ) : (
+                      <Clock className="h-4 w-4 text-orange-500" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {alert.associateName ?? alert.associateId ?? "Unknown associate"}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium truncate">
+                        {alert.associateName ?? alert.associateId ?? "Unknown associate"}
+                      </p>
+                      {(alert as any).alertLevel >= 2 && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-red-500 bg-red-500/10 px-1 rounded">
+                          ESCALATION
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-xs text-orange-600 font-semibold">
+                      <span className={`text-xs font-semibold ${
+                        (alert as any).alertLevel >= 2 ? "text-red-600" : "text-orange-600"
+                      }`}>
                         {formatElapsed(alert.elapsedMinutes)} elapsed
                       </span>
                       <span className="text-xs text-muted-foreground">

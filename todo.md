@@ -1280,3 +1280,12 @@
 - [x] Server: logs fired alert count and errors to console for observability
 - [x] Fix: drizzle execute() returns [[rows], fields] nested array — unwrapped with [0] in pullAlerts.ts
 - [x] Tests: pullAlerts tests updated to use [[rows]] mock format — all 581 tests passing
+
+## Re-Alert Threshold (Escalation Alerts)
+- [x] DB: add re_alert_multiplier column to pull_alert_settings (default 2 = fire again at 2× threshold)
+- [x] DB: add alert_level column to pull_session_alerts (1 = initial, 2 = escalation)
+- [x] Server: checkOverdueSessions fires escalation alert when elapsed > threshold * re_alert_multiplier and no level-2 alert exists yet
+- [x] Server: escalation alert uses 🚨 ESCALATION notifyOwner message with multiplier details
+- [x] UI: PullAlertSettings — Re-alert At toggle (1.5×, 2×, 3×, Off) for global + per-warehouse, shows computed escalation time
+- [x] UI: PullAlertBell — turns red with 🚨 ESCALATION badge for level-2 alerts; orange for level-1
+- [x] Tests: pullAlerts test fixed (alert_level in mock) — 581 tests passing

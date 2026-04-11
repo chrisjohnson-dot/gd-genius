@@ -82,7 +82,7 @@ describe("checkOverdueSessions", () => {
         warehouse_id: "LAX",
         started_at: now - 150 * 60 * 1000,
       }]])
-      .mockResolvedValueOnce([[{ id: 99 }]]); // existing alert found
+      .mockResolvedValueOnce([[{ id: 99, alert_level: 1 }]]); // existing alert found (level 1 already fired)
     const fired = await checkOverdueSessions();
     expect(fired).toBe(0);
   });

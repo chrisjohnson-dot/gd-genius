@@ -343,8 +343,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         style={{ background: "#1b1c21", position: "relative" }}
       >
         {/* Brand */}
-        <div className="px-4 pt-4 pb-3.5 border-b border-white/[0.06]">
-          <img src={GD_LOGO} alt="GD Genius" className="h-24 w-auto" />
+        <div className="pl-2 pr-4 pt-4 pb-3.5 border-b border-white/[0.06]">
+          <img src={GD_LOGO} alt="GD Genius" className="h-[115px] w-auto" />
         </div>
 
         {/* Navigation */}

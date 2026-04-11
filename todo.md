@@ -1213,3 +1213,8 @@
 - [x] UI: OnboardingProgressBadge in sidebar footer
 - [x] UI: Auto-launches for new authenticated users via AppLayout
 - [x] Tests: onboardingRouter unit tests
+
+## Fix: Onboarding Tour blank steps
+- [ ] Seed onboarding_steps table with real content for admin and operator roles
+- [ ] Fix OnboardingTour to not auto-launch when steps table is empty
+- [ ] Fix step rows to display title and description text

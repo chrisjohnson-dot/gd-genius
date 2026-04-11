@@ -1126,3 +1126,10 @@
 - [x] Auto-void logic: call voidFedExLabel + updateSmallParcelSession + audit log
 - [x] Webhook URL display added to Settings UI with copy button and Extensiv setup instructions
 - [x] Tests: auto-void happy path, already-voided skip, no-tracking-number, FedEx failure, multi-session, payload parsing (531 tests passing)
+
+## OrderCancel Webhook — Deallocation Extension
+- [x] DB: add findAllocatedRunOrdersByExtensivOrderId helper (joins allocationRunOrders + allocationRuns)
+- [x] Webhook: extend OrderCancel handler to call deallocateOrder for confirmed allocation run items
+- [x] Webhook: mark allocation_run_orders row as unallocated after deallocation (even on Extensiv failure)
+- [x] Webhook: decrement run allocatedCount and set run status to unallocated when all orders done
+- [x] Tests: deallocation happy path, no-orders, missing-config, missing-etag, Extensiv failure, multi-order, run-count (539 tests passing)

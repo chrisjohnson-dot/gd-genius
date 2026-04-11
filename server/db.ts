@@ -352,6 +352,31 @@ export async function deleteAllocationRun(id: number): Promise<void> {
   await db.delete(allocationRuns).where(eq(allocationRuns.id, id));
 }
 
+/**
+ * Find all allocation run orders for a given Extensiv order ID that are in
+ * 'allocated' status and belong to a 'confirmed' run.
+ * Used by the OrderCancel webhook to auto-deallocate.
+ */
+export async function findAllocatedRunOrdersByExtensivOrderId(
+  extensivOrderId: number
+): Promise<Array<AllocationRunOrder & { run: AllocationRun }>> {
+  const db = await getDb();
+  if (!db) return [];
+  // Join allocation_run_orders with allocation_runs to filter by run status
+  const rows = await db
+    .select()
+    .from(allocationRunOrders)
+    .innerJoin(allocationRuns, eq(allocationRunOrders.runId, allocationRuns.id))
+    .where(
+      and(
+        eq(allocationRunOrders.orderId, extensivOrderId),
+        eq(allocationRunOrders.status, "allocated"),
+        eq(allocationRuns.status, "confirmed")
+      )
+    );
+  return rows.map((r) => ({ ...r.allocation_run_orders, run: r.allocation_runs }));
+}
+
 export async function getUnresolvedVerificationCount(): Promise<number> {
   const db = await getDb();
   if (!db) return 0;

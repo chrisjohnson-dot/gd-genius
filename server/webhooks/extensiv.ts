@@ -4,7 +4,8 @@
  * Listens for Extensiv 3PL Warehouse Manager webhook events.
  * Currently handles:
  *   - OrderCancel: automatically voids any label_purchased FedEx labels
- *     for the cancelled order.
+ *     for the cancelled order AND deallocates any confirmed allocation run
+ *     orders for the same Extensiv order ID.
  *
  * Security: Validates the RSA-SHA256 signature in the `Signature` header
  * using Extensiv's public key fetched from https://secure-wms.com/events/webhook/key
@@ -32,8 +33,14 @@ import {
   findSmallParcelSessionsByExtensivOrderId,
   updateSmallParcelSession,
   logSmallParcelAuditEvent,
+  findAllocatedRunOrdersByExtensivOrderId,
+  updateAllocationRunOrder,
+  updateAllocationRun,
+  getAllocationRunOrders,
+  getExtensivConfigById,
 } from "../db";
 import { voidFedExLabel } from "../carriers/fedex";
+import { deallocateOrder, fetchOrderWithDetail } from "../extensiv/api";
 
 // ─── RSA Public Key Cache ──────────────────────────────────────────────────────
 const EXTENSIV_PUBLIC_KEY_URL = "https://secure-wms.com/events/webhook/key";
@@ -168,6 +175,80 @@ async function autoVoidSessionsForOrder(extensivOrderId: number): Promise<{
   return result;
 }
 
+// ─── Auto-Deallocate Logic ────────────────────────────────────────────────────
+
+/**
+ * Find all confirmed allocation run orders for the given Extensiv order ID
+ * and deallocate them in Extensiv, then mark them as unallocated in the DB.
+ */
+async function autoDeallocateOrderInExtensiv(extensivOrderId: number): Promise<{
+  found: number;
+  deallocated: number;
+  alreadyUnallocated: number;
+  errors: string[];
+}> {
+  const runOrders = await findAllocatedRunOrdersByExtensivOrderId(extensivOrderId);
+  const result = { found: runOrders.length, deallocated: 0, alreadyUnallocated: 0, errors: [] as string[] };
+
+  for (const runOrder of runOrders) {
+    // Load the Extensiv config for this run
+    const config = await getExtensivConfigById(runOrder.run.configId);
+    if (!config) {
+      const msg = `Run ${runOrder.runId}: Extensiv config ${runOrder.run.configId} not found`;
+      result.errors.push(msg);
+      console.error(`[ExtensivWebhook] ${msg}`);
+      continue;
+    }
+
+    try {
+      // Fetch fresh ETag for the order (required by Extensiv's optimistic concurrency)
+      const { etag } = await fetchOrderWithDetail(config, runOrder.orderId);
+      if (!etag) {
+        const msg = `RunOrder ${runOrder.id}: Could not fetch ETag for order ${runOrder.orderId}`;
+        result.errors.push(msg);
+        console.error(`[ExtensivWebhook] ${msg}`);
+        continue;
+      }
+
+      // Call Extensiv deallocator
+      const deallocResult = await deallocateOrder(config, runOrder.orderId, etag);
+
+      if (!deallocResult.success) {
+        const msg = `RunOrder ${runOrder.id}: Extensiv deallocate failed — ${deallocResult.error}`;
+        result.errors.push(msg);
+        console.error(`[ExtensivWebhook] ${msg}`);
+        // Still mark as unallocated in DB so it doesn't block future allocations
+        // (the order is cancelled anyway, so the allocation is moot)
+      } else {
+        console.log(
+          `[ExtensivWebhook] Deallocated order ${runOrder.orderId} (runOrder ${runOrder.id}) ` +
+          `from run ${runOrder.runId} for cancelled Extensiv order ${extensivOrderId}`
+        );
+      }
+
+      // Update run order status to unallocated in DB
+      await updateAllocationRunOrder(runOrder.id, { status: "unallocated" });
+
+      // Update the run's allocatedCount; if all orders are now unallocated, update run status too
+      const allOrders = await getAllocationRunOrders(runOrder.runId);
+      const allocatedCount = allOrders.filter((o) => o.status === "allocated").length;
+      const runStatusUpdate: { allocatedCount: number; status?: "proposed" | "confirmed" | "cancelled" | "failed" | "unallocated" } = { allocatedCount };
+      if (allocatedCount === 0) {
+        runStatusUpdate.status = "unallocated";
+      }
+      await updateAllocationRun(runOrder.runId, runStatusUpdate);
+
+      result.deallocated++;
+    } catch (err) {
+      const msg = `RunOrder ${runOrder.id}: ${err instanceof Error ? err.message : String(err)}`;
+      result.errors.push(msg);
+      console.error(`[ExtensivWebhook] Deallocation error for runOrder ${runOrder.id}:`, err);
+    }
+  }
+
+  return result;
+}
+
 // ─── Route Registration ───────────────────────────────────────────────────────
 
 export function registerExtensivWebhookRoutes(app: Express): void {
@@ -244,14 +325,26 @@ export function registerExtensivWebhookRoutes(app: Express): void {
               return;
             }
 
-            console.log(`[ExtensivWebhook] OrderCancel received for order ${orderId} — checking for label_purchased sessions...`);
-            const result = await autoVoidSessionsForOrder(orderId);
+            console.log(`[ExtensivWebhook] OrderCancel received for order ${orderId} — processing void + deallocation...`);
+
+            // Step 1: Auto-void any purchased FedEx labels
+            const voidResult = await autoVoidSessionsForOrder(orderId);
             console.log(
               `[ExtensivWebhook] Auto-void complete for order ${orderId}: ` +
-              `found=${result.found}, voided=${result.voided}, alreadyVoided=${result.alreadyVoided}, errors=${result.errors.length}`
+              `found=${voidResult.found}, voided=${voidResult.voided}, alreadyVoided=${voidResult.alreadyVoided}, errors=${voidResult.errors.length}`
             );
-            if (result.errors.length > 0) {
-              console.error("[ExtensivWebhook] Void errors:", result.errors);
+            if (voidResult.errors.length > 0) {
+              console.error("[ExtensivWebhook] Void errors:", voidResult.errors);
+            }
+
+            // Step 2: Auto-deallocate any confirmed allocation run orders
+            const deallocResult = await autoDeallocateOrderInExtensiv(orderId);
+            console.log(
+              `[ExtensivWebhook] Auto-deallocation complete for order ${orderId}: ` +
+              `found=${deallocResult.found}, deallocated=${deallocResult.deallocated}, alreadyUnallocated=${deallocResult.alreadyUnallocated}, errors=${deallocResult.errors.length}`
+            );
+            if (deallocResult.errors.length > 0) {
+              console.error("[ExtensivWebhook] Deallocation errors:", deallocResult.errors);
             }
           } else {
             // Log unhandled event types for future reference

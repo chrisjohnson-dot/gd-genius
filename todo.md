@@ -1352,3 +1352,9 @@
 - [x] UI: Faster refresh (10s) in kiosk mode vs 15s normal
 - [x] UI: Keyboard shortcut ESC / F key to toggle kiosk
 - [x] Tests: kiosk mode unit tests (toggle state, refresh interval)
+
+## Idle Auto-Enter Kiosk Mode
+- [x] Hook: useIdleKiosk — inactivity timer (60s), countdown (last 10s), activity reset on mouse/key/touch/scroll
+- [x] UI: Countdown banner in LivePullBoard header (shows last 10s before auto-enter)
+- [x] UI: Auto-kiosk toggle button to enable/disable the feature (persisted in localStorage)
+- [x] Tests: useIdleKiosk logic unit tests (timer, reset, countdown, enable/disable)

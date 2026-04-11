@@ -33,6 +33,8 @@ import {
 import { Link } from "wouter";
 import { PaceSparkline } from "@/components/ltl/PaceSparkline";
 import { useKiosk } from "@/contexts/KioskContext";
+import { useIdleKiosk } from "@/hooks/useIdleKiosk";
+import { TimerReset } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SparkPoint {
@@ -392,6 +394,18 @@ export default function LivePullBoard() {
     setIsRefreshing(false);
   }, [refetch]);
 
+  // ── Idle auto-kiosk ───────────────────────────────────────────────────────────
+  const {
+    autoKioskEnabled,
+    toggleAutoKiosk,
+    secondsUntilKiosk,
+    isCountingDown,
+    resetTimer,
+  } = useIdleKiosk({
+    onEnterKiosk: handleEnterKiosk,
+    active: !isKiosk, // pause timer while already in kiosk
+  });
+
   // Group by warehouse
   const byWarehouse = sessions.reduce<Record<string, LiveSession[]>>((acc, s) => {
     (acc[s.warehouseId] ??= []).push(s as LiveSession);
@@ -488,6 +502,25 @@ export default function LivePullBoard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Auto-kiosk toggle */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleAutoKiosk}
+                  className={`gap-2 ${autoKioskEnabled ? "border-indigo-500/50 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-400" : ""}`}
+                >
+                  <TimerReset className="h-4 w-4" />
+                  Auto-Kiosk {autoKioskEnabled ? "On" : "Off"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {autoKioskEnabled
+                  ? `Auto-enters kiosk after 60s of inactivity (${secondsUntilKiosk}s remaining) — click to disable`
+                  : "Auto-kiosk disabled — click to enable 60s idle timer"}
+              </TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -519,6 +552,29 @@ export default function LivePullBoard() {
             </Button>
           </div>
         </div>
+
+        {/* Countdown banner — shown during last 10 seconds before auto-kiosk */}
+        {isCountingDown && autoKioskEnabled && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-800">
+            <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
+              <Tv className="h-4 w-4 shrink-0" />
+              <span className="text-sm font-medium">
+                Entering kiosk mode in{" "}
+                <span className="font-bold tabular-nums">{secondsUntilKiosk}</span>s
+                {" "}— move your mouse or press any key to cancel
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetTimer}
+              className="gap-1.5 border-indigo-300 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900/50 shrink-0"
+            >
+              <TimerReset className="h-3.5 w-3.5" />
+              Cancel
+            </Button>
+          </div>
+        )}
 
         {/* Summary pills */}
         {sessions.length > 0 && (

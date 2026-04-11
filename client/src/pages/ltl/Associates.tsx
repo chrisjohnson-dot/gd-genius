@@ -31,7 +31,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2 } from "lucide-react";
+import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer } from "lucide-react";
+import { AssociateBadge } from "@/components/ltl/AssociateBadge";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Associate = {
@@ -167,6 +168,7 @@ export default function Associates() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Associate | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Associate | null>(null);
+  const [badgeTarget, setBadgeTarget] = useState<Associate | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -327,6 +329,15 @@ export default function Associates() {
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                          onClick={() => setBadgeTarget(a)}
+                          title="Print Badge"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                        </Button>
                         {a.active ? (
                           <Button
                             size="sm"
@@ -364,6 +375,20 @@ export default function Associates() {
         onClose={() => { setDialogOpen(false); setEditTarget(null); }}
         existing={editTarget}
       />
+
+      {/* Print Badge Dialog */}
+      {badgeTarget && (
+        <AssociateBadge
+          associate={{
+            associateId: badgeTarget.associateId,
+            name: badgeTarget.name,
+            warehouseId: badgeTarget.warehouseId,
+            role: badgeTarget.role,
+          }}
+          open={Boolean(badgeTarget)}
+          onClose={() => setBadgeTarget(null)}
+        />
+      )}
 
       {/* Deactivate Confirm */}
       <AlertDialog open={Boolean(deactivateTarget)} onOpenChange={(o) => !o && setDeactivateTarget(null)}>

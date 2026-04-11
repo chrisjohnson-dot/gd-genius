@@ -1238,3 +1238,10 @@
 - [x] UI: WarehousePull scanner auto-fills name on associate ID scan
 - [x] Nav: added "Associates" under LTL section
 - [x] Tests: associatesRouter unit tests (11 passing) + pullTracker tests fixed (14 passing)
+
+## Print Badge Feature
+- [x] Install JsBarcode for Code 128 barcode generation (client-side)
+- [x] Build AssociateBadge print component (name, ID, warehouse, role, Code 128 barcode)
+- [x] Add print-specific CSS (@media print) to hide UI chrome and show only the badge
+- [x] Wire "Print Badge" button (printer icon) into Associates management page row actions
+- [ ] Support printing multiple badges at once (select + bulk print)

@@ -1393,3 +1393,10 @@
 - [x] Associates: per-associate target items/hr field (overrides warehouse default)
 - [x] Associates: warehouse reassignment workflow (bulk Reassign button + dialog)
 - [x] Tests: 633 passing, 0 TypeScript errors
+
+## Warehouse Pull Scan Screen Improvements (Apr 2026)
+- [x] Step indicator: 3-step wizard header (Scan Ticket → Confirm Items → Complete Pull)
+- [x] Associate identity banner: show logged-in associate name/ID prominently on scan screen
+- [x] Last Pull summary card: "Your last pull: Pick Ticket #XXXXX, N cases, N min"
+- [x] Backend: pullTracker.getLastSession(associateId) procedure
+- [x] Tests: getLastSession unit tests (4 tests, 637 total)

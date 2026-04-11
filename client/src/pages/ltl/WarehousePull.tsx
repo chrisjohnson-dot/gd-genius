@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,9 @@ import {
   ChevronRight,
   AlertCircle,
   Loader2,
+  History,
+  User,
+  Warehouse,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -30,14 +34,144 @@ function formatDuration(seconds: number): string {
   return `${s}s`;
 }
 
+function timeAgo(ts: number): string {
+  const diffMs = Date.now() - ts;
+  const diffMin = Math.floor(diffMs / 60_000);
+  const diffH = Math.floor(diffMin / 60);
+  const diffD = Math.floor(diffH / 24);
+  if (diffD > 0) return `${diffD}d ago`;
+  if (diffH > 0) return `${diffH}h ago`;
+  if (diffMin > 0) return `${diffMin}m ago`;
+  return "just now";
+}
+
 type Step = "scan_ticket" | "enter_associate" | "active" | "complete";
+
+// ─── Step Indicator ───────────────────────────────────────────────────────────
+const STEPS = [
+  { key: "scan_ticket",     label: "Scan Ticket" },
+  { key: "enter_associate", label: "Identify" },
+  { key: "active",          label: "Picking" },
+  { key: "complete",        label: "Complete" },
+] as const;
+
+function StepIndicator({ current }: { current: Step }) {
+  const currentIdx = STEPS.findIndex(s => s.key === current);
+  return (
+    <div className="flex items-center gap-0 mb-6">
+      {STEPS.map((step, idx) => {
+        const done = idx < currentIdx;
+        const active = idx === currentIdx;
+        return (
+          <div key={step.key} className="flex items-center flex-1 last:flex-none">
+            {/* Circle */}
+            <div className="flex flex-col items-center gap-1 shrink-0">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                done
+                  ? "bg-[#15527f] border-[#15527f] text-white"
+                  : active
+                  ? "bg-[#15527f]/10 border-[#15527f] text-[#15527f]"
+                  : "bg-muted border-border text-muted-foreground"
+              }`}>
+                {done ? <CheckCircle2 className="h-4 w-4" /> : idx + 1}
+              </div>
+              <span className={`text-[10px] font-medium whitespace-nowrap ${
+                active ? "text-[#15527f]" : done ? "text-[#15527f]/70" : "text-muted-foreground"
+              }`}>
+                {step.label}
+              </span>
+            </div>
+            {/* Connector line */}
+            {idx < STEPS.length - 1 && (
+              <div className={`flex-1 h-0.5 mx-1 mb-4 transition-colors ${
+                idx < currentIdx ? "bg-[#15527f]" : "bg-border"
+              }`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Associate Identity Banner ────────────────────────────────────────────────
+function AssociateBanner({
+  associateId,
+  associateName,
+  warehouseId,
+}: {
+  associateId: string;
+  associateName: string;
+  warehouseId?: string;
+}) {
+  if (!associateId) return null;
+  return (
+    <div className="flex items-center gap-3 bg-[#15527f]/8 border border-[#15527f]/20 rounded-xl px-4 py-3 mb-4">
+      <div className="w-9 h-9 rounded-full bg-[#15527f] flex items-center justify-center shrink-0">
+        <User className="h-4 w-4 text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-foreground truncate leading-tight">
+          {associateName || associateId}
+        </p>
+        <p className="text-xs text-muted-foreground font-mono">{associateId}</p>
+      </div>
+      {warehouseId && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+          <Warehouse className="h-3.5 w-3.5" />
+          {warehouseId}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Last Pull Card ───────────────────────────────────────────────────────────
+function LastPullCard({ associateId }: { associateId: string }) {
+  const { data: last, isLoading } = trpc.pullTracker.getLastSession.useQuery(
+    { associateId },
+    { enabled: Boolean(associateId), staleTime: 30_000 }
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading last pull…
+      </div>
+    );
+  }
+  if (!last) return null;
+
+  return (
+    <div className="flex items-start gap-3 bg-muted/60 border border-border rounded-xl px-4 py-3 mb-4">
+      <History className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0 text-sm">
+        <p className="font-medium text-foreground leading-tight">
+          Last pull:{" "}
+          <span className="font-mono text-[#15527f]">{last.pickTicket}</span>
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {last.totalCases} case{last.totalCases !== 1 ? "s" : ""}
+          {last.totalPallets > 0 ? `, ${last.totalPallets} pallet${last.totalPallets !== 1 ? "s" : ""}` : ""}
+          {" · "}
+          {last.durationMinutes > 0 ? `${last.durationMinutes} min` : "<1 min"}
+          {" · "}
+          {timeAgo(last.endedAt)}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function WarehousePull() {
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>("scan_ticket");
   const [pickTicket, setPickTicket] = useState("");
   const [associateId, setAssociateId] = useState("");
   const [associateName, setAssociateName] = useState("");
+  const [associateWarehouse, setAssociateWarehouse] = useState<string | undefined>();
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [itemInput, setItemInput] = useState("");
   const [itemType, setItemType] = useState<"pallet" | "case" | "unit">("case");
@@ -121,9 +255,7 @@ export default function WarehousePull() {
   const [lookupFound, setLookupFound] = useState<boolean | null>(null);
   const lookupAssociate = trpc.associates.lookupById.useQuery(
     { associateId: associateId.trim() },
-    {
-      enabled: false, // manual trigger only
-    }
+    { enabled: false }
   );
 
   const handleAssociateIdBlur = useCallback(async () => {
@@ -134,6 +266,7 @@ export default function WarehousePull() {
       const result = await lookupAssociate.refetch();
       if (result.data) {
         setAssociateName(result.data.name);
+        setAssociateWarehouse(result.data.warehouseId || undefined);
         setLookupFound(true);
       } else {
         setLookupFound(false);
@@ -169,6 +302,7 @@ export default function WarehousePull() {
     setPickTicket("");
     setAssociateId("");
     setAssociateName("");
+    setAssociateWarehouse(undefined);
     setSessionId(null);
     setItemInput("");
     setElapsedSeconds(0);
@@ -183,75 +317,115 @@ export default function WarehousePull() {
   return (
     <div className="min-h-screen bg-background p-4 max-w-lg mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-5">
         <div className="w-10 h-10 rounded-xl bg-[#15527f] flex items-center justify-center">
           <ScanBarcode className="h-5 w-5 text-white" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-foreground">Warehouse Pull</h1>
           <p className="text-xs text-muted-foreground">LTL Pick Time Tracker</p>
         </div>
         {step === "active" && (
-          <div className="ml-auto flex items-center gap-1.5 bg-green-500/10 border border-green-500/30 text-green-600 rounded-lg px-3 py-1.5 text-sm font-mono font-semibold">
+          <div className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/30 text-green-600 rounded-lg px-3 py-1.5 text-sm font-mono font-semibold">
             <Clock className="h-3.5 w-3.5" />
             {formatDuration(elapsedSeconds)}
           </div>
         )}
       </div>
 
+      {/* Step Indicator */}
+      <StepIndicator current={step} />
+
       {/* ── Step 1: Scan Pick Ticket ─────────────────────────────────────── */}
       {step === "scan_ticket" && (
-        <Card className="border-2 border-[#15527f]/30">
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-center gap-2 text-[#15527f] font-semibold">
-              <span className="w-6 h-6 rounded-full bg-[#15527f] text-white text-xs flex items-center justify-center font-bold">1</span>
-              Scan Pick Ticket
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Scan or type the pick ticket / pull sheet barcode to begin.
-            </p>
-            <Input
-              ref={ticketRef}
-              placeholder="Scan or type pick ticket…"
-              value={pickTicket}
-              onChange={(e) => setPickTicket(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleTicketSubmit()}
-              className="font-mono text-base h-12"
-              autoComplete="off"
+        <>
+          {/* Associate identity banner — show if we know who's logged in */}
+          {associateId ? (
+            <AssociateBanner
+              associateId={associateId}
+              associateName={associateName}
+              warehouseId={associateWarehouse}
             />
-            <Button
-              className="w-full h-12 bg-[#15527f] hover:bg-[#1a6699] text-white gap-2"
-              disabled={!pickTicket.trim()}
-              onClick={handleTicketSubmit}
-            >
-              Continue
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
+          ) : user?.name ? (
+            <div className="flex items-center gap-3 bg-[#15527f]/8 border border-[#15527f]/20 rounded-xl px-4 py-3 mb-4">
+              <div className="w-9 h-9 rounded-full bg-[#15527f] flex items-center justify-center shrink-0">
+                <User className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-foreground truncate leading-tight">{user.name}</p>
+                <p className="text-xs text-muted-foreground">Logged in — badge scan required below</p>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Last Pull summary */}
+          {associateId && <LastPullCard associateId={associateId} />}
+
+          <Card className="border-2 border-[#15527f]/30">
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center gap-2 text-[#15527f] font-semibold text-sm">
+                <ScanBarcode className="h-4 w-4" />
+                Scan or type the pick ticket barcode to begin
+              </div>
+              <Input
+                ref={ticketRef}
+                placeholder="Scan or type pick ticket…"
+                value={pickTicket}
+                onChange={(e) => setPickTicket(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleTicketSubmit()}
+                className="font-mono text-base h-12"
+                autoComplete="off"
+              />
+              <Button
+                className="w-full h-12 bg-[#15527f] hover:bg-[#1a6699] text-white gap-2"
+                disabled={!pickTicket.trim()}
+                onClick={handleTicketSubmit}
+              >
+                Continue
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </>
       )}
 
-      {/* ── Step 2: Enter Associate ID ───────────────────────────────────── */}
+      {/* ── Step 2: Identify Associate ───────────────────────────────────── */}
       {step === "enter_associate" && (
         <Card className="border-2 border-[#15527f]/30">
           <CardContent className="pt-6 space-y-4">
-            <div className="flex items-center gap-2 text-[#15527f] font-semibold">
-              <span className="w-6 h-6 rounded-full bg-[#15527f] text-white text-xs flex items-center justify-center font-bold">2</span>
-              Associate ID
-            </div>
-            <div className="bg-muted rounded-lg px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Pick Ticket: </span>
+            {/* Context: which ticket */}
+            <div className="bg-muted rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+              <ScanBarcode className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Pick Ticket:</span>
               <span className="font-mono font-semibold">{pickTicket}</span>
             </div>
 
-            {/* Badge ID field with auto-fill */}
+            {/* Associate identity banner — shown once name is resolved */}
+            {lookupFound === true && associateName && (
+              <AssociateBanner
+                associateId={associateId}
+                associateName={associateName}
+                warehouseId={associateWarehouse}
+              />
+            )}
+
+            {/* Last Pull card — shown once associate is identified */}
+            {lookupFound === true && associateId && (
+              <LastPullCard associateId={associateId} />
+            )}
+
+            {/* Badge ID field */}
             <div className="space-y-1.5">
+              <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-[#15527f]" />
+                Scan your badge or enter your associate ID
+              </p>
               <div className="relative">
                 <Input
                   ref={associateRef}
                   placeholder="Scan badge or type associate ID…"
                   value={associateId}
-                  onChange={(e) => { setAssociateId(e.target.value); setLookupFound(null); setAssociateName(""); }}
+                  onChange={(e) => { setAssociateId(e.target.value); setLookupFound(null); setAssociateName(""); setAssociateWarehouse(undefined); }}
                   onBlur={handleAssociateIdBlur}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && associateId.trim()) {
@@ -309,15 +483,19 @@ export default function WarehousePull() {
       {/* ── Step 3: Active Session ───────────────────────────────────────── */}
       {step === "active" && sessionId && (
         <div className="space-y-4">
+          {/* Associate identity banner */}
+          <AssociateBanner
+            associateId={associateId}
+            associateName={associateName}
+            warehouseId={associateWarehouse}
+          />
+
           {/* Session info */}
-          <div className="bg-muted rounded-xl p-3 grid grid-cols-2 gap-2 text-sm">
-            <div>
+          <div className="bg-muted rounded-xl p-3 text-sm">
+            <div className="flex items-center gap-2">
+              <ScanBarcode className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground text-xs">Pick Ticket</span>
-              <p className="font-mono font-semibold truncate">{pickTicket}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Associate</span>
-              <p className="font-semibold truncate">{associateName || associateId}</p>
+              <span className="font-mono font-semibold ml-auto">{pickTicket}</span>
             </div>
           </div>
 
@@ -417,7 +595,14 @@ export default function WarehousePull() {
       {/* ── Step 4: Complete ─────────────────────────────────────────────── */}
       {step === "complete" && session && (
         <div className="space-y-4">
-          <div className="flex flex-col items-center py-8 text-center space-y-3">
+          {/* Associate identity banner */}
+          <AssociateBanner
+            associateId={associateId}
+            associateName={associateName}
+            warehouseId={associateWarehouse}
+          />
+
+          <div className="flex flex-col items-center py-6 text-center space-y-3">
             <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
               <CheckCircle2 className="h-8 w-8 text-green-500" />
             </div>
@@ -429,10 +614,6 @@ export default function WarehousePull() {
 
           {/* Summary */}
           <div className="bg-muted rounded-xl p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Associate</span>
-              <span className="font-semibold">{session.associateName || session.associateId}</span>
-            </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Duration</span>
               <span className="font-semibold font-mono">{formatDuration(session.durationSeconds ?? 0)}</span>

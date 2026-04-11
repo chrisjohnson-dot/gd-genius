@@ -555,3 +555,59 @@ describe("recordPaceSnapshot", () => {
     expect(mockExecute).toHaveBeenCalledTimes(3);
   });
 });
+
+// ─── getLastSession tests ─────────────────────────────────────────────────────
+describe("pullTracker.getLastSession", () => {
+  it("returns the most recent completed session for an associate", async () => {
+    const startedAt = 1_700_000_000_000;
+    const endedAt   = 1_700_003_600_000; // 1 hour later
+    mockExecute.mockResolvedValueOnce([{
+      id: 42,
+      pick_ticket: "PT-9001",
+      warehouse_id: "COL",
+      started_at: startedAt,
+      ended_at: endedAt,
+      duration_seconds: 3600,
+      total_pallets: 2,
+      total_cases: 18,
+      total_items: 20,
+      status: "completed",
+    }]);
+
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.pullTracker.getLastSession({ associateId: "EMP-001" });
+
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe(42);
+    expect(result!.pickTicket).toBe("PT-9001");
+    expect(result!.warehouseId).toBe("COL");
+    expect(result!.durationSeconds).toBe(3600);
+    expect(result!.durationMinutes).toBe(60);
+    expect(result!.totalCases).toBe(18);
+    expect(result!.totalPallets).toBe(2);
+    expect(result!.totalItems).toBe(20);
+    expect(result!.status).toBe("completed");
+  });
+
+  it("returns null when associate has no completed sessions", async () => {
+    mockExecute.mockResolvedValueOnce([]);
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.pullTracker.getLastSession({ associateId: "EMP-NEW" });
+    expect(result).toBeNull();
+  });
+
+  it("returns null when DB is unavailable", async () => {
+    const { getDb } = await import("./db");
+    vi.mocked(getDb).mockResolvedValueOnce(null as any);
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.pullTracker.getLastSession({ associateId: "EMP-001" });
+    expect(result).toBeNull();
+  });
+
+  it("rejects empty associateId", async () => {
+    const caller = appRouterV4.createCaller(makeCtx());
+    await expect(
+      caller.pullTracker.getLastSession({ associateId: "" })
+    ).rejects.toThrow();
+  });
+});

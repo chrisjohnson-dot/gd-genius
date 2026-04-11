@@ -724,4 +724,53 @@ export const pullTrackerRouter = router({
         warehouses,
       };
     }),
+
+  // ── getLastSession ────────────────────────────────────────────────────────────
+  // Returns the most recently completed session for a given associate ID.
+  // Used by the Warehouse Pull scan screen to show the "Last Pull" summary card.
+  getLastSession: protectedProcedure
+    .input(z.object({
+      associateId: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      const rows = await db.execute<any>(sql`
+        SELECT
+          id,
+          pick_ticket,
+          warehouse_id,
+          started_at,
+          ended_at,
+          duration_seconds,
+          total_pallets,
+          total_cases,
+          total_items,
+          status
+        FROM pull_sessions
+        WHERE associate_id = ${input.associateId}
+          AND status = 'completed'
+        ORDER BY ended_at DESC
+        LIMIT 1
+      `);
+
+      const r = (rows as any[])[0];
+      if (!r) return null;
+
+      const durationSeconds = Number(r.duration_seconds) || 0;
+      return {
+        id: Number(r.id),
+        pickTicket: r.pick_ticket as string,
+        warehouseId: r.warehouse_id as string,
+        startedAt: Number(r.started_at),
+        endedAt: Number(r.ended_at),
+        durationSeconds,
+        durationMinutes: Math.round(durationSeconds / 60),
+        totalPallets: Number(r.total_pallets) || 0,
+        totalCases: Number(r.total_cases) || 0,
+        totalItems: Number(r.total_items) || 0,
+        status: r.status as string,
+      };
+    }),
 });

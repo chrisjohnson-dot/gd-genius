@@ -373,6 +373,99 @@ export const pullTrackerRouter = router({
       }));
     }),
 
+  // Export sessions as CSV — for manager download
+  exportSessions: protectedProcedure
+    .input(z.object({
+      warehouseId: z.string().optional(),
+      associateId: z.string().optional(),
+      status: z.enum(["active", "completed", "cancelled", "all"]).default("all"),
+      dateFrom: z.number().optional(), // unix ms
+      dateTo: z.number().optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const rows = await db.execute<any>(sql`
+        SELECT
+          ps.id,
+          ps.pick_ticket,
+          ps.associate_id,
+          ps.associate_name,
+          ps.warehouse_id,
+          ps.status,
+          ps.started_at,
+          ps.ended_at,
+          ps.duration_seconds,
+          ps.total_pallets,
+          ps.total_cases,
+          ps.total_items,
+          ps.opfi_pushed,
+          ps.notes
+        FROM pull_sessions ps
+        WHERE 1=1
+          ${input.warehouseId ? sql`AND ps.warehouse_id = ${input.warehouseId}` : sql``}
+          ${input.associateId ? sql`AND ps.associate_id = ${input.associateId}` : sql``}
+          ${input.status !== "all" ? sql`AND ps.status = ${input.status}` : sql``}
+          ${input.dateFrom ? sql`AND ps.started_at >= ${input.dateFrom}` : sql``}
+          ${input.dateTo ? sql`AND ps.started_at <= ${input.dateTo}` : sql``}
+        ORDER BY ps.started_at DESC
+        LIMIT 5000
+      `);
+
+      // Build CSV
+      const headers = [
+        "Session ID", "Pick Ticket", "Associate ID", "Associate Name",
+        "Warehouse", "Status", "Started At", "Ended At",
+        "Duration (min)", "Total Pallets", "Total Cases", "Total Items",
+        "Items / Hour", "OpFi Pushed", "Notes",
+      ];
+
+      function csvCell(v: string | number | null | undefined): string {
+        if (v === null || v === undefined) return "";
+        const s = String(v);
+        if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+          return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      }
+
+      function fmtTs(ts: number | null): string {
+        if (!ts) return "";
+        return new Date(ts).toISOString().replace("T", " ").slice(0, 19);
+      }
+
+      const dataRows = (rows as any[]).map((r: any) => {
+        const durationMin = r.duration_seconds
+          ? Math.round(Number(r.duration_seconds) / 60)
+          : null;
+        const itemsPerHour =
+          r.duration_seconds && Number(r.duration_seconds) > 0 && r.total_items
+            ? Math.round((Number(r.total_items) / Number(r.duration_seconds)) * 3600)
+            : null;
+        return [
+          r.id,
+          r.pick_ticket,
+          r.associate_id,
+          r.associate_name ?? "",
+          r.warehouse_id,
+          r.status,
+          fmtTs(Number(r.started_at)),
+          fmtTs(r.ended_at ? Number(r.ended_at) : null),
+          durationMin,
+          Number(r.total_pallets) || 0,
+          Number(r.total_cases) || 0,
+          Number(r.total_items) || 0,
+          itemsPerHour,
+          r.opfi_pushed ? "Yes" : "No",
+          r.notes ?? "",
+        ].map(csvCell).join(",");
+      });
+
+      const csv = [headers.join(","), ...dataRows].join("\n");
+      return { csv, rowCount: dataRows.length };
+    }),
+
   // Manually retry OpFi push for a completed session
   retryOpFiPush: protectedProcedure
     .input(z.object({ sessionId: z.number().int().positive() }))

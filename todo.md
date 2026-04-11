@@ -1311,3 +1311,9 @@
 - [x] UI: AssociateStatsDrawer component (Sheet) with KPI cards, session history table, items/hour trend chart
 - [x] UI: "View Stats" button (BarChart2 icon) in Associates table row actions
 - [x] Tests: getStats unit test (4 tests added, 588 total passing)
+
+## Pull Session CSV Export
+- [x] Server: ltlRouter.exportSessions — query pull_sessions with optional warehouseId/dateFrom/dateTo filters, return CSV string
+- [x] UI: "Download CSV" button on Pull Manager with date-range pickers and warehouse filter
+- [x] UI: Client-side CSV blob download (no new page/route needed)
+- [x] Tests: exportSessions unit test (4 tests added, 592 total passing)

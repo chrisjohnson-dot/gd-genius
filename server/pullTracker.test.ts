@@ -254,7 +254,7 @@ describe("pullTrackerRouter", () => {
     });
   });
 
-  // ── removeItem ───────────────────────────────────────────────────────────
+  // ── removeItem ───────────────────────────────────────────────────────────────
   describe("removeItem", () => {
     it("deletes an item by id (1 execute call)", async () => {
       mockExecute.mockResolvedValueOnce({});
@@ -262,6 +262,123 @@ describe("pullTrackerRouter", () => {
       const caller = appRouterV4.createCaller(makeCtx());
       const result = await caller.pullTracker.removeItem({ itemId: 5 });
       expect(result.success).toBe(true);
+    });
+  });
+
+  // ── exportSessions ───────────────────────────────────────────────────────────
+  describe("exportSessions", () => {
+    it("returns CSV string with header + data rows", async () => {
+      const startedAt = 1_700_000_000_000;
+      const endedAt   = 1_700_003_600_000; // 1 hour later
+
+      mockExecute.mockResolvedValueOnce([
+        {
+          id: 1,
+          pick_ticket: "PT-001",
+          associate_id: "EMP-1",
+          associate_name: "Alice",
+          warehouse_id: "COL",
+          status: "completed",
+          started_at: startedAt,
+          ended_at: endedAt,
+          duration_seconds: 3600,
+          total_pallets: 3,
+          total_cases: 12,
+          total_items: 15,
+          opfi_pushed: 1,
+          notes: null,
+        },
+      ]);
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.pullTracker.exportSessions({ status: "completed" });
+
+      expect(result.rowCount).toBe(1);
+      expect(result.csv).toContain("Session ID");
+      expect(result.csv).toContain("Pick Ticket");
+      expect(result.csv).toContain("PT-001");
+      expect(result.csv).toContain("Alice");
+      expect(result.csv).toContain("COL");
+      expect(result.csv).toContain("Yes"); // opfi_pushed
+      // Duration should be 60 minutes
+      expect(result.csv).toContain("60");
+      // Items/hour: 15 items / 1 hour = 15
+      expect(result.csv).toContain("15");
+    });
+
+    it("returns empty CSV (header only) when no sessions match", async () => {
+      mockExecute.mockResolvedValueOnce([]);
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.pullTracker.exportSessions({ status: "active" });
+
+      expect(result.rowCount).toBe(0);
+      // Should still have the header row
+      expect(result.csv).toContain("Session ID");
+      const lines = result.csv.split("\n");
+      expect(lines).toHaveLength(1); // only header
+    });
+
+    it("escapes commas and quotes in CSV cells", async () => {
+      mockExecute.mockResolvedValueOnce([
+        {
+          id: 2,
+          pick_ticket: "PT,002",        // contains comma
+          associate_id: "EMP-2",
+          associate_name: 'Bob "The Builder"', // contains quotes
+          warehouse_id: "TOR",
+          status: "completed",
+          started_at: 1_700_000_000_000,
+          ended_at: 1_700_003_600_000,
+          duration_seconds: 3600,
+          total_pallets: 1,
+          total_cases: 5,
+          total_items: 6,
+          opfi_pushed: 0,
+          notes: "Line1\nLine2", // contains newline
+        },
+      ]);
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.pullTracker.exportSessions({});
+
+      // Comma in pick ticket should be quoted
+      expect(result.csv).toContain('"PT,002"');
+      // Quotes in name should be escaped as double-quotes
+      expect(result.csv).toContain('"Bob ""The Builder"""');
+      // Newline in notes should be quoted
+      expect(result.csv).toContain('"Line1\nLine2"');
+    });
+
+    it("handles sessions with no end time (active sessions)", async () => {
+      mockExecute.mockResolvedValueOnce([
+        {
+          id: 3,
+          pick_ticket: "PT-003",
+          associate_id: "EMP-3",
+          associate_name: "Carol",
+          warehouse_id: "COL",
+          status: "active",
+          started_at: Date.now() - 1800_000,
+          ended_at: null,
+          duration_seconds: null,
+          total_pallets: 0,
+          total_cases: 0,
+          total_items: 0,
+          opfi_pushed: 0,
+          notes: null,
+        },
+      ]);
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.pullTracker.exportSessions({ status: "active" });
+
+      expect(result.rowCount).toBe(1);
+      // Ended At and Duration should be empty for active sessions
+      const lines = result.csv.split("\n");
+      const dataLine = lines[1];
+      // The ended_at and duration_min columns should be empty strings
+      expect(dataLine).toContain("active");
     });
   });
 });

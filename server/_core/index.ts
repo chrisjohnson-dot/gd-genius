@@ -13,6 +13,7 @@ import { startOrderSyncScheduler } from "../scheduler/orderSync";
 import { startShipwellSyncScheduler } from "../scheduler/shipwellSync";
 import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 import { registerCortexRoutes } from "../cortex/routes";
+import { registerExtensivWebhookRoutes } from "../webhooks/extensiv";
 import { registerScanEndpoint } from "../scanEndpoint";
 import { registerScanImageEndpoints } from "../scanImageEndpoint";
 import { flushPendingWebhooks, flushPendingShipmentPushes } from "../cortex/webhook";
@@ -52,6 +53,8 @@ async function startServer() {
   registerPdfRoutes(app);
   // GD Cortex integration REST endpoints
   registerCortexRoutes(app);
+  // Extensiv webhook receiver — POST /api/webhooks/extensiv
+  registerExtensivWebhookRoutes(app);
   // Vision system scan endpoint — /api/scan
   registerScanEndpoint(app);
   // Scan image upload/post-apply endpoints — raw body parser must come before JSON

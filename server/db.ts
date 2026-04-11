@@ -3400,6 +3400,21 @@ export async function updateSmallParcelSession(id: number, data: Partial<InsertS
   if (!db) return;
   await db.update(smallParcelSessions).set({ ...data, updatedAt: new Date() }).where(eq(smallParcelSessions.id, id));
 }
+
+/**
+ * Find all small parcel sessions linked to a given Extensiv order ID.
+ * Used by the auto-void webhook to find label_purchased sessions when an order is cancelled.
+ */
+export async function findSmallParcelSessionsByExtensivOrderId(
+  extensivOrderId: number
+): Promise<SmallParcelSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(smallParcelSessions)
+    .where(eq(smallParcelSessions.extensivOrderId, extensivOrderId));
+}
 export async function listSmallParcelSessions(opts: { facilityId?: number; status?: string; limit?: number } = {}): Promise<SmallParcelSession[]> {
   const db = await getDb();
   if (!db) return [];

@@ -1117,3 +1117,12 @@
 - [x] UI: add Void button to SmallParcelHistory with confirmation dialog
 - [x] UI: show voided state styling (strikethrough, red badge) and disable Reprint on voided labels
 - [x] Tests: add vitest tests for voidLabel procedure
+
+## Auto-Void Webhook (Extensiv Order Cancellation)
+- [x] Research Extensiv webhook payload format for order cancellation (eventType=OrderCancel, data={OrderId})
+- [x] Add POST /api/webhooks/extensiv endpoint (Express route, not tRPC)
+- [x] Implement RSA-SHA256 signature validation using Extensiv public key endpoint
+- [x] DB: findSmallParcelSessionsByExtensivOrderId helper added
+- [x] Auto-void logic: call voidFedExLabel + updateSmallParcelSession + audit log
+- [x] Webhook URL display added to Settings UI with copy button and Extensiv setup instructions
+- [x] Tests: auto-void happy path, already-voided skip, no-tracking-number, FedEx failure, multi-session, payload parsing (531 tests passing)

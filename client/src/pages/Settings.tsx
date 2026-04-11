@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Loader2, Pencil, Plus, Settings2, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Loader2, Pencil, Plus, Settings2, Trash2, Webhook, XCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -75,6 +75,17 @@ export default function Settings() {
       tplGuid: form.tplGuid,
       userLoginId: Number(form.userLoginId),
       baseUrl: form.baseUrl,
+    });
+  };
+
+  // Derive the webhook URL from the current browser origin
+  const webhookUrl = `${window.location.origin}/api/webhooks/extensiv`;
+
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl).then(() => {
+      toast.success("Webhook URL copied to clipboard");
+    }).catch(() => {
+      toast.error("Failed to copy — please copy manually");
     });
   };
 
@@ -175,6 +186,42 @@ export default function Settings() {
             Log into Extensiv 3PL Warehouse Manager → Admin → API Credentials. Your TPL GUID is found under Company Settings.
             The User Login ID is the numeric ID of the API user account.
           </p>
+        </div>
+
+        {/* Extensiv Webhook URL */}
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-foreground">Extensiv Order Cancellation Webhook</p>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Register this URL in Extensiv 3PL Warehouse Manager under{" "}
+            <span className="font-medium text-foreground">Customers → Event Notifications → New Webhook</span>.
+            Select event type <span className="font-mono text-[11px] bg-muted px-1 py-0.5 rounded">Order</span> and
+            event <span className="font-mono text-[11px] bg-muted px-1 py-0.5 rounded">OrderCancel</span>.
+            When an order is cancelled in Extensiv, any purchased FedEx labels for that order will be automatically voided.
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 font-mono text-xs bg-muted rounded-lg px-3 py-2 text-muted-foreground truncate select-all">
+              {webhookUrl}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs shrink-0"
+              onClick={copyWebhookUrl}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copy
+            </Button>
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <span className="text-amber-600 text-xs mt-0.5">⚠</span>
+            <p className="text-xs text-amber-700 leading-relaxed">
+              Extensiv validates the destination URL with an HTTPS check before saving. Ensure this application is
+              deployed and accessible at the URL above before registering the webhook in Extensiv.
+            </p>
+          </div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Settings, Plus, Trash2, Save, Ghost } from "lucide-react";
+import { Settings, Plus, Trash2, Save, Ghost, Bell } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
@@ -23,11 +23,20 @@ interface SettingRow {
   enabled: boolean;
   notifyEmail: string | null;
   expectedItemsPerHour: number | null;
+  alertCooldownMinutes: number;
 }
 
 interface EditableRow extends SettingRow {
   dirty: boolean;
 }
+
+const COOLDOWN_OPTIONS = [
+  { label: "1 min", value: 1 },
+  { label: "2 min", value: 2 },
+  { label: "5 min", value: 5 },
+  { label: "10 min", value: 10 },
+  { label: "15 min", value: 15 },
+];
 
 const MULTIPLIER_OPTIONS = [
   { label: "1.5×", value: 1.5 },
@@ -42,6 +51,7 @@ export function PullAlertSettings() {
   const [newThreshold, setNewThreshold] = useState("120");
   const [newMultiplier, setNewMultiplier] = useState(2);
   const [newExpectedRate, setNewExpectedRate] = useState("");
+  const [newCooldown, setNewCooldown] = useState(5);
   const [rows, setRows] = useState<EditableRow[]>([]);
 
   const utils = trpc.useUtils();
@@ -80,6 +90,7 @@ export function PullAlertSettings() {
       enabled: row.enabled,
       notifyEmail: row.notifyEmail || null,
       expectedItemsPerHour: row.expectedItemsPerHour ?? null,
+      alertCooldownMinutes: row.alertCooldownMinutes ?? 5,
     });
     setRows((prev) =>
       prev.map((r) => (r.warehouseId === row.warehouseId ? { ...r, dirty: false } : r))
@@ -99,17 +110,19 @@ export function PullAlertSettings() {
       reAlertMultiplier: newMultiplier > 0 ? newMultiplier : 999,
       enabled: true,
       expectedItemsPerHour: rate && rate > 0 ? rate : null,
+      alertCooldownMinutes: newCooldown,
     });
     setNewWarehouse("");
     setNewThreshold("120");
     setNewMultiplier(2);
     setNewExpectedRate("");
+    setNewCooldown(5);
   }
 
   // Sync rows when settings load (only when not dirty)
   const hasRows = rows.length > 0;
   if (settings.length > 0 && !hasRows) {
-    setRows(settings.map((s) => ({ ...s, dirty: false })));
+    setRows(settings.map((s) => ({ ...s, alertCooldownMinutes: s.alertCooldownMinutes ?? 5, dirty: false })));
   }
 
   const globalRow = rows.find((r) => r.warehouseId === "all");
@@ -198,6 +211,32 @@ export function PullAlertSettings() {
                   />
                   <p className="text-[10px] text-muted-foreground">
                     Used by the Live Board to pace the ghost picker. Leave blank for 30 items/hr default.
+                  </p>
+                </div>
+                {/* Alert cooldown */}
+                <div className="space-y-1">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Bell className="h-3 w-3" />
+                    Behind Alert Cooldown
+                  </Label>
+                  <div className="flex gap-1">
+                    {COOLDOWN_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => updateRow("all", { alertCooldownMinutes: opt.value })}
+                        className={`flex-1 h-8 rounded text-xs font-medium border transition-colors ${
+                          globalRow.alertCooldownMinutes === opt.value
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background border-input hover:bg-accent"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Minimum time before the kiosk sound alert re-fires for the same session.
                   </p>
                 </div>
                 <div className="flex items-center justify-between">

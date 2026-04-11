@@ -512,6 +512,11 @@ export default function LivePullBoard() {
     { refetchInterval }
   );
 
+  // Fetch alert settings to get the configured cooldown
+  const { data: alertSettings = [] } = trpc.pullAlerts.getSettings.useQuery();
+  const globalAlertSetting = alertSettings.find((s: any) => s.warehouseId === "all");
+  const alertCooldownMs = (globalAlertSetting?.alertCooldownMinutes ?? 5) * 60_000;
+
   // All unique warehouses from live sessions (for filter dropdown)
   const allWarehouses = useMemo(() => {
     const whs = Array.from(new Set(allSessions.map((s: any) => s.warehouseId as string))).sort();
@@ -583,7 +588,7 @@ export default function LivePullBoard() {
     useIdleKiosk({ onEnterKiosk: handleEnterKiosk, active: !isKiosk });
 
   // Pace sound alert — fires when any session transitions to "behind" in kiosk mode
-  const { muted, toggleMute, alertedIds } = usePaceAlert(sessions, isKiosk);
+  const { muted, toggleMute, alertedIds } = usePaceAlert(sessions, isKiosk, { cooldownMs: alertCooldownMs });
 
   // Group filtered sessions by warehouse
   const byWarehouse = useMemo(() =>

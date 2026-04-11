@@ -139,6 +139,7 @@ export const pullAlertsRouter = router({
       notify_email: string | null;
       updated_at: number;
       expected_items_per_hour: number | null;
+      alert_cooldown_minutes: number | null;
     }>).map((s) => ({
       id: s.id,
       warehouseId: s.warehouse_id,
@@ -148,6 +149,7 @@ export const pullAlertsRouter = router({
       notifyEmail: s.notify_email,
       updatedAt: s.updated_at,
       expectedItemsPerHour: s.expected_items_per_hour != null ? Number(s.expected_items_per_hour) : null,
+      alertCooldownMinutes: s.alert_cooldown_minutes != null ? Number(s.alert_cooldown_minutes) : 5,
     }));
   }),
 
@@ -161,6 +163,7 @@ export const pullAlertsRouter = router({
         enabled: z.boolean(),
         notifyEmail: z.string().email().optional().nullable(),
         expectedItemsPerHour: z.number().min(1).max(9999).optional().nullable(),
+        alertCooldownMinutes: z.number().int().min(1).max(60).default(5),
       })
     )
     .mutation(async ({ input }) => {
@@ -171,16 +174,18 @@ export const pullAlertsRouter = router({
       const emailVal = input.notifyEmail ?? null;
       const multiplierVal = input.reAlertMultiplier ?? 2;
       const rateVal = input.expectedItemsPerHour ?? null;
+      const cooldownVal = input.alertCooldownMinutes ?? 5;
       await db.execute(
         sql`INSERT INTO pull_alert_settings
-              (warehouse_id, threshold_minutes, re_alert_multiplier, enabled, notify_email, expected_items_per_hour, created_at, updated_at)
-            VALUES (${input.warehouseId}, ${input.thresholdMinutes}, ${multiplierVal}, ${enabledVal}, ${emailVal}, ${rateVal}, ${now}, ${now})
+              (warehouse_id, threshold_minutes, re_alert_multiplier, enabled, notify_email, expected_items_per_hour, alert_cooldown_minutes, created_at, updated_at)
+            VALUES (${input.warehouseId}, ${input.thresholdMinutes}, ${multiplierVal}, ${enabledVal}, ${emailVal}, ${rateVal}, ${cooldownVal}, ${now}, ${now})
             ON DUPLICATE KEY UPDATE
               threshold_minutes = VALUES(threshold_minutes),
               re_alert_multiplier = VALUES(re_alert_multiplier),
               enabled = VALUES(enabled),
               notify_email = VALUES(notify_email),
               expected_items_per_hour = VALUES(expected_items_per_hour),
+              alert_cooldown_minutes = VALUES(alert_cooldown_minutes),
               updated_at = VALUES(updated_at)`
       );
       return { success: true };

@@ -1406,3 +1406,11 @@
 - [x] LivePullBoard: wire usePaceAlert in kiosk mode with mute toggle button
 - [x] Visual indicator: show which sessions triggered the alert (flash ring or badge)
 - [x] Tests: usePaceAlert unit tests (10 tests, 647 total)
+
+## Alert Cooldown Feature (Apr 2026)
+- [x] usePaceAlert: add per-session cooldown map (timestamp of last alert per session ID)
+- [x] usePaceAlert: accept cooldownMs param, skip re-fire if within cooldown window
+- [x] Pull Alert Settings: add alert_cooldown_minutes column to pull_alert_settings table
+- [x] Pull Alert Settings UI: add cooldown dropdown (1 min, 2 min, 5 min, 10 min, 15 min)
+- [x] LivePullBoard: pass cooldown setting from server to usePaceAlert
+- [x] Tests: cooldown logic unit tests

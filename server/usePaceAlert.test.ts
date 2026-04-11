@@ -141,3 +141,104 @@ describe("usePaceAlert — mute state logic", () => {
     expect(soundsPlayed).toEqual(["42"]);
   });
 });
+
+// ─── Cooldown logic helpers ────────────────────────────────────────────────────
+/**
+ * Mirrors the cooldown check in usePaceAlert:
+ * A new "behind" transition fires only if enough time has elapsed since the
+ * last alert for that session.
+ */
+function shouldFireWithCooldown(
+  id: string,
+  lastAlertAt: Map<string, number>,
+  cooldownMs: number,
+  now: number
+): boolean {
+  const lastFired = lastAlertAt.get(id) ?? 0;
+  return now - lastFired >= cooldownMs;
+}
+
+function pruneAlertsWithCooldown(
+  alerted: Set<string>,
+  active: Session[],
+  lastAlertAt: Map<string, number>,
+  cooldownMs: number,
+  now: number
+): Set<string> {
+  const activeIds = new Set(active.map((s) => String(s.id)));
+  const next = new Set<string>();
+  alerted.forEach((id) => {
+    if (!activeIds.has(id)) return; // session ended — remove ring
+    const lastFired = lastAlertAt.get(id) ?? 0;
+    if (now - lastFired < cooldownMs) next.add(id); // still in cooldown window
+  });
+  return next;
+}
+
+describe("usePaceAlert — cooldown logic", () => {
+  it("fires on first behind transition (no prior alert)", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    expect(shouldFireWithCooldown("1", lastAlertAt, 5 * 60_000, now)).toBe(true);
+  });
+
+  it("suppresses re-fire within cooldown window", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    lastAlertAt.set("1", now - 2 * 60_000); // fired 2 min ago
+    const cooldown = 5 * 60_000; // 5 min cooldown
+    expect(shouldFireWithCooldown("1", lastAlertAt, cooldown, now)).toBe(false);
+  });
+
+  it("allows re-fire after cooldown has elapsed", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    lastAlertAt.set("1", now - 6 * 60_000); // fired 6 min ago
+    const cooldown = 5 * 60_000; // 5 min cooldown
+    expect(shouldFireWithCooldown("1", lastAlertAt, cooldown, now)).toBe(true);
+  });
+
+  it("fires immediately with 1-minute cooldown after 1 min has passed", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    lastAlertAt.set("5", now - 61_000); // 61 seconds ago
+    expect(shouldFireWithCooldown("5", lastAlertAt, 60_000, now)).toBe(true);
+  });
+
+  it("suppresses with 15-minute cooldown when only 10 min have passed", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    lastAlertAt.set("7", now - 10 * 60_000);
+    expect(shouldFireWithCooldown("7", lastAlertAt, 15 * 60_000, now)).toBe(false);
+  });
+
+  it("removes alertedId ring once cooldown expires", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    lastAlertAt.set("3", now - 6 * 60_000); // fired 6 min ago, cooldown 5 min
+    const alerted = new Set(["3"]);
+    const active: Session[] = [{ id: 3, paceStatus: "behind" }];
+    const pruned = pruneAlertsWithCooldown(alerted, active, lastAlertAt, 5 * 60_000, now);
+    expect(pruned.has("3")).toBe(false); // cooldown expired — ring removed
+  });
+
+  it("keeps alertedId ring while still within cooldown", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    lastAlertAt.set("4", now - 2 * 60_000); // fired 2 min ago, cooldown 5 min
+    const alerted = new Set(["4"]);
+    const active: Session[] = [{ id: 4, paceStatus: "behind" }];
+    const pruned = pruneAlertsWithCooldown(alerted, active, lastAlertAt, 5 * 60_000, now);
+    expect(pruned.has("4")).toBe(true); // still in cooldown — keep ring
+  });
+
+  it("removes ring for ended sessions regardless of cooldown", () => {
+    const lastAlertAt = new Map<string, number>();
+    const now = Date.now();
+    lastAlertAt.set("9", now - 1_000); // fired 1 sec ago — within any cooldown
+    const alerted = new Set(["9"]);
+    const active: Session[] = []; // session has ended
+    const pruned = pruneAlertsWithCooldown(alerted, active, lastAlertAt, 5 * 60_000, now);
+    expect(pruned.has("9")).toBe(false); // session ended — always remove
+  });
+});

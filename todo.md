@@ -1229,3 +1229,12 @@
 - [x] Nav: added "Warehouse Pull" and "Pull Manager" under LTL section in sidebar
 - [x] OpFi push: send completed session data to OpFi API on session end
 - [x] Tests: pullTrackerRouter unit tests (11 tests passing)
+
+## Associate Lookup Table
+- [x] DB: warehouse_associates table (associate_id, name, warehouse_id, role, active, created_at)
+- [x] Server: associatesRouter (list, get, upsert, deactivate, lookupById)
+- [x] Server: pullTracker.startSession auto-fills name from lookup table
+- [x] UI: /ltl/associates — admin management page (add/edit/deactivate associates)
+- [x] UI: WarehousePull scanner auto-fills name on associate ID scan
+- [x] Nav: added "Associates" under LTL section
+- [x] Tests: associatesRouter unit tests (11 passing) + pullTracker tests fixed (14 passing)

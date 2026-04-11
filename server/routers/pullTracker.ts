@@ -77,6 +77,19 @@ export const pullTrackerRouter = router({
       if (!db) throw new Error("DB unavailable");
       const now = Date.now();
 
+      // Auto-fill associate name from lookup table if not provided
+      let resolvedName = input.associateName ?? null;
+      if (!resolvedName) {
+        const lookup = await db.execute<any>(sql`
+          SELECT name FROM warehouse_associates
+          WHERE associate_id = ${input.associateId} AND active = 1
+          LIMIT 1
+        `);
+        if ((lookup as any[]).length > 0) {
+          resolvedName = (lookup as any[])[0].name;
+        }
+      }
+
       // Check for an already-active session for this pick ticket
       const existing = await db.execute<any>(sql`
         SELECT id FROM pull_sessions
@@ -84,18 +97,18 @@ export const pullTrackerRouter = router({
         LIMIT 1
       `);
       if ((existing as any[]).length > 0) {
-        return { sessionId: (existing as any[])[0].id, resumed: true };
+        return { sessionId: (existing as any[])[0].id, resumed: true, associateName: resolvedName };
       }
 
       const result = await db.execute<any>(sql`
         INSERT INTO pull_sessions
           (pick_ticket, associate_id, associate_name, warehouse_id, status, started_at, created_by)
         VALUES
-          (${input.pickTicket}, ${input.associateId}, ${input.associateName ?? null},
+          (${input.pickTicket}, ${input.associateId}, ${resolvedName},
            ${input.warehouseId}, 'active', ${now}, ${ctx.user.id})
       `);
       const sessionId = (result as any).insertId ?? (result as any)[0]?.insertId;
-      return { sessionId: Number(sessionId), resumed: false };
+      return { sessionId: Number(sessionId), resumed: false, associateName: resolvedName };
     }),
 
   // End a pull session — records end time, duration, totals, and optionally pushes to OpFi

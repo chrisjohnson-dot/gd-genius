@@ -98,6 +98,7 @@ const packagingItems = [
 const ltlItems = [
   { href: "/ltl/warehouse-pull",  label: "Warehouse Pull",          icon: ScanBarcode },
   { href: "/ltl/pull-manager",    label: "Pull Manager",            icon: BarChart2 },
+  { href: "/ltl/associates",      label: "Associates",              icon: Users },
   { href: "/qc/scanner",          label: "QC Scanner",              icon: ScanBarcode },
   { href: "/qc/production-line",  label: "Production Line Scans",   icon: Activity },
   { href: "/qc/scan-label",       label: "QC Scan & Label",         icon: Tag },

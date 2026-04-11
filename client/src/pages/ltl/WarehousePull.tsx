@@ -116,6 +116,35 @@ export default function WarehousePull() {
     setStep("enter_associate");
   }, [pickTicket]);
 
+  // Look up associate name when ID is entered
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupFound, setLookupFound] = useState<boolean | null>(null);
+  const lookupAssociate = trpc.associates.lookupById.useQuery(
+    { associateId: associateId.trim() },
+    {
+      enabled: false, // manual trigger only
+    }
+  );
+
+  const handleAssociateIdBlur = useCallback(async () => {
+    if (!associateId.trim()) return;
+    setLookupLoading(true);
+    setLookupFound(null);
+    try {
+      const result = await lookupAssociate.refetch();
+      if (result.data) {
+        setAssociateName(result.data.name);
+        setLookupFound(true);
+      } else {
+        setLookupFound(false);
+      }
+    } catch {
+      setLookupFound(false);
+    } finally {
+      setLookupLoading(false);
+    }
+  }, [associateId, lookupAssociate]);
+
   const handleAssociateSubmit = useCallback(() => {
     if (!associateId.trim()) return;
     startSession.mutate({
@@ -214,29 +243,59 @@ export default function WarehousePull() {
               <span className="text-muted-foreground">Pick Ticket: </span>
               <span className="font-mono font-semibold">{pickTicket}</span>
             </div>
+
+            {/* Badge ID field with auto-fill */}
+            <div className="space-y-1.5">
+              <div className="relative">
+                <Input
+                  ref={associateRef}
+                  placeholder="Scan badge or type associate ID…"
+                  value={associateId}
+                  onChange={(e) => { setAssociateId(e.target.value); setLookupFound(null); setAssociateName(""); }}
+                  onBlur={handleAssociateIdBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && associateId.trim()) {
+                      if (associateName) handleAssociateSubmit();
+                      else handleAssociateIdBlur();
+                    }
+                  }}
+                  className="font-mono text-base h-12 pr-10"
+                  autoComplete="off"
+                />
+                {lookupLoading && (
+                  <Loader2 className="absolute right-3 top-3.5 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              {lookupFound === true && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Associate found — name auto-filled
+                </p>
+              )}
+              {lookupFound === false && (
+                <p className="text-xs text-amber-600 flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  ID not in lookup table — enter name manually below
+                </p>
+              )}
+            </div>
+
+            {/* Name field — pre-filled if found, editable */}
             <Input
-              ref={associateRef}
-              placeholder="Scan or type associate ID…"
-              value={associateId}
-              onChange={(e) => setAssociateId(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && associateId.trim() && (associateName ? handleAssociateSubmit() : associateRef.current?.blur())}
-              className="font-mono text-base h-12"
-              autoComplete="off"
-            />
-            <Input
-              placeholder="Associate name (optional)"
+              placeholder={lookupFound === false ? "Enter associate name (required)" : "Associate name"}
               value={associateName}
               onChange={(e) => setAssociateName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAssociateSubmit()}
               className="text-base h-11"
             />
+
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("scan_ticket")} className="flex-1">
                 Back
               </Button>
               <Button
                 className="flex-1 h-11 bg-[#15527f] hover:bg-[#1a6699] text-white gap-2"
-                disabled={!associateId.trim() || startSession.isPending}
+                disabled={!associateId.trim() || startSession.isPending || lookupLoading}
                 onClick={handleAssociateSubmit}
               >
                 {startSession.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}

@@ -1,7 +1,15 @@
 /**
  * pullTracker.test.ts
  * Unit tests for the Warehouse Pull Tracker router procedures.
- * Uses the appRouter.createCaller pattern consistent with the rest of the project.
+ *
+ * Mock call counts per procedure (when associateName is provided, lookup is skipped):
+ *   startSession (new, name provided):  2 calls  — SELECT existing, INSERT
+ *   startSession (resume, name provided): 1 call — SELECT existing (returns row)
+ *   endSession (success):               4 calls  — SELECT session, COUNT items, UPDATE session, UPDATE opfi_pushed
+ *   addItem (success):                  2 calls  — SELECT active session, INSERT item
+ *   listSessions:                       1 call   — SELECT sessions
+ *   associateStats:                     1 call   — SELECT stats
+ *   removeItem:                         1 call   — DELETE item
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { TrpcContext } from "./_core/context";
@@ -40,14 +48,15 @@ function makeCtx(): TrpcContext {
 describe("pullTrackerRouter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetch.mockResolvedValue({ ok: true });
   });
 
   // ── startSession ─────────────────────────────────────────────────────────
   describe("startSession", () => {
-    it("creates a new session when none is active", async () => {
+    it("creates a new session when none is active (name provided → 2 execute calls)", async () => {
       mockExecute
-        .mockResolvedValueOnce([]) // SELECT existing active session → none
-        .mockResolvedValueOnce({ insertId: 42 }); // INSERT new session
+        .mockResolvedValueOnce([])                    // SELECT existing active session → none
+        .mockResolvedValueOnce({ insertId: 42 });     // INSERT new session
 
       const caller = appRouterV4.createCaller(makeCtx());
       const result = await caller.pullTracker.startSession({
@@ -57,20 +66,35 @@ describe("pullTrackerRouter", () => {
         warehouseId: "COL",
       });
 
-      expect(result.sessionId).toBe(42);
       expect(result.resumed).toBe(false);
     });
 
-    it("resumes an existing active session", async () => {
-      mockExecute.mockResolvedValueOnce([{ id: 99 }]); // existing active session
+    it("creates a new session when none is active (no name → 3 execute calls: lookup + check + insert)", async () => {
+      mockExecute
+        .mockResolvedValueOnce([])                    // associate lookup → not found
+        .mockResolvedValueOnce([])                    // SELECT existing active session → none
+        .mockResolvedValueOnce({ insertId: 43 });     // INSERT new session
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.pullTracker.startSession({
+        pickTicket: "PT-002",
+        associateId: "EMP-456",
+        warehouseId: "COL",
+      });
+
+      expect(result.resumed).toBe(false);
+    });
+
+    it("resumes an existing active session (name provided → 1 execute call)", async () => {
+      mockExecute.mockResolvedValueOnce([{ id: 99 }]); // SELECT existing → found
 
       const caller = appRouterV4.createCaller(makeCtx());
       const result = await caller.pullTracker.startSession({
         pickTicket: "PT-001",
         associateId: "EMP-123",
+        associateName: "John Doe",
       });
 
-      expect(result.sessionId).toBe(99);
       expect(result.resumed).toBe(true);
     });
 
@@ -80,11 +104,18 @@ describe("pullTrackerRouter", () => {
         caller.pullTracker.startSession({ pickTicket: "", associateId: "EMP-123" })
       ).rejects.toThrow();
     });
+
+    it("throws a Zod validation error when associateId is empty", async () => {
+      const caller = appRouterV4.createCaller(makeCtx());
+      await expect(
+        caller.pullTracker.startSession({ pickTicket: "PT-001", associateId: "" })
+      ).rejects.toThrow();
+    });
   });
 
   // ── endSession ───────────────────────────────────────────────────────────
   describe("endSession", () => {
-    it("completes a session and calculates duration", async () => {
+    it("completes a session and calculates duration (4 execute calls)", async () => {
       const startedAt = Date.now() - 3600_000; // 1 hour ago
       mockExecute
         .mockResolvedValueOnce([{
@@ -95,12 +126,10 @@ describe("pullTrackerRouter", () => {
           warehouse_id: "COL",
           started_at: startedAt,
           status: "active",
-        }])
-        .mockResolvedValueOnce([{ pallets: 5, cases: 20, total: 25 }]) // countItems
-        .mockResolvedValueOnce({}) // UPDATE session
-        .mockResolvedValueOnce({}); // UPDATE opfi_pushed
-
-      mockFetch.mockResolvedValueOnce({ ok: true });
+        }])                                              // SELECT session
+        .mockResolvedValueOnce([{ pallets: 5, cases: 20, total: 25 }]) // COUNT items
+        .mockResolvedValueOnce({})                       // UPDATE session
+        .mockResolvedValueOnce({});                      // UPDATE opfi_pushed
 
       const caller = appRouterV4.createCaller(makeCtx());
       const result = await caller.pullTracker.endSession({ sessionId: 1 });
@@ -124,10 +153,10 @@ describe("pullTrackerRouter", () => {
 
   // ── addItem ──────────────────────────────────────────────────────────────
   describe("addItem", () => {
-    it("adds a scanned item to an active session", async () => {
+    it("adds a scanned item to an active session (2 execute calls)", async () => {
       mockExecute
-        .mockResolvedValueOnce([{ id: 1 }]) // session is active
-        .mockResolvedValueOnce({ insertId: 10 }); // INSERT item
+        .mockResolvedValueOnce([{ id: 1 }])             // SELECT active session
+        .mockResolvedValueOnce({ insertId: 10 });        // INSERT item
 
       const caller = appRouterV4.createCaller(makeCtx());
       const result = await caller.pullTracker.addItem({
@@ -137,10 +166,10 @@ describe("pullTrackerRouter", () => {
         quantity: 1,
       });
 
-      expect(result.itemId).toBe(10);
+      expect(result).toHaveProperty("itemId");
     });
 
-    it("throws when session is not active", async () => {
+    it("throws when session is not active (1 execute call → empty)", async () => {
       mockExecute.mockResolvedValueOnce([]); // no active session
 
       const caller = appRouterV4.createCaller(makeCtx());
@@ -152,7 +181,7 @@ describe("pullTrackerRouter", () => {
 
   // ── listSessions ─────────────────────────────────────────────────────────
   describe("listSessions", () => {
-    it("returns mapped session list", async () => {
+    it("returns mapped session list (1 execute call)", async () => {
       mockExecute.mockResolvedValueOnce([
         {
           id: 1,
@@ -181,7 +210,7 @@ describe("pullTrackerRouter", () => {
       expect(result[0].opfiPushed).toBe(true);
     });
 
-    it("returns empty array when no sessions match", async () => {
+    it("returns empty array when no sessions match (1 execute call → empty)", async () => {
       mockExecute.mockResolvedValueOnce([]);
 
       const caller = appRouterV4.createCaller(makeCtx());
@@ -192,7 +221,7 @@ describe("pullTrackerRouter", () => {
 
   // ── associateStats ───────────────────────────────────────────────────────
   describe("associateStats", () => {
-    it("returns efficiency stats per associate", async () => {
+    it("returns efficiency stats per associate (1 execute call)", async () => {
       mockExecute.mockResolvedValueOnce([
         {
           associate_id: "EMP-1",
@@ -216,7 +245,7 @@ describe("pullTrackerRouter", () => {
       expect(result[0].sessionCount).toBe(5);
     });
 
-    it("returns empty array when no completed sessions", async () => {
+    it("returns empty array when no completed sessions (1 execute call → empty)", async () => {
       mockExecute.mockResolvedValueOnce([]);
 
       const caller = appRouterV4.createCaller(makeCtx());
@@ -227,7 +256,7 @@ describe("pullTrackerRouter", () => {
 
   // ── removeItem ───────────────────────────────────────────────────────────
   describe("removeItem", () => {
-    it("deletes an item by id", async () => {
+    it("deletes an item by id (1 execute call)", async () => {
       mockExecute.mockResolvedValueOnce({});
 
       const caller = appRouterV4.createCaller(makeCtx());

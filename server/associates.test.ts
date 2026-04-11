@@ -174,4 +174,98 @@ describe("associatesRouter", () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // ── getStats ──────────────────────────────────────────────────────────────
+  describe("getStats", () => {
+    it("returns aggregated KPIs and session history", async () => {
+      const now = Date.now();
+      const oneHourAgo = now - 3600000;
+
+      // Mock 1: KPI aggregate row
+      mockExecute.mockResolvedValueOnce([{
+        total_sessions: 5,
+        total_items: 120,
+        total_pallets: 10,
+        total_cases: 110,
+        avg_items_per_hour: 60,
+        avg_duration_minutes: 45,
+      }]);
+
+      // Mock 2: Recent sessions
+      mockExecute.mockResolvedValueOnce([{
+        id: 1,
+        pick_ticket: "PT-001",
+        warehouse_id: "COL",
+        started_at: oneHourAgo,
+        ended_at: now,
+        total_items: 24,
+        total_pallets: 2,
+        total_cases: 22,
+        status: "completed",
+      }]);
+
+      // Mock 3: Trend data
+      mockExecute.mockResolvedValueOnce([{
+        day: "2025-01-15",
+        items: 24,
+        hours: 0.5,
+      }]);
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.associates.getStats({ associateId: "EMP-001" });
+
+      expect(result).not.toBeNull();
+      expect(result!.totalSessions).toBe(5);
+      expect(result!.totalItems).toBe(120);
+      expect(result!.totalPallets).toBe(10);
+      expect(result!.totalCases).toBe(110);
+      expect(result!.avgItemsPerHour).toBe(60);
+      expect(result!.avgDurationMinutes).toBe(45);
+      expect(result!.sessions).toHaveLength(1);
+      expect(result!.sessions[0].pickTicket).toBe("PT-001");
+      expect(result!.sessions[0].durationMinutes).toBe(60);
+      expect(result!.sessions[0].itemsPerHour).toBe(24);
+      expect(result!.trend).toHaveLength(1);
+      expect(result!.trend[0].day).toBe("2025-01-15");
+      expect(result!.trend[0].itemsPerHour).toBe(48);
+    });
+
+    it("returns null when DB is unavailable", async () => {
+      vi.mocked(await import("./db").then(m => m.getDb)).mockResolvedValueOnce(null as any);
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.associates.getStats({ associateId: "EMP-001" });
+      expect(result).toBeNull();
+    });
+
+    it("returns zero KPIs when associate has no sessions", async () => {
+      // KPI row with all zeros/nulls
+      mockExecute.mockResolvedValueOnce([{
+        total_sessions: 0,
+        total_items: null,
+        total_pallets: null,
+        total_cases: null,
+        avg_items_per_hour: null,
+        avg_duration_minutes: null,
+      }]);
+      // Empty sessions
+      mockExecute.mockResolvedValueOnce([]);
+      // Empty trend
+      mockExecute.mockResolvedValueOnce([]);
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.associates.getStats({ associateId: "EMP-NEW" });
+
+      expect(result).not.toBeNull();
+      expect(result!.totalSessions).toBe(0);
+      expect(result!.totalItems).toBe(0);
+      expect(result!.avgItemsPerHour).toBeNull();
+      expect(result!.sessions).toHaveLength(0);
+      expect(result!.trend).toHaveLength(0);
+    });
+
+    it("throws on empty associateId", async () => {
+      const caller = appRouterV4.createCaller(makeCtx());
+      await expect(caller.associates.getStats({ associateId: "" })).rejects.toThrow();
+    });
+  });
 });

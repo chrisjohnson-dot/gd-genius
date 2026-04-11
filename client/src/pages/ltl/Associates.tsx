@@ -39,9 +39,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer, Warehouse } from "lucide-react";
+import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer, Warehouse, BarChart2 } from "lucide-react";
 import { AssociateBadge } from "@/components/ltl/AssociateBadge";
 import { BulkBadgePrint } from "@/components/ltl/BulkBadgePrint";
+import { AssociateStatsDrawer } from "@/components/AssociateStatsDrawer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Associate = {
@@ -182,6 +183,7 @@ export default function Associates() {
   const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
   const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statsTarget, setStatsTarget] = useState<Associate | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -498,8 +500,17 @@ export default function Associates() {
                         <Button
                           size="sm"
                           variant="ghost"
+                          className="h-7 px-2 text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/20"
+                          onClick={(e) => { e.stopPropagation(); setStatsTarget(a); }}
+                          title="View Stats"
+                        >
+                          <BarChart2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                          onClick={() => setBadgeTarget(a)}
+                          onClick={(e) => { e.stopPropagation(); setBadgeTarget(a); }}
                           title="Print Badge"
                         >
                           <Printer className="h-3.5 w-3.5" />
@@ -560,6 +571,18 @@ export default function Associates() {
           }}
           open={Boolean(badgeTarget)}
           onClose={() => setBadgeTarget(null)}
+        />
+      )}
+
+      {/* Associate Stats Drawer */}
+      {statsTarget && (
+        <AssociateStatsDrawer
+          open={Boolean(statsTarget)}
+          onClose={() => setStatsTarget(null)}
+          associateId={statsTarget.associateId}
+          associateName={statsTarget.name}
+          warehouseId={statsTarget.warehouseId}
+          role={statsTarget.role}
         />
       )}
 

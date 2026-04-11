@@ -1305,3 +1305,9 @@
 - [x] UI: "View history" / "Hide history" toggle per alert (only shown when a note exists)
 - [x] UI: history panel shows timestamped list of edits with author name and timeAgo
 - [x] Tests: getNoteHistory unit tests (2) + saveNote updated — 584 tests passing
+
+## Associate Stats Drawer
+- [x] Server: associatesRouter.getStats(associateId) — sessions count, total items, avg items/hour, total pallets, total cases, recent 10 sessions
+- [x] UI: AssociateStatsDrawer component (Sheet) with KPI cards, session history table, items/hour trend chart
+- [x] UI: "View Stats" button (BarChart2 icon) in Associates table row actions
+- [x] Tests: getStats unit test (4 tests added, 588 total passing)

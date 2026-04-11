@@ -141,4 +141,96 @@ export const associatesRouter = router({
       `);
       return { success: true };
     }),
+
+  // Performance stats for a single associate
+  getStats: protectedProcedure
+    .input(z.object({ associateId: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      // KPI aggregates from completed sessions
+      const kpiRows = await db.execute<any>(sql`
+        SELECT
+          COUNT(*) AS total_sessions,
+          SUM(total_items) AS total_items,
+          SUM(total_pallets) AS total_pallets,
+          SUM(total_cases) AS total_cases,
+          AVG(CASE
+            WHEN ended_at IS NOT NULL AND started_at IS NOT NULL AND ended_at > started_at
+            THEN total_items / ((ended_at - started_at) / 3600000.0)
+            ELSE NULL
+          END) AS avg_items_per_hour,
+          AVG(CASE
+            WHEN ended_at IS NOT NULL AND started_at IS NOT NULL AND ended_at > started_at
+            THEN (ended_at - started_at) / 60000.0
+            ELSE NULL
+          END) AS avg_duration_minutes
+        FROM pull_sessions
+        WHERE associate_id = ${input.associateId} AND status = 'completed'
+      `);
+      const kpi = (kpiRows as any[])[0] ?? {};
+
+      // Recent 10 completed sessions for history table
+      const sessionRows = await db.execute<any>(sql`
+        SELECT id, pick_ticket, warehouse_id, started_at, ended_at,
+               total_items, total_pallets, total_cases, status
+        FROM pull_sessions
+        WHERE associate_id = ${input.associateId}
+        ORDER BY started_at DESC
+        LIMIT 10
+      `);
+      const sessions = (sessionRows as any[]).map((s: any) => ({
+        id: Number(s.id),
+        pickTicket: s.pick_ticket as string,
+        warehouseId: s.warehouse_id as string,
+        startedAt: Number(s.started_at),
+        endedAt: s.ended_at ? Number(s.ended_at) : null,
+        totalItems: Number(s.total_items ?? 0),
+        totalPallets: Number(s.total_pallets ?? 0),
+        totalCases: Number(s.total_cases ?? 0),
+        status: s.status as string,
+        durationMinutes: s.ended_at && s.started_at
+          ? Math.round((Number(s.ended_at) - Number(s.started_at)) / 60000)
+          : null,
+        itemsPerHour: s.ended_at && s.started_at && Number(s.total_items) > 0
+          ? Math.round(Number(s.total_items) / ((Number(s.ended_at) - Number(s.started_at)) / 3600000))
+          : null,
+      }));
+
+      // Daily items/hour trend for last 30 days (for chart)
+      const trendRows = await db.execute<any>(sql`
+        SELECT
+          DATE(FROM_UNIXTIME(started_at / 1000)) AS day,
+          SUM(total_items) AS items,
+          SUM(CASE
+            WHEN ended_at IS NOT NULL AND ended_at > started_at
+            THEN (ended_at - started_at) / 3600000.0
+            ELSE 0
+          END) AS hours
+        FROM pull_sessions
+        WHERE associate_id = ${input.associateId}
+          AND status = 'completed'
+          AND started_at >= ${Date.now() - 30 * 24 * 3600000}
+        GROUP BY day
+        ORDER BY day ASC
+      `);
+      const trend = (trendRows as any[]).map((t: any) => ({
+        day: t.day as string,
+        items: Number(t.items ?? 0),
+        hours: Number(t.hours ?? 0),
+        itemsPerHour: t.hours > 0 ? Math.round(Number(t.items) / Number(t.hours)) : 0,
+      }));
+
+      return {
+        totalSessions: Number(kpi.total_sessions ?? 0),
+        totalItems: Number(kpi.total_items ?? 0),
+        totalPallets: Number(kpi.total_pallets ?? 0),
+        totalCases: Number(kpi.total_cases ?? 0),
+        avgItemsPerHour: kpi.avg_items_per_hour != null ? Math.round(Number(kpi.avg_items_per_hour)) : null,
+        avgDurationMinutes: kpi.avg_duration_minutes != null ? Math.round(Number(kpi.avg_duration_minutes)) : null,
+        sessions,
+        trend,
+      };
+    }),
 });

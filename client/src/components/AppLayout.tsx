@@ -46,6 +46,8 @@ import {
   Wand2,
   UserCog,
   Receipt,
+  AlertTriangle,
+  CalendarDays,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -56,6 +58,9 @@ const dashboardItems = [
   { href: "/",                 label: "Open Orders — B2B", icon: FolderOpen, badge: true },
   { href: "/open-orders-d2c", label: "Open Orders — D2C", icon: FolderOpen },
   { href: "/sla-performance",  label: "SLA Performance",   icon: TrendingUp },
+  { href: "/exceptions",       label: "Exceptions Queue",  icon: AlertTriangle },
+  { href: "/my-shift",         label: "My Shift",          icon: CalendarDays },
+  { href: "/scan-mode",         label: "Scan Mode",          icon: ScanBarcode },
 ];
 
 const receivingItems = [

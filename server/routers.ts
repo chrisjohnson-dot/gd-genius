@@ -9014,6 +9014,10 @@ const shippingHistoryRouter = router({
 });
 
 import { cortexHubRouter } from "./routers/cortex-hub";
+import { notesRouter } from "./routers/notes";
+import { exceptionsRouter } from "./routers/exceptions";
+import { myShiftRouter } from "./routers/myShift";
+import { scanModeRouter } from "./routers/scanMode";
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9025,5 +9029,9 @@ export const appRouterV4 = router({
   shippingHistory: shippingHistoryRouter,
   directly: directlyRouter,
   cortexHub: cortexHubRouter,
+  notes: notesRouter,
+  exceptions: exceptionsRouter,
+  myShift: myShiftRouter,
+  scanMode: scanModeRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

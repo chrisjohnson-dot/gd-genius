@@ -6,6 +6,7 @@ import AllocationRules from "@/pages/AllocationRules";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import AppLayout from "./components/AppLayout";
+import { CommandPalette } from "./components/CommandPalette";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import LocationConfig from "./pages/LocationConfig";
@@ -52,6 +53,9 @@ import QrScanHistory from "@/pages/QrScanHistory";
 import QcAuditLog from "@/pages/QcAuditLog";
 import SlaPerformance from "@/pages/SlaPerformance";
 import SmallParcel from "@/pages/SmallParcel";
+import ExceptionsQueue from "@/pages/ExceptionsQueue";
+import MyShift from "@/pages/MyShift";
+import ScanMode from "@/pages/ScanMode";
 import SmallParcelPrinterSettings from "@/pages/SmallParcelPrinterSettings";
 import SmallParcelHistory from "@/pages/SmallParcelHistory";
 import SmallParcelPackageSizes from "@/pages/SmallParcelPackageSizes";
@@ -126,6 +130,9 @@ function AppRoutes() {
         <Route path="/qc/audit" component={QcAuditLog} />
         <Route path="/open-orders-d2c" component={OpenOrdersD2C} />
         <Route path="/sla-performance" component={SlaPerformance} />
+        <Route path="/exceptions" component={ExceptionsQueue} />
+        <Route path="/my-shift" component={MyShift} />
+        <Route path="/scan-mode" component={ScanMode} />
         <Route path="/small-parcel" component={SmallParcel} />
         <Route path="/small-parcel/history" component={SmallParcelHistory} />
         <Route path="/small-parcel/printer-settings" component={SmallParcelPrinterSettings} />
@@ -155,6 +162,7 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <Toaster />
+          <CommandPalette />
           <Router />
         </TooltipProvider>
       </ThemeProvider>

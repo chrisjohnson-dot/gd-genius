@@ -1133,3 +1133,33 @@
 - [x] Webhook: mark allocation_run_orders row as unallocated after deallocation (even on Extensiv failure)
 - [x] Webhook: decrement run allocatedCount and set run status to unallocated when all orders done
 - [x] Tests: deallocation happy path, no-orders, missing-config, missing-etag, Extensiv failure, multi-order, run-count (539 tests passing)
+
+## Phase 1 — Feature 9: Order Notes ✅
+- [x] DB: entity_notes and entity_note_mentions tables + migration SQL
+- [x] Server: notes tRPC router (addNote, listNotes, markMentionRead, deleteNote)
+- [x] UI: NotesPanel component (collapsible, @mention autocomplete, note types)
+- [x] UI: Integrated into SmallParcelHistory session rows
+- [x] Tests: notes router unit tests
+
+## Phase 1 — Feature 2: Command Palette ✅
+- [x] UI: CommandPalette component (Cmd+K/Ctrl+K overlay, full page index, categorized results)
+- [x] UI: Registered globally in App.tsx with keyboard listener
+
+## Phase 1 — Feature 5: Exceptions Queue ✅
+- [x] DB: exceptions + exception_events tables + migration SQL
+- [x] Server: exceptionsRouter (list, get, create, updateStatus, assign, counts)
+- [x] UI: /exceptions page with filters, detail panel, resolve/assign actions
+- [x] Sidebar: Exceptions Queue nav item added
+
+## Phase 1 — Feature 1: My Shift ✅
+- [x] DB: shift_sessions + shift_tasks tables + migration SQL
+- [x] Server: myShiftRouter (currentShift, startShift, endShift, addTask, updateTaskStatus, deleteTask, stats, recentShifts)
+- [x] UI: /my-shift page with task queue, progress bar, shift timer, recent shifts
+- [x] Sidebar: My Shift nav item added
+
+## Phase 1 — Feature 3: Scan Mode ✅
+- [x] DB: scan_sessions + scan_events tables + migration SQL
+- [x] Server: scanModeRouter (startSession, endSession, activeSession, scan, recentSessions, sessionEvents)
+- [x] UI: /scan-mode full-screen page with barcode input, result flash, recent scans list, session stats
+- [x] Sidebar: Scan Mode nav item added
+- [x] 539 tests passing

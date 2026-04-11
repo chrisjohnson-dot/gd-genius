@@ -1879,3 +1879,86 @@ export const geniusCortexEvents = mysqlTable("genius_cortex_events", {
 });
 export type GeniusCortexEvent = typeof geniusCortexEvents.$inferSelect;
 export type InsertGeniusCortexEvent = typeof geniusCortexEvents.$inferInsert;
+
+// ─── Feature 9: Order Notes ───────────────────────────────────────────────────
+export const entityNoteTypeEnum = mysqlEnum("entity_note_type", [
+  "internal",
+  "client",
+  "system",
+  "decision",
+]);
+
+export const entityNotes = mysqlTable("entity_notes", {
+  id: int("id").autoincrement().primaryKey(),
+  entityType: varchar("entityType", { length: 64 }).notNull(), // "order" | "exception" | "return" | "allocation_run"
+  entityId: varchar("entityId", { length: 128 }).notNull(),
+  noteType: entityNoteTypeEnum.notNull().default("internal"),
+  authorId: int("authorId"), // null for system notes
+  authorName: varchar("authorName", { length: 128 }), // denormalized for display
+  bodyText: text("bodyText").notNull(),
+  editedAt: timestamp("editedAt"),
+  originalBodyText: text("originalBodyText"), // preserved on edit
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type EntityNote = typeof entityNotes.$inferSelect;
+export type InsertEntityNote = typeof entityNotes.$inferInsert;
+
+export const entityNoteMentions = mysqlTable("entity_note_mentions", {
+  id: int("id").autoincrement().primaryKey(),
+  noteId: int("noteId").notNull(),
+  mentionedUserId: int("mentionedUserId").notNull(),
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type EntityNoteMention = typeof entityNoteMentions.$inferSelect;
+export type InsertEntityNoteMention = typeof entityNoteMentions.$inferInsert;
+
+// ─── Feature 5: Exceptions Queue ─────────────────────────────────────────────
+export const exceptionPriorityEnum = mysqlEnum("exception_priority", [
+  "critical",
+  "high",
+  "medium",
+  "low",
+]);
+
+export const exceptionStatusEnum = mysqlEnum("exception_status", [
+  "open",
+  "in_progress",
+  "resolved",
+  "dismissed",
+]);
+
+export const exceptions = mysqlTable("exceptions", {
+  id: int("id").autoincrement().primaryKey(),
+  exceptionType: varchar("exceptionType", { length: 64 }).notNull(),
+  priority: exceptionPriorityEnum.notNull().default("medium"),
+  status: exceptionStatusEnum.notNull().default("open"),
+  title: varchar("title", { length: 256 }).notNull(),
+  description: text("description"),
+  entityType: varchar("entityType", { length: 64 }),
+  entityId: varchar("entityId", { length: 128 }),
+  warehouseId: varchar("warehouseId", { length: 64 }),
+  clientName: varchar("clientName", { length: 128 }),
+  assignedToId: int("assignedToId"),
+  assignedToName: varchar("assignedToName", { length: 128 }),
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedById: int("resolvedById"),
+  resolvedByName: varchar("resolvedByName", { length: 128 }),
+  resolutionNote: text("resolutionNote"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Exception = typeof exceptions.$inferSelect;
+export type InsertException = typeof exceptions.$inferInsert;
+
+export const exceptionEvents = mysqlTable("exception_events", {
+  id: int("id").autoincrement().primaryKey(),
+  exceptionId: int("exceptionId").notNull(),
+  eventType: varchar("eventType", { length: 64 }).notNull(),
+  actorId: int("actorId"),
+  actorName: varchar("actorName", { length: 128 }),
+  detail: text("detail"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ExceptionEvent = typeof exceptionEvents.$inferSelect;
+export type InsertExceptionEvent = typeof exceptionEvents.$inferInsert;

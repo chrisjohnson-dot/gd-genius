@@ -31,6 +31,7 @@ import {
 import { useDirectPrint } from "@/hooks/useDirectPrint";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
+import { NotesPanel } from "@/components/NotesPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Session {
@@ -459,6 +460,13 @@ export default function SmallParcelHistory() {
                           Voided
                         </span>
                       )}
+                    </div>
+                    {/* Notes panel */}
+                    <div className="w-full mt-2">
+                      <NotesPanel
+                        entityType="small_parcel_session"
+                        entityId={String(session.id)}
+                      />
                     </div>
                   </div>
                 );

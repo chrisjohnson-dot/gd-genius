@@ -373,6 +373,76 @@ export const pullTrackerRouter = router({
       }));
     }),
 
+  // Get active sessions enriched with item counts and expected rate — for Live Pull Board
+  getActiveSessions: protectedProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      // Fetch active sessions with live item counts
+      const sessionRows = await db.execute<any>(sql`
+        SELECT
+          ps.id,
+          ps.pick_ticket,
+          ps.associate_id,
+          ps.associate_name,
+          ps.warehouse_id,
+          ps.started_at,
+          COALESCE(SUM(psi.quantity), 0) AS items_scanned
+        FROM pull_sessions ps
+        LEFT JOIN pull_session_items psi ON psi.session_id = ps.id
+        WHERE ps.status = 'active'
+        GROUP BY ps.id
+        ORDER BY ps.started_at ASC
+      `);
+
+      // Fetch expected rate settings (global + per-warehouse)
+      const settingRows = await db.execute<any>(sql`
+        SELECT warehouse_id, expected_items_per_hour
+        FROM pull_alert_settings
+        WHERE expected_items_per_hour IS NOT NULL
+      `);
+
+      const rateMap: Record<string, number> = {};
+      let globalRate: number | null = null;
+      for (const r of (settingRows as any[])) {
+        const wh = (r as any).warehouse_id as string;
+        const rate = Number((r as any).expected_items_per_hour);
+        if (wh === "all") globalRate = rate;
+        else rateMap[wh] = rate;
+      }
+      const DEFAULT_RATE = 30; // items/hour fallback
+
+      const now = Date.now();
+      return (sessionRows as any[]).map((r: any) => {
+        const startedAt = Number(r.started_at);
+        const elapsedSeconds = Math.round((now - startedAt) / 1000);
+        const itemsScanned = Number(r.items_scanned) || 0;
+        const warehouseId = r.warehouse_id as string;
+        const expectedRate = rateMap[warehouseId] ?? globalRate ?? DEFAULT_RATE; // items/hour
+        // Ghost picker: how many items should have been done by now
+        const ghostItems = (expectedRate / 3600) * elapsedSeconds;
+        // Pace ratio: actual / ghost (>1 = ahead, <1 = behind)
+        const paceRatio = ghostItems > 0 ? itemsScanned / ghostItems : 1;
+        const paceStatus: "ahead" | "on_pace" | "behind" =
+          paceRatio >= 1.05 ? "ahead" : paceRatio >= 0.85 ? "on_pace" : "behind";
+        return {
+          id: Number(r.id),
+          pickTicket: r.pick_ticket as string,
+          associateId: r.associate_id as string,
+          associateName: r.associate_name as string | null,
+          warehouseId,
+          startedAt,
+          elapsedSeconds,
+          itemsScanned,
+          expectedRate,       // items/hour
+          ghostItems: Math.round(ghostItems * 10) / 10,
+          paceRatio: Math.round(paceRatio * 100) / 100,
+          paceStatus,
+        };
+      });
+    }),
+
   // Export sessions as CSV — for manager download
   exportSessions: protectedProcedure
     .input(z.object({

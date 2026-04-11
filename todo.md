@@ -1317,3 +1317,20 @@
 - [x] UI: "Download CSV" button on Pull Manager with date-range pickers and warehouse filter
 - [x] UI: Client-side CSV blob download (no new page/route needed)
 - [x] Tests: exportSessions unit test (4 tests added, 592 total passing)
+
+## Live Pull Board
+- [ ] Server: pullTracker.getActiveSessions — active sessions enriched with elapsed seconds, item counts, and expected rate from alert settings
+- [ ] Server: pullTracker.getExpectedRate — read expected_items_per_hour from pull_alert_settings (global + per-warehouse)
+- [ ] UI: /ltl/live-board page — card grid of active sessions, running clock (useInterval), ghost-picker progress bar, pace badge (Ahead/On Pace/Behind)
+- [ ] UI: Expected rate config inline on the board (editable)
+- [ ] Nav: Add "Live Board" link under LTL section in sidebar
+- [ ] Tests: getActiveSessions unit test
+
+## Live Pull Board
+- [x] DB: ALTER pull_alert_settings ADD expected_items_per_hour column
+- [x] Server: pullAlertsRouter.getSettings / saveSetting updated with expectedItemsPerHour
+- [x] Server: pullTrackerRouter.getActiveSessions — enriches active sessions with ghost picker pace data
+- [x] UI: LivePullBoard page (/ltl/live-board) with running clocks, animated progress bars, pace badges
+- [x] UI: Live Board nav entry added to LTL sidebar section
+- [x] UI: PullAlertSettings dialog updated with Ghost Picker Rate field (global + per-warehouse)
+- [x] Tests: 4 getActiveSessions unit tests (596 total passing)

@@ -382,3 +382,83 @@ describe("pullTrackerRouter", () => {
     });
   });
 });
+// ─── getActiveSessions ────────────────────────────────────────────────────────
+describe("getActiveSessions", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns empty array when no active sessions exist", async () => {
+    mockExecute
+      .mockResolvedValueOnce([])   // session rows (flat array — no nested)
+      .mockResolvedValueOnce([]);  // rate settings
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.pullTracker.getActiveSessions();
+    expect(result).toHaveLength(0);
+  });
+
+  it("computes paceStatus=on_pace when actual matches ghost", async () => {
+    const startedAt = Date.now() - 3600_000; // 1 hour ago
+    // With default rate 30 items/hr, ghost = 30 after 1 hr
+    // If itemsScanned = 30 → paceRatio = 1.0 → on_pace
+    mockExecute
+      .mockResolvedValueOnce([{
+        id: 1,
+        pick_ticket: "PT-100",
+        associate_id: "EMP-1",
+        associate_name: "Alice",
+        warehouse_id: "COL",
+        started_at: startedAt,
+        items_scanned: 30,
+      }])
+      .mockResolvedValueOnce([]); // no rate settings → use default 30
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.pullTracker.getActiveSessions();
+    expect(result).toHaveLength(1);
+    expect(result[0].paceStatus).toBe("on_pace");
+    expect(result[0].expectedRate).toBe(30);
+    expect(result[0].itemsScanned).toBe(30);
+  });
+
+  it("computes paceStatus=behind when actual is well below ghost", async () => {
+    const startedAt = Date.now() - 3600_000; // 1 hour ago
+    // ghost = 30, actual = 10 → ratio = 0.33 → behind
+    mockExecute
+      .mockResolvedValueOnce([{
+        id: 2,
+        pick_ticket: "PT-200",
+        associate_id: "EMP-2",
+        associate_name: "Bob",
+        warehouse_id: "LAX",
+        started_at: startedAt,
+        items_scanned: 10,
+      }])
+      .mockResolvedValueOnce([]); // no rate settings
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.pullTracker.getActiveSessions();
+    expect(result[0].paceStatus).toBe("behind");
+    expect(result[0].paceRatio).toBeLessThan(0.85);
+  });
+
+  it("uses per-warehouse rate from pull_alert_settings", async () => {
+    const startedAt = Date.now() - 3600_000; // 1 hour ago
+    // warehouse LAX has rate 60 items/hr → ghost = 60 after 1 hr
+    // actual = 65 → ratio = 1.08 → ahead
+    mockExecute
+      .mockResolvedValueOnce([{
+        id: 3,
+        pick_ticket: "PT-300",
+        associate_id: "EMP-3",
+        associate_name: "Carol",
+        warehouse_id: "LAX",
+        started_at: startedAt,
+        items_scanned: 65,
+      }])
+      .mockResolvedValueOnce([{
+        warehouse_id: "LAX",
+        expected_items_per_hour: 60,
+      }]);
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.pullTracker.getActiveSessions();
+    expect(result[0].expectedRate).toBe(60);
+    expect(result[0].paceStatus).toBe("ahead");
+  });
+});

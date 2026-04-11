@@ -138,6 +138,7 @@ export const pullAlertsRouter = router({
       enabled: number;
       notify_email: string | null;
       updated_at: number;
+      expected_items_per_hour: number | null;
     }>).map((s) => ({
       id: s.id,
       warehouseId: s.warehouse_id,
@@ -146,6 +147,7 @@ export const pullAlertsRouter = router({
       enabled: Boolean(s.enabled),
       notifyEmail: s.notify_email,
       updatedAt: s.updated_at,
+      expectedItemsPerHour: s.expected_items_per_hour != null ? Number(s.expected_items_per_hour) : null,
     }));
   }),
 
@@ -158,6 +160,7 @@ export const pullAlertsRouter = router({
         reAlertMultiplier: z.number().min(1).max(10).default(2),
         enabled: z.boolean(),
         notifyEmail: z.string().email().optional().nullable(),
+        expectedItemsPerHour: z.number().min(1).max(9999).optional().nullable(),
       })
     )
     .mutation(async ({ input }) => {
@@ -167,15 +170,17 @@ export const pullAlertsRouter = router({
       const enabledVal = input.enabled ? 1 : 0;
       const emailVal = input.notifyEmail ?? null;
       const multiplierVal = input.reAlertMultiplier ?? 2;
+      const rateVal = input.expectedItemsPerHour ?? null;
       await db.execute(
         sql`INSERT INTO pull_alert_settings
-              (warehouse_id, threshold_minutes, re_alert_multiplier, enabled, notify_email, created_at, updated_at)
-            VALUES (${input.warehouseId}, ${input.thresholdMinutes}, ${multiplierVal}, ${enabledVal}, ${emailVal}, ${now}, ${now})
+              (warehouse_id, threshold_minutes, re_alert_multiplier, enabled, notify_email, expected_items_per_hour, created_at, updated_at)
+            VALUES (${input.warehouseId}, ${input.thresholdMinutes}, ${multiplierVal}, ${enabledVal}, ${emailVal}, ${rateVal}, ${now}, ${now})
             ON DUPLICATE KEY UPDATE
               threshold_minutes = VALUES(threshold_minutes),
               re_alert_multiplier = VALUES(re_alert_multiplier),
               enabled = VALUES(enabled),
               notify_email = VALUES(notify_email),
+              expected_items_per_hour = VALUES(expected_items_per_hour),
               updated_at = VALUES(updated_at)`
       );
       return { success: true };

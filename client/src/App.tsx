@@ -74,6 +74,7 @@ import WorkloadPage from "@/pages/workload/WorkloadPage";
 import WarehousePull from "@/pages/ltl/WarehousePull";
 import PullManager from "@/pages/ltl/PullManager";
 import Associates from "@/pages/ltl/Associates";
+import LivePullBoard from "@/pages/ltl/LivePullBoard";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -158,6 +159,7 @@ function AppRoutes() {
         <Route path="/ltl/warehouse-pull" component={WarehousePull} />
         <Route path="/ltl/pull-manager" component={PullManager} />
         <Route path="/ltl/associates" component={Associates} />
+        <Route path="/ltl/live-board" component={LivePullBoard} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

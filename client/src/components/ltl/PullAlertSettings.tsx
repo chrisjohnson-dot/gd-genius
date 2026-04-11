@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Settings, Plus, Trash2, Save } from "lucide-react";
+import { Settings, Plus, Trash2, Save, Ghost } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
@@ -22,6 +22,7 @@ interface SettingRow {
   reAlertMultiplier: number;
   enabled: boolean;
   notifyEmail: string | null;
+  expectedItemsPerHour: number | null;
 }
 
 interface EditableRow extends SettingRow {
@@ -40,6 +41,7 @@ export function PullAlertSettings() {
   const [newWarehouse, setNewWarehouse] = useState("");
   const [newThreshold, setNewThreshold] = useState("120");
   const [newMultiplier, setNewMultiplier] = useState(2);
+  const [newExpectedRate, setNewExpectedRate] = useState("");
   const [rows, setRows] = useState<EditableRow[]>([]);
 
   const utils = trpc.useUtils();
@@ -77,6 +79,7 @@ export function PullAlertSettings() {
       reAlertMultiplier: row.reAlertMultiplier > 0 ? row.reAlertMultiplier : 999,
       enabled: row.enabled,
       notifyEmail: row.notifyEmail || null,
+      expectedItemsPerHour: row.expectedItemsPerHour ?? null,
     });
     setRows((prev) =>
       prev.map((r) => (r.warehouseId === row.warehouseId ? { ...r, dirty: false } : r))
@@ -89,15 +92,18 @@ export function PullAlertSettings() {
     if (rows.some((r) => r.warehouseId === wh)) { toast.error("Override already exists."); return; }
     const mins = parseInt(newThreshold, 10);
     if (isNaN(mins) || mins < 1) { toast.error("Enter a valid threshold."); return; }
+    const rate = newExpectedRate ? parseFloat(newExpectedRate) : null;
     saveSetting.mutate({
       warehouseId: wh,
       thresholdMinutes: mins,
       reAlertMultiplier: newMultiplier > 0 ? newMultiplier : 999,
       enabled: true,
+      expectedItemsPerHour: rate && rate > 0 ? rate : null,
     });
     setNewWarehouse("");
     setNewThreshold("120");
     setNewMultiplier(2);
+    setNewExpectedRate("");
   }
 
   // Sync rows when settings load (only when not dirty)
@@ -117,7 +123,7 @@ export function PullAlertSettings() {
           Alert Settings
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -171,6 +177,29 @@ export function PullAlertSettings() {
                     </div>
                   </div>
                 </div>
+                {/* Ghost picker rate */}
+                <div className="space-y-1">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Ghost className="h-3 w-3" />
+                    Ghost Picker Rate (items/hour)
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={9999}
+                    placeholder="e.g. 30 (default)"
+                    value={globalRow.expectedItemsPerHour ?? ""}
+                    onChange={(e) =>
+                      updateRow("all", {
+                        expectedItemsPerHour: e.target.value ? parseFloat(e.target.value) : null,
+                      })
+                    }
+                    className="h-8 text-sm"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Used by the Live Board to pace the ghost picker. Leave blank for 30 items/hr default.
+                  </p>
+                </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Switch
@@ -181,7 +210,7 @@ export function PullAlertSettings() {
                   </div>
                   {globalRow.reAlertMultiplier > 0 && globalRow.reAlertMultiplier < 10 && (
                     <p className="text-xs text-muted-foreground">
-                      Escalation fires at {Math.round(globalRow.thresholdMinutes * globalRow.reAlertMultiplier)} min ({globalRow.reAlertMultiplier}×)
+                      Escalation at {Math.round(globalRow.thresholdMinutes * globalRow.reAlertMultiplier)} min ({globalRow.reAlertMultiplier}×)
                     </p>
                   )}
                   <Button
@@ -270,6 +299,26 @@ export function PullAlertSettings() {
                           </div>
                         </div>
                       </div>
+                      {/* Ghost picker rate per warehouse */}
+                      <div className="space-y-1">
+                        <Label className="text-xs flex items-center gap-1">
+                          <Ghost className="h-3 w-3" />
+                          Ghost Rate (items/hr)
+                        </Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={9999}
+                          placeholder="inherit global"
+                          value={row.expectedItemsPerHour ?? ""}
+                          onChange={(e) =>
+                            updateRow(row.warehouseId, {
+                              expectedItemsPerHour: e.target.value ? parseFloat(e.target.value) : null,
+                            })
+                          }
+                          className="h-7 text-xs"
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -299,6 +348,21 @@ export function PullAlertSettings() {
                       className="h-8 text-sm"
                     />
                   </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Ghost className="h-3 w-3" />
+                    Ghost Rate (items/hr, optional)
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={9999}
+                    placeholder="e.g. 35"
+                    value={newExpectedRate}
+                    onChange={(e) => setNewExpectedRate(e.target.value)}
+                    className="h-8 text-sm"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Re-alert At</Label>

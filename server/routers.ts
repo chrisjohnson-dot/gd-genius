@@ -9025,6 +9025,7 @@ import { workloadRouter } from "./routers/workload";
 import { onboardingRouter } from "./routers/onboarding";
 import { pullTrackerRouter } from "./routers/pullTracker";
 import { associatesRouter } from "./routers/associates";
+import { pullAlertsRouter } from "./routers/pullAlerts";
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9047,5 +9048,6 @@ export const appRouterV4 = router({
   onboarding: onboardingRouter,
   pullTracker: pullTrackerRouter,
   associates: associatesRouter,
+  pullAlerts: pullAlertsRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

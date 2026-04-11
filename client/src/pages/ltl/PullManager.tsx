@@ -30,7 +30,10 @@ import {
   Send,
   TrendingUp,
   AlertCircle,
+  Settings,
 } from "lucide-react";
+import { PullAlertBell } from "@/components/ltl/PullAlertBell";
+import { PullAlertSettings } from "@/components/ltl/PullAlertSettings";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDuration(seconds: number | null | undefined): string {
@@ -173,10 +176,14 @@ export default function PullManager() {
           <h1 className="text-2xl font-bold text-foreground">Pull Manager</h1>
           <p className="text-sm text-muted-foreground">Monitor warehouse associate pull sessions and efficiency</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <PullAlertBell />
+          <PullAlertSettings />
+          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}

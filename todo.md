@@ -1264,3 +1264,13 @@
 - [x] Apply role filter on top of warehouse filter and search
 - [x] Add "Select All [Role]s" quick-select button when a role is filtered
 - [x] Both filters work together (e.g., "Select All Pickers in Columbus")
+
+## Pull Session Alert System
+- [x] DB: pull_alert_settings table (warehouse_id, threshold_minutes, enabled, notify_email)
+- [x] DB: pull_session_alerts table (session_id, associate_id, elapsed_minutes, alerted_at, acknowledged)
+- [x] Server: pullAlertsRouter (getSettings, saveSetting, deleteSetting, getAlerts, getUnreadCount, acknowledge, checkNow)
+- [x] Server: checkOverdueSessions helper fires notifyOwner + inserts alert record when threshold exceeded
+- [x] UI: PullAlertBell — notification bell in Pull Manager header with orange unread count badge
+- [x] UI: Alert list popover — shows overdue sessions with elapsed time, warehouse, pick ticket, acknowledge buttons
+- [x] UI: PullAlertSettings dialog — global threshold + per-warehouse overrides with enable/disable toggle
+- [x] Tests: pullAlerts unit tests (6 passing)

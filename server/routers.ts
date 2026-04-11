@@ -9020,6 +9020,9 @@ import { myShiftRouter } from "./routers/myShift";
 import { scanModeRouter } from "./routers/scanMode";
 import { liveOpsRouter } from "./routers/liveOps";
 import { clientProfilesRouter } from "./routers/clientProfiles";
+import { photoCaptureRouter } from "./routers/photoCapture";
+import { workloadRouter } from "./routers/workload";
+import { onboardingRouter } from "./routers/onboarding";
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9037,5 +9040,8 @@ export const appRouterV4 = router({
   scanMode: scanModeRouter,
   liveOps: liveOpsRouter,
   clientProfiles: clientProfilesRouter,
+  photoCapture: photoCaptureRouter,
+  workload: workloadRouter,
+  onboarding: onboardingRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

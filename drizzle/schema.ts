@@ -2012,3 +2012,72 @@ export const clientProfileAudit = mysqlTable("client_profile_audit", {
 
 export type ClientProfile = typeof clientProfiles.$inferSelect;
 export type NewClientProfile = typeof clientProfiles.$inferInsert;
+
+// ── Media Attachments (Photo Capture) ─────────────────────────────────────────
+export const mediaAttachments = mysqlTable('media_attachments', {
+  id: int('id').autoincrement().primaryKey(),
+  entityType: varchar('entity_type', { length: 64 }).notNull(),
+  entityId: varchar('entity_id', { length: 128 }).notNull(),
+  category: mysqlEnum('category', ['item_condition', 'packaging', 'damage', 'label', 'other']).notNull().default('other'),
+  fileKey: varchar('file_key', { length: 512 }).notNull(),
+  fileUrl: text('file_url').notNull(),
+  fileSizeBytes: int('file_size_bytes').notNull().default(0),
+  mimeType: varchar('mime_type', { length: 64 }).notNull().default('image/jpeg'),
+  width: int('width'),
+  height: int('height'),
+  note: text('note'),
+  capturedBy: int('captured_by'),
+  capturedAt: bigint('captured_at', { mode: 'number' }).notNull(),
+});
+
+export type MediaAttachment = typeof mediaAttachments.$inferSelect;
+export type InsertMediaAttachment = typeof mediaAttachments.$inferInsert;
+
+// ── Throughput Snapshots (Predictive Workload) ────────────────────────────────
+export const throughputSnapshots = mysqlTable('throughput_snapshots', {
+  id: int('id').autoincrement().primaryKey(),
+  warehouseId: varchar('warehouse_id', { length: 64 }).notNull(),
+  stage: varchar('stage', { length: 64 }).notNull(),
+  hourBucket: bigint('hour_bucket', { mode: 'number' }).notNull(),
+  ordersProcessed: int('orders_processed').notNull().default(0),
+  workerCount: int('worker_count').notNull().default(0),
+  avgTimeSeconds: int('avg_time_seconds').notNull().default(0),
+  recordedAt: bigint('recorded_at', { mode: 'number' }).notNull(),
+});
+
+// ── Workload Forecasts (Predictive Workload) ──────────────────────────────────
+export const workloadForecasts = mysqlTable('workload_forecasts', {
+  id: int('id').autoincrement().primaryKey(),
+  warehouseId: varchar('warehouse_id', { length: 64 }).notNull(),
+  forecastAt: bigint('forecast_at', { mode: 'number' }).notNull(),
+  stage: varchar('stage', { length: 64 }).notNull(),
+  currentQueue: int('current_queue').notNull().default(0),
+  projectedCompletionAt: bigint('projected_completion_at', { mode: 'number' }),
+  slaBreachCount: int('sla_breach_count').notNull().default(0),
+  throughputPerHour: decimal('throughput_per_hour', { precision: 8, scale: 2 }).notNull().default('0'),
+  requiredThroughput: decimal('required_throughput', { precision: 8, scale: 2 }).notNull().default('0'),
+  bottleneck: int('bottleneck').notNull().default(0),
+  actualBreachCount: int('actual_breach_count'),
+});
+
+// ── Onboarding Steps (Guided Onboarding) ─────────────────────────────────────
+export const onboardingSteps = mysqlTable('onboarding_steps', {
+  id: int('id').autoincrement().primaryKey(),
+  role: varchar('role', { length: 64 }).notNull(),
+  stepOrder: int('step_order').notNull(),
+  stepKey: varchar('step_key', { length: 128 }).notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  description: text('description').notNull(),
+  targetRoute: varchar('target_route', { length: 255 }),
+  targetSelector: varchar('target_selector', { length: 255 }),
+  actionType: mysqlEnum('action_type', ['navigate', 'highlight', 'interact', 'read']).notNull().default('navigate'),
+});
+
+// ── Onboarding Progress (Guided Onboarding) ───────────────────────────────────
+export const onboardingProgress = mysqlTable('onboarding_progress', {
+  id: int('id').autoincrement().primaryKey(),
+  userId: int('user_id').notNull(),
+  stepKey: varchar('step_key', { length: 128 }).notNull(),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+  skipped: int('skipped').notNull().default(0),
+});

@@ -50,11 +50,14 @@ import {
   CalendarDays,
   Monitor,
   Building2,
+  BarChart2,
+  BookOpen,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
+import { OnboardingTour, OnboardingProgressBadge } from "./onboarding/OnboardingTour";
 
 const dashboardItems = [
   { href: "/",                 label: "Open Orders — B2B", icon: FolderOpen, badge: true },
@@ -65,6 +68,7 @@ const dashboardItems = [
   { href: "/scan-mode",         label: "Scan Mode",          icon: ScanBarcode },
   { href: "/live-ops",           label: "Live Ops View",      icon: Monitor },
   { href: "/clients",             label: "Client Profiles",    icon: Building2 },
+  { href: "/workload",             label: "Workload Planning",  icon: BarChart2 },
 ];
 
 const receivingItems = [
@@ -497,6 +501,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
+        {/* Footer — onboarding progress */}
+        {isAuthenticated && (
+          <div className="px-3 pb-2">
+            <OnboardingProgressBadge />
+          </div>
+        )}
+
         {/* Footer — user card */}
         <div className="p-3 border-t border-white/[0.06]">
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-[10px] hover:bg-[#252830] transition-colors cursor-default">
@@ -539,6 +550,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
+
+      {/* ── Onboarding Tour ──────────────────────────────────────────────── */}
+      {isAuthenticated && <OnboardingTour />}
     </div>
   );
 }

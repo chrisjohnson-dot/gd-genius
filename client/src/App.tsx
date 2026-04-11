@@ -70,6 +70,7 @@ import CustomerShippingRules from "@/pages/CustomerShippingRules";
 import LiveOpsView from "@/pages/LiveOpsView";
 import Clients from "@/pages/Clients";
 import ClientProfile from "@/pages/ClientProfile";
+import WorkloadPage from "@/pages/workload/WorkloadPage";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -150,6 +151,7 @@ function AppRoutes() {
         <Route path="/live-ops" component={LiveOpsView} />
         <Route path="/clients" component={Clients} />
         <Route path="/clients/:configId/:customerId" component={ClientProfile} />
+        <Route path="/workload" component={WorkloadPage} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

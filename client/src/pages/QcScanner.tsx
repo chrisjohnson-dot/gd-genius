@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { PhotoGallery } from "@/components/photos/PhotoGallery";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1641,6 +1642,17 @@ export default function QcScanner() {
                     </Button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Photos */}
+            {session && (
+              <div className="border-t border-border pt-3">
+                <PhotoGallery
+                  entityType="qc_session"
+                  entityId={String(session.id)}
+                  title="QC Photos"
+                />
               </div>
             )}
 

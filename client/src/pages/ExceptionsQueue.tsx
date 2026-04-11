@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { NotesPanel } from "@/components/NotesPanel";
+import { PhotoGallery } from "@/components/photos/PhotoGallery";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -289,6 +290,15 @@ function ExceptionDetailDialog({
           entityId={String(exc.id)}
           defaultOpen
         />
+
+        {/* Photos */}
+        <div className="border-t border-border pt-3">
+          <PhotoGallery
+            entityType="exception"
+            entityId={String(exc.id)}
+            title="Photos"
+          />
+        </div>
       </div>
 
       <DialogFooter>

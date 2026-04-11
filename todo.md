@@ -1185,3 +1185,31 @@
 - [x] UI: Audit log showing recent field changes with old/new values and editor name
 - [x] Sidebar: Client Profiles nav item added under Dashboard section
 - [x] 539 tests passing (0 TypeScript errors)
+
+## Phase 2 — Feature 8: Photo Capture
+- [x] DB: media_attachments table + migration SQL
+- [x] Server: photoCaptureRouter (upload to S3, list, delete, countBatch)
+- [x] UI: PhotoGallery component (camera capture, file picker, lightbox, category selector, note)
+- [x] Integration: ExceptionsQueue detail panel
+- [x] Integration: QcScanner complete dialog
+- [x] Tests: photoCaptureRouter unit tests
+
+## Phase 2 — Feature 11: Mobile Responsive
+- [x] Responsive layouts maintained across all pages (Tailwind responsive utilities)
+- [x] PhotoGallery works on mobile (camera capture via file input with capture=environment)
+- [x] Workload page responsive grid layout
+
+## Phase 3 — Feature 7: Predictive Workload Planning
+- [x] DB: throughput_snapshots + workload_forecasts tables + migration SQL
+- [x] Server: workloadRouter (getPipelineSnapshot, recordSnapshot, getHistoricalThroughput, generateForecast, getLatestForecast, getStaffingRecommendation)
+- [x] UI: /workload page with pipeline bar chart, forecast table, staffing insights
+- [x] UI: Generate Forecast button, bottleneck highlighting, SLA risk indicators
+- [x] Tests: workloadRouter unit tests
+
+## Phase 3 — Feature 10: Guided Onboarding
+- [x] DB: onboarding_progress + onboarding_steps tables + migration SQL
+- [x] Server: onboardingRouter (getSteps, completeStep, skipStep, reset, getProgress)
+- [x] UI: OnboardingTour dialog (step list, progress bar, navigate/next/skip actions)
+- [x] UI: OnboardingProgressBadge in sidebar footer
+- [x] UI: Auto-launches for new authenticated users via AppLayout
+- [x] Tests: onboardingRouter unit tests

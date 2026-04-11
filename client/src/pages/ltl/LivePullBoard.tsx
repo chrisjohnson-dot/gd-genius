@@ -47,7 +47,8 @@ import { Link } from "wouter";
 import { PaceSparkline } from "@/components/ltl/PaceSparkline";
 import { useKiosk } from "@/contexts/KioskContext";
 import { useIdleKiosk } from "@/hooks/useIdleKiosk";
-import { TimerReset } from "lucide-react";
+import { usePaceAlert } from "@/hooks/usePaceAlert";
+import { TimerReset, BellOff, Bell } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SparkPoint {
@@ -216,10 +217,12 @@ function SessionCard({
   session,
   tickOffset,
   kiosk = false,
+  alerted = false,
 }: {
   session: LiveSession;
   tickOffset: number;
   kiosk?: boolean;
+  alerted?: boolean;
 }) {
   const elapsedTotal = session.elapsedSeconds + tickOffset;
   const ghostNow = computeGhostItems(session, tickOffset);
@@ -238,7 +241,9 @@ function SessionCard({
 
   return (
     <Card
-      className={`relative overflow-hidden border-2 ${cfg.cardBorder} ${kiosk ? "bg-gray-900 border-gray-700" : ""}`}
+      className={`relative overflow-hidden border-2 ${
+        alerted && kiosk ? "border-red-500 ring-2 ring-red-500/60 ring-offset-2 ring-offset-gray-950" : cfg.cardBorder
+      } ${kiosk ? "bg-gray-900" : ""}`}
     >
       {/* Bold color-coded status banner — visible from across the floor */}
       <div className={`${cfg.bannerClass} ${kiosk ? "py-2.5" : "py-1.5"} px-4 flex items-center justify-between`}>
@@ -357,6 +362,9 @@ function KioskHeader({
   onExit,
   onRefresh,
   isRefreshing,
+  muted,
+  onToggleMute,
+  alertedIds,
 }: {
   sessions: LiveSession[];
   wallClock: string;
@@ -366,6 +374,9 @@ function KioskHeader({
   onExit: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
+  muted: boolean;
+  onToggleMute: () => void;
+  alertedIds: Set<string>;
 }) {
   const aheadCount = sessions.filter((s) => s.paceStatus === "ahead").length;
   const onPaceCount = sessions.filter((s) => s.paceStatus === "on_pace").length;
@@ -428,6 +439,33 @@ function KioskHeader({
           <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
           Refresh
         </Button>
+        {/* Mute toggle */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleMute}
+                className={`gap-1.5 ${
+                  muted
+                    ? "text-gray-600 hover:text-gray-400"
+                    : alertedIds.size > 0
+                    ? "text-red-400 hover:text-red-300"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                {muted ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+                {muted ? "Muted" : "Sound On"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {muted
+                ? "Alerts muted — click to unmute"
+                : "Playing alert when session drops to Behind — click to mute"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <Button
           variant="outline"
           size="sm"
@@ -544,6 +582,9 @@ export default function LivePullBoard() {
   const { autoKioskEnabled, toggleAutoKiosk, secondsUntilKiosk, isCountingDown, resetTimer } =
     useIdleKiosk({ onEnterKiosk: handleEnterKiosk, active: !isKiosk });
 
+  // Pace sound alert — fires when any session transitions to "behind" in kiosk mode
+  const { muted, toggleMute, alertedIds } = usePaceAlert(sessions, isKiosk);
+
   // Group filtered sessions by warehouse
   const byWarehouse = useMemo(() =>
     sessions.reduce<Record<string, LiveSession[]>>((acc, s) => {
@@ -573,6 +614,9 @@ export default function LivePullBoard() {
           onExit={handleExitKiosk}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
+          muted={muted}
+          onToggleMute={toggleMute}
+          alertedIds={alertedIds}
         />
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -602,7 +646,7 @@ export default function LivePullBoard() {
                   </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {wSessions.map((s) => (
-                      <SessionCard key={s.id} session={s} tickOffset={tickOffset} kiosk />
+                      <SessionCard key={s.id} session={s} tickOffset={tickOffset} kiosk alerted={alertedIds.has(String(s.id))} />
                     ))}
                   </div>
                 </div>

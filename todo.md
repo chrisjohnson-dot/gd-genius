@@ -1400,3 +1400,9 @@
 - [x] Last Pull summary card: "Your last pull: Pick Ticket #XXXXX, N cases, N min"
 - [x] Backend: pullTracker.getLastSession(associateId) procedure
 - [x] Tests: getLastSession unit tests (4 tests, 637 total)
+
+## Kiosk Mode Sound Alert (Apr 2026)
+- [x] usePaceAlert hook: detect new "behind" pace transitions, play Web Audio API tone
+- [x] LivePullBoard: wire usePaceAlert in kiosk mode with mute toggle button
+- [x] Visual indicator: show which sessions triggered the alert (flash ring or badge)
+- [x] Tests: usePaceAlert unit tests (10 tests, 647 total)

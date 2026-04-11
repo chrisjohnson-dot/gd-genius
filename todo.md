@@ -1252,3 +1252,9 @@
 - [x] Add "Print N Badges" toolbar button (shown when ≥1 associate selected)
 - [x] Build BulkBadgePrint component: renders all selected badges in a hidden print-only div, one badge per page-break
 - [x] Wire bulk print into Associates page
+
+## Warehouse Filter for Associates
+- [x] Add warehouse filter dropdown (All Warehouses + unique warehouse IDs from associate list)
+- [x] Filter displayed associates by selected warehouse
+- [x] Add "Select All in [Warehouse]" quick-select button when a warehouse is filtered
+- [x] Print N Badges button reflects cross-warehouse selection correctly

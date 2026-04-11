@@ -32,7 +32,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer, Warehouse } from "lucide-react";
 import { AssociateBadge } from "@/components/ltl/AssociateBadge";
 import { BulkBadgePrint } from "@/components/ltl/BulkBadgePrint";
 
@@ -173,6 +180,7 @@ export default function Associates() {
   const [badgeTarget, setBadgeTarget] = useState<Associate | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
+  const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
 
   const utils = trpc.useUtils();
 
@@ -181,7 +189,15 @@ export default function Associates() {
     search: search.trim() || undefined,
   }, { refetchInterval: 30000 });
 
-  const allIds = associates.map((a) => a.associateId);
+  // Unique warehouse IDs derived from the full list (for dropdown options)
+  const warehouseOptions = Array.from(new Set(associates.map((a) => a.warehouseId))).sort();
+
+  // Apply warehouse filter on top of the server-side search/active filters
+  const filteredAssociates = warehouseFilter === "all"
+    ? associates
+    : associates.filter((a) => a.warehouseId === warehouseFilter);
+
+  const allIds = filteredAssociates.map((a) => a.associateId);
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
   const someSelected = allIds.some((id) => selectedIds.has(id));
 
@@ -201,6 +217,17 @@ export default function Associates() {
     }
   }
 
+  function selectAllInWarehouse(wh: string) {
+    const ids = associates.filter((a) => a.warehouseId === wh).map((a) => a.associateId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  // selectedAssociates is drawn from the FULL list (not filtered) so deselecting warehouse
+  // doesn't silently drop already-selected badges from the print job
   const selectedAssociates = associates
     .filter((a) => selectedIds.has(a.associateId))
     .map((a) => ({ associateId: a.associateId, name: a.name, warehouseId: a.warehouseId, role: a.role }));
@@ -289,14 +316,40 @@ export default function Associates() {
               <Users className="h-4 w-4 text-[#15527f]" />
               Associate Directory
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Warehouse filter */}
+              <Select value={warehouseFilter} onValueChange={(v) => setWarehouseFilter(v)}>
+                <SelectTrigger className="h-8 w-44 text-sm gap-1.5">
+                  <Warehouse className="h-3.5 w-3.5 text-muted-foreground" />
+                  <SelectValue placeholder="All Warehouses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Warehouses</SelectItem>
+                  {warehouseOptions.map((wh) => (
+                    <SelectItem key={wh} value={wh}>{wh === "all" ? "All" : wh}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Select All in Warehouse shortcut */}
+              {warehouseFilter !== "all" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => selectAllInWarehouse(warehouseFilter)}
+                >
+                  Select All in {warehouseFilter}
+                </Button>
+              )}
+
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   placeholder="Search name or ID…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="h-8 pl-8 w-48 text-sm"
+                  className="h-8 pl-8 w-40 text-sm"
                 />
               </div>
               <button
@@ -317,7 +370,7 @@ export default function Associates() {
             <div className="py-10 text-center text-muted-foreground flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
-          ) : associates.length === 0 ? (
+          ) : filteredAssociates.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Users className="h-10 w-10 mx-auto mb-3 opacity-20" />
               <p className="font-medium">No associates found.</p>
@@ -345,7 +398,7 @@ export default function Associates() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {associates.map((a) => (
+                {filteredAssociates.map((a) => (
                   <TableRow key={a.associateId} className={!a.active ? "opacity-50" : ""} onClick={() => toggleRow(a.associateId)} style={{ cursor: "pointer" }}>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox

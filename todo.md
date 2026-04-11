@@ -1297,3 +1297,11 @@
 - [x] UI: inline comment field in PullAlertBell popover per alert row (Add note / Edit note toggle)
 - [x] UI: saved notes shown as italic preview under the alert row
 - [x] Tests: saveNote unit test — 582 tests passing
+
+## Alert Note History
+- [x] DB: pull_alert_note_history table (id, alert_id, note, written_by, written_at)
+- [x] Server: saveNote now inserts into pull_alert_note_history on each save (2 execute calls)
+- [x] Server: getNoteHistory procedure (alertId) returns list of history entries
+- [x] UI: "View history" / "Hide history" toggle per alert (only shown when a note exists)
+- [x] UI: history panel shows timestamped list of edits with author name and timeAgo
+- [x] Tests: getNoteHistory unit tests (2) + saveNote updated — 584 tests passing

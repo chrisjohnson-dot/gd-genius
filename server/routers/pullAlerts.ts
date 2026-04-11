@@ -291,7 +291,7 @@ export const pullAlertsRouter = router({
       return { success: true };
     }),
 
-  /** Save a manager note on a specific alert */
+  /** Save a manager note on a specific alert (also logs to history) */
   saveNote: protectedProcedure
     .input(
       z.object({
@@ -299,13 +299,44 @@ export const pullAlertsRouter = router({
         note: z.string().max(1000),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
+      const writtenBy = (ctx.user as any)?.name ?? (ctx.user as any)?.id ?? "Manager";
+      const now = Date.now();
+      // Update the current note on the alert
       await db.execute(
         sql`UPDATE pull_session_alerts SET manager_note = ${input.note} WHERE id = ${input.alertId}`
       );
+      // Append to history
+      await db.execute(
+        sql`INSERT INTO pull_alert_note_history (alert_id, note, written_by, written_at)
+            VALUES (${input.alertId}, ${input.note}, ${writtenBy}, ${now})`
+      );
       return { success: true };
+    }),
+
+  /** Get the full note edit history for a specific alert */
+  getNoteHistory: protectedProcedure
+    .input(z.object({ alertId: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db.execute<any>(
+        sql`SELECT id, alert_id, note, written_by, written_at
+            FROM pull_alert_note_history
+            WHERE alert_id = ${input.alertId}
+            ORDER BY written_at DESC
+            LIMIT 50`
+      );
+      const data = ((rows as any[])[0] ?? []) as any[];
+      return data.map((r) => ({
+        id: Number(r.id),
+        alertId: Number(r.alert_id),
+        note: r.note as string,
+        writtenBy: r.written_by as string,
+        writtenAt: Number(r.written_at),
+      }));
     }),
 
   /** Manually trigger a session check */

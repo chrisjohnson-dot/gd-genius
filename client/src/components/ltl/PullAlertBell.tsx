@@ -50,8 +50,14 @@ function AlertRow({ alert, onAcknowledge, acknowledging }: AlertRowProps) {
   const [showNote, setShowNote] = useState(false);
   const [noteText, setNoteText] = useState(alert.managerNote ?? "");
   const [saved, setSaved] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const utils = trpc.useUtils();
+
+  const { data: noteHistory = [], isLoading: historyLoading } = trpc.pullAlerts.getNoteHistory.useQuery(
+    { alertId: alert.id },
+    { enabled: showHistory }
+  );
 
   const saveNote = trpc.pullAlerts.saveNote.useMutation({
     onSuccess: () => {
@@ -154,13 +160,47 @@ function AlertRow({ alert, onAcknowledge, acknowledging }: AlertRowProps) {
 
           {/* Toggle note button */}
           {!showNote && (
-            <button
-              className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setShowNote(true)}
-            >
-              <MessageSquare className="h-3 w-3" />
-              {alert.managerNote ? "Edit note" : "Add note"}
-            </button>
+            <div className="mt-1.5 flex items-center gap-3">
+              <button
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setShowNote(true)}
+              >
+                <MessageSquare className="h-3 w-3" />
+                {alert.managerNote ? "Edit note" : "Add note"}
+              </button>
+              {alert.managerNote && (
+                <button
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowHistory((v) => !v)}
+                >
+                  <Clock className="h-3 w-3" />
+                  {showHistory ? "Hide history" : "View history"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Note history panel */}
+          {showHistory && (
+            <div className="mt-2 rounded-md border bg-muted/20 p-2 space-y-1.5">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Edit History</p>
+              {historyLoading ? (
+                <p className="text-xs text-muted-foreground">Loading…</p>
+              ) : noteHistory.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No history yet.</p>
+              ) : (
+                noteHistory.map((entry) => (
+                  <div key={entry.id} className="text-xs border-l-2 border-border pl-2">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="font-medium text-foreground">{entry.writtenBy}</span>
+                      <span>·</span>
+                      <span>{timeAgo(entry.writtenAt)}</span>
+                    </div>
+                    <p className="mt-0.5 italic text-muted-foreground">{entry.note}</p>
+                  </div>
+                ))
+              )}
+            </div>
           )}
         </div>
         <Button

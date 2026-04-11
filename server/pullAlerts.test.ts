@@ -109,14 +109,39 @@ describe("checkOverdueSessions", () => {
   });
 });
 
-import { appRouterV4 as appRouter } from "./routers";
+import { appRouterV4 } from "./routers";
 
 describe("pullAlerts.saveNote", () => {
-  it("saves a manager note on an alert", async () => {
-    mockExecute.mockResolvedValueOnce([{ affectedRows: 1 }]);
-    const caller = appRouter.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+  it("saves a manager note and logs to history", async () => {
+    // saveNote makes 2 execute calls: UPDATE pull_session_alerts + INSERT pull_alert_note_history
+    mockExecute
+      .mockResolvedValueOnce([{ affectedRows: 1 }]) // UPDATE
+      .mockResolvedValueOnce([{ insertId: 1 }]);    // INSERT history
+    const caller = appRouterV4.createCaller({ user: { id: "u1", name: "Manager" } } as any);
     const result = await caller.pullAlerts.saveNote({ alertId: 1, note: "Checked in — associate on break" });
     expect(result.success).toBe(true);
-    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(mockExecute).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("pullAlerts.getNoteHistory", () => {
+  it("returns history entries for an alert", async () => {
+    const now = Date.now();
+    mockExecute.mockResolvedValueOnce([[
+      { id: 1, alert_id: 42, note: "First note", written_by: "Alice", written_at: now - 5000 },
+      { id: 2, alert_id: 42, note: "Updated note", written_by: "Bob", written_at: now },
+    ]]);
+    const caller = appRouterV4.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+    const history = await caller.pullAlerts.getNoteHistory({ alertId: 42 });
+    expect(history).toHaveLength(2);
+    expect(history[0].writtenBy).toBe("Alice");
+    expect(history[1].note).toBe("Updated note");
+  });
+
+  it("returns empty array when no history exists", async () => {
+    mockExecute.mockResolvedValueOnce([[]]);
+    const caller = appRouterV4.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+    const history = await caller.pullAlerts.getNoteHistory({ alertId: 99 });
+    expect(history).toHaveLength(0);
   });
 });

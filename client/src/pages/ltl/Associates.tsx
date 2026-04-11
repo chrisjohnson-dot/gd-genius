@@ -39,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer, Warehouse, BarChart2 } from "lucide-react";
+import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer, Warehouse, BarChart2, ArrowRightLeft } from "lucide-react";
 import { AssociateBadge } from "@/components/ltl/AssociateBadge";
 import { BulkBadgePrint } from "@/components/ltl/BulkBadgePrint";
 import { AssociateStatsDrawer } from "@/components/AssociateStatsDrawer";
@@ -53,6 +53,7 @@ type Associate = {
   role: string | null;
   active: boolean;
   notes: string | null;
+  targetItemsPerHour: number | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -74,6 +75,7 @@ function AssociateDialog({
     warehouseId: existing?.warehouseId ?? "all",
     role: existing?.role ?? "",
     notes: existing?.notes ?? "",
+    targetItemsPerHour: existing?.targetItemsPerHour != null ? String(existing.targetItemsPerHour) : "",
   });
 
   const upsert = trpc.associates.upsert.useMutation({
@@ -90,6 +92,7 @@ function AssociateDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.associateId.trim() || !form.name.trim()) return;
+    const tph = parseInt(form.targetItemsPerHour, 10);
     upsert.mutate({
       associateId: form.associateId.trim(),
       name: form.name.trim(),
@@ -97,6 +100,7 @@ function AssociateDialog({
       role: form.role.trim() || undefined,
       notes: form.notes.trim() || undefined,
       active: true,
+      targetItemsPerHour: !isNaN(tph) && tph > 0 ? tph : null,
     });
   }
 
@@ -154,6 +158,20 @@ function AssociateDialog({
               onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5">
+              Target Items/hr
+              <span className="text-xs font-normal text-muted-foreground">(ghost picker rate override)</span>
+            </Label>
+            <Input
+              type="number"
+              min={1}
+              max={9999}
+              placeholder="e.g. 45 — leave blank to use warehouse default"
+              value={form.targetItemsPerHour}
+              onChange={(e) => setForm(f => ({ ...f, targetItemsPerHour: e.target.value }))}
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button
@@ -184,6 +202,8 @@ export default function Associates() {
   const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [statsTarget, setStatsTarget] = useState<Associate | null>(null);
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignWarehouse, setReassignWarehouse] = useState("");
 
   const utils = trpc.useUtils();
 
@@ -284,6 +304,17 @@ export default function Associates() {
     onError: (e) => toast.error(e.message),
   });
 
+  const bulkReassign = trpc.associates.bulkReassign.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Reassigned ${data.updated} associate${data.updated !== 1 ? 's' : ''} to ${reassignWarehouse}.`);
+      utils.associates.list.invalidate();
+      setReassignOpen(false);
+      setReassignWarehouse("");
+      setSelectedIds(new Set());
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   function openAdd() {
     setEditTarget(null);
     setDialogOpen(true);
@@ -310,15 +341,26 @@ export default function Associates() {
             Refresh
           </Button>
           {someSelected && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-              onClick={() => setBulkPrintOpen(true)}
-            >
-              <Printer className="h-3.5 w-3.5" />
-              Print {selectedIds.size} Badge{selectedIds.size !== 1 ? "s" : ""}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                onClick={() => setReassignOpen(true)}
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                Reassign {selectedIds.size}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                onClick={() => setBulkPrintOpen(true)}
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Print {selectedIds.size} Badge{selectedIds.size !== 1 ? "s" : ""}
+              </Button>
+            </>
           )}
           <Button onClick={openAdd} className="bg-[#15527f] hover:bg-[#1a6699] text-white gap-2">
             <Plus className="h-4 w-4" />
@@ -445,6 +487,7 @@ export default function Associates() {
                   <TableHead>Name</TableHead>
                   <TableHead>Warehouse</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead className="text-right">Target/hr</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Updated</TableHead>
                   <TableHead></TableHead>
@@ -474,6 +517,13 @@ export default function Associates() {
                         </Badge>
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(a as any).targetItemsPerHour != null ? (
+                        <span className="font-mono font-semibold text-sm text-[#15527f] dark:text-blue-400">{(a as any).targetItemsPerHour}</span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">default</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -585,6 +635,63 @@ export default function Associates() {
           role={statsTarget.role}
         />
       )}
+
+      {/* Bulk Reassign Dialog */}
+      <Dialog open={reassignOpen} onOpenChange={(o) => { if (!o) { setReassignOpen(false); setReassignWarehouse(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4 text-amber-500" />
+              Reassign {selectedIds.size} Associate{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Move the selected associate{selectedIds.size !== 1 ? "s" : ""} to a different warehouse.
+              This updates their default warehouse assignment immediately.
+            </p>
+            <div className="space-y-1.5">
+              <Label>New Warehouse ID <span className="text-red-500">*</span></Label>
+              <Input
+                placeholder="e.g. COL, TOR, CAL"
+                value={reassignWarehouse}
+                onChange={(e) => setReassignWarehouse(e.target.value.toUpperCase())}
+                className="font-mono"
+                autoFocus
+              />
+              {warehouseOptions.filter(w => w !== "all").length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {warehouseOptions.filter(w => w !== "all").map(wh => (
+                    <button
+                      key={wh}
+                      type="button"
+                      onClick={() => setReassignWarehouse(wh)}
+                      className={`px-2 py-0.5 rounded text-xs font-mono font-semibold border transition-colors ${
+                        reassignWarehouse === wh
+                          ? "bg-amber-500 text-white border-amber-500"
+                          : "bg-muted text-muted-foreground border-border hover:border-amber-400 hover:text-foreground"
+                      }`}
+                    >
+                      {wh}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setReassignOpen(false); setReassignWarehouse(""); }}>Cancel</Button>
+            <Button
+              disabled={!reassignWarehouse.trim() || bulkReassign.isPending}
+              onClick={() => bulkReassign.mutate({ associateIds: Array.from(selectedIds), warehouseId: reassignWarehouse.trim() })}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              {bulkReassign.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Reassign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Deactivate Confirm */}
       <AlertDialog open={Boolean(deactivateTarget)} onOpenChange={(o) => !o && setDeactivateTarget(null)}>

@@ -269,3 +269,86 @@ describe("associatesRouter", () => {
     });
   });
 });
+
+// ─── bulkReassign tests ───────────────────────────────────────────────────────
+describe("associates.bulkReassign", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("reassigns all provided associate IDs and returns updated count", async () => {
+    // One execute call per associate ID
+    mockExecute
+      .mockResolvedValueOnce({}) // EMP-001
+      .mockResolvedValueOnce({}) // EMP-002
+      .mockResolvedValueOnce({}); // EMP-003
+
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.associates.bulkReassign({
+      associateIds: ["EMP-001", "EMP-002", "EMP-003"],
+      warehouseId: "TOR",
+    });
+
+    expect(result.updated).toBe(3);
+    expect(mockExecute).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns updated=1 for a single associate", async () => {
+    mockExecute.mockResolvedValueOnce({});
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.associates.bulkReassign({
+      associateIds: ["EMP-001"],
+      warehouseId: "COL",
+    });
+    expect(result.updated).toBe(1);
+  });
+
+  it("rejects empty associateIds array", async () => {
+    const caller = appRouterV4.createCaller(makeCtx());
+    await expect(
+      caller.associates.bulkReassign({ associateIds: [], warehouseId: "COL" })
+    ).rejects.toThrow();
+  });
+
+  it("rejects empty warehouseId", async () => {
+    const caller = appRouterV4.createCaller(makeCtx());
+    await expect(
+      caller.associates.bulkReassign({ associateIds: ["EMP-001"], warehouseId: "" })
+    ).rejects.toThrow();
+  });
+});
+
+// ─── targetItemsPerHour upsert tests ─────────────────────────────────────────
+describe("associates.upsert targetItemsPerHour", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("creates associate with targetItemsPerHour", async () => {
+    mockExecute
+      .mockResolvedValueOnce([]) // SELECT → not found
+      .mockResolvedValueOnce({ insertId: 10 }); // INSERT
+
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.associates.upsert({
+      associateId: "EMP-099",
+      name: "Test Worker",
+      warehouseId: "COL",
+      targetItemsPerHour: 55,
+    });
+
+    expect(result.created).toBe(true);
+    expect(result.associateId).toBe("EMP-099");
+  });
+
+  it("updates associate with null targetItemsPerHour when omitted", async () => {
+    mockExecute
+      .mockResolvedValueOnce([{ id: 5 }]) // SELECT → found
+      .mockResolvedValueOnce({}); // UPDATE
+
+    const caller = appRouterV4.createCaller(makeCtx());
+    const result = await caller.associates.upsert({
+      associateId: "EMP-001",
+      name: "Alice Updated",
+      warehouseId: "TOR",
+    });
+
+    expect(result.created).toBe(false);
+  });
+});

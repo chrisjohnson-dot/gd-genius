@@ -17,6 +17,7 @@ function mapRow(r: any) {
     role: r.role as string | null,
     active: Boolean(r.active),
     notes: r.notes as string | null,
+    targetItemsPerHour: r.target_items_per_hour != null ? Number(r.target_items_per_hour) : null,
     createdAt: Number(r.created_at),
     updatedAt: Number(r.updated_at),
   };
@@ -69,6 +70,7 @@ export const associatesRouter = router({
       role: z.string().max(128).optional(),
       notes: z.string().max(1000).optional(),
       active: z.boolean().default(true),
+      targetItemsPerHour: z.number().int().min(1).max(9999).nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -88,6 +90,7 @@ export const associatesRouter = router({
             role = ${input.role ?? null},
             notes = ${input.notes ?? null},
             active = ${input.active ? 1 : 0},
+            target_items_per_hour = ${input.targetItemsPerHour ?? null},
             updated_at = ${now}
           WHERE associate_id = ${input.associateId}
         `);
@@ -95,10 +98,11 @@ export const associatesRouter = router({
       } else {
         await db.execute(sql`
           INSERT INTO warehouse_associates
-            (associate_id, name, warehouse_id, role, notes, active, created_at, updated_at)
+            (associate_id, name, warehouse_id, role, notes, active, target_items_per_hour, created_at, updated_at)
           VALUES
             (${input.associateId}, ${input.name}, ${input.warehouseId},
-             ${input.role ?? null}, ${input.notes ?? null}, 1, ${now}, ${now})
+             ${input.role ?? null}, ${input.notes ?? null}, 1,
+             ${input.targetItemsPerHour ?? null}, ${now}, ${now})
         `);
         return { associateId: input.associateId, created: true };
       }
@@ -232,5 +236,28 @@ export const associatesRouter = router({
         sessions,
         trend,
       };
+    }),
+
+  // Bulk reassign a list of associates to a new warehouse
+  bulkReassign: protectedProcedure
+    .input(z.object({
+      associateIds: z.array(z.string().min(1)).min(1).max(500),
+      warehouseId: z.string().min(1).max(64),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const now = Date.now();
+      let updated = 0;
+      // Use individual parameterised updates to avoid SQL injection risk
+      for (const id of input.associateIds) {
+        await db.execute(sql`
+          UPDATE warehouse_associates
+          SET warehouse_id = ${input.warehouseId}, updated_at = ${now}
+          WHERE associate_id = ${id}
+        `);
+        updated++;
+      }
+      return { updated };
     }),
 });

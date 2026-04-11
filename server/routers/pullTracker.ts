@@ -389,17 +389,57 @@ export const pullTrackerRouter = router({
         ORDER BY items_per_hour DESC
       `);
 
-      return (rows as any[]).map((r: any) => ({
-        associateId: r.associate_id,
-        associateName: r.associate_name,
-        sessionCount: Number(r.session_count),
-        totalPallets: Number(r.total_pallets) || 0,
-        totalCases: Number(r.total_cases) || 0,
-        totalItems: Number(r.total_items) || 0,
-        totalSeconds: Number(r.total_seconds) || 0,
-        avgSecondsPerSession: Math.round(Number(r.avg_seconds_per_session) || 0),
-        itemsPerHour: Number(r.items_per_hour) || 0,
-      }));
+      // 7-day trend: compare last 7 days vs prior 7 days for each associate
+      const now = Date.now();
+      const sevenDaysAgo = now - 7 * 24 * 3600_000;
+      const fourteenDaysAgo = now - 14 * 24 * 3600_000;
+
+      const trendRows = await db.execute<any>(sql`
+        SELECT
+          associate_id,
+          ROUND(SUM(CASE WHEN started_at >= ${sevenDaysAgo} THEN total_items ELSE 0 END) /
+            NULLIF(SUM(CASE WHEN started_at >= ${sevenDaysAgo} THEN duration_seconds ELSE 0 END) / 3600, 0), 1) as recent_iph,
+          ROUND(SUM(CASE WHEN started_at < ${sevenDaysAgo} AND started_at >= ${fourteenDaysAgo} THEN total_items ELSE 0 END) /
+            NULLIF(SUM(CASE WHEN started_at < ${sevenDaysAgo} AND started_at >= ${fourteenDaysAgo} THEN duration_seconds ELSE 0 END) / 3600, 0), 1) as prior_iph
+        FROM pull_sessions
+        WHERE status = 'completed'
+          AND started_at >= ${fourteenDaysAgo}
+          ${input.warehouseId ? sql`AND warehouse_id = ${input.warehouseId}` : sql``}
+        GROUP BY associate_id
+      `);
+
+      const trendMap: Record<string, { recent: number; prior: number }> = {};
+      for (const r of (trendRows as any[])) {
+        trendMap[r.associate_id as string] = {
+          recent: Number(r.recent_iph) || 0,
+          prior: Number(r.prior_iph) || 0,
+        };
+      }
+
+      return (rows as any[]).map((r: any) => {
+        const trend = trendMap[r.associate_id as string];
+        let trendDirection: "up" | "down" | "flat" | "new" = "new";
+        if (trend && trend.prior > 0) {
+          const delta = trend.recent - trend.prior;
+          trendDirection = delta > 0.5 ? "up" : delta < -0.5 ? "down" : "flat";
+        } else if (trend && trend.recent > 0) {
+          trendDirection = "new";
+        }
+        return {
+          associateId: r.associate_id,
+          associateName: r.associate_name,
+          sessionCount: Number(r.session_count),
+          totalPallets: Number(r.total_pallets) || 0,
+          totalCases: Number(r.total_cases) || 0,
+          totalItems: Number(r.total_items) || 0,
+          totalSeconds: Number(r.total_seconds) || 0,
+          avgSecondsPerSession: Math.round(Number(r.avg_seconds_per_session) || 0),
+          itemsPerHour: Number(r.items_per_hour) || 0,
+          trendDirection,
+          trendRecentIph: trend?.recent ?? null,
+          trendPriorIph: trend?.prior ?? null,
+        };
+      });
     }),
 
   // Get active sessions enriched with item counts and expected rate — for Live Pull Board
@@ -624,5 +664,64 @@ export const pullTrackerRouter = router({
         `);
       }
       return result;
+    }),
+
+  // 24-hour recap — completed sessions in the last 24 hours, optionally filtered by warehouse
+  get24HourRecap: protectedProcedure
+    .input(z.object({
+      warehouseId: z.string().optional(), // omit or 'all' for all warehouses
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const since = Date.now() - 24 * 60 * 60_000;
+      const warehouseFilter = input.warehouseId && input.warehouseId !== "all"
+        ? sql`AND ps.warehouse_id = ${input.warehouseId}`
+        : sql``;
+
+      const rows = await db.execute<any>(sql`
+        SELECT
+          ps.associate_name,
+          ps.associate_id,
+          ps.total_items,
+          ps.duration_seconds,
+          ps.warehouse_id
+        FROM pull_sessions ps
+        WHERE ps.status = 'completed'
+          AND ps.ended_at >= ${since}
+          ${warehouseFilter}
+      `);
+
+      const sessions = rows as any[];
+      const totalPulls = sessions.length;
+
+      if (totalPulls === 0) {
+        return { totalPulls: 0, avgDurationSeconds: 0, topPickerName: null, topPickerItems: 0, warehouses: [] };
+      }
+
+      const avgDurationSeconds = Math.round(
+        sessions.reduce((s, r) => s + Number(r.duration_seconds ?? 0), 0) / totalPulls
+      );
+
+      // Top picker by total items across all their sessions in the window
+      const pickerTotals: Record<string, { name: string; items: number }> = {};
+      for (const r of sessions) {
+        const id = r.associate_id as string;
+        if (!pickerTotals[id]) pickerTotals[id] = { name: r.associate_name ?? id, items: 0 };
+        pickerTotals[id].items += Number(r.total_items ?? 0);
+      }
+      const topPicker = Object.values(pickerTotals).sort((a, b) => b.items - a.items)[0];
+
+      // Unique warehouses active in the window
+      const warehouses = Array.from(new Set(sessions.map(r => r.warehouse_id as string)));
+
+      return {
+        totalPulls,
+        avgDurationSeconds,
+        topPickerName: topPicker?.name ?? null,
+        topPickerItems: topPicker?.items ?? 0,
+        warehouses,
+      };
     }),
 });

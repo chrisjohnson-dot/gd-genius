@@ -1358,3 +1358,38 @@
 - [x] UI: Countdown banner in LivePullBoard header (shows last 10s before auto-enter)
 - [x] UI: Auto-kiosk toggle button to enable/disable the feature (persisted in localStorage)
 - [x] Tests: useIdleKiosk logic unit tests (timer, reset, countdown, enable/disable)
+
+## Live Pull Board Mock Data
+- [x] Seed: 9 realistic pull sessions across 3 warehouses (COL, TOR, CAL) with varied pace statuses
+- [x] Seed: pull_pace_snapshots for each session (last 10 minutes of trend data)
+- [x] Seed: pull_alert_settings with expected_items_per_hour per warehouse
+
+## Live Board Improvements (Round 2)
+- [ ] Backend: get24HourRecap(warehouseId?) — pulls completed today, avg duration, top picker
+- [ ] Backend: getActiveSessions — include expectedItemsPerHour per session from pull_alert_settings
+- [ ] UI: Warehouse filter dropdown (persisted to localStorage) in Live Board header
+- [ ] UI: 24-hour recap card in empty state
+- [ ] UI: Ghost-picker target rate badge on each session card
+- [ ] UI: Larger color-coded status bar (green/yellow/red) visible from across the floor
+
+## Pull Manager Improvements (Feedback Round)
+- [ ] Session history: date range quick-filter (Today / This Week / This Month / Custom)
+- [ ] Session history: Cost/Case derived column (labor cost per case from session data)
+- [ ] Associate Efficiency table: 7-day trend arrow (improving/declining items/hr)
+
+## Associates Improvements (Feedback Round)
+- [ ] Per-associate target items/hr field (overrides warehouse default; inherits if blank)
+- [ ] Bulk badge print — select multiple rows → print all badges in one action
+- [ ] Warehouse reassignment workflow — reassign associate to different warehouse without creating new record
+
+## Batch Improvements (Apr 2026)
+- [x] Live Board: warehouse filter (persisted to localStorage)
+- [x] Live Board: 24-hour recap in empty state (sessions count, avg duration, top picker)
+- [x] Live Board: target rate badge on each session card
+- [x] Live Board: bold color-coded status indicators (Ahead/On Pace/Behind)
+- [x] Pull Manager: date range quick-filter on session history table
+- [x] Pull Manager: Cost/Case derived column in session history
+- [x] Pull Manager: 7-day trend arrow on Associate Efficiency table (up/down/flat/new)
+- [x] Associates: per-associate target items/hr field (overrides warehouse default)
+- [x] Associates: warehouse reassignment workflow (bulk Reassign button + dialog)
+- [x] Tests: 633 passing, 0 TypeScript errors

@@ -221,7 +221,8 @@ describe("pullTrackerRouter", () => {
 
   // ── associateStats ───────────────────────────────────────────────────────
   describe("associateStats", () => {
-    it("returns efficiency stats per associate (1 execute call)", async () => {
+    it("returns efficiency stats per associate with trend direction", async () => {
+      // Mock 1: main stats query
       mockExecute.mockResolvedValueOnce([
         {
           associate_id: "EMP-1",
@@ -235,6 +236,10 @@ describe("pullTrackerRouter", () => {
           items_per_hour: 12.0,
         },
       ]);
+      // Mock 2: 7-day trend query
+      mockExecute.mockResolvedValueOnce([
+        { associate_id: "EMP-1", recent_iph: 14.0, prior_iph: 10.0 },
+      ]);
 
       const caller = appRouterV4.createCaller(makeCtx());
       const result = await caller.pullTracker.associateStats({});
@@ -243,14 +248,35 @@ describe("pullTrackerRouter", () => {
       expect(result[0].associateId).toBe("EMP-1");
       expect(result[0].itemsPerHour).toBe(12.0);
       expect(result[0].sessionCount).toBe(5);
+      expect(result[0].trendDirection).toBe("up"); // 14 > 10 + 0.5
+      expect(result[0].trendRecentIph).toBe(14);
+      expect(result[0].trendPriorIph).toBe(10);
     });
 
-    it("returns empty array when no completed sessions (1 execute call → empty)", async () => {
+    it("returns empty array when no completed sessions", async () => {
+      // Mock 1: main stats query → empty
+      mockExecute.mockResolvedValueOnce([]);
+      // Mock 2: trend query → empty
       mockExecute.mockResolvedValueOnce([]);
 
       const caller = appRouterV4.createCaller(makeCtx());
       const result = await caller.pullTracker.associateStats({});
       expect(result).toHaveLength(0);
+    });
+
+    it("returns trendDirection=flat when recent and prior are within 0.5", async () => {
+      mockExecute.mockResolvedValueOnce([
+        { associate_id: "EMP-2", associate_name: "Bob", session_count: 3,
+          total_pallets: 5, total_cases: 20, total_items: 30,
+          total_seconds: 9000, avg_seconds_per_session: 3000, items_per_hour: 12.0 },
+      ]);
+      mockExecute.mockResolvedValueOnce([
+        { associate_id: "EMP-2", recent_iph: 12.2, prior_iph: 12.0 },
+      ]);
+
+      const caller = appRouterV4.createCaller(makeCtx());
+      const result = await caller.pullTracker.associateStats({});
+      expect(result[0].trendDirection).toBe("flat");
     });
   });
 

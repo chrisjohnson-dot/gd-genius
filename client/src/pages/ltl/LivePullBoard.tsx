@@ -2,12 +2,11 @@
  * LivePullBoard.tsx
  * Real-time view of all active pull sessions.
  * Each card shows a running clock, an animated progress bar vs. a ghost picker,
- * and a pace badge (Ahead / On Pace / Behind).
+ * a pace badge (Ahead / On Pace / Behind), and a historical items/hr sparkline.
  * Refreshes from the server every 15 s; clocks tick every second client-side.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -27,10 +26,17 @@ import {
   Minus,
   Ghost,
   Settings,
+  Activity,
 } from "lucide-react";
 import { Link } from "wouter";
+import { PaceSparkline } from "@/components/ltl/PaceSparkline";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+interface SparkPoint {
+  bucketTs: number;
+  itemsPerHour: number;
+}
+
 interface LiveSession {
   id: number;
   pickTicket: string;
@@ -44,6 +50,7 @@ interface LiveSession {
   ghostItems: number;
   paceRatio: number;
   paceStatus: "ahead" | "on_pace" | "behind";
+  sparkline: SparkPoint[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -68,7 +75,7 @@ function computePaceStatus(ratio: number): "ahead" | "on_pace" | "behind" {
   return ratio >= 1.05 ? "ahead" : ratio >= 0.85 ? "on_pace" : "behind";
 }
 
-// ─── Pace Badge ───────────────────────────────────────────────────────────────
+// ─── Pace Badge Config ────────────────────────────────────────────────────────
 const PACE_CONFIG = {
   ahead: {
     label: "Ahead",
@@ -108,9 +115,7 @@ function SessionCard({
   const cfg = PACE_CONFIG[paceStatus];
   const PaceIcon = cfg.icon;
 
-  // Progress bar: use ghost as the 100% anchor (so the bar shows actual vs expected)
-  // We show two layers: ghost bar (full width) + actual bar (proportional)
-  // Cap actual bar at 100% visually if ahead
+  // Progress bar: use ghost as the 100% anchor
   const actualPct = Math.min(100, ghostNow > 0 ? (session.itemsScanned / ghostNow) * 100 : 100);
   const itemsPerHourNow =
     elapsedTotal > 0
@@ -183,6 +188,22 @@ function SessionCard({
           </div>
         </div>
 
+        {/* Historical pace sparkline */}
+        <div className="space-y-1 pt-1 border-t border-border/50">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Activity className="h-3 w-3" />
+            <span>Last 10 min pace trend</span>
+          </div>
+          <PaceSparkline
+            data={session.sparkline}
+            expectedRate={session.expectedRate}
+            paceStatus={paceStatus}
+            width={260}
+            height={52}
+            className="w-full"
+          />
+        </div>
+
         {/* Current throughput */}
         <div className="flex items-center gap-1.5 pt-1 border-t border-border/50">
           <Zap className="h-3.5 w-3.5 text-amber-500" />
@@ -232,7 +253,7 @@ export default function LivePullBoard() {
 
   // Group by warehouse for display
   const byWarehouse = sessions.reduce<Record<string, LiveSession[]>>((acc, s) => {
-    (acc[s.warehouseId] ??= []).push(s);
+    (acc[s.warehouseId] ??= []).push(s as LiveSession);
     return acc;
   }, {});
 
@@ -307,6 +328,7 @@ export default function LivePullBoard() {
                   <div className="h-4 bg-muted rounded w-3/4" />
                   <div className="h-8 bg-muted rounded w-1/2" />
                   <div className="h-4 bg-muted rounded" />
+                  <div className="h-12 bg-muted rounded" />
                   <div className="h-4 bg-muted rounded w-5/6" />
                 </CardContent>
               </Card>
@@ -343,15 +365,17 @@ export default function LivePullBoard() {
 
         {/* Legend */}
         <div className="flex items-center gap-4 flex-wrap pt-2 border-t border-border/50 text-xs text-muted-foreground">
-          <span className="font-semibold">Progress bar legend:</span>
+          <span className="font-semibold">Sparkline legend:</span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block" /> Actual items scanned
+            <span className="inline-block w-6 border-t-2 border-current border-dashed opacity-60" />
+            Ghost picker target rate
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-emerald-200 dark:bg-emerald-900/40 border border-emerald-500/30 inline-block" /> Ghost picker target
+            <span className="inline-block w-6 border-t-2 border-emerald-500" />
+            Actual items/hr per minute
           </span>
           <span className="ml-auto">
-            Ghost rate configured in <strong>Pull Manager → Alert Settings → Expected Rate</strong>
+            Ghost rate configured in <strong>Pull Manager → Alert Settings → Ghost Picker Rate</strong>
           </span>
         </div>
       </div>

@@ -1334,3 +1334,11 @@
 - [x] UI: Live Board nav entry added to LTL sidebar section
 - [x] UI: PullAlertSettings dialog updated with Ghost Picker Rate field (global + per-warehouse)
 - [x] Tests: 4 getActiveSessions unit tests (596 total passing)
+
+## Pace Sparkline on Live Pull Board
+- [x] DB: CREATE pull_pace_snapshots table (session_id, bucket_ts, items_in_bucket, items_per_hour)
+- [x] Server: recordPaceSnapshot helper — called on addItem to write a 1-min rolling bucket
+- [x] Server: getActiveSessions enriched with last 10 sparkline points per session
+- [x] UI: PaceSparkline component (SVG path sparkline, color-coded by pace status)
+- [x] UI: Sparkline wired into LivePullBoard session cards
+- [x] Tests: recordPaceSnapshot + sparkline data unit tests

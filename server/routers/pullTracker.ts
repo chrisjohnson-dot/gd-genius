@@ -61,6 +61,31 @@ async function pushPullSessionToOpFi(session: {
   }
 }
 
+// ─── Pace Snapshot Helper ───────────────────────────────────────────────────
+/**
+ * Records (or updates) a 1-minute rolling pace bucket for the given session.
+ * Each bucket covers a 60-second window aligned to the minute.
+ * items_per_hour is computed as items_in_bucket * 60 (annualised to 1 hr).
+ * Exported so it can be unit-tested independently.
+ */
+export async function recordPaceSnapshot(
+  db: { execute: (q: any) => Promise<any> },
+  sessionId: number,
+  quantity: number,
+  now: number
+): Promise<void> {
+  // Align to the nearest 1-minute bucket (floor to minute boundary)
+  const bucketTs = Math.floor(now / 60_000) * 60_000;
+  // Upsert: if a row for this session+bucket already exists, add to it
+  await db.execute(
+    sql`INSERT INTO pull_pace_snapshots (session_id, bucket_ts, items_in_bucket, items_per_hour)
+        VALUES (${sessionId}, ${bucketTs}, ${quantity}, ${quantity * 60})
+        ON DUPLICATE KEY UPDATE
+          items_in_bucket = items_in_bucket + VALUES(items_in_bucket),
+          items_per_hour  = (items_in_bucket + VALUES(items_in_bucket)) * 60`
+  );
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 export const pullTrackerRouter = router({
 
@@ -220,6 +245,10 @@ export const pullTrackerRouter = router({
            ${input.quantity}, ${input.location ?? null}, ${now})
       `);
       const itemId = (result as any).insertId ?? (result as any)[0]?.insertId;
+
+      // Record pace snapshot (fire-and-forget; don't block the response)
+      recordPaceSnapshot(db, input.sessionId, input.quantity, now).catch(() => {});
+
       return { itemId: Number(itemId) };
     }),
 
@@ -414,6 +443,29 @@ export const pullTrackerRouter = router({
       const DEFAULT_RATE = 30; // items/hour fallback
 
       const now = Date.now();
+      const sessionIds = (sessionRows as any[]).map((r: any) => Number(r.id));
+
+      // Fetch last 10 pace snapshots per active session (last 10 minutes)
+      let sparklineMap: Record<number, Array<{ bucketTs: number; itemsPerHour: number }>> = {};
+      if (sessionIds.length > 0) {
+        const tenMinAgo = now - 10 * 60_000;
+        const snapshotRows = await db.execute<any>(sql`
+          SELECT session_id, bucket_ts, items_per_hour
+          FROM pull_pace_snapshots
+          WHERE session_id IN (${sql.raw(sessionIds.join(","))})
+            AND bucket_ts >= ${tenMinAgo}
+          ORDER BY session_id, bucket_ts ASC
+        `);
+        for (const snap of (snapshotRows as any[])) {
+          const sid = Number(snap.session_id);
+          if (!sparklineMap[sid]) sparklineMap[sid] = [];
+          sparklineMap[sid].push({
+            bucketTs: Number(snap.bucket_ts),
+            itemsPerHour: Math.round(Number(snap.items_per_hour)),
+          });
+        }
+      }
+
       return (sessionRows as any[]).map((r: any) => {
         const startedAt = Number(r.started_at);
         const elapsedSeconds = Math.round((now - startedAt) / 1000);
@@ -426,8 +478,9 @@ export const pullTrackerRouter = router({
         const paceRatio = ghostItems > 0 ? itemsScanned / ghostItems : 1;
         const paceStatus: "ahead" | "on_pace" | "behind" =
           paceRatio >= 1.05 ? "ahead" : paceRatio >= 0.85 ? "on_pace" : "behind";
+        const sessionId = Number(r.id);
         return {
-          id: Number(r.id),
+          id: sessionId,
           pickTicket: r.pick_ticket as string,
           associateId: r.associate_id as string,
           associateName: r.associate_name as string | null,
@@ -439,6 +492,7 @@ export const pullTrackerRouter = router({
           ghostItems: Math.round(ghostItems * 10) / 10,
           paceRatio: Math.round(paceRatio * 100) / 100,
           paceStatus,
+          sparkline: sparklineMap[sessionId] ?? [],
         };
       });
     }),

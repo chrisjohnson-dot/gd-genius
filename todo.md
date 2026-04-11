@@ -1342,3 +1342,13 @@
 - [x] UI: PaceSparkline component (SVG path sparkline, color-coded by pace status)
 - [x] UI: Sparkline wired into LivePullBoard session cards
 - [x] Tests: recordPaceSnapshot + sparkline data unit tests
+
+## TV/Kiosk Mode on Live Pull Board
+- [x] UI: Kiosk toggle button (Tv icon) in LivePullBoard header
+- [x] UI: Full-screen API (requestFullscreen / exitFullscreen) wired to toggle
+- [x] UI: Kiosk mode hides AppLayout sidebar via context/portal
+- [x] UI: Kiosk header — minimal bar with logo, live clock, session counts, exit button
+- [x] UI: Kiosk session cards — enlarged clock (4xl), bigger sparkline (300×80), larger pace badge
+- [x] UI: Faster refresh (10s) in kiosk mode vs 15s normal
+- [x] UI: Keyboard shortcut ESC / F key to toggle kiosk
+- [x] Tests: kiosk mode unit tests (toggle state, refresh interval)

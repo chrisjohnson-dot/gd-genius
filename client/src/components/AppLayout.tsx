@@ -57,6 +57,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
+import { useKiosk } from "@/contexts/KioskContext";
 
 const dashboardItems = [
   { href: "/",                 label: "Open Orders — B2B", icon: FolderOpen, badge: true },
@@ -266,6 +267,7 @@ function NavItem({
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
+  const { isKiosk } = useKiosk();
   const { theme, toggleTheme } = useTheme();
   const navRef = useRef<HTMLElement>(null);
   const savedNavScroll = useRef(0);
@@ -353,10 +355,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6" }}>
-      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      {/* ── Sidebar ─────────────────────────────────────────────────────────────────── */}
       <aside
         className="w-[260px] shrink-0 flex flex-col h-full"
-        style={{ background: "#1b1c21", position: "relative" }}
+        style={{ background: "#1b1c21", position: "relative", display: isKiosk ? "none" : undefined }}
       >
         {/* Brand */}
         <div className="pl-2 pr-4 pt-4 pb-3.5 border-b border-white/[0.06]">

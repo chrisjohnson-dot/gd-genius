@@ -5,6 +5,7 @@ import { Route, Switch, useRoute } from "wouter";
 import AllocationRules from "@/pages/AllocationRules";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { KioskProvider } from "./contexts/KioskContext";
 import AppLayout from "./components/AppLayout";
 import { CommandPalette } from "./components/CommandPalette";
 import Home from "./pages/Home";
@@ -176,11 +177,13 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>
-        <TooltipProvider>
-          <Toaster />
-          <CommandPalette />
-          <Router />
-        </TooltipProvider>
+        <KioskProvider>
+          <TooltipProvider>
+            <Toaster />
+            <CommandPalette />
+            <Router />
+          </TooltipProvider>
+        </KioskProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

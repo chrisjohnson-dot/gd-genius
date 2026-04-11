@@ -31,8 +31,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Users, Plus, Pencil, UserX, UserCheck, Search, RefreshCw, Loader2, Printer } from "lucide-react";
 import { AssociateBadge } from "@/components/ltl/AssociateBadge";
+import { BulkBadgePrint } from "@/components/ltl/BulkBadgePrint";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Associate = {
@@ -169,6 +171,8 @@ export default function Associates() {
   const [editTarget, setEditTarget] = useState<Associate | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Associate | null>(null);
   const [badgeTarget, setBadgeTarget] = useState<Associate | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -176,6 +180,30 @@ export default function Associates() {
     activeOnly: !showInactive,
     search: search.trim() || undefined,
   }, { refetchInterval: 30000 });
+
+  const allIds = associates.map((a) => a.associateId);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+  const someSelected = allIds.some((id) => selectedIds.has(id));
+
+  function toggleRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allIds));
+    }
+  }
+
+  const selectedAssociates = associates
+    .filter((a) => selectedIds.has(a.associateId))
+    .map((a) => ({ associateId: a.associateId, name: a.name, warehouseId: a.warehouseId, role: a.role }));
 
   const deactivate = trpc.associates.deactivate.useMutation({
     onSuccess: () => {
@@ -219,6 +247,17 @@ export default function Associates() {
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </Button>
+          {someSelected && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+              onClick={() => setBulkPrintOpen(true)}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print {selectedIds.size} Badge{selectedIds.size !== 1 ? "s" : ""}
+            </Button>
+          )}
           <Button onClick={openAdd} className="bg-[#15527f] hover:bg-[#1a6699] text-white gap-2">
             <Plus className="h-4 w-4" />
             Add Associate
@@ -288,6 +327,14 @@ export default function Associates() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleAll}
+                      aria-label="Select all"
+                      className={someSelected && !allSelected ? "opacity-50" : ""}
+                    />
+                  </TableHead>
                   <TableHead>Badge ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Warehouse</TableHead>
@@ -299,7 +346,14 @@ export default function Associates() {
               </TableHeader>
               <TableBody>
                 {associates.map((a) => (
-                  <TableRow key={a.associateId} className={!a.active ? "opacity-50" : ""}>
+                  <TableRow key={a.associateId} className={!a.active ? "opacity-50" : ""} onClick={() => toggleRow(a.associateId)} style={{ cursor: "pointer" }}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(a.associateId)}
+                        onCheckedChange={() => toggleRow(a.associateId)}
+                        aria-label={`Select ${a.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono font-semibold text-sm">{a.associateId}</TableCell>
                     <TableCell className="font-medium">{a.name}</TableCell>
                     <TableCell>
@@ -374,6 +428,13 @@ export default function Associates() {
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setEditTarget(null); }}
         existing={editTarget}
+      />
+
+      {/* Bulk Print Badges Dialog */}
+      <BulkBadgePrint
+        associates={selectedAssociates}
+        open={bulkPrintOpen}
+        onClose={() => setBulkPrintOpen(false)}
       />
 
       {/* Print Badge Dialog */}

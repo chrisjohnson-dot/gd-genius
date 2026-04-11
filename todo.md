@@ -1245,3 +1245,10 @@
 - [x] Add print-specific CSS (@media print) to hide UI chrome and show only the badge
 - [x] Wire "Print Badge" button (printer icon) into Associates management page row actions
 - [ ] Support printing multiple badges at once (select + bulk print)
+
+## Bulk Badge Printing
+- [x] Add checkbox column to Associates table (individual row selection)
+- [x] Add Select All / Deselect All checkbox in table header
+- [x] Add "Print N Badges" toolbar button (shown when ≥1 associate selected)
+- [x] Build BulkBadgePrint component: renders all selected badges in a hidden print-only div, one badge per page-break
+- [x] Wire bulk print into Associates page

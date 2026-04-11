@@ -11,10 +11,11 @@ export async function checkOverdueSessions(): Promise<number> {
   const now = Date.now();
 
   // Fetch all enabled settings
-  const settingsRows = await db.execute<any>(
+  // drizzle execute() for MySQL returns [[rows], fields] — unwrap with [0]
+  const settingsResult = await db.execute<any>(
     sql`SELECT * FROM pull_alert_settings WHERE enabled = 1`
   );
-  const settings = (settingsRows as any[]) as Array<{
+  const settings = ((settingsResult as any[])[0] ?? []) as Array<{
     warehouse_id: string;
     threshold_minutes: number;
   }>;
@@ -28,34 +29,42 @@ export async function checkOverdueSessions(): Promise<number> {
   });
 
   // Fetch active sessions
-  const sessionRows = await db.execute<any>(
-    sql`SELECT id, pick_ticket, associate_id, associate_name, warehouse_id, start_time
+  const sessionResult = await db.execute<any>(
+    sql`SELECT id, pick_ticket, associate_id, associate_name, warehouse_id, started_at
         FROM pull_sessions WHERE status = 'active'`
   );
-  const activeSessions = (sessionRows as any[]) as Array<{
+  const activeSessions = ((sessionResult as any[])[0] ?? []) as Array<{
     id: number;
     pick_ticket: string | null;
     associate_id: string | null;
     associate_name: string | null;
     warehouse_id: string | null;
-    start_time: number;
+    started_at: number;
   }>;
 
   let firedCount = 0;
 
   for (const session of activeSessions) {
+    // Normalize id — TiDB may return BigInt; cast to plain number for sql interpolation
+    const sessionId = Number(session.id);
     const threshold =
       session.warehouse_id && warehouseThresholds[session.warehouse_id] !== undefined
         ? warehouseThresholds[session.warehouse_id]
         : globalThreshold;
 
-    const elapsedMinutes = Math.floor((now - session.start_time) / 60000);
+    // started_at may be a Date object or a number/string from TiDB
+    const rawStartedAt: unknown = session.started_at;
+    const startedAtMs = rawStartedAt instanceof Date
+      ? rawStartedAt.getTime()
+      : Number(rawStartedAt);
+    const elapsedMinutes = Math.floor((now - startedAtMs) / 60000);
     if (elapsedMinutes < threshold) continue;
 
     // Skip if already alerted
-    const existingRows = await db.execute<any>(
-      sql`SELECT id FROM pull_session_alerts WHERE session_id = ${session.id} LIMIT 1`
+    const existingResult = await db.execute<any>(
+      sql`SELECT id FROM pull_session_alerts WHERE session_id = ${sessionId} LIMIT 1`
     );
+    const existingRows = (existingResult as any[])[0] ?? [];
     if ((existingRows as any[]).length > 0) continue;
 
     // Insert alert
@@ -63,7 +72,7 @@ export async function checkOverdueSessions(): Promise<number> {
       sql`INSERT INTO pull_session_alerts
           (session_id, pick_ticket, associate_id, associate_name, warehouse_id,
            elapsed_minutes, threshold_minutes, alerted_at, acknowledged)
-         VALUES (${session.id}, ${session.pick_ticket}, ${session.associate_id},
+         VALUES (${sessionId}, ${session.pick_ticket}, ${session.associate_id},
                  ${session.associate_name}, ${session.warehouse_id},
                  ${elapsedMinutes}, ${threshold}, ${now}, 0)`
     );
@@ -88,9 +97,10 @@ export const pullAlertsRouter = router({
   getSettings: protectedProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    const rows = await db.execute<any>(
+    const result = await db.execute<any>(
       sql`SELECT * FROM pull_alert_settings ORDER BY warehouse_id`
     );
+    const rows = (result as any[])[0] ?? [];
     return ((rows as any[]) as Array<{
       id: number;
       warehouse_id: string;
@@ -173,7 +183,8 @@ export const pullAlertsRouter = router({
                 ORDER BY alerted_at DESC
                 LIMIT ${input.limit}`
           );
-      return ((rows as any[]) as Array<{
+      const alertRows = (rows as any[])[0] ?? [];
+      return ((alertRows as any[]) as Array<{
         id: number;
         session_id: number;
         pick_ticket: string | null;
@@ -209,7 +220,8 @@ export const pullAlertsRouter = router({
     const rows = await db.execute<any>(
       sql`SELECT COUNT(*) as cnt FROM pull_session_alerts WHERE acknowledged = 0`
     );
-    return { count: Number((rows as any[])[0]?.cnt ?? 0) };
+    const countRows = (rows as any[])[0] ?? [];
+    return { count: Number((countRows as any[])[0]?.cnt ?? 0) };
   }),
 
   /** Acknowledge one or all alerts */

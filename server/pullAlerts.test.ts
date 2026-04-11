@@ -23,15 +23,15 @@ beforeEach(() => {
 
 describe("checkOverdueSessions", () => {
   it("returns 0 when no enabled settings exist", async () => {
-    mockExecute.mockResolvedValueOnce([]); // settings query returns empty
+    mockExecute.mockResolvedValueOnce([[]]); // settings query returns empty nested array
     const fired = await checkOverdueSessions();
     expect(fired).toBe(0);
   });
 
   it("returns 0 when no active sessions exist", async () => {
     mockExecute
-      .mockResolvedValueOnce([{ warehouse_id: "all", threshold_minutes: 120 }]) // settings
-      .mockResolvedValueOnce([]); // active sessions
+      .mockResolvedValueOnce([[{ warehouse_id: "all", threshold_minutes: 120 }]]) // settings
+      .mockResolvedValueOnce([[]]); // active sessions
     const fired = await checkOverdueSessions();
     expect(fired).toBe(0);
   });
@@ -39,15 +39,15 @@ describe("checkOverdueSessions", () => {
   it("returns 0 when session is under threshold", async () => {
     const now = Date.now();
     mockExecute
-      .mockResolvedValueOnce([{ warehouse_id: "all", threshold_minutes: 120 }]) // settings
-      .mockResolvedValueOnce([{ // active sessions
+      .mockResolvedValueOnce([[{ warehouse_id: "all", threshold_minutes: 120 }]]) // settings
+      .mockResolvedValueOnce([[{ // active sessions
         id: 1,
         pick_ticket: "PT-001",
         associate_id: "A001",
         associate_name: "John",
         warehouse_id: "LAX",
-        start_time: now - 30 * 60 * 1000, // 30 min ago — under threshold
-      }]);
+        started_at: now - 30 * 60 * 1000, // 30 min ago — under threshold
+      }]]);
     const fired = await checkOverdueSessions();
     expect(fired).toBe(0);
   });
@@ -55,16 +55,16 @@ describe("checkOverdueSessions", () => {
   it("fires an alert when session exceeds threshold", async () => {
     const now = Date.now();
     mockExecute
-      .mockResolvedValueOnce([{ warehouse_id: "all", threshold_minutes: 120 }]) // settings
-      .mockResolvedValueOnce([{ // active sessions
+      .mockResolvedValueOnce([[{ warehouse_id: "all", threshold_minutes: 120 }]]) // settings
+      .mockResolvedValueOnce([[{ // active sessions
         id: 1,
         pick_ticket: "PT-001",
         associate_id: "A001",
         associate_name: "John",
         warehouse_id: "LAX",
-        start_time: now - 150 * 60 * 1000, // 150 min ago — over threshold
-      }])
-      .mockResolvedValueOnce([]) // no existing alert
+        started_at: now - 150 * 60 * 1000, // 150 min ago — over threshold
+      }]])
+      .mockResolvedValueOnce([[]]) // no existing alert
       .mockResolvedValueOnce(undefined); // insert alert
     const fired = await checkOverdueSessions();
     expect(fired).toBe(1);
@@ -73,16 +73,16 @@ describe("checkOverdueSessions", () => {
   it("skips session that already has an alert", async () => {
     const now = Date.now();
     mockExecute
-      .mockResolvedValueOnce([{ warehouse_id: "all", threshold_minutes: 120 }]) // settings
-      .mockResolvedValueOnce([{ // active sessions
+      .mockResolvedValueOnce([[{ warehouse_id: "all", threshold_minutes: 120 }]]) // settings
+      .mockResolvedValueOnce([[{ // active sessions
         id: 1,
         pick_ticket: "PT-001",
         associate_id: "A001",
         associate_name: "John",
         warehouse_id: "LAX",
-        start_time: now - 150 * 60 * 1000,
-      }])
-      .mockResolvedValueOnce([{ id: 99 }]); // existing alert found
+        started_at: now - 150 * 60 * 1000,
+      }]])
+      .mockResolvedValueOnce([[{ id: 99 }]]); // existing alert found
     const fired = await checkOverdueSessions();
     expect(fired).toBe(0);
   });
@@ -90,19 +90,19 @@ describe("checkOverdueSessions", () => {
   it("uses per-warehouse threshold override when available", async () => {
     const now = Date.now();
     mockExecute
-      .mockResolvedValueOnce([ // settings — global 120min, LAX override 60min
+      .mockResolvedValueOnce([[ // settings — global 120min, LAX override 60min
         { warehouse_id: "all", threshold_minutes: 120 },
         { warehouse_id: "LAX", threshold_minutes: 60 },
-      ])
-      .mockResolvedValueOnce([{ // active session at LAX, 90 min elapsed
+      ]])
+      .mockResolvedValueOnce([[{ // active session at LAX, 90 min elapsed
         id: 2,
         pick_ticket: "PT-002",
         associate_id: "A002",
         associate_name: "Jane",
         warehouse_id: "LAX",
-        start_time: now - 90 * 60 * 1000, // 90 min > 60 min LAX threshold
-      }])
-      .mockResolvedValueOnce([]) // no existing alert
+        started_at: now - 90 * 60 * 1000, // 90 min > 60 min LAX threshold
+      }]])
+      .mockResolvedValueOnce([[]]) // no existing alert
       .mockResolvedValueOnce(undefined); // insert
     const fired = await checkOverdueSessions();
     expect(fired).toBe(1);

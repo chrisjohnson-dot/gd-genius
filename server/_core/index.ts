@@ -21,6 +21,7 @@ import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
 import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
 import { startScanImagePurgeScheduler } from "../scheduler/scanImagePurge";
 import { startOpFiHealthCheckScheduler } from "../scheduler/opfiHealthCheck";
+import { checkOverdueSessions } from "../routers/pullAlerts";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -104,6 +105,16 @@ async function startServer() {
     startScanImagePurgeScheduler();
     // OpFi connection health check every 15 minutes
     startOpFiHealthCheckScheduler();
+    // Pull session overdue alert check every 5 minutes
+    const runPullAlertCheck = () => {
+      checkOverdueSessions()
+        .then((fired) => {
+          if (fired > 0) console.log(`[PullAlerts] Fired ${fired} overdue session alert(s).`);
+        })
+        .catch((err) => console.error("[PullAlerts] Check failed:", err));
+    };
+    runPullAlertCheck(); // run once immediately on startup
+    setInterval(runPullAlertCheck, 5 * 60 * 1000);
   });
 }
 

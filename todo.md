@@ -1274,3 +1274,9 @@
 - [x] UI: Alert list popover — shows overdue sessions with elapsed time, warehouse, pick ticket, acknowledge buttons
 - [x] UI: PullAlertSettings dialog — global threshold + per-warehouse overrides with enable/disable toggle
 - [x] Tests: pullAlerts unit tests (6 passing)
+
+## Auto-Check Overdue Sessions (Background Job)
+- [x] Server: setInterval on server boot calls checkOverdueSessions every 5 minutes
+- [x] Server: logs fired alert count and errors to console for observability
+- [x] Fix: drizzle execute() returns [[rows], fields] nested array — unwrapped with [0] in pullAlerts.ts
+- [x] Tests: pullAlerts tests updated to use [[rows]] mock format — all 581 tests passing

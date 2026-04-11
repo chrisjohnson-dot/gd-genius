@@ -181,6 +181,7 @@ export default function Associates() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
   const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
 
   const utils = trpc.useUtils();
 
@@ -192,10 +193,17 @@ export default function Associates() {
   // Unique warehouse IDs derived from the full list (for dropdown options)
   const warehouseOptions = Array.from(new Set(associates.map((a) => a.warehouseId))).sort();
 
-  // Apply warehouse filter on top of the server-side search/active filters
-  const filteredAssociates = warehouseFilter === "all"
-    ? associates
-    : associates.filter((a) => a.warehouseId === warehouseFilter);
+  // Unique roles derived from the full list (excluding null/empty)
+  const roleOptions = Array.from(
+    new Set(associates.map((a) => a.role).filter((r): r is string => Boolean(r)))
+  ).sort();
+
+  // Apply both warehouse and role filters on top of the server-side search/active filters
+  const filteredAssociates = associates.filter((a) => {
+    if (warehouseFilter !== "all" && a.warehouseId !== warehouseFilter) return false;
+    if (roleFilter !== "all" && (a.role ?? "") !== roleFilter) return false;
+    return true;
+  });
 
   const allIds = filteredAssociates.map((a) => a.associateId);
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
@@ -225,6 +233,22 @@ export default function Associates() {
       return next;
     });
   }
+
+  function selectAllInRole(role: string) {
+    const ids = associates.filter((a) => (a.role ?? "") === role).map((a) => a.associateId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  // Label map for display
+  const ROLE_LABEL: Record<string, string> = {
+    picker: "Picker", packer: "Packer", receiver: "Receiver",
+    supervisor: "Supervisor", driver: "Driver",
+  };
+  function roleLabel(r: string | null) { return r ? (ROLE_LABEL[r] ?? r) : "—"; }
 
   // selectedAssociates is drawn from the FULL list (not filtered) so deselecting warehouse
   // doesn't silently drop already-selected badges from the print job
@@ -331,15 +355,33 @@ export default function Associates() {
                 </SelectContent>
               </Select>
 
-              {/* Select All in Warehouse shortcut */}
-              {warehouseFilter !== "all" && (
+              {/* Role filter */}
+              <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v)}>
+                <SelectTrigger className="h-8 w-36 text-sm gap-1.5">
+                  <SelectValue placeholder="All Roles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  {roleOptions.map((r) => (
+                    <SelectItem key={r} value={r}>{ROLE_LABEL[r] ?? r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Select All shortcuts — show combined label when both filters active */}
+              {(warehouseFilter !== "all" || roleFilter !== "all") && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs gap-1.5"
-                  onClick={() => selectAllInWarehouse(warehouseFilter)}
+                  onClick={() => setSelectedIds(new Set(filteredAssociates.map((a) => a.associateId)))}
                 >
-                  Select All in {warehouseFilter}
+                  Select All
+                  {warehouseFilter !== "all" && roleFilter !== "all"
+                    ? ` ${ROLE_LABEL[roleFilter] ?? roleFilter}s in ${warehouseFilter}`
+                    : warehouseFilter !== "all"
+                    ? ` in ${warehouseFilter}`
+                    : ` ${ROLE_LABEL[roleFilter] ?? roleFilter}s`}
                 </Button>
               )}
 
@@ -414,7 +456,7 @@ export default function Associates() {
                         {a.warehouseId === "all" ? "All" : a.warehouseId}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{a.role ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{roleLabel(a.role)}</TableCell>
                     <TableCell>
                       {a.active ? (
                         <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>

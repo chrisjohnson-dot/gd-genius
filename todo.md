@@ -1258,3 +1258,9 @@
 - [x] Filter displayed associates by selected warehouse
 - [x] Add "Select All in [Warehouse]" quick-select button when a warehouse is filtered
 - [x] Print N Badges button reflects cross-warehouse selection correctly
+
+## Role Filter for Associates
+- [x] Add role filter dropdown (All Roles + unique roles from associate list)
+- [x] Apply role filter on top of warehouse filter and search
+- [x] Add "Select All [Role]s" quick-select button when a role is filtered
+- [x] Both filters work together (e.g., "Select All Pickers in Columbus")

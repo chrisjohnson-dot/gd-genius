@@ -248,7 +248,16 @@ export default function Associates() {
     picker: "Picker", packer: "Packer", receiver: "Receiver",
     supervisor: "Supervisor", driver: "Driver",
   };
+  // Color map: bg / text / border Tailwind classes per role
+  const ROLE_COLOR: Record<string, string> = {
+    picker:     "bg-green-500/10 text-green-700 border-green-500/30 dark:text-green-400",
+    packer:     "bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400",
+    receiver:   "bg-orange-500/10 text-orange-700 border-orange-500/30 dark:text-orange-400",
+    supervisor: "bg-purple-500/10 text-purple-700 border-purple-500/30 dark:text-purple-400",
+    driver:     "bg-yellow-500/10 text-yellow-700 border-yellow-500/30 dark:text-yellow-500",
+  };
   function roleLabel(r: string | null) { return r ? (ROLE_LABEL[r] ?? r) : "—"; }
+  function roleColor(r: string | null) { return r ? (ROLE_COLOR[r] ?? "bg-gray-500/10 text-gray-600 border-gray-500/20") : ""; }
 
   // selectedAssociates is drawn from the FULL list (not filtered) so deselecting warehouse
   // doesn't silently drop already-selected badges from the print job
@@ -456,7 +465,15 @@ export default function Associates() {
                         {a.warehouseId === "all" ? "All" : a.warehouseId}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{roleLabel(a.role)}</TableCell>
+                    <TableCell>
+                      {a.role ? (
+                        <Badge variant="outline" className={`text-xs font-medium ${roleColor(a.role)}`}>
+                          {roleLabel(a.role)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {a.active ? (
                         <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>

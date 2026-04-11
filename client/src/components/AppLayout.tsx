@@ -95,13 +95,15 @@ const packagingItems = [
   { href: "/small-parcel/packaging",     label: "Inventory",     icon: Boxes },
 ];
 
-const qcItems = [
-  { href: "/qc/scanner",     label: "QC Scanner",      icon: ScanBarcode },
-  { href: "/qc/production-line",   label: "Production Line Scans",  icon: Activity },
-  { href: "/qc/scan-label",  label: "QC Scan & Label", icon: Tag },
-  { href: "/qc/qr-scan-history",   label: "K18QR Scanning",  icon: QrCode },
-  { href: "/qc/label-files",       label: "Label Files",      icon: FileText },
-  { href: "/qc/audit",             label: "Audit Log",        icon: ClipboardList },
+const ltlItems = [
+  { href: "/ltl/warehouse-pull",  label: "Warehouse Pull",          icon: ScanBarcode },
+  { href: "/ltl/pull-manager",    label: "Pull Manager",            icon: BarChart2 },
+  { href: "/qc/scanner",          label: "QC Scanner",              icon: ScanBarcode },
+  { href: "/qc/production-line",  label: "Production Line Scans",   icon: Activity },
+  { href: "/qc/scan-label",       label: "QC Scan & Label",         icon: Tag },
+  { href: "/qc/qr-scan-history",  label: "K18QR Scanning",          icon: QrCode },
+  { href: "/qc/label-files",      label: "Label Files",             icon: FileText },
+  { href: "/qc/audit",            label: "Audit Log",               icon: ClipboardList },
 ];
 
 const shippingItems = [
@@ -414,9 +416,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* QC section — always expanded */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">QC</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">LTL</p>
             <div className="space-y-0.5">
-              {qcItems.map(item => (
+              {ltlItems.map(item => (
                 <NavItem key={item.href} {...item} active={location === item.href} />
               ))}
             </div>

@@ -9023,6 +9023,7 @@ import { clientProfilesRouter } from "./routers/clientProfiles";
 import { photoCaptureRouter } from "./routers/photoCapture";
 import { workloadRouter } from "./routers/workload";
 import { onboardingRouter } from "./routers/onboarding";
+import { pullTrackerRouter } from "./routers/pullTracker";
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9043,5 +9044,6 @@ export const appRouterV4 = router({
   photoCapture: photoCaptureRouter,
   workload: workloadRouter,
   onboarding: onboardingRouter,
+  pullTracker: pullTrackerRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

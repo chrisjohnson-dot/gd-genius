@@ -1218,3 +1218,14 @@
 - [ ] Seed onboarding_steps table with real content for admin and operator roles
 - [ ] Fix OnboardingTour to not auto-launch when steps table is empty
 - [ ] Fix step rows to display title and description text
+
+## Warehouse Pull Tracker (LTL section)
+- [x] Rename "QC" nav section label to "LTL" in AppLayout sidebar
+- [x] DB: pull_sessions table (pick ticket, associate ID, start/end time, status, warehouse)
+- [x] DB: pull_session_items table (pallet/case scans per session)
+- [x] Server: pullTrackerRouter (startSession, endSession, addItem, getSession, listSessions, associateStats, pushToOpFi)
+- [x] UI: /ltl/warehouse-pull — worker scanner page (scan pick ticket → enter associate ID → active session with item scanning → end session)
+- [x] UI: /ltl/pull-manager — manager dashboard (session history, associate efficiency table, time/pallet metrics)
+- [x] Nav: added "Warehouse Pull" and "Pull Manager" under LTL section in sidebar
+- [x] OpFi push: send completed session data to OpFi API on session end
+- [x] Tests: pullTrackerRouter unit tests (11 tests passing)

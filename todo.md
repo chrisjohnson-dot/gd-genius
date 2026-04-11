@@ -1289,3 +1289,11 @@
 - [x] UI: PullAlertSettings — Re-alert At toggle (1.5×, 2×, 3×, Off) for global + per-warehouse, shows computed escalation time
 - [x] UI: PullAlertBell — turns red with 🚨 ESCALATION badge for level-2 alerts; orange for level-1
 - [x] Tests: pullAlerts test fixed (alert_level in mock) — 581 tests passing
+
+## Alert Comments / Notes
+- [x] DB: add manager_note TEXT column to pull_session_alerts
+- [x] Server: pullAlertsRouter.saveNote mutation (alertId, note)
+- [x] Server: include manager_note in getAlerts response
+- [x] UI: inline comment field in PullAlertBell popover per alert row (Add note / Edit note toggle)
+- [x] UI: saved notes shown as italic preview under the alert row
+- [x] Tests: saveNote unit test — 582 tests passing

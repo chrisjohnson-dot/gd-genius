@@ -108,3 +108,15 @@ describe("checkOverdueSessions", () => {
     expect(fired).toBe(1);
   });
 });
+
+import { appRouterV4 as appRouter } from "./routers";
+
+describe("pullAlerts.saveNote", () => {
+  it("saves a manager note on an alert", async () => {
+    mockExecute.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const caller = appRouter.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+    const result = await caller.pullAlerts.saveNote({ alertId: 1, note: "Checked in — associate on break" });
+    expect(result.success).toBe(true);
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+  });
+});

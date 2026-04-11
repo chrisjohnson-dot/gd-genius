@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, BellRing, Check, CheckCheck, Clock, Warehouse, X } from "lucide-react";
+import { Bell, BellRing, Check, CheckCheck, Clock, MessageSquare, Warehouse, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 
 function formatElapsed(minutes: number) {
   if (minutes < 60) return `${minutes}m`;
@@ -28,13 +29,162 @@ function timeAgo(ts: number) {
   return new Date(ts).toLocaleDateString();
 }
 
+interface AlertRowProps {
+  alert: {
+    id: number;
+    associateName?: string | null;
+    associateId?: string | null;
+    alertLevel?: number;
+    elapsedMinutes: number;
+    thresholdMinutes: number;
+    warehouseId?: string | null;
+    pickTicket?: string | null;
+    alertedAt: number;
+    managerNote?: string | null;
+  };
+  onAcknowledge: (id: number) => void;
+  acknowledging: boolean;
+}
+
+function AlertRow({ alert, onAcknowledge, acknowledging }: AlertRowProps) {
+  const [showNote, setShowNote] = useState(false);
+  const [noteText, setNoteText] = useState(alert.managerNote ?? "");
+  const [saved, setSaved] = useState(false);
+
+  const utils = trpc.useUtils();
+
+  const saveNote = trpc.pullAlerts.saveNote.useMutation({
+    onSuccess: () => {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      utils.pullAlerts.getAlerts.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const alertLevel = alert.alertLevel ?? 1;
+  const isEscalation = alertLevel >= 2;
+
+  return (
+    <div className="px-4 py-3 hover:bg-muted/30 transition-colors">
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
+          isEscalation ? "bg-red-500/10" : "bg-orange-500/10"
+        }`}>
+          {isEscalation ? (
+            <span className="text-base leading-none">🚨</span>
+          ) : (
+            <Clock className="h-4 w-4 text-orange-500" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium truncate">
+              {alert.associateName ?? alert.associateId ?? "Unknown associate"}
+            </p>
+            {isEscalation && (
+              <span className="text-[10px] font-bold uppercase tracking-wide text-red-500 bg-red-500/10 px-1 rounded">
+                ESCALATION
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <span className={`text-xs font-semibold ${isEscalation ? "text-red-600" : "text-orange-600"}`}>
+              {formatElapsed(alert.elapsedMinutes)} elapsed
+            </span>
+            <span className="text-xs text-muted-foreground">
+              (limit: {formatElapsed(alert.thresholdMinutes)})
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-1">
+            {alert.warehouseId && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Warehouse className="h-3 w-3" />
+                {alert.warehouseId}
+              </span>
+            )}
+            {alert.pickTicket && (
+              <span className="text-xs text-muted-foreground">
+                · Ticket: {alert.pickTicket}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground/60 mt-0.5">
+            {timeAgo(alert.alertedAt)}
+          </p>
+
+          {/* Existing note preview */}
+          {alert.managerNote && !showNote && (
+            <div className="mt-1.5 flex items-start gap-1">
+              <MessageSquare className="h-3 w-3 mt-0.5 text-muted-foreground flex-shrink-0" />
+              <p className="text-xs text-muted-foreground italic line-clamp-2">{alert.managerNote}</p>
+            </div>
+          )}
+
+          {/* Note editor */}
+          {showNote && (
+            <div className="mt-2 space-y-1.5">
+              <Textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Add a note about this alert…"
+                className="text-xs min-h-[64px] resize-none"
+                maxLength={1000}
+              />
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  className="h-6 text-xs px-2"
+                  onClick={() => saveNote.mutate({ alertId: alert.id, note: noteText })}
+                  disabled={saveNote.isPending}
+                >
+                  {saved ? "Saved ✓" : saveNote.isPending ? "Saving…" : "Save Note"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs px-2 text-muted-foreground"
+                  onClick={() => { setShowNote(false); setNoteText(alert.managerNote ?? ""); }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Toggle note button */}
+          {!showNote && (
+            <button
+              className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setShowNote(true)}
+            >
+              <MessageSquare className="h-3 w-3" />
+              {alert.managerNote ? "Edit note" : "Add note"}
+            </button>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-green-600"
+          onClick={() => onAcknowledge(alert.id)}
+          disabled={acknowledging}
+          title="Acknowledge"
+        >
+          <Check className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function PullAlertBell() {
   const [open, setOpen] = useState(false);
 
   const utils = trpc.useUtils();
 
   const { data: countData } = trpc.pullAlerts.getUnreadCount.useQuery(undefined, {
-    refetchInterval: 60000, // poll every minute
+    refetchInterval: 60000,
   });
 
   const { data: alerts = [], isLoading } = trpc.pullAlerts.getAlerts.useQuery(
@@ -42,7 +192,6 @@ export function PullAlertBell() {
     { enabled: open, refetchInterval: open ? 30000 : false }
   );
 
-  // Count escalation alerts for bell color
   const escalationCount = alerts.filter((a) => (a as any).alertLevel >= 2).length;
 
   const acknowledge = trpc.pullAlerts.acknowledge.useMutation({
@@ -86,7 +235,7 @@ export function PullAlertBell() {
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-96 p-0" sideOffset={8}>
+      <PopoverContent align="end" className="w-[420px] p-0" sideOffset={8}>
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2">
@@ -113,7 +262,7 @@ export function PullAlertBell() {
         </div>
 
         {/* Alert list */}
-        <ScrollArea className="max-h-80">
+        <ScrollArea className="max-h-[480px]">
           {isLoading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
           ) : alerts.length === 0 ? (
@@ -124,68 +273,12 @@ export function PullAlertBell() {
           ) : (
             <div className="divide-y">
               {alerts.map((alert) => (
-                <div
+                <AlertRow
                   key={alert.id}
-                  className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-                >
-                  <div className={`mt-0.5 flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
-                    (alert as any).alertLevel >= 2 ? "bg-red-500/10" : "bg-orange-500/10"
-                  }`}>
-                    {(alert as any).alertLevel >= 2 ? (
-                      <span className="text-base leading-none">🚨</span>
-                    ) : (
-                      <Clock className="h-4 w-4 text-orange-500" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-medium truncate">
-                        {alert.associateName ?? alert.associateId ?? "Unknown associate"}
-                      </p>
-                      {(alert as any).alertLevel >= 2 && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-red-500 bg-red-500/10 px-1 rounded">
-                          ESCALATION
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className={`text-xs font-semibold ${
-                        (alert as any).alertLevel >= 2 ? "text-red-600" : "text-orange-600"
-                      }`}>
-                        {formatElapsed(alert.elapsedMinutes)} elapsed
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        (limit: {formatElapsed(alert.thresholdMinutes)})
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      {alert.warehouseId && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Warehouse className="h-3 w-3" />
-                          {alert.warehouseId}
-                        </span>
-                      )}
-                      {alert.pickTicket && (
-                        <span className="text-xs text-muted-foreground">
-                          · Ticket: {alert.pickTicket}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground/60 mt-0.5">
-                      {timeAgo(alert.alertedAt)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-green-600"
-                    onClick={() => handleAcknowledgeOne(alert.id)}
-                    disabled={acknowledge.isPending}
-                    title="Acknowledge"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                  alert={alert as any}
+                  onAcknowledge={handleAcknowledgeOne}
+                  acknowledging={acknowledge.isPending}
+                />
               ))}
             </div>
           )}

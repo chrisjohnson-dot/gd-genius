@@ -232,6 +232,7 @@ export const pullAlertsRouter = router({
         acknowledged_at: number | null;
         acknowledged_by: string | null;
         alert_level: number;
+        manager_note: string | null;
       }>).map((a) => ({
         id: a.id,
         sessionId: a.session_id,
@@ -246,6 +247,7 @@ export const pullAlertsRouter = router({
         acknowledgedAt: a.acknowledged_at,
         acknowledgedBy: a.acknowledged_by,
         alertLevel: Number(a.alert_level ?? 1),
+        managerNote: a.manager_note ?? null,
       }));
     }),
 
@@ -286,6 +288,23 @@ export const pullAlertsRouter = router({
               WHERE acknowledged = 0`
         );
       }
+      return { success: true };
+    }),
+
+  /** Save a manager note on a specific alert */
+  saveNote: protectedProcedure
+    .input(
+      z.object({
+        alertId: z.number().int(),
+        note: z.string().max(1000),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      await db.execute(
+        sql`UPDATE pull_session_alerts SET manager_note = ${input.note} WHERE id = ${input.alertId}`
+      );
       return { success: true };
     }),
 

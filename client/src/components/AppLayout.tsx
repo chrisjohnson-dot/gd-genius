@@ -49,6 +49,7 @@ import {
   AlertTriangle,
   CalendarDays,
   Monitor,
+  Building2,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -63,6 +64,7 @@ const dashboardItems = [
   { href: "/my-shift",         label: "My Shift",          icon: CalendarDays },
   { href: "/scan-mode",         label: "Scan Mode",          icon: ScanBarcode },
   { href: "/live-ops",           label: "Live Ops View",      icon: Monitor },
+  { href: "/clients",             label: "Client Profiles",    icon: Building2 },
 ];
 
 const receivingItems = [

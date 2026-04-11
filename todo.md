@@ -1173,3 +1173,15 @@
 - [x] UI: 10s auto-refresh with last-updated indicator and manual refresh button
 - [x] Sidebar: Live Ops View nav item added under Dashboard section
 - [x] 539 tests passing (no new router tests needed — liveOps queries are aggregation-only)
+
+## Phase 2 — Feature 6: Client Profiles ✅
+- [x] DB: client_profiles + client_profile_audit tables + migration SQL
+- [x] Server: clientProfilesRouter (list, getProfile, updateProfile, getStats, getOrderHistory, getSlaTrend, getExceptions, getAuditLog)
+- [x] UI: /clients list page with search, summary tiles, client cards with open/unallocated/exception counts
+- [x] UI: /clients/:configId/:customerId profile page with 6 tabs (Overview, Fulfillment Rules, QC Requirements, Special Instructions, Billing, Analytics)
+- [x] UI: Inline click-to-edit fields, toggle buttons for boolean/enum fields, color picker for brand color
+- [x] UI: Analytics tab with order volume bar chart + SLA compliance line chart (recharts)
+- [x] UI: Special instructions banner preview
+- [x] UI: Audit log showing recent field changes with old/new values and editor name
+- [x] Sidebar: Client Profiles nav item added under Dashboard section
+- [x] 539 tests passing (0 TypeScript errors)

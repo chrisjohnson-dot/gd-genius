@@ -1962,3 +1962,53 @@ export const exceptionEvents = mysqlTable("exception_events", {
 });
 export type ExceptionEvent = typeof exceptionEvents.$inferSelect;
 export type InsertExceptionEvent = typeof exceptionEvents.$inferInsert;
+
+// ── Client Profiles ──────────────────────────────────────────────────────────
+export const clientProfiles = mysqlTable("client_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: int("customerId").notNull(),
+  configId: int("configId").notNull(),
+  customerName: varchar("customerName", { length: 256 }).notNull(),
+  brandColor: varchar("brandColor", { length: 16 }).default("#3B82F6"),
+  logoUrl: varchar("logoUrl", { length: 512 }),
+  contactName: varchar("contactName", { length: 256 }),
+  contactEmail: varchar("contactEmail", { length: 256 }),
+  contactPhone: varchar("contactPhone", { length: 64 }),
+  orderChannel: mysqlEnum("orderChannel", ["b2b", "d2c", "both"]).default("b2b"),
+  slaStandardHours: int("slaStandardHours").default(48),
+  slaExpeditedHours: int("slaExpeditedHours").default(24),
+  slaCutoffTime: varchar("slaCutoffTime", { length: 8 }).default("15:00"),
+  qcScanType: mysqlEnum("qcScanType", ["standard", "enhanced", "visual"]).default("standard"),
+  qcDamageThresholdPct: int("qcDamageThresholdPct").default(0),
+  qcItemCountRequired: int("qcItemCountRequired").default(0),
+  qcPhotoRequirement: mysqlEnum("qcPhotoRequirement", ["none", "exceptions_only", "per_order", "per_item"]).default("none"),
+  packagingBoxType: varchar("packagingBoxType", { length: 128 }),
+  packagingVoidFill: int("packagingVoidFill").default(0),
+  packagingInsertSheets: int("packagingInsertSheets").default(0),
+  packagingTissueWrap: int("packagingTissueWrap").default(0),
+  packagingGiftMessaging: int("packagingGiftMessaging").default(0),
+  lotTrackingRequired: int("lotTrackingRequired").default(0),
+  billingPerOrderFee: decimal("billingPerOrderFee", { precision: 10, scale: 2 }).default("0"),
+  billingPerItemFee: decimal("billingPerItemFee", { precision: 10, scale: 2 }).default("0"),
+  billingStorageFee: decimal("billingStorageFee", { precision: 10, scale: 2 }).default("0"),
+  billingFrequency: mysqlEnum("billingFrequency", ["weekly", "biweekly", "monthly"]).default("monthly"),
+  billingPoRequired: int("billingPoRequired").default(0),
+  specialInstructions: text("specialInstructions"),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+
+export const clientProfileAudit = mysqlTable("client_profile_audit", {
+  id: int("id").autoincrement().primaryKey(),
+  clientProfileId: int("clientProfileId").notNull(),
+  customerId: int("customerId").notNull(),
+  userId: varchar("userId", { length: 128 }),
+  userName: varchar("userName", { length: 256 }),
+  fieldName: varchar("fieldName", { length: 128 }).notNull(),
+  oldValue: text("oldValue"),
+  newValue: text("newValue"),
+  changedAt: timestamp("changedAt").defaultNow(),
+});
+
+export type ClientProfile = typeof clientProfiles.$inferSelect;
+export type NewClientProfile = typeof clientProfiles.$inferInsert;

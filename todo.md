@@ -1163,3 +1163,13 @@
 - [x] UI: /scan-mode full-screen page with barcode input, result flash, recent scans list, session stats
 - [x] Sidebar: Scan Mode nav item added
 - [x] 539 tests passing
+
+## Phase 2 — Feature 4: Live Ops View ✅
+- [x] DB: ops_events table for alert ticker + migration SQL
+- [x] Server: liveOpsRouter (snapshot, events, stationActivity, exceptionSummary, slaSummary, warehouses)
+- [x] Server: aggregation across allocation_run_orders, small_parcel_sessions, qc_scan_sessions, sla_snapshots, exceptions, shift_sessions
+- [x] UI: /live-ops page — pipeline flow (6 stages with counts), alert ticker, station activity, exception panel, SLA breach list
+- [x] UI: Warehouse selector (All + per-warehouse) + TV mode full-screen toggle
+- [x] UI: 10s auto-refresh with last-updated indicator and manual refresh button
+- [x] Sidebar: Live Ops View nav item added under Dashboard section
+- [x] 539 tests passing (no new router tests needed — liveOps queries are aggregation-only)

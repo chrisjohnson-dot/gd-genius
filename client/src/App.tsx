@@ -67,6 +67,7 @@ import PackagingInventory from "@/pages/PackagingInventory";
 import WhLocationConfig from "@/pages/WhLocationConfig";
 import RateWizard from "@/pages/RateWizard";
 import CustomerShippingRules from "@/pages/CustomerShippingRules";
+import LiveOpsView from "@/pages/LiveOpsView";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -144,6 +145,7 @@ function AppRoutes() {
         <Route path="/small-parcel/packaging" component={PackagingInventory} />
         <Route path="/small-parcel/rate-wizard" component={RateWizard} />
         <Route path="/small-parcel/customer-shipping-rules" component={CustomerShippingRules} />
+        <Route path="/live-ops" component={LiveOpsView} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

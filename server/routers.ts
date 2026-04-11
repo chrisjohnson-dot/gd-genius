@@ -9018,6 +9018,7 @@ import { notesRouter } from "./routers/notes";
 import { exceptionsRouter } from "./routers/exceptions";
 import { myShiftRouter } from "./routers/myShift";
 import { scanModeRouter } from "./routers/scanMode";
+import { liveOpsRouter } from "./routers/liveOps";
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9033,5 +9034,6 @@ export const appRouterV4 = router({
   exceptions: exceptionsRouter,
   myShift: myShiftRouter,
   scanMode: scanModeRouter,
+  liveOps: liveOpsRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

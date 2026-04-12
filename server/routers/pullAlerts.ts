@@ -354,4 +354,194 @@ export const pullAlertsRouter = router({
     const fired = await checkOverdueSessions();
     return { fired };
   }),
+
+  // ─── Behind Alert History ─────────────────────────────────────────────────
+
+  /** Record a new "Behind" pace alert fired from the kiosk */
+  recordBehindAlert: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        associateName: z.string().default(""),
+        warehouseId: z.string().default(""),
+        pickTicket: z.string().default(""),
+        itemsAtAlert: z.number().int().min(0).default(0),
+        itemsPerHourAtAlert: z.number().nullable().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const now = Date.now();
+      await db.execute(
+        sql`INSERT INTO pull_alert_history
+              (session_id, associate_name, warehouse_id, pick_ticket,
+               alerted_at, items_at_alert, items_per_hour_at_alert, created_at)
+            VALUES (${input.sessionId}, ${input.associateName}, ${input.warehouseId},
+                    ${input.pickTicket}, ${now}, ${input.itemsAtAlert},
+                    ${input.itemsPerHourAtAlert ?? null}, ${now})`
+      );
+      return { success: true };
+    }),
+
+  /** Mark a session as recovered (set recovered_at + duration) */
+  markRecovered: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const now = Date.now();
+      // Update the most recent unresolved alert for this session
+      await db.execute(
+        sql`UPDATE pull_alert_history
+            SET recovered_at = ${now},
+                duration_behind_seconds = FLOOR((${now} - alerted_at) / 1000)
+            WHERE session_id = ${input.sessionId}
+              AND recovered_at IS NULL
+            ORDER BY alerted_at DESC
+            LIMIT 1`
+      );
+      return { success: true };
+    }),
+
+  /** List Behind alert history with optional filters */
+  listAlertHistory: protectedProcedure
+    .input(
+      z.object({
+        warehouseId: z.string().optional(),
+        associateName: z.string().optional(),
+        dateFrom: z.number().optional(),
+        dateTo: z.number().optional(),
+        limit: z.number().int().min(1).max(500).default(100),
+        offset: z.number().int().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { rows: [], total: 0 };
+
+      const whereParts: string[] = [];
+      const params: any[] = [];
+
+      if (input.warehouseId && input.warehouseId !== "all") {
+        whereParts.push("warehouse_id = ?");
+        params.push(input.warehouseId);
+      }
+      if (input.associateName) {
+        whereParts.push("associate_name LIKE ?");
+        params.push(`%${input.associateName}%`);
+      }
+      if (input.dateFrom) {
+        whereParts.push("alerted_at >= ?");
+        params.push(input.dateFrom);
+      }
+      if (input.dateTo) {
+        whereParts.push("alerted_at <= ?");
+        params.push(input.dateTo);
+      }
+
+      const where = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
+      const conn = (db as any).session?.client ?? (db as any).$client;
+
+      // Use raw mysql2 for parameterized dynamic WHERE
+      const mysql = await import("mysql2/promise");
+      const rawConn = await mysql.createConnection(process.env.DATABASE_URL!);
+      try {
+        const [countRows] = await rawConn.execute<any[]>(
+          `SELECT COUNT(*) as total FROM pull_alert_history ${where}`,
+          params
+        );
+        const total = Number((countRows as any[])[0]?.total ?? 0);
+
+        const [rows] = await rawConn.execute<any[]>(
+          `SELECT * FROM pull_alert_history ${where}
+           ORDER BY alerted_at DESC
+           LIMIT ? OFFSET ?`,
+          [...params, input.limit, input.offset]
+        );
+
+        return {
+          total,
+          rows: (rows as any[]).map((r) => ({
+            id: Number(r.id),
+            sessionId: String(r.session_id),
+            associateName: r.associate_name as string,
+            warehouseId: r.warehouse_id as string,
+            pickTicket: r.pick_ticket as string,
+            alertedAt: Number(r.alerted_at),
+            recoveredAt: r.recovered_at != null ? Number(r.recovered_at) : null,
+            durationBehindSeconds: r.duration_behind_seconds != null ? Number(r.duration_behind_seconds) : null,
+            itemsAtAlert: Number(r.items_at_alert ?? 0),
+            itemsPerHourAtAlert: r.items_per_hour_at_alert != null ? Number(r.items_per_hour_at_alert) : null,
+            createdAt: Number(r.created_at),
+          })),
+        };
+      } finally {
+        await rawConn.end();
+      }
+    }),
+
+  /** Summary stats for the alert history */
+  alertHistoryStats: protectedProcedure
+    .input(
+      z.object({
+        warehouseId: z.string().optional(),
+        dateFrom: z.number().optional(),
+        dateTo: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const mysql = await import("mysql2/promise");
+      const rawConn = await mysql.createConnection(process.env.DATABASE_URL!);
+      try {
+        const whereParts: string[] = [];
+        const params: any[] = [];
+        if (input.warehouseId && input.warehouseId !== "all") {
+          whereParts.push("warehouse_id = ?");
+          params.push(input.warehouseId);
+        }
+        if (input.dateFrom) { whereParts.push("alerted_at >= ?"); params.push(input.dateFrom); }
+        if (input.dateTo) { whereParts.push("alerted_at <= ?"); params.push(input.dateTo); }
+        const where = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
+
+        const [[summary]] = await rawConn.execute<any[]>(
+          `SELECT
+             COUNT(*) as total_alerts,
+             COUNT(recovered_at) as resolved_alerts,
+             AVG(duration_behind_seconds) as avg_duration_seconds,
+             MAX(duration_behind_seconds) as max_duration_seconds
+           FROM pull_alert_history ${where}`,
+          params
+        ) as any;
+
+        // Top 5 associates by alert count
+        const [topRows] = await rawConn.execute<any[]>(
+          `SELECT associate_name, COUNT(*) as alert_count,
+                  AVG(duration_behind_seconds) as avg_duration
+           FROM pull_alert_history ${where}
+           GROUP BY associate_name
+           ORDER BY alert_count DESC
+           LIMIT 5`,
+          params
+        ) as any;
+
+        return {
+          totalAlerts: Number(summary?.total_alerts ?? 0),
+          resolvedAlerts: Number(summary?.resolved_alerts ?? 0),
+          avgDurationSeconds: summary?.avg_duration_seconds != null ? Math.round(Number(summary.avg_duration_seconds)) : null,
+          maxDurationSeconds: summary?.max_duration_seconds != null ? Number(summary.max_duration_seconds) : null,
+          topOffenders: (topRows as any[]).map((r) => ({
+            associateName: r.associate_name as string,
+            alertCount: Number(r.alert_count),
+            avgDurationSeconds: r.avg_duration != null ? Math.round(Number(r.avg_duration)) : null,
+          })),
+        };
+      } finally {
+        await rawConn.end();
+      }
+    }),
 });

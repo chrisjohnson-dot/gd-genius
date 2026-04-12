@@ -1,32 +1,28 @@
 /**
  * usePaceAlert
  *
- * Detects when a session's pace status transitions to "behind" and plays a
- * two-tone alert using the Web Audio API (no audio file required).
+ * Detects when a session's pace status transitions to "behind" and:
+ *  1. Plays a two-tone alert via Web Audio API (kiosk mode only)
+ *  2. Persists the alert to the server via pullAlerts.recordBehindAlert
+ *  3. Marks recovery via pullAlerts.markRecovered when a session leaves "behind"
  *
  * Cooldown logic:
  *   After firing for a session, the hook records the timestamp. If the session
  *   recovers and then drops behind again, the alert will only re-fire once the
- *   cooldown window has elapsed. This prevents alert fatigue on borderline
- *   sessions that oscillate around the pace threshold.
- *
- * Usage:
- *   const { muted, toggleMute, alertedIds, cooldownMs, setCooldownMs } =
- *     usePaceAlert(sessions, isKiosk, { cooldownMs: 5 * 60_000 });
- *
- * - `sessions`    — the live session array from getActiveSessions
- * - `isKiosk`     — only fires alerts when kiosk mode is active
- * - `cooldownMs`  — minimum ms between alerts for the same session (default 5 min)
- * - `muted`       — current mute state (persisted to localStorage)
- * - `toggleMute`  — flip mute on/off
- * - `alertedIds`  — Set of session IDs currently in their alert/cooldown window
- * - `setCooldownMs` — update the cooldown duration at runtime
+ *   cooldown window has elapsed.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { trpc } from "@/lib/trpc";
 
 export interface PaceSession {
   id: number | string;
   paceStatus: "ahead" | "on_pace" | "behind";
+  /** Optional enrichment fields for the history record */
+  associateName?: string | null;
+  warehouseId?: string | null;
+  pickTicket?: string | null;
+  totalItems?: number | null;
+  currentItemsPerHour?: number | null;
 }
 
 export interface UsePaceAlertOptions {
@@ -53,7 +49,6 @@ const DEFAULT_COOLDOWN_MS = 5 * 60_000; // 5 minutes
 function playBehindAlert(ctx: AudioContext) {
   const now = ctx.currentTime;
 
-  // First tone: 880 Hz → 660 Hz over 0.25 s
   const osc1 = ctx.createOscillator();
   const gain1 = ctx.createGain();
   osc1.connect(gain1);
@@ -66,7 +61,6 @@ function playBehindAlert(ctx: AudioContext) {
   osc1.start(now);
   osc1.stop(now + 0.3);
 
-  // Second tone: 660 Hz → 440 Hz, starts 0.15 s later
   const osc2 = ctx.createOscillator();
   const gain2 = ctx.createGain();
   osc2.connect(gain2);
@@ -100,21 +94,26 @@ export function usePaceAlert(
     }
   });
 
+  // Sync cooldownMs when the prop changes (e.g. server setting loaded)
+  useEffect(() => {
+    if (options.cooldownMs !== undefined) {
+      setCooldownMsState(options.cooldownMs);
+    }
+  }, [options.cooldownMs]);
+
   const setCooldownMs = useCallback((ms: number) => {
     setCooldownMsState(ms);
     try { localStorage.setItem(COOLDOWN_STORAGE_KEY, String(ms)); } catch {}
   }, []);
 
-  // prevBehindRef: set of session IDs that were "behind" on the last render
   const prevBehindRef = useRef<Set<string>>(new Set());
-
-  // lastAlertAt: maps session ID → timestamp (ms) of the most recent alert fired
   const lastAlertAtRef = useRef<Map<string, number>>(new Map());
-
-  // alertedIds: IDs currently within their cooldown window (shown with red ring)
   const [alertedIds, setAlertedIds] = useState<Set<string>>(new Set());
 
-  // Lazy AudioContext
+  // tRPC mutations for persisting alert history
+  const recordBehindAlert = trpc.pullAlerts.recordBehindAlert.useMutation();
+  const markRecovered = trpc.pullAlerts.markRecovered.useMutation();
+
   const audioCtxRef = useRef<AudioContext | null>(null);
   const getAudioCtx = useCallback((): AudioContext | null => {
     if (typeof window === "undefined") return null;
@@ -138,35 +137,36 @@ export function usePaceAlert(
     });
   }, []);
 
+  // Stable ref for sessions to avoid stale closures in the effect
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
   useEffect(() => {
     if (!isKiosk) return;
 
     const now = Date.now();
+    const currentSessions = sessionsRef.current;
 
     const currentBehind = new Set<string>(
-      sessions
+      currentSessions
         .filter((s) => s.paceStatus === "behind")
         .map((s) => String(s.id))
     );
 
-    // Find IDs that just transitioned into "behind" AND are not within cooldown
+    // Detect new "behind" transitions
     const toAlert: string[] = [];
     currentBehind.forEach((id) => {
       const wasAlreadyBehind = prevBehindRef.current.has(id);
-      if (wasAlreadyBehind) return; // still behind from last tick — no new transition
+      if (wasAlreadyBehind) return;
 
-      // New "behind" transition — check cooldown
       const lastFired = lastAlertAtRef.current.get(id) ?? 0;
-      const elapsed = now - lastFired;
-      if (elapsed >= cooldownMs) {
+      if (now - lastFired >= cooldownMs) {
         toAlert.push(id);
       }
-      // If within cooldown, silently skip — no alert, no ring update
     });
 
     if (toAlert.length > 0) {
-      const firedAt = now;
-      toAlert.forEach((id) => lastAlertAtRef.current.set(id, firedAt));
+      toAlert.forEach((id) => lastAlertAtRef.current.set(id, now));
 
       setAlertedIds((prev) => {
         const next = new Set(prev);
@@ -180,31 +180,52 @@ export function usePaceAlert(
           try { playBehindAlert(ctx); } catch { /* ignore */ }
         }
       }
+
+      // Persist each new alert to the server (fire-and-forget)
+      toAlert.forEach((id) => {
+        const session = currentSessions.find((s) => String(s.id) === id);
+        recordBehindAlert.mutate({
+          sessionId: id,
+          associateName: session?.associateName ?? "",
+          warehouseId: session?.warehouseId ?? "",
+          pickTicket: session?.pickTicket ?? "",
+          itemsAtAlert: session?.totalItems ?? 0,
+          itemsPerHourAtAlert: session?.currentItemsPerHour ?? null,
+        });
+      });
     }
 
-    // Prune alertedIds: remove IDs no longer active OR whose cooldown has expired
-    const activeIds = new Set(sessions.map((s) => String(s.id)));
+    // Detect recoveries: sessions that WERE behind but are no longer
+    prevBehindRef.current.forEach((id) => {
+      if (!currentBehind.has(id)) {
+        // Session recovered or ended — mark it on the server
+        markRecovered.mutate({ sessionId: id });
+      }
+    });
+
+    // Prune alertedIds
+    const activeIds = new Set(currentSessions.map((s) => String(s.id)));
     setAlertedIds((prev) => {
       let changed = false;
       const next = new Set<string>();
       prev.forEach((id) => {
-        if (!activeIds.has(id)) { changed = true; return; } // session ended
+        if (!activeIds.has(id)) { changed = true; return; }
         const lastFired = lastAlertAtRef.current.get(id) ?? 0;
         if (now - lastFired < cooldownMs) {
-          next.add(id); // still within cooldown window — keep ring
+          next.add(id);
         } else {
-          changed = true; // cooldown expired — remove ring
+          changed = true;
         }
       });
       return changed ? next : prev;
     });
 
-    // Also clean up lastAlertAt for sessions that have ended
     lastAlertAtRef.current.forEach((_, id) => {
       if (!activeIds.has(id)) lastAlertAtRef.current.delete(id);
     });
 
     prevBehindRef.current = currentBehind;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, isKiosk, muted, cooldownMs, getAudioCtx]);
 
   return { muted, toggleMute, alertedIds, cooldownMs, setCooldownMs };

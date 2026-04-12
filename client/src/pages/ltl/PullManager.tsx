@@ -51,9 +51,11 @@ import {
   DollarSign,
   CalendarRange,
   X,
+  Bell,
 } from "lucide-react";
 import { PullAlertBell } from "@/components/ltl/PullAlertBell";
 import { PullAlertSettings } from "@/components/ltl/PullAlertSettings";
+import { AlertHistoryTab } from "@/components/ltl/AlertHistoryTab";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDuration(seconds: number | null | undefined): string {
@@ -628,6 +630,16 @@ export default function PullManager() {
             )}
           </CardContent>
         </Card>
+
+        {/* Behind Alert History */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Bell className="h-4 w-4 text-red-500" />
+            <h2 className="text-base font-semibold">Behind Alert History</h2>
+            <span className="text-xs text-muted-foreground ml-1">Kiosk pace alerts log</span>
+          </div>
+          <AlertHistoryTab warehouses={warehouseOptions} />
+        </div>
 
         <SessionDetailDialog
           sessionId={selectedSessionId}

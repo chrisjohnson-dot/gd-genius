@@ -145,3 +145,48 @@ describe("pullAlerts.getNoteHistory", () => {
     expect(history).toHaveLength(0);
   });
 });
+
+// ─── Behind Alert History tests ───────────────────────────────────────────────
+
+describe("pullAlerts.recordBehindAlert", () => {
+  it("inserts a row into pull_alert_history", async () => {
+    mockExecute.mockResolvedValueOnce([{ insertId: 1 }]);
+    const caller = appRouterV4.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+    const result = await caller.pullAlerts.recordBehindAlert({
+      sessionId: "sess-abc",
+      associateName: "Jane Doe",
+      warehouseId: "COL",
+      pickTicket: "COL-9999",
+      itemsAtAlert: 12,
+      itemsPerHourAtAlert: 22.5,
+    });
+    expect(result.success).toBe(true);
+    expect(mockExecute).toHaveBeenCalledOnce();
+  });
+
+  it("throws when db is unavailable", async () => {
+    (getDb as any).mockResolvedValueOnce(null);
+    const caller = appRouterV4.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+    await expect(
+      caller.pullAlerts.recordBehindAlert({ sessionId: "x" })
+    ).rejects.toThrow("Database unavailable");
+  });
+});
+
+describe("pullAlerts.markRecovered", () => {
+  it("updates the most recent unresolved alert for the session", async () => {
+    mockExecute.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const caller = appRouterV4.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+    const result = await caller.pullAlerts.markRecovered({ sessionId: "sess-abc" });
+    expect(result.success).toBe(true);
+    expect(mockExecute).toHaveBeenCalledOnce();
+  });
+
+  it("throws when db is unavailable", async () => {
+    (getDb as any).mockResolvedValueOnce(null);
+    const caller = appRouterV4.createCaller({ user: { id: "u1", name: "Manager" } } as any);
+    await expect(
+      caller.pullAlerts.markRecovered({ sessionId: "x" })
+    ).rejects.toThrow("Database unavailable");
+  });
+});

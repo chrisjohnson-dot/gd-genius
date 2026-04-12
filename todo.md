@@ -1414,3 +1414,23 @@
 - [x] Pull Alert Settings UI: add cooldown dropdown (1 min, 2 min, 5 min, 10 min, 15 min)
 - [x] LivePullBoard: pass cooldown setting from server to usePaceAlert
 - [x] Tests: cooldown logic unit tests
+
+## Behind Alert History Log
+- [x] DB: create pull_alert_history table (id, session_id, associate_name, warehouse_id, alerted_at, recovered_at, duration_behind_seconds, items_at_alert, items_per_hour_at_alert)
+- [x] Server: pullAlerts.recordBehindAlert mutation (called from frontend when alert fires)
+- [x] Server: pullAlerts.markRecovered mutation (called when session leaves Behind)
+- [x] Server: pullAlerts.listAlertHistory query (filters: warehouseId, associateId, dateFrom, dateTo, limit)
+- [x] Server: pullAlerts.alertHistoryStats query (total alerts, avg duration behind, top offenders)
+- [x] UI: AlertHistoryTab component in Pull Manager with filters, table, and stats cards
+- [x] UI: usePaceAlert calls recordBehindAlert on fire and markRecovered on recovery
+- [ ] Tests: recordBehindAlert, listAlertHistory, alertHistoryStats unit tests
+
+## Behind Alert History Log
+- [x] DB: create pull_alert_history table
+- [x] Server: pullAlerts.recordBehindAlert mutation
+- [x] Server: pullAlerts.markRecovered mutation
+- [x] Server: pullAlerts.listAlertHistory query
+- [x] Server: pullAlerts.alertHistoryStats query
+- [x] UI: AlertHistoryTab component in Pull Manager
+- [x] UI: usePaceAlert calls recordBehindAlert on fire and markRecovered on recovery
+- [x] Tests: alert history unit tests

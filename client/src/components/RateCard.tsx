@@ -312,6 +312,21 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
     return allFiltered.filter((r) => top3Ids.has(r.rateId));
   }, [allFiltered, showAllRates, recommendedRoute]);
 
+  // Derive the guide rate ID so the row renderer can badge it
+  const guideRateId = useMemo(() => {
+    if (!recommendedRoute) return null;
+    const byCode = (recommendedRoute as { serviceCode?: string }).serviceCode
+      ? allFiltered.find(r => r.serviceCode === (recommendedRoute as { serviceCode?: string }).serviceCode)
+      : null;
+    if (byCode) return byCode.rateId;
+    return (
+      allFiltered.find(r =>
+        r.carrierCode === recommendedRoute.carrierCode &&
+        r.service.toLowerCase().includes(recommendedRoute.serviceLevel.toLowerCase().split(" ")[0].toLowerCase())
+      ) ?? allFiltered.find(r => r.carrierCode === recommendedRoute.carrierCode)
+    )?.rateId ?? null;
+  }, [allFiltered, recommendedRoute]);
+
   const selectedRate = displayed.find((r) => r.rateId === selectedRateId) ?? null;
 
   function toggleSort(key: SortKey) {
@@ -581,6 +596,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
             <tbody>
               {displayed.map((rate) => {
                 const isSelected = rate.rateId === selectedRateId;
+                const isGuide = rate.rateId === guideRateId;
                 return (
                   <tr
                     key={rate.rateId}
@@ -682,6 +698,16 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
                               <Star className="w-3.5 h-3.5 text-blue-500 fill-blue-500" />
                             </TooltipTrigger>
                             <TooltipContent>Customer preferred carrier</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {isGuide && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 whitespace-nowrap">
+                                <Navigation className="w-2.5 h-2.5" /> Guide
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Routing guide recommendation</TooltipContent>
                           </Tooltip>
                         )}
                       </div>

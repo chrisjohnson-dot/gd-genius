@@ -43,6 +43,7 @@ import {
   ArrowRight,
   ClipboardCheck,
   Package,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -125,6 +126,366 @@ type Receiver = {
   }>;
 };
 
+// ─── Pallet Capture Sheet (embedded in Receiving Dashboard) ─────────────────
+
+type PalletCaptureStep = "capture" | "complete" | "done";
+
+function PalletCaptureSheet({
+  open,
+  onClose,
+  transactionId,
+  facilityId,
+  facilityName,
+  customerId,
+  customerName,
+  poNum,
+  referenceNum,
+}: {
+  open: boolean;
+  onClose: () => void;
+  transactionId: number;
+  facilityId: number;
+  facilityName: string;
+  customerId: number;
+  customerName: string;
+  poNum?: string;
+  referenceNum?: string;
+}) {
+  const utils = trpc.useUtils();
+  const [step, setStep] = useState<PalletCaptureStep>("capture");
+  const [sessionId, setSessionId] = useState<number | null>(null);
+
+  const { data: sessionData, refetch: refetchSession } = trpc.palletCapture.getSession.useQuery(
+    { sessionId: sessionId! },
+    { enabled: sessionId != null }
+  );
+
+  const startSession = trpc.palletCapture.startSession.useMutation({
+    onSuccess: (data) => {
+      setSessionId(data.sessionId);
+      setStep("capture");
+      if (data.resumed) {
+        toast.info("Resumed existing open session for this transaction.");
+      }
+    },
+    onError: (err) => {
+      toast.error("Failed to start session", { description: err.message });
+    },
+  });
+
+  const session = sessionData?.session;
+
+  // Auto-start session when sheet opens
+  const [autoStarted, setAutoStarted] = useState(false);
+  if (open && !autoStarted && !startSession.isPending && sessionId == null) {
+    setAutoStarted(true);
+    startSession.mutate({ transactionId, facilityId, facilityName, customerId, customerName, poNum, referenceNum });
+  }
+  if (!open && autoStarted) {
+    setAutoStarted(false);
+    setSessionId(null);
+    setStep("capture");
+  }
+
+  function handleClose() {
+    utils.palletCapture.listSessions.invalidate();
+    onClose();
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <SheetTitle className="flex items-center gap-2 text-base">
+                <Layers className="h-5 w-5 text-muted-foreground" />
+                Pallet Capture
+              </SheetTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                {referenceNum ? `Receipt — ${referenceNum}` : `TX #${transactionId}`}
+                {" · "}{facilityName || `Facility ${facilityId}`}
+              </p>
+            </div>
+            {sessionId && (
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
+                Session #{sessionId}
+              </span>
+            )}
+          </div>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Loading state while auto-starting */}
+          {(startSession.isPending || (sessionId == null && step === "capture")) && (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Starting pallet session…
+            </div>
+          )}
+
+          {/* Step indicator */}
+          {session && step !== "done" && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
+              {(["capture", "complete"] as PalletCaptureStep[]).map((s, i) => (
+                <div key={s} className="flex items-center gap-2">
+                  {i > 0 && <div className="h-px w-6 bg-border" />}
+                  <span className={cn(
+                    "flex items-center gap-1 px-2 py-0.5 rounded-full font-medium",
+                    step === s ? "bg-primary/10 text-primary" :
+                    ["capture", "complete"].indexOf(step) > i ? "text-green-400" : "text-muted-foreground"
+                  )}>
+                    {["capture", "complete"].indexOf(step) > i && <CheckCircle2 className="h-3 w-3" />}
+                    {s === "capture" && "Capture Pallets"}
+                    {s === "complete" && "Complete"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Inline pallet type buttons (capture step) */}
+          {step === "capture" && sessionId != null && session && (
+            <InlinePalletCapture
+              sessionId={sessionId}
+              session={{
+                totalPallets: session.totalPallets,
+                standardPallets: session.standardPallets,
+                oversizePallets: session.oversizePallets,
+                otherPallets: session.otherPallets,
+                transactionId: session.transactionId,
+                poNum: session.poNum,
+                referenceNum: session.referenceNum,
+                customerName: session.customerName,
+                facilityName: session.facilityName,
+              }}
+              onRefresh={() => refetchSession()}
+              onComplete={() => setStep("complete")}
+            />
+          )}
+
+          {/* Complete step */}
+          {step === "complete" && sessionId != null && session && (
+            <InlineCompleteSession
+              sessionId={sessionId}
+              session={{
+                totalPallets: session.totalPallets,
+                standardPallets: session.standardPallets,
+                oversizePallets: session.oversizePallets,
+                otherPallets: session.otherPallets,
+                transactionId: session.transactionId,
+                poNum: session.poNum,
+                customerName: session.customerName,
+                facilityName: session.facilityName,
+              }}
+              onDone={() => { refetchSession(); setStep("done"); }}
+              onBack={() => setStep("capture")}
+            />
+          )}
+
+          {/* Done step */}
+          {step === "done" && session && (
+            <div className="max-w-lg mx-auto text-center space-y-6 py-4">
+              <div className="space-y-2">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-2">
+                  <CheckCircle2 className="h-8 w-8 text-green-400" />
+                </div>
+                <h2 className="text-2xl font-bold">Session Complete</h2>
+                <p className="text-muted-foreground">
+                  {session.totalPallets} pallet{session.totalPallets !== 1 ? "s" : ""} captured for TX #{session.transactionId}.
+                </p>
+              </div>
+              <Button className="w-full" onClick={handleClose}>
+                Close &amp; Return to Receipt
+              </Button>
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ─── Inline Pallet Capture (used inside PalletCaptureSheet) ──────────────────
+
+type PalletType = "standard" | "oversize" | "other";
+
+const PALLET_TYPE_OPTIONS = [
+  { type: "standard" as PalletType, label: "Standard",  description: '48" × 40" GMA pallet',              color: "text-blue-400",   bg: "bg-blue-500/10 hover:bg-blue-500/20",     border: "border-blue-500/30 hover:border-blue-500/60" },
+  { type: "oversize" as PalletType, label: "Oversize",  description: "Larger than standard dimensions",    color: "text-amber-400",  bg: "bg-amber-500/10 hover:bg-amber-500/20",   border: "border-amber-500/30 hover:border-amber-500/60" },
+  { type: "other"    as PalletType, label: "Other",     description: "Slip sheet, floor load, non-standard", color: "text-purple-400", bg: "bg-purple-500/10 hover:bg-purple-500/20", border: "border-purple-500/30 hover:border-purple-500/60" },
+];
+
+function InlinePalletCapture({
+  sessionId, session, onRefresh, onComplete,
+}: {
+  sessionId: number;
+  session: { totalPallets: number; standardPallets: number; oversizePallets: number; otherPallets: number; transactionId: number; poNum?: string | null; referenceNum?: string | null; customerName: string; facilityName: string };
+  onRefresh: () => void;
+  onComplete: () => void;
+}) {
+  const [otherDescription, setOtherDescription] = useState("");
+  const [otherNotes, setOtherNotes] = useState("");
+  const [showOtherDialog, setShowOtherDialog] = useState(false);
+  const [lastAdded, setLastAdded] = useState<PalletType | null>(null);
+
+  const addPallet = trpc.palletCapture.addPallet.useMutation({
+    onSuccess: (data) => {
+      onRefresh();
+      const num = data.session?.totalPallets ?? session.totalPallets + 1;
+      toast.success(`Pallet #${num} captured`, { description: lastAdded ? `Type: ${lastAdded.charAt(0).toUpperCase() + lastAdded.slice(1)}` : undefined, duration: 2000 });
+    },
+    onError: (err) => toast.error("Failed to add pallet", { description: err.message }),
+  });
+
+  const undoPallet = trpc.palletCapture.undoLastPallet.useMutation({
+    onSuccess: (data) => { if (data.removed) { onRefresh(); toast.info("Last pallet removed"); } else { toast.warning("Nothing to undo"); } },
+    onError: (err) => toast.error("Undo failed", { description: err.message }),
+  });
+
+  function handleAdd(type: PalletType, description?: string, notes?: string) {
+    setLastAdded(type);
+    addPallet.mutate({ sessionId, palletType: type, description, notes });
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Count bar */}
+      <div className="flex items-center gap-4 flex-wrap text-sm">
+        <span className="font-semibold">{session.totalPallets} pallet{session.totalPallets !== 1 ? "s" : ""} captured</span>
+        <span className="text-blue-400">{session.standardPallets} standard</span>
+        <span className="text-amber-400">{session.oversizePallets} oversize</span>
+        <span className="text-purple-400">{session.otherPallets} other</span>
+      </div>
+
+      {/* Pallet type buttons */}
+      <div className="grid grid-cols-3 gap-3">
+        {PALLET_TYPE_OPTIONS.map((opt) => (
+          <button
+            key={opt.type}
+            disabled={addPallet.isPending}
+            onClick={() => {
+              if (opt.type === "other") { setShowOtherDialog(true); }
+              else { handleAdd(opt.type); }
+            }}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all cursor-pointer disabled:opacity-50",
+              opt.bg, opt.border
+            )}
+          >
+            <Package className={cn("h-7 w-7", opt.color)} />
+            <span className={cn("text-sm font-semibold", opt.color)}>{opt.label}</span>
+            <span className="text-[10px] text-muted-foreground text-center leading-tight">{opt.description}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Undo + Complete row */}
+      <div className="flex gap-3">
+        <Button variant="outline" className="flex-1 gap-1.5" disabled={undoPallet.isPending || session.totalPallets === 0} onClick={() => undoPallet.mutate({ sessionId })}>
+          {undoPallet.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+          Undo Last
+        </Button>
+        <Button className="flex-1 gap-1.5" onClick={onComplete}>
+          <CheckCircle2 className="h-4 w-4" />
+          Complete Session
+        </Button>
+      </div>
+
+      {/* Other pallet dialog */}
+      {showOtherDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowOtherDialog(false)}>
+          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-base">Other Pallet Type</h3>
+            <p className="text-sm text-muted-foreground">Describe the non-standard pallet type.</p>
+            <div className="space-y-2">
+              <label className="text-xs font-medium">Description <span className="text-destructive">*</span></label>
+              <input className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" placeholder="e.g. Slip sheet" value={otherDescription} onChange={(e) => setOtherDescription(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium">Notes (optional)</label>
+              <textarea className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm resize-none" rows={2} placeholder="Any additional notes…" value={otherNotes} onChange={(e) => setOtherNotes(e.target.value)} />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setShowOtherDialog(false)}>Cancel</Button>
+              <Button className="flex-1" disabled={!otherDescription.trim()} onClick={() => { handleAdd("other", otherDescription, otherNotes || undefined); setOtherDescription(""); setOtherNotes(""); setShowOtherDialog(false); }}>Add Pallet</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InlineCompleteSession({
+  sessionId, session, onDone, onBack,
+}: {
+  sessionId: number;
+  session: { totalPallets: number; standardPallets: number; oversizePallets: number; otherPallets: number; transactionId: number; poNum?: string | null; customerName: string; facilityName: string };
+  onDone: () => void;
+  onBack: () => void;
+}) {
+  const [hasNonConforming, setHasNonConforming] = useState(false);
+  const [hours, setHours] = useState("");
+  const [reason, setReason] = useState("");
+
+  const completeSession = trpc.palletCapture.completeSession.useMutation({
+    onSuccess: () => { toast.success("Session completed", { description: "Pallet data saved and queued for OpFi." }); onDone(); },
+    onError: (err) => toast.error("Failed to complete session", { description: err.message }),
+  });
+
+  const canComplete = !hasNonConforming || (hours.trim() !== "" && parseFloat(hours) > 0 && reason.trim() !== "");
+
+  return (
+    <div className="max-w-lg mx-auto space-y-5">
+      {/* Summary */}
+      <div className="grid grid-cols-4 gap-3 text-center">
+        {[
+          { label: "Total",    value: session.totalPallets,    color: "text-foreground" },
+          { label: "Standard", value: session.standardPallets, color: "text-blue-400" },
+          { label: "Oversize", value: session.oversizePallets, color: "text-amber-400" },
+          { label: "Other",    value: session.otherPallets,    color: "text-purple-400" },
+        ].map((s) => (
+          <div key={s.label} className="bg-muted/40 rounded-xl p-3">
+            <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
+            <p className="text-xs text-muted-foreground">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Non-conforming hours */}
+      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+        <p className="text-sm font-medium">Non-conforming hours required?</p>
+        <div className="flex gap-2">
+          <Button size="sm" variant={hasNonConforming ? "default" : "outline"} onClick={() => setHasNonConforming(true)}>Yes</Button>
+          <Button size="sm" variant={!hasNonConforming ? "default" : "outline"} onClick={() => { setHasNonConforming(false); setHours(""); setReason(""); }}>No</Button>
+        </div>
+        {hasNonConforming && (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Hours <span className="text-destructive">*</span></label>
+              <input type="number" min="0.5" max="24" step="0.5" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" placeholder="e.g. 2.5" value={hours} onChange={(e) => setHours(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Reason <span className="text-destructive">*</span></label>
+              <textarea rows={3} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm resize-none" placeholder="Explain why non-conforming hours were needed…" value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        <Button variant="outline" className="flex-1" onClick={onBack}>
+          <ChevronDown className="h-4 w-4 mr-1.5 rotate-90" /> Back
+        </Button>
+        <Button className="flex-1" disabled={!canComplete || completeSession.isPending} onClick={() => completeSession.mutate({ sessionId, nonConformingHours: hasNonConforming ? parseFloat(hours) : null, nonConformingReason: hasNonConforming ? reason : null })}>
+          {completeSession.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+          Complete &amp; Push to OpFi
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Detail Slide-over ────────────────────────────────────────────────────
 
 function ReceiverDetailSheet({
@@ -140,6 +501,7 @@ function ReceiverDetailSheet({
 }) {
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
+  const [palletCaptureOpen, setPalletCaptureOpen] = useState(false);
 
   const { data, isLoading } = trpc.receiving.detail.useQuery(
     { configId, transactionId: receiver?.readOnly.transactionId ?? 0 },
@@ -208,6 +570,7 @@ function ReceiverDetailSheet({
   const canComplete = isInProgress;
   const canPutAway = detail?.readOnly.status === 0 || detail?.readOnly.status === 1;
   const canConfirmItems = isInProgress; // Confirm items only when In Progress
+  const canPalletCapture = detail?.readOnly.status === 0 || detail?.readOnly.status === 1;
 
   function handleConfirmItems() {
     if (!receiver || !detail) return;
@@ -236,6 +599,7 @@ function ReceiverDetailSheet({
   }
 
   return (
+    <>
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
         {/* Header */}
@@ -371,7 +735,7 @@ function ReceiverDetailSheet({
         </div>
 
         {/* Footer — action buttons */}
-        {detail && (canStart || canComplete || canPutAway || canConfirmItems) && (
+        {detail && (canStart || canComplete || canPutAway || canConfirmItems || canPalletCapture) && (
           <div className="px-6 py-4 border-t border-border bg-card space-y-2">
             {canStart && (
               <Button
@@ -420,10 +784,36 @@ function ReceiverDetailSheet({
                 Put Away Items
               </Button>
             )}
+            {canPalletCapture && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 h-10 text-sm font-semibold"
+                onClick={() => setPalletCaptureOpen(true)}
+              >
+                <Layers className="h-4 w-4" />
+                Pallet Capture
+              </Button>
+            )}
           </div>
         )}
       </SheetContent>
     </Sheet>
+
+    {/* Pallet Capture Sheet — opens on top of the detail sheet */}
+    {detail && (
+      <PalletCaptureSheet
+        open={palletCaptureOpen}
+        onClose={() => setPalletCaptureOpen(false)}
+        transactionId={detail.readOnly.transactionId}
+        facilityId={detail.readOnly.facilityIdentifier.id}
+        facilityName={detail.readOnly.facilityIdentifier.name ?? ""}
+        customerId={detail.readOnly.customerIdentifier.id}
+        customerName={detail.readOnly.customerIdentifier.name ?? ""}
+        poNum={detail.poNum ?? undefined}
+        referenceNum={detail.referenceNum ?? undefined}
+      />
+    )}
+    </>
   );
 }
 

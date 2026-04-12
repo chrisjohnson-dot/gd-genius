@@ -69,7 +69,6 @@ const dashboardItems = [
 
 const receivingItems = [
   { href: "/receiving",                label: "Receiving Dashboard", icon: Inbox },
-  { href: "/receiving/pallet-capture", label: "Pallet Capture",      icon: Package },
   { href: "/receiving/put-away",       label: "Run Put Away Wizard", icon: ConciergeBell },
   { href: "/receiving/put-away/list",  label: "Put Away List",       icon: ClipboardList },
 ];

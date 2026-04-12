@@ -1616,6 +1616,42 @@ function Step4PackShip({
           Pack &amp; Ship — Print Label
         </Button>
       )}
+
+      {/* Persistent reprint button — shown after countdown expires so ops can reprint at any time */}
+      {labelPurchased && countdown === null && lastZpl && (
+        <div className="flex flex-col gap-2 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3 bg-green-50 dark:bg-green-900/20">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+            <span className="text-sm font-medium text-green-800 dark:text-green-300">
+              Label purchased — {purchaseMutation.data?.trackingNumber}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReprint}
+              disabled={reprinting || printStatus === "printing"}
+              className="gap-2 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
+            >
+              {reprinting || printStatus === "printing" ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Printer className="w-3.5 h-3.5" />
+              )}
+              Reprint Label (DUPLICATE)
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onReset}
+              className="gap-2 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
+            >
+              Next Order
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

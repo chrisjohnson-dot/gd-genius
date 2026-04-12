@@ -134,7 +134,6 @@ const configItems = [
   { href: "/receiving/put-away/priority", label: "Put Away Config",        icon: ConciergeBell },
   { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
   { href: "/shipping-integration",        label: "Shipping Integration",   icon: Truck },
-  { href: "/config/wh-location",          label: "WH Location Config",     icon: MapPin },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

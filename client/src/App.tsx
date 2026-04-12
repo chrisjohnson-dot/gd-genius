@@ -10,7 +10,7 @@ import AppLayout from "./components/AppLayout";
 import { CommandPalette } from "./components/CommandPalette";
 import Home from "./pages/Home";
 import ApiSettingsDiagnostics from "./pages/ApiSettingsDiagnostics";
-import LocationConfig from "./pages/LocationConfig";
+import LocationConfigCombined from "./pages/LocationConfigCombined";
 import OrderSelection from "./pages/OrderSelection";
 import AllocationReview from "./pages/AllocationReview";
 import RunHistory from "./pages/RunHistory";
@@ -64,7 +64,7 @@ import SmallParcelSupervisorPins from "@/pages/SmallParcelSupervisorPins";
 import SmallParcelHighValueSkus from "@/pages/SmallParcelHighValueSkus";
 import SmallParcelSettings from "@/pages/SmallParcelSettings";
 import PackagingInventory from "@/pages/PackagingInventory";
-import WhLocationConfig from "@/pages/WhLocationConfig";
+
 import RateWizard from "@/pages/RateWizard";
 import CustomerShippingRules from "@/pages/CustomerShippingRules";
 import LiveOpsView from "@/pages/LiveOpsView";
@@ -92,7 +92,7 @@ function AppRoutes() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/settings" component={ApiSettingsDiagnostics} />
-        <Route path="/locations" component={LocationConfig} />
+        <Route path="/locations" component={LocationConfigCombined} />
         <Route path="/rules" component={AllocationRules} />
         <Route path="/allocate" component={OrderSelection} />
         <Route path="/review/:runId" component={AllocationReview} />
@@ -131,7 +131,7 @@ function AppRoutes() {
         <Route path="/qc/scan-label" component={QcScanLabel} />
         <Route path="/qc/label-files" component={LabelFiles} />
         <Route path="/config/label-scan" component={LabelScanSettings} />
-        <Route path="/config/wh-location" component={WhLocationConfig} />
+        <Route path="/config/wh-location">{() => { window.location.replace("/locations"); return null; }}</Route>
         <Route path="/config/customer-apps" component={CustomerAppConfig} />
         <Route path="/qc/production-line" component={ProductionLine} />
         <Route path="/qc/qr-scan-history" component={QrScanHistory} />

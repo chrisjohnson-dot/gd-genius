@@ -568,6 +568,14 @@ function ReceiverDetailSheet({
   const canStart = detail?.readOnly.status === 0; // Expected → can start
   const isInProgress = detail?.readOnly.status === 1; // In Progress → can complete
   const canComplete = isInProgress;
+
+  // Fetch pallet session count for this specific transaction
+  const txId = receiver?.readOnly.transactionId ?? 0;
+  const { data: palletCountsMap } = trpc.palletCapture.batchSessionCounts.useQuery(
+    { transactionIds: [txId] },
+    { enabled: txId > 0, staleTime: 15_000, refetchInterval: 30_000 }
+  );
+  const palletInfo = txId > 0 ? palletCountsMap?.[txId] : undefined;
   const canPutAway = detail?.readOnly.status === 0 || detail?.readOnly.status === 1;
   const canConfirmItems = isInProgress; // Confirm items only when In Progress
   const canPalletCapture = detail?.readOnly.status === 0 || detail?.readOnly.status === 1;
@@ -618,7 +626,21 @@ function ReceiverDetailSheet({
                 </p>
               )}
             </div>
-            {detail && <StatusBadge status={detail.readOnly.status} />}
+            <div className="flex items-center gap-2 shrink-0">
+              {palletInfo && palletInfo.totalPallets > 0 && (
+                <span className={cn(
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border",
+                  palletInfo.status === "completed"
+                    ? "bg-green-500/10 text-green-400 border-green-500/20"
+                    : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                )}>
+                  <Layers className="h-3 w-3" />
+                  {palletInfo.totalPallets} pallet{palletInfo.totalPallets !== 1 ? "s" : ""}
+                  {palletInfo.status === "completed" && <span className="ml-0.5 opacity-70">✓</span>}
+                </span>
+              )}
+              {detail && <StatusBadge status={detail.readOnly.status} />}
+            </div>
           </div>
         </SheetHeader>
 

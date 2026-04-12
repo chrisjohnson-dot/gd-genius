@@ -1443,3 +1443,4 @@
 - [x] Workload Planning sidebar: tooltip on red dot listing critical warehouse names
 - [x] Remove Pallet Capture standalone sidebar nav item; launch from Receiving Dashboard receipt detail sheet
 - [x] Receiving Dashboard: pallet count badge on each receipt row
+- [x] Receiving Dashboard: pallet count badge in ReceiverDetailSheet header

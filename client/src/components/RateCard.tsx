@@ -273,6 +273,10 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
     if (forceOneRate) list = list.filter((r) => r.serviceCode?.includes("ONE_RATE"));
     if (!forceOneRate && filterCarrier !== "all") list = list.filter((r) => r.carrierCode === filterCarrier);
     if (!forceOneRate && filterMaxDays !== "all") list = list.filter((r) => r.transitDays <= parseInt(filterMaxDays));
+    // Always sort by cost ascending first to identify the 3 cheapest, then re-sort by user preference
+    const byCost = [...list].sort((a, b) => a.totalCost - b.totalCost);
+    const top3Ids = new Set(byCost.slice(0, 3).map((r) => r.rateId));
+    list = list.filter((r) => top3Ids.has(r.rateId));
     list.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "cost") cmp = a.totalCost - b.totalCost;

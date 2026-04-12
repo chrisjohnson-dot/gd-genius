@@ -317,20 +317,27 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
  * Automatically uses the correct packagingType for One Rate services.
  */
 export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLabelResult> {
-  const clientId = process.env.FEDEX_USER_KEY;
-  const clientSecret = process.env.FEDEX_PASSWORD;
-  const accountNumber = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
+  const serviceCode = input.serviceCode ?? "FEDEX_GROUND";
+  const isOneRate = FEDEX_ONE_RATE_SERVICE_CODES.has(serviceCode);
+
+  // Use dedicated One Rate credentials when available and the service is One Rate
+  const stdClientId = process.env.FEDEX_USER_KEY;
+  const stdClientSecret = process.env.FEDEX_PASSWORD;
+  const stdAccountNumber = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
+
+  const clientId = (isOneRate && process.env.FEDEX_ONE_RATE_USER_KEY) ? process.env.FEDEX_ONE_RATE_USER_KEY : stdClientId;
+  const clientSecret = (isOneRate && process.env.FEDEX_ONE_RATE_PASSWORD) ? process.env.FEDEX_ONE_RATE_PASSWORD : stdClientSecret;
+  const accountNumber = (isOneRate && process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER) ? process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER : stdAccountNumber;
 
   if (!clientId || !clientSecret || !accountNumber) {
     return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: "", error: "FedEx REST credentials not configured (FEDEX_USER_KEY, FEDEX_PASSWORD, FEDEX_ACCOUNT_NUMBER required)" };
   }
 
+  console.log(`[FedEx] buyFedExLabel: service=${serviceCode} isOneRate=${isOneRate} account=${accountNumber} clientId=${clientId?.slice(0,8)}...`);
+
   // One Rate services require a FedEx-supplied box packaging type.
   // Default to FEDEX_SMALL_BOX for One Rate; use YOUR_PACKAGING for standard services.
-  const serviceCode = input.serviceCode ?? "FEDEX_GROUND";
-  const packagingType = FEDEX_ONE_RATE_SERVICE_CODES.has(serviceCode)
-    ? "FEDEX_SMALL_BOX"
-    : "YOUR_PACKAGING";
+  const packagingType = isOneRate ? "FEDEX_SMALL_BOX" : "YOUR_PACKAGING";
 
   try {
     const token = await getAccessToken(clientId, clientSecret);

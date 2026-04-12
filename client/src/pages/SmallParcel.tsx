@@ -80,6 +80,7 @@ interface OrderData {
   facilityName: string;
   status: number;
   isClosed: boolean;
+  totalWeight?: number | null;
   shipTo: {
     companyName?: string;
     name?: string;
@@ -1125,6 +1126,8 @@ function Step4PackShip({
   onReset: () => void;
   onBack?: () => void;
 }) {
+  // Pre-populate weight from Extensiv order totalWeight (lbs) if available
+  const orderWeightLbs = order.totalWeight ? parseFloat(order.totalWeight.toFixed(2)) : null;
   const [weight, setWeight] = useState("");
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
@@ -1156,12 +1159,32 @@ function Step4PackShip({
   const [rateConfirmed, setRateConfirmed] = useState(false);
   const [confirmedRate, setConfirmedRate] = useState<RateRow | null>(null);
 
+  // ── One Rate >1 lb PIN gate ────────────────────────────────────────────────
+  const [oneRatePinOpen, setOneRatePinOpen] = useState(false);
+  const [oneRatePinInput, setOneRatePinInput] = useState("");
+  const [oneRatePinError, setOneRatePinError] = useState("");
+  const [oneRatePinVerifying, setOneRatePinVerifying] = useState(false);
+  const [oneRatePinApproved, setOneRatePinApproved] = useState(false);
+  const verifySupervisorPinMutation = trpc.smallParcel.verifySupervisorPin.useMutation();
+
   // Compute Rate Wizard input from dimensions (convert cm/kg → in/lbs)
   // Prefer manually entered values; fall back to selected package size defaults
   const weightLbs = (() => {
-    const w = weight ? parseFloat(weight) : selectedSize?.weightKg ? parseFloat(selectedSize.weightKg) : 0;
-    return parseFloat((w * 2.20462).toFixed(2));
+    // Priority: manually entered → package size default → Extensiv order weight
+    if (weight) return parseFloat((parseFloat(weight) * 2.20462).toFixed(2));
+    if (selectedSize?.weightKg) return parseFloat((parseFloat(selectedSize.weightKg) * 2.20462).toFixed(2));
+    if (orderWeightLbs && orderWeightLbs > 0) return orderWeightLbs;
+    return 0;
   })();
+
+  // Detect if selected rate is a FedEx One Rate service
+  const isOneRateSelected = !!(confirmedRate?.serviceCode?.includes("ONE_RATE") || confirmedRate?.service?.toLowerCase().includes("one rate"));
+  // Autobagger mode always uses One Rate
+  const isAutobaggerMode = !!(selectedSizeName?.toLowerCase().includes("autobag") || selectedSizeName?.toLowerCase().includes("autobagger"));
+  const forceOneRate = isAutobaggerMode;
+  // Flag: One Rate selected AND weight > 1 lb AND not yet approved by supervisor
+  const oneRateWeightViolation = (isOneRateSelected || forceOneRate) && weightLbs > 1 && !oneRatePinApproved;
+
   const lengthIn = (() => {
     const l = length ? parseFloat(length) : selectedSize?.lengthCm ? parseFloat(selectedSize.lengthCm) : 0;
     return parseFloat((l / 2.54).toFixed(2));
@@ -1245,8 +1268,30 @@ function Step4PackShip({
     },
   });
 
-  const handlePackShip = async () => {
-    // Save dimensions first if provided
+  const handleOneRatePinSubmit = async () => {
+    if (!oneRatePinInput.trim()) return;
+    setOneRatePinVerifying(true);
+    setOneRatePinError("");
+    try {
+      const result = await verifySupervisorPinMutation.mutateAsync({ pin: oneRatePinInput.trim() });
+      if (result.valid) {
+        setOneRatePinApproved(true);
+        setOneRatePinOpen(false);
+        setOneRatePinInput("");
+        toast.success("Supervisor override approved", { description: `Authorized by ${result.supervisorName ?? "supervisor"}` });
+        // Proceed with purchase immediately after approval
+        await handlePackShipCore();
+      } else {
+        setOneRatePinError("Invalid PIN. Please try again.");
+      }
+    } catch {
+      setOneRatePinError("PIN verification failed. Try again.");
+    } finally {
+      setOneRatePinVerifying(false);
+    }
+  };
+
+  const handlePackShipCore = async () => {
     if (weight || length || width || height) {
       await updateDimsMutation.mutateAsync({
         id: sessionId,
@@ -1257,6 +1302,15 @@ function Step4PackShip({
       });
     }
     purchaseMutation.mutate({ id: sessionId });
+  };
+
+  const handlePackShip = async () => {
+    // Block if One Rate + weight > 1 lb and no supervisor approval yet
+    if (oneRateWeightViolation) {
+      setOneRatePinOpen(true);
+      return;
+    }
+    await handlePackShipCore();
   };
 
   const isLoading = updateDimsMutation.status === "pending" || purchaseMutation.status === "pending";
@@ -1364,9 +1418,12 @@ function Step4PackShip({
           <CardContent className="pt-0">
             <RateCard
               input={rateCardInput}
+              forceOneRate={forceOneRate}
               onConfirm={(rate) => {
                 setConfirmedRate(rate);
                 setRateConfirmed(true);
+                // Reset PIN approval if rate changes
+                setOneRatePinApproved(false);
               }}
               onSkip={() => setRateConfirmed(true)}
             />
@@ -1481,6 +1538,58 @@ function Step4PackShip({
           </div>
         </div>
       )}
+
+      {/* One Rate >1 lb weight alert */}
+      {oneRateWeightViolation && (
+        <div className="flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg px-4 py-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+          <div className="text-sm flex-1">
+            <p className="font-bold text-red-800 dark:text-red-300">⚠ FedEx One Rate — Weight Exceeds 1 lb</p>
+            <p className="text-red-700 dark:text-red-400 mt-0.5">
+              This package weighs <strong>{weightLbs.toFixed(2)} lb</strong>. FedEx One Rate is only valid for packages ≤ 1 lb.
+              A supervisor PIN is required to proceed.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* One Rate >1 lb supervisor PIN dialog */}
+      <Dialog open={oneRatePinOpen} onOpenChange={(o) => { setOneRatePinOpen(o); if (!o) { setOneRatePinInput(""); setOneRatePinError(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
+              <AlertTriangle className="w-5 h-5" />
+              Supervisor Override Required
+            </DialogTitle>
+            <DialogDescription>
+              Package weight ({weightLbs.toFixed(2)} lb) exceeds the 1 lb FedEx One Rate limit.
+              Enter a supervisor PIN to allow this shipment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            <Input
+              type="password"
+              placeholder="Supervisor PIN"
+              value={oneRatePinInput}
+              onChange={(e) => { setOneRatePinInput(e.target.value); setOneRatePinError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") handleOneRatePinSubmit(); }}
+              autoFocus
+              className={oneRatePinError ? "border-red-500" : ""}
+            />
+            {oneRatePinError && <p className="text-xs text-red-600">{oneRatePinError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOneRatePinOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleOneRatePinSubmit}
+              disabled={oneRatePinVerifying || !oneRatePinInput.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {oneRatePinVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Authorize & Ship"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {!labelPurchased && (
         <Button

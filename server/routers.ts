@@ -6679,6 +6679,7 @@ const smallParcelRouter = router({
         status: o.readOnly.status,
         isClosed: o.readOnly.isClosed,
         shipTo: o.shipTo ?? null,
+        totalWeight: (o.readOnly as { totalWeight?: number | null })?.totalWeight ?? null,
         orderItems: (o.orderItems ?? []).map((item) => ({
           sku: item.itemIdentifier.sku,
           qty: item.qty,
@@ -6686,8 +6687,7 @@ const smallParcelRouter = router({
         })),
       };
     }),
-
-  /** Create a new small parcel session (after pick ticket scan & order confirmation) */
+  /** Create a new small parcel sessionn (after pick ticket scan & order confirmation) */
   createSession: protectedProcedure
     .input(z.object({
       configId: z.number(),

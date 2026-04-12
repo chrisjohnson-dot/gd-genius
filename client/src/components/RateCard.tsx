@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Zap, DollarSign, Clock, Star, AlertTriangle, CheckCircle2,
   RefreshCw, ChevronUp, ChevronDown, Loader2, Info, Package,
-  Truck, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert, Navigation,
+  Truck, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert, Navigation, PackageCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -83,9 +83,11 @@ interface RateCardProps {
   onConfirm?: (rate: RateRow) => void;
   onSkip?: () => void;
   compact?: boolean;
+  /** When true, auto-select the cheapest FedEx One Rate service and hide non-One-Rate options */
+  forceOneRate?: boolean;
 }
 
-export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCardProps) {
+export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRate = false }: RateCardProps) {
   const [selectedRateId, setSelectedRateId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("cost");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -142,6 +144,15 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
   // Auto-select: routing guide takes priority over SLA-based auto-select
   useEffect(() => {
     if (!ratesQuery.data || selectedRateId) return;
+    // forceOneRate mode: auto-select cheapest One Rate service
+    if (forceOneRate) {
+      const oneRates = rates.filter(r => r.serviceCode?.includes("ONE_RATE"));
+      if (oneRates.length > 0) {
+        const cheapest = oneRates.reduce((a, b) => a.totalCost <= b.totalCost ? a : b);
+        setSelectedRateId(cheapest.rateId);
+      }
+      return;
+    }
     if (recommendedRoute && rates.length > 0) {
       // 1. Exact serviceCode match (most reliable — e.g. FEDEX_2_DAY_ONE_RATE)
       const byCode = (recommendedRoute as { serviceCode?: string }).serviceCode
@@ -163,7 +174,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
       setSelectedRateId(cheapest.rateId);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSelectedRateId, recommendedRoute, ratesQuery.data]);
+  }, [autoSelectedRateId, recommendedRoute, ratesQuery.data, forceOneRate]);
 
   // When the transit filter changes, clear the selection so the user picks from the new filtered list
   useEffect(() => {
@@ -211,8 +222,10 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
   // Filter + sort
   const displayed = useMemo(() => {
     let list = [...rates];
-    if (filterCarrier !== "all") list = list.filter((r) => r.carrierCode === filterCarrier);
-    if (filterMaxDays !== "all") list = list.filter((r) => r.transitDays <= parseInt(filterMaxDays));
+    // When autobagger / forceOneRate mode is active, show only FedEx One Rate services
+    if (forceOneRate) list = list.filter((r) => r.serviceCode?.includes("ONE_RATE"));
+    if (!forceOneRate && filterCarrier !== "all") list = list.filter((r) => r.carrierCode === filterCarrier);
+    if (!forceOneRate && filterMaxDays !== "all") list = list.filter((r) => r.transitDays <= parseInt(filterMaxDays));
     list.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "cost") cmp = a.totalCost - b.totalCost;
@@ -221,7 +234,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
       return sortDir === "asc" ? cmp : -cmp;
     });
     return list;
-  }, [rates, filterCarrier, filterMaxDays, sortKey, sortDir]);
+  }, [rates, filterCarrier, filterMaxDays, sortKey, sortDir, forceOneRate]);
 
   const selectedRate = displayed.find((r) => r.rateId === selectedRateId) ?? null;
 
@@ -399,8 +412,18 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
           </div>
         )}
 
+        {/* Autobagger One Rate mode banner */}
+        {forceOneRate && (
+          <div className="flex items-center gap-2 text-purple-800 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-xs">
+            <PackageCheck className="w-3.5 h-3.5 shrink-0 text-purple-600" />
+            <span>
+              <strong>Autobagger mode</strong> — showing FedEx One Rate services only. Cheapest option auto-selected.
+            </span>
+          </div>
+        )}
+
         {/* Filters row */}
-        {!compact && (
+        {!compact && !forceOneRate && (
           <div className="flex flex-wrap items-center gap-2">
             <Select value={filterCarrier} onValueChange={setFilterCarrier}>
               <SelectTrigger className="h-7 text-xs w-36">

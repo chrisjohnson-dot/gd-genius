@@ -1455,3 +1455,6 @@
 - [x] Merge Location Config and WH Location Config into one tabbed page
 - [x] SmallParcel Pack & Ship: remove optional Package Dimensions card
 - [x] RateCard: hide dim weight warning for One Rate services; fix default dims causing false 4.7lb dim weight
+- [x] SmallParcel: auto-select FedEx One Rate when autobagger size selected
+- [ ] SmallParcel: block Pack & Ship with supervisor PIN alert if One Rate selected and weight > 1 lb
+- [x] SmallParcel: pull Extensiv order weight as default weight for rate calculations

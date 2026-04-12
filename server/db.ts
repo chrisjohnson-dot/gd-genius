@@ -4089,8 +4089,17 @@ export async function createRateWizardShipment(data: InsertRateWizardShipment): 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(rateWizardShipments).values(data);
-  const insertId = (result as unknown as { insertId: number }).insertId;
+  // Drizzle MySQL2 may return [ResultSetHeader, ...] or a plain ResultSetHeader
+  const raw = result as unknown as Record<string, unknown>;
+  const insertId: number =
+    Array.isArray(raw) && typeof (raw[0] as Record<string, unknown>)?.insertId === "number"
+      ? (raw[0] as Record<string, unknown>).insertId as number
+      : typeof raw.insertId === "number"
+        ? raw.insertId as number
+        : 0;
+  if (!insertId) throw new Error(`createRateWizardShipment: could not get insertId from result: ${JSON.stringify(raw)}`);
   const [row] = await db.select().from(rateWizardShipments).where(eq(rateWizardShipments.id, insertId));
+  if (!row) throw new Error(`createRateWizardShipment: row not found after insert (insertId=${insertId})`);
   return row;
 }
 

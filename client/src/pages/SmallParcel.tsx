@@ -1592,11 +1592,21 @@ function Step4PackShip({
         </DialogContent>
       </Dialog>
 
+      {/* Rate Wizard gate: show a prompt instead of the button when a rate hasn't been confirmed yet */}
+      {!labelPurchased && activeSmallParcelIntegration === "rate_wizard" && rateWizardAvailable && !rateConfirmed && (
+        <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
+          <Truck className="w-5 h-5 text-amber-600 shrink-0" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            <strong>Select a carrier rate above</strong> before purchasing the label.
+          </p>
+        </div>
+      )}
+
       {!labelPurchased && (
         <Button
           onClick={handlePackShip}
-          disabled={isLoading || printStatus === "printing"}
-          className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700"
+          disabled={isLoading || printStatus === "printing" || (activeSmallParcelIntegration === "rate_wizard" && rateWizardAvailable && !rateConfirmed)}
+          className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading || printStatus === "printing" ? (
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />

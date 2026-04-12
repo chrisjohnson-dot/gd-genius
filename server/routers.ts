@@ -210,7 +210,7 @@ import {
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
-import { purchaseOrders, carrierRoutingTable } from "../drizzle/schema";
+import { purchaseOrders, carrierRoutingTable, receivePalletSessions } from "../drizzle/schema";
 import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, voidFedExLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
@@ -5563,6 +5563,34 @@ const palletCaptureRouter = router({
       const removed = await removeLastPallet(input.sessionId);
       const session = await getPalletSession(input.sessionId);
       return { removed, session };
+    }),
+
+  /** Batch-fetch pallet session counts for a list of transaction IDs. */
+  batchSessionCounts: protectedProcedure
+    .input(z.object({ transactionIds: z.array(z.number()).max(500) }))
+    .query(async ({ input }) => {
+      if (input.transactionIds.length === 0) return {};
+      const db = await getDb();
+      if (!db) return {};
+      const { inArray } = await import("drizzle-orm");
+      const rows = await db
+        .select({
+          transactionId: receivePalletSessions.transactionId,
+          totalPallets: receivePalletSessions.totalPallets,
+          status: receivePalletSessions.status,
+        })
+        .from(receivePalletSessions)
+        .where(inArray(receivePalletSessions.transactionId, input.transactionIds));
+      // Build a map: transactionId → { totalPallets, status }
+      // If multiple sessions exist for one transaction, pick the most recent (highest id)
+      const map: Record<number, { totalPallets: number; status: string }> = {};
+      for (const row of rows) {
+        const existing = map[row.transactionId];
+        if (!existing || row.totalPallets > existing.totalPallets) {
+          map[row.transactionId] = { totalPallets: row.totalPallets, status: row.status };
+        }
+      }
+      return map;
     }),
 
   /** Complete a session and trigger OpFi push. */

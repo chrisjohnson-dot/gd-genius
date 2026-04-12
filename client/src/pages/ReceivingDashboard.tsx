@@ -825,12 +825,14 @@ function ClientGroup({
   facilityId,
   receivers,
   onSelect,
+  palletCounts,
 }: {
   clientName: string;
   clientId: number;
   facilityId: number;
   receivers: Receiver[];
   onSelect: (r: Receiver) => void;
+  palletCounts?: Record<number, { totalPallets: number; status: string }>;
 }) {
   const storageKey = `receiving-client-expanded-${facilityId}-${clientId}`;
   const [expanded, setExpandedRaw] = useState<boolean>(() => {
@@ -938,9 +940,24 @@ function ClientGroup({
                   </div>
                 </div>
 
-                {/* Status + arrow */}
+                {/* Status + pallet badge + arrow */}
                 <div className="flex items-center gap-2 shrink-0">
                   <StatusBadge status={r.readOnly.status} />
+                  {(() => {
+                    const pc = palletCounts?.[r.readOnly.transactionId];
+                    if (!pc || pc.totalPallets === 0) return null;
+                    return (
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border",
+                        pc.status === "completed"
+                          ? "bg-green-500/10 text-green-400 border-green-500/20"
+                          : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                      )}>
+                        <Layers className="h-2.5 w-2.5" />
+                        {pc.totalPallets} pallet{pc.totalPallets !== 1 ? "s" : ""}
+                      </span>
+                    );
+                  })()}
                   <span className="text-muted-foreground group-hover:text-foreground transition-colors text-xs">View →</span>
                 </div>
               </button>
@@ -959,11 +976,13 @@ function WarehouseCard({
   facilityId,
   receivers,
   onSelect,
+  palletCounts,
 }: {
   facilityName: string;
   facilityId: number;
   receivers: Receiver[];
   onSelect: (r: Receiver) => void;
+  palletCounts?: Record<number, { totalPallets: number; status: string }>;
 }) {
   // Persist expanded state per facility in localStorage
   const storageKey = `receiving-warehouse-expanded-${facilityId}`;
@@ -1085,6 +1104,7 @@ function WarehouseCard({
                   facilityId={facilityId}
                   receivers={cg.receivers}
                   onSelect={onSelect}
+                  palletCounts={palletCounts}
                 />
               ))}
             </div>
@@ -1162,6 +1182,17 @@ export default function ReceivingDashboard() {
       a.facilityName.localeCompare(b.facilityName)
     );
   }, [displayReceivers]);
+
+  // Batch-fetch pallet session counts for all visible receipts
+  const allTransactionIds = useMemo(
+    () => allReceivers.map((r) => r.readOnly.transactionId),
+    [allReceivers]
+  );
+  const { data: palletCountsRaw } = trpc.palletCapture.batchSessionCounts.useQuery(
+    { transactionIds: allTransactionIds },
+    { enabled: allTransactionIds.length > 0, staleTime: 30_000, refetchInterval: 60_000 }
+  );
+  const palletCounts: Record<number, { totalPallets: number; status: string }> = palletCountsRaw ?? {};
 
   // KPI summary from all open receipts
   const openCount = allReceivers.filter((r) => r.readOnly.status === 0).length;
@@ -1285,6 +1316,7 @@ export default function ReceivingDashboard() {
                   facilityId={group.facilityId}
                   receivers={group.receivers}
                   onSelect={setSelectedReceiver}
+                  palletCounts={palletCounts}
                 />
               ))}
             </div>

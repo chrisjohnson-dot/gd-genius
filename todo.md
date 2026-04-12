@@ -1442,3 +1442,4 @@
 - [x] Workload Planning detail: 7-day average rate reference line on items/hr trend chart
 - [x] Workload Planning sidebar: tooltip on red dot listing critical warehouse names
 - [x] Remove Pallet Capture standalone sidebar nav item; launch from Receiving Dashboard receipt detail sheet
+- [x] Receiving Dashboard: pallet count badge on each receipt row

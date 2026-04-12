@@ -627,13 +627,15 @@ export function RateCard({ input, onConfirm, onSkip, compact = false }: RateCard
           </div>
         </div>
 
-        {/* Dim weight notice */}
+        {/* Dim weight notice — only shown for non-One-Rate services */}
         {!compact && (() => {
           const dw = (input.lengthIn * input.widthIn * input.heightIn) / 139;
-          return dw > input.weightLbs ? (
+          // One Rate is flat-rate pricing — dim weight is irrelevant; suppress the notice
+          const isOneRate = selectedRate?.serviceCode?.includes("ONE_RATE") ?? false;
+          return dw > input.weightLbs && !isOneRate ? (
             <p className="text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1">
               <Clock className="w-3 h-3 inline mr-1" />
-              Dim weight ({dw.toFixed(1)} lb) exceeds actual weight ({input.weightLbs} lb) — rates calculated on dim weight.
+              Dim weight ({dw.toFixed(1)} lb) exceeds actual weight ({input.weightLbs} lb) — rates calculated on dim weight. One Rate services are unaffected.
             </p>
           ) : null;
         })()}

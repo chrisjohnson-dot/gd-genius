@@ -1453,3 +1453,5 @@
 - [x] Sidebar/Cortex: move Supervisor PINs into Cortex Hub tab; remove from Configuration
 - [x] Consolidate API Settings and API Diagnostics into one menu item with two tabs
 - [x] Merge Location Config and WH Location Config into one tabbed page
+- [x] SmallParcel Pack & Ship: remove optional Package Dimensions card
+- [x] RateCard: hide dim weight warning for One Rate services; fix default dims causing false 4.7lb dim weight

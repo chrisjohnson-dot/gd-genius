@@ -1345,59 +1345,7 @@ function Step4PackShip({
         </Card>
       )}
 
-      {/* Package dimensions */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Package Dimensions (optional)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Weight (kg)</label>
-              <Input
-                type="number"
-                placeholder="0.00"
-                value={weight}
-                onChange={(e) => { setWeight(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Length (cm)</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={length}
-                onChange={(e) => { setLength(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
-                min="0"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Width (cm)</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={width}
-                onChange={(e) => { setWidth(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
-                min="0"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Height (cm)</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={height}
-                onChange={(e) => { setHeight(e.target.value); setRateConfirmed(false); setConfirmedRate(null); }}
-                min="0"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Package dimensions removed — dimensions come from the selected package size only */}
 
       {/* ── Rate Wizard rate card ─────────────────────────────────────────── */}
       {rateWizardAvailable && !rateConfirmed && (

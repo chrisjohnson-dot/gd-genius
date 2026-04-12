@@ -106,8 +106,6 @@ const ltlItems = [
 const shippingItems = [
   { href: "/shipping",         label: "Shipping Dashboard", icon: Ship },
   { href: "/shipping/history", label: "Shipping History",   icon: ScrollText },
-  { href: "/shipping-integration", label: "Shipping Integration", icon: Truck },
-  { href: "/small-parcel/rate-wizard", label: "Rate Wizard", icon: Wand2 },
 ];
 
 const returnsItems = [
@@ -137,6 +135,7 @@ const configItems = [
   { href: "/small-parcel/printer-settings", label: "Printer Settings",    icon: Printer },
   { href: "/receiving/put-away/priority", label: "Put Away Config",        icon: ConciergeBell },
   { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
+  { href: "/shipping-integration",        label: "Shipping Integration",   icon: Truck },
   { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs",       icon: ShieldCheck },
   { href: "/config/wh-location",          label: "WH Location Config",     icon: MapPin },
 ];

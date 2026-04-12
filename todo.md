@@ -1446,3 +1446,5 @@
 - [x] Receiving Dashboard: pallet count badge in ReceiverDetailSheet header
 - [x] Sidebar: move Rate Wizard from Small Parcel to Shipping Integration section
 - [x] Sidebar: sort Configuration items alphabetically
+- [x] Sidebar: move Shipping Integration and Rate Wizard from Shipping to Configuration
+- [x] Shipping Integration page: embed Rate Wizard as a tab (already embedded as expandable card)

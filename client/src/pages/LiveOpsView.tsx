@@ -286,9 +286,9 @@ export default function LiveOpsView() {
                     <div key={wh}>
                       <div className="text-xs text-white/40 font-medium mb-1.5">{wh}</div>
                       <div className="grid grid-cols-2 gap-1.5">
-                        {(roles as any[]).map((r: any) => (
-                          <div key={r.role} className="flex items-center justify-between bg-white/[0.04] rounded px-2.5 py-1.5 border border-white/10">
-                            <span className="text-xs text-white/60 capitalize">{r.role.replace(/_/g, " ")}</span>
+                        {(roles as any[]).map((r: any, ri: number) => (
+                          <div key={r.role ?? ri} className="flex items-center justify-between bg-white/[0.04] rounded px-2.5 py-1.5 border border-white/10">
+                            <span className="text-xs text-white/60 capitalize">{(r.role ?? "unknown").replace(/_/g, " ")}</span>
                             <span className="text-sm font-bold text-purple-400">{r.activeWorkers}</span>
                           </div>
                         ))}

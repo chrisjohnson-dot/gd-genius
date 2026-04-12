@@ -135,8 +135,8 @@ export const liveOpsRouter = router({
 
       const shiftRows = await db.execute<any>(
         input.warehouseId
-          ? sql`SELECT COALESCE(warehouseId,'Unknown') AS warehouseId, role, COUNT(*) AS activeWorkers FROM shift_sessions WHERE endedAt IS NULL AND startedAt IS NOT NULL AND warehouseId=${input.warehouseId} GROUP BY warehouseId, role ORDER BY warehouseId, role`
-          : sql`SELECT COALESCE(warehouseId,'Unknown') AS warehouseId, role, COUNT(*) AS activeWorkers FROM shift_sessions WHERE endedAt IS NULL AND startedAt IS NOT NULL GROUP BY warehouseId, role ORDER BY warehouseId, role`
+          ? sql`SELECT COALESCE(warehouseId,'Unknown') AS warehouseId, COALESCE(role,'unknown') AS role, COUNT(*) AS activeWorkers FROM shift_sessions WHERE endedAt IS NULL AND startedAt IS NOT NULL AND warehouseId=${input.warehouseId} GROUP BY warehouseId, role ORDER BY warehouseId, role`
+          : sql`SELECT COALESCE(warehouseId,'Unknown') AS warehouseId, COALESCE(role,'unknown') AS role, COUNT(*) AS activeWorkers FROM shift_sessions WHERE endedAt IS NULL AND startedAt IS NOT NULL GROUP BY warehouseId, role ORDER BY warehouseId, role`
       );
 
       const byWarehouse: Record<string, { role: string; activeWorkers: number }[]> = {};

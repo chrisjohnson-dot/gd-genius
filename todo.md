@@ -1434,3 +1434,4 @@
 - [x] UI: AlertHistoryTab component in Pull Manager
 - [x] UI: usePaceAlert calls recordBehindAlert on fire and markRecovered on recovery
 - [x] Tests: alert history unit tests
+- [x] Workload Planning: live production rate (1h/3h/24h window), backlog projection, burn-down chart, per-warehouse breakdown — 685 tests passing

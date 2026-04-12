@@ -1448,3 +1448,6 @@
 - [x] Sidebar: sort Configuration items alphabetically
 - [x] Sidebar: move Shipping Integration and Rate Wizard from Shipping to Configuration
 - [x] Shipping Integration page: embed Rate Wizard as a tab (already embedded as expandable card)
+- [ ] Routing Guides: DB schema, tRPC procedures, customer list with rule highlights, per-customer routing guide editor with destination requirements
+- [x] Sidebar: move Associates to Configuration section (alphabetically sorted)
+- [x] Sidebar/Cortex: move Supervisor PINs into Cortex Hub tab; remove from Configuration

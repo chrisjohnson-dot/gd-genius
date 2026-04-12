@@ -2081,3 +2081,36 @@ export const onboardingProgress = mysqlTable('onboarding_progress', {
   completedAt: bigint('completed_at', { mode: 'number' }),
   skipped: int('skipped').notNull().default(0),
 });
+
+// ── Routing Guides ────────────────────────────────────────────────────────────
+// Per-customer, per-destination shipping routing requirements
+export const routingGuides = mysqlTable('routing_guides', {
+  id: int('id').autoincrement().primaryKey(),
+  configId: int('config_id').notNull(),
+  customerId: int('customer_id').notNull(),
+  customerName: varchar('customer_name', { length: 255 }).notNull(),
+  // Destination scope — any field left null means "any"
+  destCountry: varchar('dest_country', { length: 2 }),          // e.g. "US", "CA"
+  destState: varchar('dest_state', { length: 64 }),             // e.g. "CA", "TX"
+  destZipFrom: varchar('dest_zip_from', { length: 16 }),        // ZIP range start
+  destZipTo: varchar('dest_zip_to', { length: 16 }),            // ZIP range end
+  destCity: varchar('dest_city', { length: 128 }),
+  // Routing requirements
+  requiredCarrier: varchar('required_carrier', { length: 64 }), // e.g. "fedex"
+  requiredService: varchar('required_service', { length: 128 }), // e.g. "GROUND"
+  requiredAccount: varchar('required_account', { length: 128 }), // carrier account #
+  maxTransitDays: int('max_transit_days'),
+  requiresResidential: boolean('requires_residential').notNull().default(false),
+  requiresSignature: boolean('requires_signature').notNull().default(false),
+  requiresAdultSignature: boolean('requires_adult_signature').notNull().default(false),
+  requiresSaturdayDelivery: boolean('requires_saturday_delivery').notNull().default(false),
+  labelInstructions: text('label_instructions'),
+  notes: text('notes'),
+  priority: int('priority').notNull().default(0), // higher = evaluated first
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+});
+
+export type RoutingGuide = typeof routingGuides.$inferSelect;
+export type InsertRoutingGuide = typeof routingGuides.$inferInsert;

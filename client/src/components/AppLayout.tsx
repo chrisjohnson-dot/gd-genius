@@ -94,7 +94,6 @@ const ltlItems = [
   { href: "/ltl/warehouse-pull",  label: "Item Pull Control",       icon: ScanBarcode },
   { href: "/ltl/live-board",      label: "Live Board",              icon: Activity },
   { href: "/ltl/pull-manager",    label: "Pull Manager",            icon: BarChart2 },
-  { href: "/ltl/associates",      label: "Associates",              icon: Users },
   { href: "/qc/scanner",          label: "QC Scanner",              icon: ScanBarcode },
   { href: "/qc/production-line",  label: "Production Line Scans",   icon: Activity },
   { href: "/qc/scan-label",       label: "QC Scan & Label",         icon: Tag },
@@ -125,6 +124,7 @@ const auditItems = [
 
 const configItems = [
   { href: "/rules",                      label: "Allocation Rules",        icon: ListChecks },
+  { href: "/ltl/associates",             label: "Associates",              icon: Users },
   { href: "/settings",                   label: "API Settings",            icon: Cog },
   { href: "/diagnostics",                label: "API Diagnostics",         icon: Stethoscope },
   { href: "/schedule",                   label: "Auto-Run Allocation",     icon: CalendarClock },
@@ -136,7 +136,6 @@ const configItems = [
   { href: "/receiving/put-away/priority", label: "Put Away Config",        icon: ConciergeBell },
   { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
   { href: "/shipping-integration",        label: "Shipping Integration",   icon: Truck },
-  { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs",       icon: ShieldCheck },
   { href: "/config/wh-location",          label: "WH Location Config",     icon: MapPin },
 ];
 

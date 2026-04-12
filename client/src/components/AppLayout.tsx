@@ -81,7 +81,6 @@ const allocationItems = [
 
 const smallParcelItems = [
   { href: "/small-parcel", label: "Pack & Ship", icon: Package },
-  { href: "/small-parcel/rate-wizard", label: "Rate Wizard", icon: Wand2 },
   { href: "/small-parcel/history", label: "Labels Printed", icon: ScrollText },
   { href: "/small-parcel/audit-log", label: "Audit Log", icon: ClipboardList },
 ];
@@ -107,6 +106,8 @@ const ltlItems = [
 const shippingItems = [
   { href: "/shipping",         label: "Shipping Dashboard", icon: Ship },
   { href: "/shipping/history", label: "Shipping History",   icon: ScrollText },
+  { href: "/shipping-integration", label: "Shipping Integration", icon: Truck },
+  { href: "/small-parcel/rate-wizard", label: "Rate Wizard", icon: Wand2 },
 ];
 
 const returnsItems = [
@@ -125,20 +126,19 @@ const auditItems = [
 ];
 
 const configItems = [
-  { href: "/settings",                   label: "API Settings",       icon: Cog },
-  { href: "/locations",                  label: "Location Config",    icon: MapPin },
-  { href: "/rules",                      label: "Allocation Rules",   icon: ListChecks },
-  { href: "/schedule",                   label: "Auto-Run Allocation",  icon: CalendarClock },
-  { href: "/diagnostics",                label: "API Diagnostics",    icon: Stethoscope },
-  { href: "/shipping-integration",       label: "Shipping Integration", icon: Truck },
-  { href: "/client-visibility",          label: "Client Visibility",  icon: Users },
-  { href: "/receiving/put-away/priority", label: "Put Away Config",    icon: ConciergeBell },
-  { href: "/config/wh-location",          label: "WH Location Config",  icon: MapPin },
-  { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
-  { href: "/small-parcel/high-value-skus", label: "High-Value SKUs",   icon: ShieldAlert },
-  { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs",   icon: ShieldCheck },
-  { href: "/small-parcel/printer-settings", label: "Printer Settings", icon: Printer },
+  { href: "/rules",                      label: "Allocation Rules",        icon: ListChecks },
+  { href: "/settings",                   label: "API Settings",            icon: Cog },
+  { href: "/diagnostics",                label: "API Diagnostics",         icon: Stethoscope },
+  { href: "/schedule",                   label: "Auto-Run Allocation",     icon: CalendarClock },
+  { href: "/client-visibility",          label: "Client Visibility",       icon: Users },
   { href: "/small-parcel/customer-shipping-rules", label: "Customer Shipping Rules", icon: UserCog },
+  { href: "/small-parcel/high-value-skus", label: "High-Value SKUs",       icon: ShieldAlert },
+  { href: "/locations",                  label: "Location Config",         icon: MapPin },
+  { href: "/small-parcel/printer-settings", label: "Printer Settings",    icon: Printer },
+  { href: "/receiving/put-away/priority", label: "Put Away Config",        icon: ConciergeBell },
+  { href: "/config/label-scan",            label: "Scan and Label Settings", icon: ScanBarcode },
+  { href: "/small-parcel/supervisor-pins", label: "Supervisor PINs",       icon: ShieldCheck },
+  { href: "/config/wh-location",          label: "WH Location Config",     icon: MapPin },
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";

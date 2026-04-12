@@ -1444,3 +1444,5 @@
 - [x] Remove Pallet Capture standalone sidebar nav item; launch from Receiving Dashboard receipt detail sheet
 - [x] Receiving Dashboard: pallet count badge on each receipt row
 - [x] Receiving Dashboard: pallet count badge in ReceiverDetailSheet header
+- [x] Sidebar: move Rate Wizard from Small Parcel to Shipping Integration section
+- [x] Sidebar: sort Configuration items alphabetically

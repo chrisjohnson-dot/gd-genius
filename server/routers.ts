@@ -8866,7 +8866,7 @@ const rateWizardRouter = router({
         rateAmountCents: Math.round(input.totalCost * 100),
         currency: input.currency,
         weightOz: Math.round(input.weightLbs * 16),
-        status: input.isMock ? "rated" : "rated", // always 'rated' until label is booked
+        status: input.isMock ? "rated" : "confirmed", // 'confirmed' for real rates so purchaseLabel can find them
         bookedByUserId: typeof ctx.user.id === "number" ? ctx.user.id : undefined,
         bookedByName: ctx.user.name ?? ctx.user.email,
         remoteShipmentId: input.remoteShipmentId,

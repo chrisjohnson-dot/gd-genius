@@ -410,8 +410,11 @@ export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLa
       errors?: Array<{ code: string; message: string }>;
     };
 
+    console.log(`[FedEx] ship API response status=${res.status} body=`, JSON.stringify(data).slice(0, 1000));
+
     if (data.errors?.length) {
       const msg = data.errors.map(e => `${e.code}: ${e.message}`).join("; ");
+      console.error(`[FedEx] label purchase failed: ${msg}`);
       return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: serviceCode, error: msg };
     }
 

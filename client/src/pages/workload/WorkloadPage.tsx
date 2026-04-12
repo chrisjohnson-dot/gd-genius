@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -558,17 +558,50 @@ function WarehouseDetail({ warehouseId, window, shiftHours, onBack }: { warehous
   );
 }
 
+// ─── Helpers for end-time picker ─────────────────────────────────────────────
+function defaultShiftEnd(): string {
+  // Default to 5:00 PM today
+  return "17:00";
+}
+
+function hoursUntil(timeStr: string): number {
+  const now = new Date();
+  const [hh, mm] = timeStr.split(":").map(Number);
+  const end = new Date(now);
+  end.setHours(hh, mm, 0, 0);
+  // If end time is in the past, assume it's tomorrow
+  if (end <= now) end.setDate(end.getDate() + 1);
+  return Math.max((end.getTime() - now.getTime()) / 3_600_000, 0.25);
+}
+
+function formatCountdown(timeStr: string): string {
+  const h = hoursUntil(timeStr);
+  if (h >= 24) return ">24h";
+  const totalMin = Math.round(h * 60);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (hrs === 0) return `${mins}m left`;
+  return mins === 0 ? `${hrs}h left` : `${hrs}h ${mins}m left`;
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function WorkloadPage() {
   const [window, setWindow] = useState<Window>("1h");
-  const [shiftHours, setShiftHours] = useState(8);
+  const [shiftEnd, setShiftEnd] = useState<string>(defaultShiftEnd);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
-  // Fetch the per-warehouse summary to get the required rate for the reference line
-  const { data: warehouseSummaries } = trpc.workload.getWarehouseSummaries.useQuery(
-    { window, shiftHours },
-    { refetchInterval: 60_000 }
-  );
+  // Tick every minute to keep countdown live
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Derive shiftHours from the end-time picker (recomputes every minute)
+  const shiftHours = useMemo(() => {
+    void now; // depend on the ticker
+    return Math.max(hoursUntil(shiftEnd), 0.25);
+  }, [shiftEnd, now]);
 
   const { data: summaries, isLoading, refetch } = trpc.workload.getWarehouseSummaries.useQuery(
     { window, shiftHours },
@@ -610,23 +643,17 @@ export default function WorkloadPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Shift hours selector */}
+          {/* Shift end-time picker */}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" />
-            <span>Shift:</span>
-            <div className="flex items-center rounded-lg border border-border bg-muted/30 p-0.5 gap-0.5">
-              {[4, 8, 12].map((h) => (
-                <button
-                  key={h}
-                  onClick={() => setShiftHours(h)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    shiftHours === h ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {h}h
-                </button>
-              ))}
-            </div>
+            <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="whitespace-nowrap">Shift ends:</span>
+            <input
+              type="time"
+              value={shiftEnd}
+              onChange={(e) => setShiftEnd(e.target.value)}
+              className="h-7 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            <span className="whitespace-nowrap font-medium text-primary">{formatCountdown(shiftEnd)}</span>
           </div>
           {/* Window selector */}
           <div className="flex items-center rounded-lg border border-border bg-muted/30 p-0.5 gap-0.5">
@@ -725,7 +752,7 @@ export default function WorkloadPage() {
           </div>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
-          Required rate = backlog pieces ÷ shift hours. Rate window and shift length are adjustable above.
+          Required rate = backlog pieces ÷ hours remaining in shift. Set the shift end time above — the target rate updates automatically as the clock counts down.
         </div>
       </div>
     </div>

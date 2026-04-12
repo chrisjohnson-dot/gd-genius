@@ -1437,3 +1437,4 @@
 - [x] Workload Planning: live production rate (1h/3h/24h window), backlog projection, burn-down chart, per-warehouse breakdown — 685 tests passing
 - [x] Workload Planning: per-warehouse green/amber/red status cards (rate vs required rate), auto-flag red to Requires Attention, drill-down detail with charts — 696 tests passing
 - [x] Workload Planning detail: target rate reference line on items/hr trend chart
+- [x] Workload Planning: replace shift hours toggle with end-time picker (live countdown to shift end)

@@ -267,37 +267,14 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
   const carriers = useMemo(() => Array.from(new Set(rates.map((r) => r.carrierCode))), [rates]);
 
   // Filter + sort
-  const displayed = useMemo(() => {
+  const [showAllRates, setShowAllRates] = useState(false);
+
+  // allFiltered: full list after carrier/day/OneRate filters, sorted by user preference
+  const allFiltered = useMemo(() => {
     let list = [...rates];
-    // When autobagger / forceOneRate mode is active, show only FedEx One Rate services
     if (forceOneRate) list = list.filter((r) => r.serviceCode?.includes("ONE_RATE"));
     if (!forceOneRate && filterCarrier !== "all") list = list.filter((r) => r.carrierCode === filterCarrier);
     if (!forceOneRate && filterMaxDays !== "all") list = list.filter((r) => r.transitDays <= parseInt(filterMaxDays));
-    // Find the routing-guide-recommended rate (if any) so it is always included
-    const guideRate = recommendedRoute
-      ? (() => {
-          // 1. Exact serviceCode match
-          const byCode = (recommendedRoute as { serviceCode?: string }).serviceCode
-            ? list.find(r => r.serviceCode === (recommendedRoute as { serviceCode?: string }).serviceCode)
-            : null;
-          if (byCode) return byCode;
-          // 2. Carrier + service name fuzzy match
-          return list.find(r =>
-            r.carrierCode === recommendedRoute.carrierCode &&
-            r.service.toLowerCase().includes(recommendedRoute.serviceLevel.toLowerCase().split(" ")[0].toLowerCase())
-          ) ?? list.find(r => r.carrierCode === recommendedRoute.carrierCode) ?? null;
-        })()
-      : null;
-
-    // Build the top-3 set: always include the guide rate, fill remaining slots with cheapest
-    const byCost = [...list].sort((a, b) => a.totalCost - b.totalCost);
-    const top3Ids = new Set<string>();
-    if (guideRate) top3Ids.add(guideRate.rateId);
-    for (const r of byCost) {
-      if (top3Ids.size >= 3) break;
-      top3Ids.add(r.rateId);
-    }
-    list = list.filter((r) => top3Ids.has(r.rateId));
     list.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "cost") cmp = a.totalCost - b.totalCost;
@@ -306,7 +283,34 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
       return sortDir === "asc" ? cmp : -cmp;
     });
     return list;
-  }, [rates, filterCarrier, filterMaxDays, sortKey, sortDir, forceOneRate, recommendedRoute]);
+  }, [rates, filterCarrier, filterMaxDays, sortKey, sortDir, forceOneRate]);
+
+  // displayed: top-3 (guide rate pinned + cheapest fill) or full list when expanded
+  const displayed = useMemo(() => {
+    if (showAllRates) return allFiltered;
+    // Find the routing-guide-recommended rate (if any) so it is always included
+    const guideRate = recommendedRoute
+      ? (() => {
+          const byCode = (recommendedRoute as { serviceCode?: string }).serviceCode
+            ? allFiltered.find(r => r.serviceCode === (recommendedRoute as { serviceCode?: string }).serviceCode)
+            : null;
+          if (byCode) return byCode;
+          return allFiltered.find(r =>
+            r.carrierCode === recommendedRoute.carrierCode &&
+            r.service.toLowerCase().includes(recommendedRoute.serviceLevel.toLowerCase().split(" ")[0].toLowerCase())
+          ) ?? allFiltered.find(r => r.carrierCode === recommendedRoute.carrierCode) ?? null;
+        })()
+      : null;
+    // Build the top-3 set: guide rate pinned, remaining slots filled by cheapest
+    const byCost = [...allFiltered].sort((a, b) => a.totalCost - b.totalCost);
+    const top3Ids = new Set<string>();
+    if (guideRate) top3Ids.add(guideRate.rateId);
+    for (const r of byCost) {
+      if (top3Ids.size >= 3) break;
+      top3Ids.add(r.rateId);
+    }
+    return allFiltered.filter((r) => top3Ids.has(r.rateId));
+  }, [allFiltered, showAllRates, recommendedRoute]);
 
   const selectedRate = displayed.find((r) => r.rateId === selectedRateId) ?? null;
 
@@ -689,11 +693,27 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
           </table>
         </div>
 
+        {/* Show all / collapse toggle — only shown when there are more rates than the top-3 */}
+        {allFiltered.length > 3 && (
+          <button
+            onClick={() => setShowAllRates((v) => !v)}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 py-1 self-start"
+          >
+            {showAllRates ? (
+              <><ChevronUp className="w-3.5 h-3.5" /> Show fewer rates</>
+            ) : (
+              <><ChevronDown className="w-3.5 h-3.5" /> Show all {allFiltered.length} rates</>
+            )}
+          </button>
+        )}
+
         {/* Summary + confirm row */}
         <div className="flex items-center justify-between gap-3 pt-1">
           <div className="text-xs text-muted-foreground">
-            {displayed.length} rate{displayed.length !== 1 ? "s" : ""} from {carriers.length} carrier{carriers.length !== 1 ? "s" : ""}
-            {data.isMockData && " · estimated"}
+            {showAllRates
+              ? <>{allFiltered.length} rate{allFiltered.length !== 1 ? "s" : ""} from {carriers.length} carrier{carriers.length !== 1 ? "s" : ""}{data.isMockData && " · estimated"}</>
+              : <>{displayed.length} of {allFiltered.length} rate{allFiltered.length !== 1 ? "s" : ""} shown{data.isMockData && " · estimated"}</>
+            }
           </div>
 
           <div className="flex items-center gap-2">

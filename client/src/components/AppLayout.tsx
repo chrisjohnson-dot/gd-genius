@@ -230,11 +230,45 @@ function AttentionBadge({
 
 // ─── NavItem ──────────────────────────────────────────────────────────────────
 
-function WorkloadDot({ count }: { count: number }) {
-  if (count <= 0) return null;
+function WorkloadCriticalDot({ warehouses }: { warehouses: string[] }) {
+  const [hovered, setHovered] = useState(false);
+  if (warehouses.length === 0) return null;
   return (
-    <span className="ml-auto shrink-0 flex items-center gap-1">
-      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+    <span
+      className="relative ml-auto shrink-0"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Pulsing red dot */}
+      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse block" />
+
+      {/* Hover popover */}
+      {hovered && (
+        <div
+          className="absolute right-0 top-5 z-50 w-[200px] rounded-xl shadow-xl border border-white/10 overflow-hidden"
+          style={{ background: "#252830" }}
+        >
+          {/* Header */}
+          <div className="px-3 py-2 border-b border-white/10">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">
+              Critical Pace
+            </p>
+          </div>
+          {/* Warehouse list */}
+          <div className="px-3 py-2 space-y-1.5">
+            {warehouses.map((name) => (
+              <div key={name} className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                <span className="text-[12px] text-[#cbd5e1] truncate">{name}</span>
+              </div>
+            ))}
+          </div>
+          {/* Footer */}
+          <div className="px-3 py-1.5 border-t border-white/10">
+            <p className="text-[10px] text-[#64748b]">Click to review workload</p>
+          </div>
+        </div>
+      )}
     </span>
   );
 }
@@ -247,6 +281,7 @@ function NavItem({
   badgeData,
   exceptionCount,
   workloadCount,
+  workloadWarehouses,
 }: {
   href: string;
   label: string;
@@ -255,6 +290,7 @@ function NavItem({
   badgeData?: { total: number; overdueCount: number; zeroBidCount: number; verificationIssues: number };
   exceptionCount?: number;
   workloadCount?: number;
+  workloadWarehouses?: string[];
 }) {
   return (
     <Link
@@ -278,7 +314,7 @@ function NavItem({
         />
       )}
       {exceptionCount !== undefined && exceptionCount > 0 && <SimpleCountBadge count={exceptionCount} />}
-      {workloadCount !== undefined && <WorkloadDot count={workloadCount} />}
+      {workloadWarehouses !== undefined && <WorkloadCriticalDot warehouses={workloadWarehouses} />}
     </Link>
   );
 }
@@ -348,9 +384,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { window: "1h", shiftHours: 8 },
     { refetchInterval: 60_000, staleTime: 30_000 }
   );
-  const workloadCriticalCount = (workloadSummaries ?? []).filter(
-    (s: { paceStatus: string }) => s.paceStatus === "red"
-  ).length;
+  const workloadCriticalWarehouses: string[] = (workloadSummaries ?? [])
+    .filter((s: { paceStatus: string }) => s.paceStatus === "red")
+    .map((s: { warehouseId: string }) => s.warehouseId);
+  const workloadCriticalCount = workloadCriticalWarehouses.length;
 
   if (loading) {
     return (
@@ -418,6 +455,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   badgeData={item.badge ? attentionBadge : undefined}
                   exceptionCount={item.exceptionsBadge ? exceptionsCount : undefined}
                   workloadCount={(item as any).workloadBadge ? workloadCriticalCount : undefined}
+                  workloadWarehouses={(item as any).workloadBadge ? workloadCriticalWarehouses : undefined}
                 />
               ))}
             </div>

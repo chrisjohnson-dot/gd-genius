@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -182,6 +182,51 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
   useEffect(() => {
     setSelectedRateId(null);
   }, [filterMaxDays]);
+
+  // Auto-confirm: whenever a rate is selected (by the user or by auto-select), immediately
+  // fire confirmRate so the DB row is written and the Pack & Ship button becomes available
+  // without requiring a separate "Use Carrier" click.
+  const lastAutoConfirmedRateId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedRateId) return;
+    if (selectedRateId === lastAutoConfirmedRateId.current) return; // already confirmed this rate
+    const rate = rates.find(r => r.rateId === selectedRateId);
+    if (!rate) return;
+    lastAutoConfirmedRateId.current = selectedRateId;
+    // Fire confirmRate in the background; call onConfirm immediately so the UI unlocks
+    setConfirming(true);
+    confirmMutation.mutateAsync({
+      configId: input.configId,
+      sessionId: input.sessionId,
+      orderId: input.orderId,
+      orderNumber: input.orderNumber,
+      locationId: input.locationId,
+      customerId: input.customerId,
+      customerName: input.customerName,
+      rateId: rate.rateId,
+      carrierCode: rate.carrierCode,
+      carrierName: rate.carrierName,
+      service: rate.service,
+      transitDays: rate.transitDays,
+      totalCost: rate.totalCost,
+      currency: rate.currency,
+      weightLbs: input.weightLbs,
+      destPostal: input.destPostal,
+      destCountry: input.destCountry ?? "US",
+      isMock: rate.isMock,
+      remoteShipmentId: rate.remoteShipmentId,
+      requestToken: rate.requestToken,
+    }).then(() => {
+      onConfirm?.(rate);
+    }).catch((err) => {
+      console.error("[RateCard] auto-confirm failed:", err);
+      // Reset so the user can retry via the manual confirm button
+      lastAutoConfirmedRateId.current = null;
+    }).finally(() => {
+      setConfirming(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRateId]);
 
   // Snapshot the input whenever fresh data arrives
   useEffect(() => {

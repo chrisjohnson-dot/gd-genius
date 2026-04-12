@@ -643,6 +643,52 @@ export const workloadRouter = router({
       return { forecasts: rows as any[], generatedAt: Number(latestAt) };
     }),
 
+  // ── Get prior-week average rate for a warehouse ────────────────────────────
+  // Returns the average items/hr across all completed pull sessions in the
+  // 7-day window that ended exactly 7 days ago (i.e., same 7-day span last week).
+  // Used as a historical reference line on the detail chart.
+  getHistoricalAvgRate: protectedProcedure
+    .input(z.object({
+      warehouseId: z.string().default('all'),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error('DB unavailable');
+      const now = Date.now();
+      // Prior-week window: [now - 14d, now - 7d]
+      const weekEnd   = now - 7  * 86_400_000;
+      const weekStart = now - 14 * 86_400_000;
+
+      const rows = await db.execute<any>(sql`
+        SELECT
+          SUM(total_items)      as total_items,
+          SUM(duration_seconds) as total_duration_s,
+          COUNT(*)              as session_count
+        FROM pull_sessions
+        WHERE status = 'completed'
+          AND ended_at >= ${weekStart}
+          AND ended_at <  ${weekEnd}
+          ${input.warehouseId !== 'all' ? sql`AND warehouse_id = ${input.warehouseId}` : sql``}
+      `);
+
+      const r = (rows as any[])[0];
+      const totalItems    = Number(r?.total_items)      || 0;
+      const totalDurationS = Number(r?.total_duration_s) || 0;
+      const sessionCount  = Number(r?.session_count)    || 0;
+      const totalDurationH = totalDurationS / 3600;
+      const itemsPerHour  = totalDurationH > 0 ? Math.round(totalItems / totalDurationH) : 0;
+
+      return {
+        warehouseId:  input.warehouseId,
+        weekStart,
+        weekEnd,
+        sessionCount,
+        totalItems,
+        itemsPerHour,
+        hasData: sessionCount > 0,
+      };
+    }),
+
   // ── Get staffing recommendation ───────────────────────────────────────────
   getStaffingRecommendation: protectedProcedure
     .input(z.object({ warehouseId: z.string().default('all') }))

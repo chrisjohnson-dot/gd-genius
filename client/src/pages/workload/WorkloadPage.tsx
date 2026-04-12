@@ -294,6 +294,13 @@ function WarehouseDetail({ warehouseId, window, shiftHours, onBack }: { warehous
     { warehouseId },
     { refetchInterval: 60_000 }
   );
+  const { data: historicalAvg } = trpc.workload.getHistoricalAvgRate.useQuery(
+    { warehouseId },
+    { refetchInterval: 300_000, staleTime: 120_000 }
+  );
+  const priorWeekRate = (historicalAvg?.hasData && (historicalAvg?.itemsPerHour ?? 0) > 0)
+    ? historicalAvg!.itemsPerHour
+    : 0;
 
   const proj = projection?.projection;
   const paceStatus: "on_track" | "at_risk" | "critical" | "no_data" = proj?.paceStatus ?? "no_data";
@@ -412,12 +419,20 @@ function WarehouseDetail({ warehouseId, window, shiftHours, onBack }: { warehous
               </div>
             ) : (
               <>
-                {targetRate > 0 && (
-                  <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-                    <span className="inline-block w-6 border-t-2 border-dashed border-red-400" />
-                    <span>Target: <strong className="text-foreground">{targetRate.toLocaleString()} items/hr</strong> required to clear backlog in {shiftHours}h</span>
-                  </div>
-                )}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2">
+                  {targetRate > 0 && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="inline-block w-5 border-t-2 border-dashed border-red-400" />
+                      <span>Target: <strong className="text-foreground">{targetRate.toLocaleString()}/hr</strong> to clear in {Math.round(shiftHours)}h</span>
+                    </div>
+                  )}
+                  {priorWeekRate > 0 && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="inline-block w-5 border-t-2 border-dashed border-purple-400" />
+                      <span>Prior week avg: <strong className="text-foreground">{priorWeekRate.toLocaleString()}/hr</strong></span>
+                    </div>
+                  )}
+                </div>
                 <ResponsiveContainer width="100%" height={180}>
                   <AreaChart data={rateTrend} margin={{ top: 4, right: 4, left: -20, bottom: 4 }}>
                     <defs>
@@ -441,6 +456,21 @@ function WarehouseDetail({ warehouseId, window, shiftHours, onBack }: { warehous
                           position: "insideTopRight",
                           fontSize: 10,
                           fill: "#ef4444",
+                          fontWeight: 600,
+                        }}
+                      />
+                    )}
+                    {priorWeekRate > 0 && (
+                      <ReferenceLine
+                        y={priorWeekRate}
+                        stroke="#a855f7"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                        label={{
+                          value: `Prior wk ${priorWeekRate.toLocaleString()}`,
+                          position: "insideBottomRight",
+                          fontSize: 10,
+                          fill: "#a855f7",
                           fontWeight: 600,
                         }}
                       />

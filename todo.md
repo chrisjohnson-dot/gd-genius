@@ -1439,3 +1439,4 @@
 - [x] Workload Planning detail: target rate reference line on items/hr trend chart
 - [x] Workload Planning: replace shift hours toggle with end-time picker (live countdown to shift end)
 - [x] Workload Planning: red dot badge on sidebar nav item when any warehouse is critical
+- [x] Workload Planning detail: 7-day average rate reference line on items/hr trend chart

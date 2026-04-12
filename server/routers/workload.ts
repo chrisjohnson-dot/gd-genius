@@ -5,18 +5,239 @@ import { sql } from 'drizzle-orm';
 
 // ─── Workload Router ──────────────────────────────────────────────────────────
 // Predictive workload planning: throughput snapshots + forecast generation
-// + live production rate measurement + backlog projection
+// + live production rate measurement + backlog projection + warehouse summaries
 
 const STAGES = ['unallocated', 'allocated', 'picking', 'qc', 'qc_complete', 'ship_ready'] as const;
 
 // Window options in milliseconds
 const WINDOW_MS: Record<string, number> = {
-  '1h':  1 * 3600_000,
-  '3h':  3 * 3600_000,
-  '24h': 24 * 3600_000,
+  '1h':  1 * 3_600_000,
+  '3h':  3 * 3_600_000,
+  '24h': 24 * 3_600_000,
 };
 
+// ─── Pace status helpers ──────────────────────────────────────────────────────
+// Green  = current rate ≥ required rate (ratio ≥ 1.0)
+// Amber  = current rate is 70–99% of required rate (ratio 0.7–0.99)
+// Red    = current rate is <70% of required rate, or no rate data with backlog
+export type PaceStatus = 'green' | 'amber' | 'red' | 'no_data';
+
+export function computePaceStatus(currentRate: number, requiredRate: number): PaceStatus {
+  if (requiredRate <= 0) return currentRate > 0 ? 'green' : 'no_data';
+  if (currentRate <= 0) return 'red';
+  const ratio = currentRate / requiredRate;
+  if (ratio >= 1.0) return 'green';
+  if (ratio >= 0.7) return 'amber';
+  return 'red';
+}
+
+// ─── Auto-flag helper ─────────────────────────────────────────────────────────
+// Creates (or skips if already open) a Requires Attention exception for a red warehouse.
+async function autoFlagWarehouseException(
+  db: { execute: (q: any) => Promise<any> },
+  warehouseId: string,
+  currentRate: number,
+  requiredRate: number,
+  backlogPieces: number,
+  hoursToComplete: number | null,
+): Promise<void> {
+  const entityId = `workload_red_${warehouseId}`;
+  // Check if an open/in-progress exception already exists for this warehouse + type
+  const existing = await db.execute(sql`
+    SELECT id FROM exceptions
+    WHERE exceptionType = 'workload_pace_critical'
+      AND entityId = ${entityId}
+      AND status IN ('open','in_progress')
+    LIMIT 1
+  `);
+  if ((existing as any[]).length > 0) return; // already flagged
+
+  const hoursLabel = hoursToComplete != null
+    ? hoursToComplete >= 24
+      ? `${(hoursToComplete / 24).toFixed(1)} days`
+      : `${hoursToComplete.toFixed(1)} hours`
+    : 'unknown time';
+
+  const description =
+    `Warehouse ${warehouseId} is running at ${Math.round(currentRate)} items/hr ` +
+    `but needs ${Math.round(requiredRate)} items/hr to clear the backlog on time. ` +
+    `At current pace, ${backlogPieces.toLocaleString()} pieces will take ${hoursLabel} to process.`;
+
+  await db.execute(sql`
+    INSERT INTO exceptions
+      (exceptionType, priority, status, title, description, entityType, entityId, warehouseId, createdAt, updatedAt)
+    VALUES
+      ('workload_pace_critical', 'high', 'open',
+       ${`Workload pace critical — ${warehouseId}`},
+       ${description},
+       'warehouse', ${entityId}, ${warehouseId},
+       NOW(), NOW())
+  `);
+}
+
+// ─── Auto-resolve helper ──────────────────────────────────────────────────────
+// Resolves the open pace exception when a warehouse recovers to green.
+async function autoResolveWarehouseException(
+  db: { execute: (q: any) => Promise<any> },
+  warehouseId: string,
+): Promise<void> {
+  const entityId = `workload_red_${warehouseId}`;
+  await db.execute(sql`
+    UPDATE exceptions
+    SET status = 'resolved',
+        resolvedAt = NOW(),
+        resolvedByName = 'GD Genius (auto)',
+        resolutionNote = 'Warehouse pace recovered — auto-resolved by Workload Planning'
+    WHERE exceptionType = 'workload_pace_critical'
+      AND entityId = ${entityId}
+      AND status IN ('open','in_progress')
+  `);
+}
+
 export const workloadRouter = router({
+
+  // ── Per-warehouse workload summaries ──────────────────────────────────────
+  // The primary endpoint for the new Workload Planning overview.
+  // Returns one summary per known warehouse with:
+  //   - current production rate (items/hr over the selected window)
+  //   - required rate to clear the backlog within a target shift window (default 8h)
+  //   - pace status: green / amber / red / no_data
+  //   - backlog stats
+  //   - auto-flags red warehouses to Requires Attention
+  getWarehouseSummaries: protectedProcedure
+    .input(z.object({
+      window: z.enum(['1h', '3h', '24h']).default('1h'),
+      shiftHours: z.number().min(1).max(24).default(8),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error('DB unavailable');
+      const now = Date.now();
+      const windowMs = WINDOW_MS[input.window] ?? WINDOW_MS['1h'];
+      const since = now - windowMs;
+
+      // 1. All known warehouses (from pull_sessions + order_tracking)
+      const whRows = await db.execute<any>(sql`
+        SELECT DISTINCT warehouse_id AS wh FROM pull_sessions WHERE warehouse_id IS NOT NULL AND warehouse_id != ''
+        UNION
+        SELECT DISTINCT facilityName AS wh FROM order_tracking WHERE facilityName IS NOT NULL AND facilityName != ''
+        ORDER BY wh
+      `);
+      const warehouses: string[] = (whRows as any[]).map((r: any) => r.wh as string).filter(Boolean);
+
+      // 2. Completed pull sessions in window, grouped by warehouse
+      const rateRows = await db.execute<any>(sql`
+        SELECT
+          warehouse_id,
+          SUM(total_items)     AS total_items,
+          SUM(total_cases)     AS total_cases,
+          SUM(duration_seconds) AS total_dur_s,
+          COUNT(*)             AS sessions
+        FROM pull_sessions
+        WHERE status = 'completed' AND ended_at >= ${since}
+        GROUP BY warehouse_id
+      `);
+      const rateByWh: Record<string, { items: number; cases: number; durS: number; sessions: number }> = {};
+      for (const r of (rateRows as any[])) {
+        rateByWh[r.warehouse_id] = {
+          items: Number(r.total_items) || 0,
+          cases: Number(r.total_cases) || 0,
+          durS:  Number(r.total_dur_s) || 0,
+          sessions: Number(r.sessions) || 0,
+        };
+      }
+
+      // 3. Backlog (allocated + picking) grouped by warehouse (facilityName)
+      const backlogRows = await db.execute<any>(sql`
+        SELECT
+          facilityName AS wh,
+          COUNT(*)                          AS orders,
+          COALESCE(SUM(totalPieces), 0)     AS pieces
+        FROM order_tracking
+        WHERE lifecycleStatus IN ('allocated','picking')
+          AND facilityName IS NOT NULL AND facilityName != ''
+        GROUP BY facilityName
+      `);
+      const backlogByWh: Record<string, { orders: number; pieces: number }> = {};
+      for (const r of (backlogRows as any[])) {
+        backlogByWh[r.wh] = { orders: Number(r.orders) || 0, pieces: Number(r.pieces) || 0 };
+      }
+
+      // 4. Unallocated orders grouped by warehouse
+      const unallocRows = await db.execute<any>(sql`
+        SELECT
+          facilityName AS wh,
+          COUNT(*)                          AS orders,
+          COALESCE(SUM(totalPieces), 0)     AS pieces
+        FROM order_tracking
+        WHERE lifecycleStatus = 'unallocated'
+          AND facilityName IS NOT NULL AND facilityName != ''
+        GROUP BY facilityName
+      `);
+      const unallocByWh: Record<string, { orders: number; pieces: number }> = {};
+      for (const r of (unallocRows as any[])) {
+        unallocByWh[r.wh] = { orders: Number(r.orders) || 0, pieces: Number(r.pieces) || 0 };
+      }
+
+      // 5. Build per-warehouse summary
+      const summaries = await Promise.all(warehouses.map(async (wh) => {
+        const rate = rateByWh[wh];
+        const backlog = backlogByWh[wh] ?? { orders: 0, pieces: 0 };
+        const unalloc = unallocByWh[wh] ?? { orders: 0, pieces: 0 };
+
+        const durH = rate ? rate.durS / 3600 : 0;
+        const currentRate = durH > 0 ? Math.round(rate!.items / durH) : 0;
+        const casesPerHour = durH > 0 ? Math.round(rate!.cases / durH) : 0;
+
+        // Required rate = backlog pieces ÷ shift hours remaining
+        const requiredRate = input.shiftHours > 0 ? Math.round(backlog.pieces / input.shiftHours) : 0;
+
+        const hoursToComplete = currentRate > 0 && backlog.pieces > 0
+          ? Math.round((backlog.pieces / currentRate) * 10) / 10
+          : backlog.pieces === 0 ? 0 : null;
+
+        const projectedCompletionAt = hoursToComplete != null && hoursToComplete > 0
+          ? now + hoursToComplete * 3_600_000
+          : null;
+
+        const paceStatus = computePaceStatus(currentRate, requiredRate);
+
+        // Auto-flag / auto-resolve exceptions
+        if (paceStatus === 'red' && backlog.pieces > 0) {
+          await autoFlagWarehouseException(db as any, wh, currentRate, requiredRate, backlog.pieces, hoursToComplete);
+        } else if (paceStatus === 'green') {
+          await autoResolveWarehouseException(db as any, wh);
+        }
+
+        return {
+          warehouseId: wh,
+          paceStatus,
+          currentRate,
+          casesPerHour,
+          requiredRate,
+          ratio: requiredRate > 0 ? Math.round((currentRate / requiredRate) * 100) / 100 : null,
+          backlog: {
+            orders: backlog.orders,
+            pieces: backlog.pieces,
+          },
+          unallocated: {
+            orders: unalloc.orders,
+            pieces: unalloc.pieces,
+          },
+          sessions: rate?.sessions ?? 0,
+          hoursToComplete,
+          projectedCompletionAt,
+          measuredAt: now,
+        };
+      }));
+
+      // Sort: red first, then amber, then green, then no_data
+      const ORDER: Record<PaceStatus, number> = { red: 0, amber: 1, green: 2, no_data: 3 };
+      summaries.sort((a, b) => ORDER[a.paceStatus] - ORDER[b.paceStatus]);
+
+      return summaries;
+    }),
+
   // ── Get current pipeline counts per stage ─────────────────────────────────
   getPipelineSnapshot: protectedProcedure
     .input(z.object({ warehouseId: z.string().default('all') }))
@@ -38,8 +259,6 @@ export const workloadRouter = router({
     }),
 
   // ── Live production rate from completed pull sessions ─────────────────────
-  // Returns items/hr and cases/hr measured over the chosen window (1h/3h/24h),
-  // plus per-warehouse breakdown and per-hour trend buckets for sparklines.
   getThroughputRate: protectedProcedure
     .input(z.object({
       warehouseId: z.string().default('all'),
@@ -51,9 +270,8 @@ export const workloadRouter = router({
       const now = Date.now();
       const windowMs = WINDOW_MS[input.window] ?? WINDOW_MS['1h'];
       const since = now - windowMs;
-      const windowHours = windowMs / 3600_000;
+      const windowHours = windowMs / 3_600_000;
 
-      // Aggregate completed sessions in the window
       const aggRows = await db.execute<any>(sql`
         SELECT
           warehouse_id,
@@ -93,12 +311,10 @@ export const workloadRouter = router({
         });
       }
 
-      // Overall rate — use actual worked hours, not wall-clock window
       const totalDurationH = totalDurationS / 3600;
       const itemsPerHour = totalDurationH > 0 ? Math.round(totalItems / totalDurationH) : 0;
       const casesPerHour = totalDurationH > 0 ? Math.round(totalCases / totalDurationH) : 0;
 
-      // Hourly trend buckets within the window (for sparkline)
       const bucketCount = Math.min(Math.round(windowHours), 24);
       const bucketMs = windowMs / bucketCount;
       const trendRows = await db.execute<any>(sql`
@@ -140,8 +356,6 @@ export const workloadRouter = router({
     }),
 
   // ── Backlog projection ────────────────────────────────────────────────────
-  // Compares the current production rate (from the chosen window) against the
-  // open backlog (allocated + picking orders) to project completion time.
   getBacklogProjection: protectedProcedure
     .input(z.object({
       warehouseId: z.string().default('all'),
@@ -154,7 +368,6 @@ export const workloadRouter = router({
       const windowMs = WINDOW_MS[input.window] ?? WINDOW_MS['1h'];
       const since = now - windowMs;
 
-      // Current rate from completed sessions in the window
       const rateRows = await db.execute<any>(sql`
         SELECT
           SUM(total_items) as total_items,
@@ -173,7 +386,6 @@ export const workloadRouter = router({
       const itemsPerHour = durH > 0 ? rateItems / durH : 0;
       const casesPerHour = durH > 0 ? rateCases / durH : 0;
 
-      // Open backlog: orders in allocated + picking stages
       const backlogRows = await db.execute<any>(sql`
         SELECT
           lifecycle_status as stage,
@@ -196,12 +408,9 @@ export const workloadRouter = router({
         backlogByStage.push({ stage: r.stage, orders, pieces });
       }
 
-      // Projection: hours to clear backlog at current rate
-      // Use pieces as the primary unit (matches items in pull sessions)
       const hoursToComplete = itemsPerHour > 0 ? backlogPieces / itemsPerHour : null;
-      const projectedCompletionAt = hoursToComplete !== null ? now + hoursToComplete * 3600_000 : null;
+      const projectedCompletionAt = hoursToComplete !== null ? now + hoursToComplete * 3_600_000 : null;
 
-      // Pace status
       let paceStatus: 'on_track' | 'at_risk' | 'critical' | 'no_data' = 'no_data';
       if (itemsPerHour > 0 && hoursToComplete !== null) {
         if (hoursToComplete <= 4) paceStatus = 'on_track';
@@ -209,7 +418,6 @@ export const workloadRouter = router({
         else paceStatus = 'critical';
       }
 
-      // Also fetch unallocated order count for full picture
       const unallocRows = await db.execute<any>(sql`
         SELECT COUNT(*) as cnt, COALESCE(SUM(totalPieces), 0) as pieces
         FROM order_tracking
@@ -244,10 +452,6 @@ export const workloadRouter = router({
     }),
 
   // ── Burn-down series ──────────────────────────────────────────────────────
-  // Returns hourly data points for the last N hours showing:
-  //   - cumulative items completed (actual burn-down)
-  //   - projected remaining at each point
-  // Used to draw the burn-down chart.
   getBurndownSeries: protectedProcedure
     .input(z.object({
       warehouseId: z.string().default('all'),
@@ -257,10 +461,9 @@ export const workloadRouter = router({
       const db = await getDb();
       if (!db) throw new Error('DB unavailable');
       const now = Date.now();
-      const since = now - input.hours * 3600_000;
-      const bucketMs = 3600_000; // 1-hour buckets
+      const since = now - input.hours * 3_600_000;
+      const bucketMs = 3_600_000;
 
-      // Completed items per hour bucket
       const completedRows = await db.execute<any>(sql`
         SELECT
           FLOOR(ended_at / ${bucketMs}) * ${bucketMs} as bucket,
@@ -275,7 +478,6 @@ export const workloadRouter = router({
         ORDER BY bucket ASC
       `);
 
-      // Build a full series with zero-fill for missing hours
       const bucketMap: Record<number, { items: number; cases: number; sessions: number }> = {};
       for (const r of (completedRows as any[])) {
         const b = Number(r.bucket);
@@ -313,7 +515,7 @@ export const workloadRouter = router({
       return { series, totalCompleted: cumulative };
     }),
 
-  // ── Record a throughput snapshot for the current hour ─────────────────────
+  // ── Record a throughput snapshot ──────────────────────────────────────────
   recordSnapshot: protectedProcedure
     .input(z.object({
       warehouseId: z.string().default('all'),
@@ -337,7 +539,7 @@ export const workloadRouter = router({
       return { success: true };
     }),
 
-  // ── Get historical throughput for the last N days ─────────────────────────
+  // ── Get historical throughput ─────────────────────────────────────────────
   getHistoricalThroughput: protectedProcedure
     .input(z.object({
       warehouseId: z.string().default('all'),
@@ -367,9 +569,7 @@ export const workloadRouter = router({
 
   // ── Generate a workload forecast ──────────────────────────────────────────
   generateForecast: protectedProcedure
-    .input(z.object({
-      warehouseId: z.string().default('all'),
-    }))
+    .input(z.object({ warehouseId: z.string().default('all') }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error('DB unavailable');
@@ -388,11 +588,9 @@ export const workloadRouter = router({
 
       const since7d = now - 7 * 86400000;
       const throughputRows = await db.execute<any>(sql`
-        SELECT stage,
-               AVG(orders_processed) as avg_per_hour
+        SELECT stage, AVG(orders_processed) as avg_per_hour
         FROM throughput_snapshots
-        WHERE warehouse_id = ${input.warehouseId}
-          AND hour_bucket >= ${since7d}
+        WHERE warehouse_id = ${input.warehouseId} AND hour_bucket >= ${since7d}
         GROUP BY stage
       `);
       const throughput: Record<string, number> = {};
@@ -402,7 +600,6 @@ export const workloadRouter = router({
 
       const DEFAULT_THROUGHPUT = 30;
       const slaDeadline = now + 16 * 3600000;
-
       const forecasts = [];
       for (const stage of STAGES) {
         const currentQueue = queueCounts[stage] ?? 0;
@@ -412,35 +609,20 @@ export const workloadRouter = router({
         const slaBreachCount = projectedCompletionAt > slaDeadline
           ? Math.ceil((projectedCompletionAt - slaDeadline) / 3600000 * tph)
           : 0;
-
-        forecasts.push({
-          stage,
-          currentQueue,
-          throughputPerHour: tph,
-          hoursNeeded: Math.round(hoursNeeded * 10) / 10,
-          projectedCompletionAt: Math.round(projectedCompletionAt),
-          slaBreachCount,
-          bottleneck: false,
-        });
+        forecasts.push({ stage, currentQueue, throughputPerHour: tph, hoursNeeded: Math.round(hoursNeeded * 10) / 10, projectedCompletionAt: Math.round(projectedCompletionAt), slaBreachCount, bottleneck: false });
       }
-
       const maxHours = Math.max(...forecasts.map(f => f.hoursNeeded));
       for (const f of forecasts) {
         if (f.hoursNeeded === maxHours && maxHours > 0) f.bottleneck = true;
       }
-
       for (const f of forecasts) {
         await db.execute(sql`
           INSERT INTO workload_forecasts
-            (warehouse_id, forecast_at, stage, current_queue, projected_completion_at,
-             sla_breach_count, throughput_per_hour, required_throughput, bottleneck)
+            (warehouse_id, forecast_at, stage, current_queue, projected_completion_at, sla_breach_count, throughput_per_hour, required_throughput, bottleneck)
           VALUES
-            (${input.warehouseId}, ${now}, ${f.stage}, ${f.currentQueue},
-             ${f.projectedCompletionAt}, ${f.slaBreachCount}, ${f.throughputPerHour},
-             ${f.throughputPerHour}, ${f.bottleneck ? 1 : 0})
+            (${input.warehouseId}, ${now}, ${f.stage}, ${f.currentQueue}, ${f.projectedCompletionAt}, ${f.slaBreachCount}, ${f.throughputPerHour}, ${f.throughputPerHour}, ${f.bottleneck ? 1 : 0})
         `);
       }
-
       return { forecasts, generatedAt: now };
     }),
 
@@ -451,18 +633,12 @@ export const workloadRouter = router({
       const db = await getDb();
       if (!db) throw new Error('DB unavailable');
       const latestRows = await db.execute<any>(sql`
-        SELECT MAX(forecast_at) as latest_at
-        FROM workload_forecasts
-        WHERE warehouse_id = ${input.warehouseId}
+        SELECT MAX(forecast_at) as latest_at FROM workload_forecasts WHERE warehouse_id = ${input.warehouseId}
       `);
       const latestAt = (latestRows as any[])[0]?.latest_at;
       if (!latestAt) return { forecasts: [], generatedAt: null };
-
       const rows = await db.execute<any>(sql`
-        SELECT * FROM workload_forecasts
-        WHERE warehouse_id = ${input.warehouseId}
-          AND forecast_at = ${latestAt}
-        ORDER BY id ASC
+        SELECT * FROM workload_forecasts WHERE warehouse_id = ${input.warehouseId} AND forecast_at = ${latestAt} ORDER BY id ASC
       `);
       return { forecasts: rows as any[], generatedAt: Number(latestAt) };
     }),
@@ -475,26 +651,16 @@ export const workloadRouter = router({
       if (!db) throw new Error('DB unavailable');
       const since = Date.now() - 30 * 86400000;
       const rows = await db.execute<any>(sql`
-        SELECT
-          stage,
-          AVG(orders_processed) as avg_orders_per_hour,
-          AVG(worker_count) as avg_workers,
-          MAX(orders_processed) as peak_orders,
-          COUNT(*) as data_points
+        SELECT stage, AVG(orders_processed) as avg_orders_per_hour, AVG(worker_count) as avg_workers, MAX(orders_processed) as peak_orders, COUNT(*) as data_points
         FROM throughput_snapshots
-        WHERE warehouse_id = ${input.warehouseId}
-          AND hour_bucket >= ${since}
-          AND worker_count > 0
+        WHERE warehouse_id = ${input.warehouseId} AND hour_bucket >= ${since} AND worker_count > 0
         GROUP BY stage
       `);
-
       return (rows as any[]).map((r: any) => ({
         stage: r.stage,
         avgOrdersPerHour: Number(r.avg_orders_per_hour) || 0,
         avgWorkers: Number(r.avg_workers) || 0,
-        ordersPerWorkerPerHour: Number(r.avg_workers) > 0
-          ? Number(r.avg_orders_per_hour) / Number(r.avg_workers)
-          : 0,
+        ordersPerWorkerPerHour: Number(r.avg_workers) > 0 ? Number(r.avg_orders_per_hour) / Number(r.avg_workers) : 0,
         peakOrders: Number(r.peak_orders) || 0,
         dataPoints: Number(r.data_points) || 0,
       }));

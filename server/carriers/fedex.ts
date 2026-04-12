@@ -256,19 +256,22 @@ async function fetchRatesForPackaging(
 }
 
 export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierRate[]> {
-  const clientId = process.env.FEDEX_USER_KEY;
-  const clientSecret = process.env.FEDEX_PASSWORD;
-  const accountNumber = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
+  // All FedEx operations use the One Rate account (942412380) exclusively.
+  // FEDEX_ONE_RATE_USER_KEY / FEDEX_ONE_RATE_PASSWORD / FEDEX_ONE_RATE_ACCOUNT_NUMBER are the
+  // authoritative credentials; the legacy FEDEX_USER_KEY / FEDEX_PASSWORD are NOT used.
+  const clientId = process.env.FEDEX_ONE_RATE_USER_KEY;
+  const clientSecret = process.env.FEDEX_ONE_RATE_PASSWORD;
+  const accountNumber = process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER ?? "";
 
   if (!clientId || !clientSecret) {
-    console.warn("[FedEx] FEDEX_USER_KEY or FEDEX_PASSWORD not configured — skipping FedEx rates");
+    console.warn("[FedEx] FEDEX_ONE_RATE_USER_KEY or FEDEX_ONE_RATE_PASSWORD not configured — skipping FedEx rates");
     return [];
   }
 
-  // One Rate dedicated account (FE1 contract) — falls back to primary account if not set
-  const oneRateClientId = process.env.FEDEX_ONE_RATE_USER_KEY || clientId;
-  const oneRateClientSecret = process.env.FEDEX_ONE_RATE_PASSWORD || clientSecret;
-  const oneRateAccountNumber = process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER || accountNumber;
+  // One Rate and standard rates both use the same account (942412380)
+  const oneRateClientId = clientId;
+  const oneRateClientSecret = clientSecret;
+  const oneRateAccountNumber = accountNumber;
 
   try {
     const token = await getAccessToken(clientId, clientSecret);
@@ -276,11 +279,8 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
     // ── 1. Standard rates (YOUR_PACKAGING) ──────────────────────────────────
     const standardRates = await fetchRatesForPackaging(token, accountNumber, input);
 
-    // ── 2. One Rate rates — use dedicated One Rate account if configured ────
-    // We deduplicate by serviceCode, keeping the cheapest price per service.
-    const oneRateToken = (oneRateClientId !== clientId)
-      ? await getAccessToken(oneRateClientId, oneRateClientSecret).catch(() => token)
-      : token;
+    // ── 2. One Rate rates — same account, different packaging types ──────────
+    const oneRateToken = token;
     const oneRateRequests = FEDEX_ONE_RATE_PACKAGING_TYPES.map(pkg =>
       fetchRatesForPackaging(oneRateToken, oneRateAccountNumber, input, pkg).catch(() => [] as CarrierRate[])
     );
@@ -325,9 +325,11 @@ export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLa
   const stdClientSecret = process.env.FEDEX_PASSWORD;
   const stdAccountNumber = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
 
-  const clientId = (isOneRate && process.env.FEDEX_ONE_RATE_USER_KEY) ? process.env.FEDEX_ONE_RATE_USER_KEY : stdClientId;
-  const clientSecret = (isOneRate && process.env.FEDEX_ONE_RATE_PASSWORD) ? process.env.FEDEX_ONE_RATE_PASSWORD : stdClientSecret;
-  const accountNumber = (isOneRate && process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER) ? process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER : stdAccountNumber;
+  // All FedEx label purchases use account 942412380 (One Rate credentials) exclusively.
+  // The standard 620 account is only for non-FedEx carriers.
+  const clientId = process.env.FEDEX_ONE_RATE_USER_KEY || stdClientId;
+  const clientSecret = process.env.FEDEX_ONE_RATE_PASSWORD || stdClientSecret;
+  const accountNumber = process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER || stdAccountNumber;
 
   if (!clientId || !clientSecret || !accountNumber) {
     return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: "", error: "FedEx REST credentials not configured (FEDEX_USER_KEY, FEDEX_PASSWORD, FEDEX_ACCOUNT_NUMBER required)" };

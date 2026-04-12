@@ -196,6 +196,20 @@ export const myShiftRouter = router({
       };
     }),
 
+  // List distinct warehouses for the start-shift dropdown
+  warehouses: protectedProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db.execute<{ warehouseId: string }>(
+      sql`SELECT DISTINCT facilityName AS warehouseId FROM allocation_runs WHERE facilityName IS NOT NULL AND facilityName != ''
+          UNION SELECT DISTINCT facilityName AS warehouseId FROM small_parcel_sessions WHERE facilityName IS NOT NULL AND facilityName != ''
+          UNION SELECT DISTINCT warehouseName AS warehouseId FROM qc_scan_sessions WHERE warehouseName IS NOT NULL AND warehouseName != ''
+          UNION SELECT DISTINCT warehouseId AS warehouseId FROM shift_sessions WHERE warehouseId IS NOT NULL AND warehouseId != ''
+          ORDER BY warehouseId`
+    );
+    return (rows as any[]).map((r) => r.warehouseId as string);
+  }),
+
   // Recent shifts (last 5)
   recentShifts: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();

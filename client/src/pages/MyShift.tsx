@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,9 @@ import {
   BarChart3,
   ChevronDown,
   ChevronUp,
+  LogIn,
+  LogOut,
+  Timer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -68,6 +71,19 @@ interface ShiftSession {
   tasks: ShiftTask[];
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+const SHIFT_ROLES = [
+  { value: "picker", label: "Picker" },
+  { value: "packer", label: "Packer" },
+  { value: "receiver", label: "Receiver" },
+  { value: "qc", label: "QC Inspector" },
+  { value: "shipping", label: "Shipping" },
+  { value: "forklift", label: "Forklift Operator" },
+  { value: "supervisor", label: "Supervisor" },
+  { value: "returns", label: "Returns" },
+  { value: "general", label: "General Labor" },
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const STATUS_META: Record<TaskStatus, { label: string; icon: React.ReactNode; color: string }> = {
   pending: { label: "Pending", icon: <Circle className="h-4 w-4" />, color: "text-muted-foreground" },
@@ -89,7 +105,20 @@ function formatDuration(startedAt: Date, endedAt?: Date | null): string {
   const ms = end.getTime() - start.getTime();
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const s = Math.floor((ms % 60000) / 1000);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+// ─── Live Clock Hook ──────────────────────────────────────────────────────────
+function useLiveClock(startedAt: Date) {
+  const [elapsed, setElapsed] = useState(() => formatDuration(startedAt));
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(formatDuration(startedAt)), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  return elapsed;
 }
 
 // ─── Add Task Dialog ──────────────────────────────────────────────────────────
@@ -215,7 +244,6 @@ function TaskRow({ task, shiftId: _shiftId }: { task: ShiftTask; shiftId: number
   return (
     <div className={`border-b last:border-b-0 transition-colors ${isDone ? "opacity-60" : ""}`}>
       <div className="flex items-center gap-3 px-4 py-3">
-        {/* Status icon / toggle */}
         <button
           className={`shrink-0 ${sm.color} hover:scale-110 transition-transform`}
           onClick={() => {
@@ -228,7 +256,6 @@ function TaskRow({ task, shiftId: _shiftId }: { task: ShiftTask; shiftId: number
           {sm.icon}
         </button>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-sm font-medium ${isDone ? "line-through" : ""}`}>{task.title}</span>
@@ -251,7 +278,6 @@ function TaskRow({ task, shiftId: _shiftId }: { task: ShiftTask; shiftId: number
           )}
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
           {task.status === "pending" && (
             <Button
@@ -285,12 +311,13 @@ function ActiveShiftView({ shift }: { shift: ShiftSession }) {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showEndShift, setShowEndShift] = useState(false);
   const [endNotes, setEndNotes] = useState("");
+  const elapsed = useLiveClock(new Date(shift.startedAt));
 
   const endShift = trpc.myShift.endShift.useMutation({
     onSuccess: () => {
       utils.myShift.currentShift.invalidate();
       utils.myShift.recentShifts.invalidate();
-      toast.success("Shift ended");
+      toast.success("Clocked out — shift ended");
       setShowEndShift(false);
     },
   });
@@ -301,45 +328,57 @@ function ActiveShiftView({ shift }: { shift: ShiftSession }) {
   const pending = tasks.filter((t) => t.status === "pending").length;
   const pct = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
 
-  // Sort: in_progress first, then pending, then done/skipped
   const sorted = [...tasks].sort((a, b) => {
     const order = { in_progress: 0, pending: 1, done: 2, skipped: 3 };
     return (order[a.status] ?? 9) - (order[b.status] ?? 9) || a.sortOrder - b.sortOrder;
   });
 
+  const roleLabel = SHIFT_ROLES.find((r) => r.value === shift.role)?.label ?? shift.role;
+
   return (
     <div className="space-y-4">
-      {/* Shift header card */}
+      {/* Clock-in banner */}
       <Card className="border-green-200 dark:border-green-900/50 bg-green-50/50 dark:bg-green-950/20">
-        <CardContent className="pt-4 pb-3">
+        <CardContent className="pt-4 pb-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-sm font-semibold text-green-700 dark:text-green-400">Shift Active</span>
-                {shift.role && (
-                  <Badge variant="outline" className="text-xs">{shift.role}</Badge>
-                )}
-                {shift.warehouseId && (
-                  <Badge variant="secondary" className="text-xs">{shift.warehouseId}</Badge>
-                )}
+            <div className="flex items-center gap-3">
+              {/* Live clock */}
+              <div className="flex flex-col items-center justify-center bg-green-100 dark:bg-green-900/40 rounded-xl px-4 py-2 min-w-[80px]">
+                <Timer className="h-3.5 w-3.5 text-green-600 dark:text-green-400 mb-0.5" />
+                <span className="text-xl font-bold tabular-nums text-green-700 dark:text-green-300 leading-none">
+                  {elapsed}
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Started {new Date(shift.startedAt).toLocaleTimeString()} · {formatDuration(shift.startedAt)} elapsed
-              </p>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-sm font-semibold text-green-700 dark:text-green-400">Clocked In</span>
+                  {roleLabel && (
+                    <Badge variant="outline" className="text-xs">{roleLabel}</Badge>
+                  )}
+                  {shift.warehouseId && (
+                    <Badge variant="secondary" className="text-xs">{shift.warehouseId}</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Since {new Date(shift.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </div>
             </div>
+
+            {/* Clock Out button */}
             <Button
               variant="outline"
               size="sm"
-              className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+              className="gap-1.5 text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
               onClick={() => setShowEndShift(true)}
             >
-              <StopCircle className="h-3.5 w-3.5" />
-              End Shift
+              <LogOut className="h-3.5 w-3.5" />
+              Clock Out
             </Button>
           </div>
 
-          {/* Progress bar */}
+          {/* Task progress bar */}
           {tasks.length > 0 && (
             <div className="mt-3">
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
@@ -399,22 +438,32 @@ function ActiveShiftView({ shift }: { shift: ShiftSession }) {
         )}
       </Dialog>
 
-      {/* End shift dialog */}
+      {/* Clock Out / End shift dialog */}
       <Dialog open={showEndShift} onOpenChange={(o) => { if (!o) setShowEndShift(false); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>End Shift</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <LogOut className="h-4 w-4 text-red-500" />
+              Clock Out
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Duration: {formatDuration(shift.startedAt)} · {done}/{tasks.length} tasks completed
-            </p>
+            <div className="bg-muted/50 rounded-lg px-4 py-3 text-sm">
+              <div className="flex justify-between mb-1">
+                <span className="text-muted-foreground">Duration</span>
+                <span className="font-medium">{elapsed}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tasks completed</span>
+                <span className="font-medium">{done}/{tasks.length}</span>
+              </div>
+            </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Shift Notes (optional)</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Handoff Notes (optional)</label>
               <Textarea
                 value={endNotes}
                 onChange={(e) => setEndNotes(e.target.value)}
-                placeholder="Any handoff notes or observations…"
+                placeholder="Any notes for the next shift…"
                 className="resize-none min-h-[80px] text-sm"
               />
             </div>
@@ -423,10 +472,12 @@ function ActiveShiftView({ shift }: { shift: ShiftSession }) {
             <Button variant="outline" onClick={() => setShowEndShift(false)}>Cancel</Button>
             <Button
               variant="destructive"
+              className="gap-1.5"
               onClick={() => endShift.mutate({ id: shift.id, notes: endNotes.trim() || undefined })}
               disabled={endShift.isPending}
             >
-              {endShift.isPending ? "Ending…" : "End Shift"}
+              <LogOut className="h-3.5 w-3.5" />
+              {endShift.isPending ? "Clocking out…" : "Confirm Clock Out"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -439,54 +490,106 @@ function ActiveShiftView({ shift }: { shift: ShiftSession }) {
 function NoShiftView() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
-  const [warehouse, setWarehouse] = useState("");
-  const [role, setRole] = useState("");
+  const [warehouse, setWarehouse] = useState<string>("");
+  const [role, setRole] = useState<string>("");
+  const [customWarehouse, setCustomWarehouse] = useState("");
+
+  const { data: warehouses = [] } = trpc.myShift.warehouses.useQuery();
+  const { data: recentShifts = [] } = trpc.myShift.recentShifts.useQuery();
 
   const startShift = trpc.myShift.startShift.useMutation({
     onSuccess: () => {
       utils.myShift.currentShift.invalidate();
-      toast.success("Shift started!");
+      toast.success("Clocked in — shift started!");
     },
   });
 
-  const { data: recentShifts = [] } = trpc.myShift.recentShifts.useQuery();
+  const effectiveWarehouse = warehouse === "__custom__" ? customWarehouse.trim() : warehouse;
 
   return (
     <div className="space-y-4">
-      <Card className="border-dashed">
-        <CardContent className="pt-6 pb-6 text-center">
-          <CalendarDays className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-40" />
-          <h2 className="text-lg font-semibold mb-1">No Active Shift</h2>
-          <p className="text-sm text-muted-foreground mb-5">
-            Start a shift to track your tasks and activity for the day.
-          </p>
-          <div className="flex gap-2 max-w-xs mx-auto mb-4">
-            <Input
-              placeholder="Warehouse (optional)"
-              value={warehouse}
-              onChange={(e) => setWarehouse(e.target.value)}
-              className="h-9 text-sm"
-            />
-            <Input
-              placeholder="Role (optional)"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="h-9 text-sm"
-            />
+      {/* Clock In card */}
+      <Card>
+        <CardContent className="pt-6 pb-6">
+          <div className="flex flex-col items-center text-center mb-6">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <LogIn className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold mb-1">Ready to start?</h2>
+            <p className="text-sm text-muted-foreground">
+              Select your warehouse and role, then clock in to begin tracking your shift.
+            </p>
           </div>
-          <Button
-            className="gap-2"
-            onClick={() =>
-              startShift.mutate({
-                warehouseId: warehouse.trim() || undefined,
-                role: role.trim() || undefined,
-              })
-            }
-            disabled={startShift.isPending}
-          >
-            <PlayCircle className="h-4 w-4" />
-            {startShift.isPending ? "Starting…" : "Start Shift"}
-          </Button>
+
+          <div className="max-w-sm mx-auto space-y-3">
+            {/* Warehouse selector */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Warehouse</label>
+              <Select value={warehouse} onValueChange={setWarehouse}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Select warehouse…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map((wh) => (
+                    <SelectItem key={wh} value={wh}>{wh}</SelectItem>
+                  ))}
+                  <SelectItem value="__custom__">Other / Enter manually…</SelectItem>
+                </SelectContent>
+              </Select>
+              {warehouse === "__custom__" && (
+                <Input
+                  className="mt-2 h-9 text-sm"
+                  placeholder="Warehouse name"
+                  value={customWarehouse}
+                  onChange={(e) => setCustomWarehouse(e.target.value)}
+                />
+              )}
+            </div>
+
+            {/* Role selector */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Role</label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Select your role…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SHIFT_ROLES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Worker identity confirmation */}
+            {user && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-[10px]">
+                  {(user.name ?? user.email ?? "?")[0].toUpperCase()}
+                </div>
+                <span>Clocking in as <strong>{user.name ?? user.email}</strong></span>
+              </div>
+            )}
+
+            {/* Clock In button */}
+            <Button
+              className="w-full h-11 gap-2 text-base"
+              onClick={() =>
+                startShift.mutate({
+                  warehouseId: effectiveWarehouse || undefined,
+                  role: role || undefined,
+                })
+              }
+              disabled={startShift.isPending}
+            >
+              {startShift.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogIn className="h-4 w-4" />
+              )}
+              {startShift.isPending ? "Clocking in…" : "Clock In"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -501,23 +604,28 @@ function NoShiftView() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y">
-              {recentShifts.map((s) => (
-                <div key={s.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                  <div>
-                    <p className="font-medium">{new Date(s.startedAt).toLocaleDateString()}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(s.startedAt).toLocaleTimeString()} →{" "}
-                      {s.endedAt ? new Date(s.endedAt).toLocaleTimeString() : "ongoing"}
-                      {" · "}
-                      {formatDuration(s.startedAt, s.endedAt)}
-                    </p>
+              {recentShifts.map((s) => {
+                const roleLabel = SHIFT_ROLES.find((r) => r.value === s.role)?.label ?? s.role;
+                return (
+                  <div key={s.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <div>
+                      <p className="font-medium">{new Date(s.startedAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(s.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} →{" "}
+                        {s.endedAt
+                          ? new Date(s.endedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : "ongoing"}
+                        {" · "}
+                        {formatDuration(s.startedAt, s.endedAt)}
+                      </p>
+                    </div>
+                    <div className="text-right space-y-0.5">
+                      {s.warehouseId && <Badge variant="secondary" className="text-xs">{s.warehouseId}</Badge>}
+                      {roleLabel && <p className="text-xs text-muted-foreground">{roleLabel}</p>}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    {s.warehouseId && <Badge variant="secondary" className="text-xs">{s.warehouseId}</Badge>}
-                    {s.role && <p className="text-xs text-muted-foreground mt-0.5">{s.role}</p>}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -535,7 +643,7 @@ export default function MyShift() {
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-4">
       <div className="flex items-center gap-3">
-        <CalendarDays className="h-6 w-6 text-primary" />
+        <Clock className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold">My Shift</h1>
       </div>
 

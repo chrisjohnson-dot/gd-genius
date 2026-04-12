@@ -24,7 +24,6 @@ import {
   ScrollText,
   Ship,
   ShieldCheck,
-  Stethoscope,
   Sun,
   Timer,
   Truck,
@@ -125,8 +124,7 @@ const auditItems = [
 const configItems = [
   { href: "/rules",                      label: "Allocation Rules",        icon: ListChecks },
   { href: "/ltl/associates",             label: "Associates",              icon: Users },
-  { href: "/settings",                   label: "API Settings",            icon: Cog },
-  { href: "/diagnostics",                label: "API Diagnostics",         icon: Stethoscope },
+  { href: "/settings",                   label: "API Settings & Diagnostics", icon: Cog },
   { href: "/schedule",                   label: "Auto-Run Allocation",     icon: CalendarClock },
   { href: "/client-visibility",          label: "Client Visibility",       icon: Users },
   { href: "/small-parcel/customer-shipping-rules", label: "Customer Shipping Rules", icon: UserCog },

@@ -9,7 +9,7 @@ import { KioskProvider } from "./contexts/KioskContext";
 import AppLayout from "./components/AppLayout";
 import { CommandPalette } from "./components/CommandPalette";
 import Home from "./pages/Home";
-import Settings from "./pages/Settings";
+import ApiSettingsDiagnostics from "./pages/ApiSettingsDiagnostics";
 import LocationConfig from "./pages/LocationConfig";
 import OrderSelection from "./pages/OrderSelection";
 import AllocationReview from "./pages/AllocationReview";
@@ -17,7 +17,6 @@ import RunHistory from "./pages/RunHistory";
 import RunDetail from "./pages/RunDetail";
 import AuditLog from "./pages/AuditLog";
 import ScheduleSettings from "./pages/ScheduleSettings";
-import Diagnostics from "./pages/Diagnostics";
 import PrintPage from "@/pages/PrintPage";
 import QCDashboard from "@/pages/QCDashboard";
 import QCReports from "@/pages/QCReports";
@@ -92,7 +91,7 @@ function AppRoutes() {
     <AppLayout>
       <Switch>
         <Route path="/" component={Home} />
-        <Route path="/settings" component={Settings} />
+        <Route path="/settings" component={ApiSettingsDiagnostics} />
         <Route path="/locations" component={LocationConfig} />
         <Route path="/rules" component={AllocationRules} />
         <Route path="/allocate" component={OrderSelection} />
@@ -101,7 +100,7 @@ function AppRoutes() {
         <Route path="/history/:runId" component={RunDetail} />
         <Route path="/audit" component={AuditLog} />
         <Route path="/schedule" component={ScheduleSettings} />
-        <Route path="/diagnostics" component={Diagnostics} />
+        <Route path="/diagnostics">{() => { window.location.replace("/settings"); return null; }}</Route>
         <Route path="/qc" component={QCDashboard} />
         <Route path="/qc/reports" component={QCReports} />
         <Route path="/shipping" component={ShippingDashboard} />

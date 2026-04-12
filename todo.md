@@ -1451,3 +1451,4 @@
 - [ ] Routing Guides: DB schema, tRPC procedures, customer list with rule highlights, per-customer routing guide editor with destination requirements
 - [x] Sidebar: move Associates to Configuration section (alphabetically sorted)
 - [x] Sidebar/Cortex: move Supervisor PINs into Cortex Hub tab; remove from Configuration
+- [x] Consolidate API Settings and API Diagnostics into one menu item with two tabs

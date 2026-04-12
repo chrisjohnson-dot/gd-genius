@@ -322,7 +322,7 @@ export default function WarehousePull() {
           <ScanBarcode className="h-5 w-5 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-foreground">Warehouse Pull</h1>
+          <h1 className="text-xl font-bold text-foreground">Item Pull Control</h1>
           <p className="text-xs text-muted-foreground">LTL Pick Time Tracker</p>
         </div>
         {step === "active" && (

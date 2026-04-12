@@ -64,7 +64,6 @@ const dashboardItems = [
   { href: "/open-orders-d2c", label: "Open Orders — D2C", icon: FolderOpen },
   { href: "/sla-performance",  label: "SLA Performance",   icon: TrendingUp },
   { href: "/exceptions",       label: "Exceptions Queue",  icon: AlertTriangle },
-  { href: "/my-shift",         label: "My Shift",          icon: CalendarDays },
   { href: "/scan-mode",         label: "Scan Mode",          icon: ScanBarcode },
   { href: "/live-ops",           label: "Live Ops View",      icon: Monitor },
   { href: "/clients",             label: "Client Profiles",    icon: Building2 },
@@ -97,7 +96,7 @@ const packagingItems = [
 ];
 
 const ltlItems = [
-  { href: "/ltl/warehouse-pull",  label: "Warehouse Pull",          icon: ScanBarcode },
+  { href: "/ltl/warehouse-pull",  label: "Item Pull Control",       icon: ScanBarcode },
   { href: "/ltl/live-board",      label: "Live Board",              icon: Activity },
   { href: "/ltl/pull-manager",    label: "Pull Manager",            icon: BarChart2 },
   { href: "/ltl/associates",      label: "Associates",              icon: Users },

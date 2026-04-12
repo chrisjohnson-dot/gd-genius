@@ -273,9 +273,30 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
     if (forceOneRate) list = list.filter((r) => r.serviceCode?.includes("ONE_RATE"));
     if (!forceOneRate && filterCarrier !== "all") list = list.filter((r) => r.carrierCode === filterCarrier);
     if (!forceOneRate && filterMaxDays !== "all") list = list.filter((r) => r.transitDays <= parseInt(filterMaxDays));
-    // Always sort by cost ascending first to identify the 3 cheapest, then re-sort by user preference
+    // Find the routing-guide-recommended rate (if any) so it is always included
+    const guideRate = recommendedRoute
+      ? (() => {
+          // 1. Exact serviceCode match
+          const byCode = (recommendedRoute as { serviceCode?: string }).serviceCode
+            ? list.find(r => r.serviceCode === (recommendedRoute as { serviceCode?: string }).serviceCode)
+            : null;
+          if (byCode) return byCode;
+          // 2. Carrier + service name fuzzy match
+          return list.find(r =>
+            r.carrierCode === recommendedRoute.carrierCode &&
+            r.service.toLowerCase().includes(recommendedRoute.serviceLevel.toLowerCase().split(" ")[0].toLowerCase())
+          ) ?? list.find(r => r.carrierCode === recommendedRoute.carrierCode) ?? null;
+        })()
+      : null;
+
+    // Build the top-3 set: always include the guide rate, fill remaining slots with cheapest
     const byCost = [...list].sort((a, b) => a.totalCost - b.totalCost);
-    const top3Ids = new Set(byCost.slice(0, 3).map((r) => r.rateId));
+    const top3Ids = new Set<string>();
+    if (guideRate) top3Ids.add(guideRate.rateId);
+    for (const r of byCost) {
+      if (top3Ids.size >= 3) break;
+      top3Ids.add(r.rateId);
+    }
     list = list.filter((r) => top3Ids.has(r.rateId));
     list.sort((a, b) => {
       let cmp = 0;
@@ -285,7 +306,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
       return sortDir === "asc" ? cmp : -cmp;
     });
     return list;
-  }, [rates, filterCarrier, filterMaxDays, sortKey, sortDir, forceOneRate]);
+  }, [rates, filterCarrier, filterMaxDays, sortKey, sortDir, forceOneRate, recommendedRoute]);
 
   const selectedRate = displayed.find((r) => r.rateId === selectedRateId) ?? null;
 

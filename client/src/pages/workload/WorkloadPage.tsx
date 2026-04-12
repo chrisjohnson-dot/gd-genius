@@ -15,6 +15,7 @@ import {
   ResponsiveContainer,
   Legend,
   Cell,
+  ReferenceLine,
 } from "recharts";
 import {
   TrendingUp,
@@ -267,7 +268,16 @@ function WarehouseCard({ summary, onClick }: { summary: WarehouseSummary; onClic
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function WarehouseDetail({ warehouseId, window, onBack }: { warehouseId: string; window: Window; onBack: () => void }) {
+function WarehouseDetail({ warehouseId, window, shiftHours, onBack }: { warehouseId: string; window: Window; shiftHours: number; onBack: () => void }) {
+  const { data: warehouseSummaries } = trpc.workload.getWarehouseSummaries.useQuery(
+    { window, shiftHours },
+    { refetchInterval: 60_000 }
+  );
+  const thisSummary = (warehouseSummaries as WarehouseSummary[] | undefined)?.find(
+    (s) => s.warehouseId === warehouseId
+  );
+  const targetRate = thisSummary?.requiredRate ?? 0;
+
   const { data: rate } = trpc.workload.getThroughputRate.useQuery(
     { warehouseId, window },
     { refetchInterval: 60_000 }
@@ -401,21 +411,44 @@ function WarehouseDetail({ warehouseId, window, onBack }: { warehouseId: string;
                 <p className="text-sm">No sessions in this window</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={rateTrend} margin={{ top: 4, right: 4, left: -20, bottom: 4 }}>
-                  <defs>
-                    <linearGradient id="rateGrad2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Area type="monotone" dataKey="itemsPerHour" name="Items/hr" stroke="#3b82f6" fill="url(#rateGrad2)" strokeWidth={2} dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <>
+                {targetRate > 0 && (
+                  <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+                    <span className="inline-block w-6 border-t-2 border-dashed border-red-400" />
+                    <span>Target: <strong className="text-foreground">{targetRate.toLocaleString()} items/hr</strong> required to clear backlog in {shiftHours}h</span>
+                  </div>
+                )}
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={rateTrend} margin={{ top: 4, right: 4, left: -20, bottom: 4 }}>
+                    <defs>
+                      <linearGradient id="rateGrad2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<ChartTooltip />} />
+                    {targetRate > 0 && (
+                      <ReferenceLine
+                        y={targetRate}
+                        stroke="#ef4444"
+                        strokeDasharray="6 3"
+                        strokeWidth={1.5}
+                        label={{
+                          value: `Target ${targetRate.toLocaleString()}`,
+                          position: "insideTopRight",
+                          fontSize: 10,
+                          fill: "#ef4444",
+                          fontWeight: 600,
+                        }}
+                      />
+                    )}
+                    <Area type="monotone" dataKey="itemsPerHour" name="Items/hr" stroke="#3b82f6" fill="url(#rateGrad2)" strokeWidth={2} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </>
             )}
           </CardContent>
         </Card>
@@ -531,6 +564,12 @@ export default function WorkloadPage() {
   const [shiftHours, setShiftHours] = useState(8);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
 
+  // Fetch the per-warehouse summary to get the required rate for the reference line
+  const { data: warehouseSummaries } = trpc.workload.getWarehouseSummaries.useQuery(
+    { window, shiftHours },
+    { refetchInterval: 60_000 }
+  );
+
   const { data: summaries, isLoading, refetch } = trpc.workload.getWarehouseSummaries.useQuery(
     { window, shiftHours },
     { refetchInterval: 60_000 }
@@ -550,6 +589,7 @@ export default function WorkloadPage() {
         <WarehouseDetail
           warehouseId={selectedWarehouse}
           window={window}
+          shiftHours={shiftHours}
           onBack={() => setSelectedWarehouse(null)}
         />
       </div>

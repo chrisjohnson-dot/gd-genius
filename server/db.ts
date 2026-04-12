@@ -4132,6 +4132,20 @@ export async function getLatestRatedShipmentForOrder(orderId: string): Promise<R
   return row ?? null;
 }
 
+/** Get the most recent 'rated' shipment record for a given small-parcel session ID.
+ * Fallback for when the session has no Extensiv order ID (manual / walk-up shipments). */
+export async function getLatestRatedShipmentBySessionId(sessionId: number): Promise<RateWizardShipment | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select()
+    .from(rateWizardShipments)
+    .where(eq(rateWizardShipments.sessionId, sessionId))
+    .orderBy(desc(rateWizardShipments.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 // ─── Unified Shipments ────────────────────────────────────────────────────────
 
 import { shipments, type InsertShipment, type Shipment } from "../drizzle/schema";

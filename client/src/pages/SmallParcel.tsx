@@ -1208,6 +1208,7 @@ function Step4PackShip({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const rateCardInput: RateCardInput = useMemo(() => ({
     configId,
+    sessionId,
     orderId: order.extensivOrderId,
     orderNumber: order.referenceNum,
     locationId,
@@ -1227,7 +1228,7 @@ function Step4PackShip({
     isResidential: false,
   // Recompute when dimensions or destination change
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [configId, order.extensivOrderId, order.referenceNum, locationId, order.clientId, order.clientName,
+  }), [configId, sessionId, order.extensivOrderId, order.referenceNum, locationId, order.clientId, order.clientName,
     weightLbs, lengthIn, widthIn, heightIn, destPostal, destCountry,
     order.shipTo?.address1, order.shipTo?.city, order.shipTo?.state,
     order.shipTo?.companyName, order.shipTo?.name]);

@@ -16,6 +16,8 @@ import { toast } from "sonner";
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface RateCardInput {
   configId: number;
+  /** Small-parcel session ID — stored on the rate_wizard_shipments row so purchaseLabel can look it up even when extensivOrderId is null */
+  sessionId?: number;
   orderId?: number;
   orderNumber?: string;
   locationId: string;
@@ -254,6 +256,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
     try {
       await confirmMutation.mutateAsync({
         configId: input.configId,
+        sessionId: input.sessionId,
         orderId: input.orderId,
         orderNumber: input.orderNumber,
         locationId: input.locationId,

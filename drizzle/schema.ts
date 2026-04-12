@@ -1478,6 +1478,8 @@ export const rateWizardShipments = mysqlTable("rate_wizard_shipments", {
   lengthIn: int("length_in"),
   widthIn: int("width_in"),
   heightIn: int("height_in"),
+  /** Small parcel session ID — fallback lookup key when orderId is null */
+  sessionId: int("session_id"),
   /** Veeqo Rate Shopping API: remote_shipment_id from rates response (needed to book) */
   remoteShipmentId: varchar("remote_shipment_id", { length: 100 }),
   /** Veeqo Rate Shopping API: request_token from rates response (for validation) */

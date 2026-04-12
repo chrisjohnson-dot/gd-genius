@@ -201,6 +201,7 @@ import {
   createRateWizardShipment,
   updateRateWizardShipment,
   getLatestRatedShipmentForOrder,
+  getLatestRatedShipmentBySessionId,
   createShipment,
   updateShipment,
   listShipmentsUnified,
@@ -6806,10 +6807,15 @@ const smallParcelRouter = router({
       let carrier: string;
       let serviceLevel: string;
       let labelZpl: string;
-      // Look up the confirmed rate record for this session
-      const confirmedShipment = session.extensivOrderId
+      // Look up the confirmed rate record for this session.
+      // Primary: look up by Extensiv order ID (set when order was scanned via Extensiv).
+      // Fallback: look up by session ID (set during confirmRate for manual / walk-up shipments).
+      let confirmedShipment = session.extensivOrderId
         ? await getLatestRatedShipmentForOrder(String(session.extensivOrderId))
         : null;
+      if (!confirmedShipment) {
+        confirmedShipment = await getLatestRatedShipmentBySessionId(input.id);
+      }
       // Veeqo path: ONLY when activeIntegration === 'veeqo'
       const veeqoApiKey = activeIntegration === 'veeqo' ? process.env.VEEQO_API_KEY : undefined;
       const hasVeeqoTokens = activeIntegration === 'veeqo' && !!(veeqoApiKey && confirmedShipment?.remoteShipmentId && confirmedShipment?.requestToken && confirmedShipment?.serviceCode);
@@ -8822,6 +8828,8 @@ const rateWizardRouter = router({
     .input(
       z.object({
         configId: z.number(),
+        /** Small-parcel session ID — stored so purchaseLabel can look up the rate even when extensivOrderId is null */
+        sessionId: z.number().optional(),
         orderId: z.number().optional(),
         orderNumber: z.string().optional(),
         locationId: z.string(),
@@ -8846,6 +8854,7 @@ const rateWizardRouter = router({
     .mutation(async ({ input, ctx }) => {
       const shipment = await createRateWizardShipment({
         configId: input.configId,
+        sessionId: input.sessionId,
         orderId: input.orderId ? String(input.orderId) : undefined,
         locationId: input.locationId,
         customerId: input.customerId,

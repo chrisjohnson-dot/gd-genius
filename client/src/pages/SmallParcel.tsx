@@ -1293,6 +1293,8 @@ function Step4PackShip({
   };
 
   const handlePackShipCore = async () => {
+    // Reset stale error state so a fresh network call is always made
+    purchaseMutation.reset();
     if (weight || length || width || height) {
       await updateDimsMutation.mutateAsync({
         id: sessionId,

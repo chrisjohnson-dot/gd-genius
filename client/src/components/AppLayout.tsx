@@ -62,10 +62,8 @@ const dashboardItems = [
   { href: "/",                 label: "Open Orders — B2B", icon: FolderOpen, badge: true },
   { href: "/open-orders-d2c", label: "Open Orders — D2C", icon: FolderOpen },
   { href: "/sla-performance",  label: "SLA Performance",   icon: TrendingUp },
-  { href: "/exceptions",       label: "Exceptions Queue",  icon: AlertTriangle },
-  { href: "/scan-mode",         label: "Scan Mode",          icon: ScanBarcode },
+  { href: "/exceptions",       label: "Requires Attention",  icon: AlertTriangle, exceptionsBadge: true },
   { href: "/live-ops",           label: "Live Ops View",      icon: Monitor },
-  { href: "/clients",             label: "Client Profiles",    icon: Building2 },
   { href: "/workload",             label: "Workload Planning",  icon: BarChart2 },
 ];
 
@@ -145,6 +143,17 @@ const configItems = [
 ];
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";
+
+// ─── Simple count badge (for Requires Attention) ─────────────────────────────
+
+function SimpleCountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 // ─── Attention badge with hover popover ──────────────────────────────────────
 
@@ -227,12 +236,14 @@ function NavItem({
   icon: Icon,
   active,
   badgeData,
+  exceptionCount,
 }: {
   href: string;
   label: string;
   icon: React.ElementType;
   active: boolean;
   badgeData?: { total: number; overdueCount: number; zeroBidCount: number; verificationIssues: number };
+  exceptionCount?: number;
 }) {
   return (
     <Link
@@ -255,6 +266,7 @@ function NavItem({
           verificationIssues={badgeData.verificationIssues}
         />
       )}
+      {exceptionCount !== undefined && <SimpleCountBadge count={exceptionCount} />}
     </Link>
   );
 }
@@ -311,6 +323,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const attentionBadge = attentionData
     ? { total: attentionData.total, overdueCount: attentionData.overdueCount, zeroBidCount: attentionData.zeroBidCount, verificationIssues: attentionData.verificationIssues ?? 0 }
     : undefined;
+
+  // Poll exceptions count every 60 seconds for the Requires Attention badge
+  const { data: exceptionsCountData } = trpc.exceptions.counts.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const exceptionsCount = exceptionsCountData?.total ?? 0;
 
   if (loading) {
     return (
@@ -376,6 +395,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   {...item}
                   active={location === item.href}
                   badgeData={item.badge ? attentionBadge : undefined}
+                  exceptionCount={item.exceptionsBadge ? exceptionsCount : undefined}
                 />
               ))}
             </div>

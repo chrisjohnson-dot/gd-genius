@@ -64,7 +64,7 @@ const dashboardItems = [
   { href: "/sla-performance",  label: "SLA Performance",   icon: TrendingUp },
   { href: "/exceptions",       label: "Requires Attention",  icon: AlertTriangle, exceptionsBadge: true },
   { href: "/live-ops",           label: "Live Ops View",      icon: Monitor },
-  { href: "/workload",             label: "Workload Planning",  icon: BarChart2 },
+  { href: "/workload",             label: "Workload Planning",  icon: BarChart2, workloadBadge: true },
 ];
 
 const receivingItems = [
@@ -230,6 +230,15 @@ function AttentionBadge({
 
 // ─── NavItem ──────────────────────────────────────────────────────────────────
 
+function WorkloadDot({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto shrink-0 flex items-center gap-1">
+      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+    </span>
+  );
+}
+
 function NavItem({
   href,
   label,
@@ -237,6 +246,7 @@ function NavItem({
   active,
   badgeData,
   exceptionCount,
+  workloadCount,
 }: {
   href: string;
   label: string;
@@ -244,6 +254,7 @@ function NavItem({
   active: boolean;
   badgeData?: { total: number; overdueCount: number; zeroBidCount: number; verificationIssues: number };
   exceptionCount?: number;
+  workloadCount?: number;
 }) {
   return (
     <Link
@@ -266,7 +277,8 @@ function NavItem({
           verificationIssues={badgeData.verificationIssues}
         />
       )}
-      {exceptionCount !== undefined && <SimpleCountBadge count={exceptionCount} />}
+      {exceptionCount !== undefined && exceptionCount > 0 && <SimpleCountBadge count={exceptionCount} />}
+      {workloadCount !== undefined && <WorkloadDot count={workloadCount} />}
     </Link>
   );
 }
@@ -330,6 +342,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     staleTime: 30_000,
   });
   const exceptionsCount = exceptionsCountData?.total ?? 0;
+
+  // Poll workload summaries every 60 seconds for the Workload Planning red dot
+  const { data: workloadSummaries } = trpc.workload.getWarehouseSummaries.useQuery(
+    { window: "1h", shiftHours: 8 },
+    { refetchInterval: 60_000, staleTime: 30_000 }
+  );
+  const workloadCriticalCount = (workloadSummaries ?? []).filter(
+    (s: { paceStatus: string }) => s.paceStatus === "red"
+  ).length;
 
   if (loading) {
     return (
@@ -396,6 +417,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   active={location === item.href}
                   badgeData={item.badge ? attentionBadge : undefined}
                   exceptionCount={item.exceptionsBadge ? exceptionsCount : undefined}
+                  workloadCount={(item as any).workloadBadge ? workloadCriticalCount : undefined}
                 />
               ))}
             </div>

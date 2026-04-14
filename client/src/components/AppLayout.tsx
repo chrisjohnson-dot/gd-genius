@@ -143,6 +143,7 @@ const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkL
 function SharedLoginGate() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
   const loginMutation = trpc.auth.sharedLogin.useMutation({
@@ -157,7 +158,7 @@ function SharedLoginGate() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    loginMutation.mutate({ username: username.trim(), password });
+    loginMutation.mutate({ username: username.trim(), password, rememberMe });
   };
 
   return (
@@ -191,6 +192,21 @@ function SharedLoginGate() {
               placeholder="Enter password"
               required
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 accent-gray-800 cursor-pointer"
+            />
+            <label htmlFor="rememberMe" className="text-sm text-gray-600 cursor-pointer select-none">
+              Remember me
+            </label>
+            <span className="text-xs text-gray-400 ml-1">
+              {rememberMe ? "(stays signed in for 1 year)" : "(signs out after 8 hours)"}
+            </span>
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <Button

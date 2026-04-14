@@ -1459,3 +1459,4 @@
 - [ ] SmallParcel: block Pack & Ship with supervisor PIN alert if One Rate selected and weight > 1 lb
 - [x] SmallParcel: pull Extensiv order weight as default weight for rate calculations
 - [x] Feature: Shared username/password login — bypass Manus OAuth, add simple PIN/password login page so team can log in with one shared credential without Manus accounts
+- [ ] Feature: "Remember me" checkbox on shared login form — checked = 1-year session, unchecked = 8-hour session (expires on browser close)

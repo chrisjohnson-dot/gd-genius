@@ -251,7 +251,7 @@ const _appRouter = router({
       return { success: true } as const;
     }),
     sharedLogin: publicProcedure
-      .input(z.object({ username: z.string(), password: z.string() }))
+      .input(z.object({ username: z.string(), password: z.string(), rememberMe: z.boolean().default(true) }))
       .mutation(async ({ input, ctx }) => {
         const { sharedLoginUsername, sharedLoginPassword } = ENV;
         if (
@@ -271,12 +271,21 @@ const _appRouter = router({
           loginMethod: "shared",
           lastSignedIn: new Date(),
         });
+        // Remember me: 1 year; otherwise 8 hours (session cookie with no maxAge)
+        const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
+        const expiresInMs = input.rememberMe ? ONE_YEAR_MS : EIGHT_HOURS_MS;
         const sessionToken = await sdk.signSession(
           { openId: sharedOpenId, appId: ENV.appId || "gd-agent", name: "GD Team" },
-          { expiresInMs: ONE_YEAR_MS }
+          { expiresInMs }
         );
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        // Only set maxAge (persistent cookie) when rememberMe is true
+        if (input.rememberMe) {
+          ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        } else {
+          // Session cookie: no maxAge — expires when browser closes
+          ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+        }
         return { success: true } as const;
       }),
   }),

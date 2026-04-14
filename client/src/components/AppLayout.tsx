@@ -138,6 +138,75 @@ const configItems = [
 
 const GD_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/gdgenius-logo_87bc3961.png";
 
+// ─── Shared Login Gate ───────────────────────────────────────────────────────
+
+function SharedLoginGate() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const utils = trpc.useUtils();
+  const loginMutation = trpc.auth.sharedLogin.useMutation({
+    onSuccess: () => {
+      utils.auth.me.invalidate();
+    },
+    onError: (err) => {
+      setError(err.message || "Invalid username or password");
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    loginMutation.mutate({ username: username.trim(), password });
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "#f3f4f6" }}>
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8 space-y-6">
+        <div className="flex flex-col items-center gap-3">
+          <img src={GD_LOGO} alt="GD Genius" className="h-20 w-auto" />
+          <p className="text-sm text-muted-foreground">Sign in to access the dashboard</p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Username</label>
+            <input
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              placeholder="Enter username"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Password</label>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              placeholder="Enter password"
+              required
+            />
+          </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full"
+            disabled={loginMutation.isPending}
+          >
+            {loginMutation.isPending ? "Signing in..." : "Sign In"}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Simple count badge (for Requires Attention) ─────────────────────────────
 
 function SimpleCountBadge({ count }: { count: number }) {
@@ -402,19 +471,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <img src={GD_LOGO} alt="GD Genius" className="h-28 w-auto" />
-          </div>
-          <p className="text-muted-foreground">Sign in to access the allocation dashboard.</p>
-          <Button asChild size="lg" className="shadow-md">
-            <a href={getLoginUrl()}>Sign In</a>
-          </Button>
-        </div>
-      </div>
-    );
+    return <SharedLoginGate />;
   }
 
   const initials = user?.name

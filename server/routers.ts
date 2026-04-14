@@ -2,13 +2,16 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { directlyRouter } from "./routers/directly";
 import { getDb } from "./db";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { storagePut } from "./storage";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { sdk } from "./_core/sdk";
+import { ENV } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
+  upsertUser,
   getExtensivConfigs,
   getExtensivConfigById,
   upsertExtensivConfig,
@@ -247,6 +250,35 @@ const _appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    sharedLogin: publicProcedure
+      .input(z.object({ username: z.string(), password: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { sharedLoginUsername, sharedLoginPassword } = ENV;
+        if (
+          !sharedLoginUsername ||
+          !sharedLoginPassword ||
+          input.username !== sharedLoginUsername ||
+          input.password !== sharedLoginPassword
+        ) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid username or password" });
+        }
+        // Use a fixed shared openId so the user record is stable
+        const sharedOpenId = "shared-team-user";
+        await upsertUser({
+          openId: sharedOpenId,
+          name: "GD Team",
+          email: null,
+          loginMethod: "shared",
+          lastSignedIn: new Date(),
+        });
+        const sessionToken = await sdk.signSession(
+          { openId: sharedOpenId, appId: ENV.appId || "gd-agent", name: "GD Team" },
+          { expiresInMs: ONE_YEAR_MS }
+        );
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        return { success: true } as const;
+      }),
   }),
 
   // ─── Extensiv Config ───────────────────────────────────────────────────────

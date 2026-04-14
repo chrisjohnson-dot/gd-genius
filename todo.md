@@ -1458,3 +1458,4 @@
 - [x] SmallParcel: auto-select FedEx One Rate when autobagger size selected
 - [ ] SmallParcel: block Pack & Ship with supervisor PIN alert if One Rate selected and weight > 1 lb
 - [x] SmallParcel: pull Extensiv order weight as default weight for rate calculations
+- [x] Feature: Shared username/password login — bypass Manus OAuth, add simple PIN/password login page so team can log in with one shared credential without Manus accounts

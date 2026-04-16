@@ -105,6 +105,27 @@ export interface ExtensivItemDescription {
   description?: string;
 }
 
+export interface ExtensivItemDims {
+  sku: string;
+  lengthIn: number | null;
+  widthIn: number | null;
+  heightIn: number | null;
+  weightLb: number | null;
+}
+
+// Raw item shape from Extensiv /customers/{id}/items — includes options.imperial for dims
+interface RawExtensivItem {
+  sku?: string;
+  options?: {
+    imperial?: {
+      length?: number;
+      width?: number;
+      height?: number;
+      weight?: number;
+    };
+  };
+}
+
 // Raw customer shape from Extensiv API
 interface RawExtensivCustomer {
   readOnly?: { customerId?: number; deactivated?: boolean };
@@ -575,6 +596,62 @@ export async function fetchItemDescriptions(
   }
 
   return descMap;
+}
+
+// In-memory cache: configKey → Map<sku, dims> with expiry
+const _itemDimsCache = new Map<string, { data: Map<string, ExtensivItemDims>; expiresAt: number }>();
+
+/**
+ * Fetch dims/weight for a list of SKUs from the Extensiv item master.
+ * Results are cached per (tplGuid+customerId) for 1 hour to avoid hammering Extensiv.
+ * Returns an array with null dims for any SKU not found in Extensiv.
+ */
+export async function fetchItemDimsBySkus(
+  config: ExtensivClientConfig,
+  customerId: number,
+  skus: string[]
+): Promise<ExtensivItemDims[]> {
+  const cacheKey = `${config.tplGuid}:${customerId}`;
+  const now = Date.now();
+  const ONE_HOUR = 60 * 60 * 1000;
+
+  // Populate cache if missing or expired
+  if (!_itemDimsCache.has(cacheKey) || _itemDimsCache.get(cacheKey)!.expiresAt < now) {
+    const client = createExtensivClient(config);
+    const dimsMap = new Map<string, ExtensivItemDims>();
+    let pgnum = 1;
+    const pgsiz = 100;
+
+    while (true) {
+      const data = (await client.get(`/customers/${customerId}/items`, {
+        pgsiz,
+        pgnum,
+      })) as {
+        _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawExtensivItem[] };
+      };
+
+      const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
+      for (const item of items) {
+        if (!item.sku) continue;
+        const imp = item.options?.imperial;
+        dimsMap.set(item.sku, {
+          sku: item.sku,
+          lengthIn: imp?.length ?? null,
+          widthIn: imp?.width ?? null,
+          heightIn: imp?.height ?? null,
+          weightLb: imp?.weight ?? null,
+        });
+      }
+
+      if (items.length < pgsiz) break;
+      pgnum++;
+    }
+
+    _itemDimsCache.set(cacheKey, { data: dimsMap, expiresAt: now + ONE_HOUR });
+  }
+
+  const dimsMap = _itemDimsCache.get(cacheKey)!.data;
+  return skus.map((sku) => dimsMap.get(sku) ?? { sku, lengthIn: null, widthIn: null, heightIn: null, weightLb: null });
 }
 
 // Move inventory to staging location

@@ -470,7 +470,7 @@ export async function voidFedExLabel(
       accountNumber: { value: accountNumber },
       trackingNumber,
       scheduledDate: new Date().toISOString().split("T")[0],
-      comments: "Voided by GD Allocation Agent",
+      comments: "Voided by GD Genius",
     };
 
     const res = await fetch(`${FEDEX_BASE}/ship/v1/shipments/cancel`, {

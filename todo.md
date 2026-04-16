@@ -1460,3 +1460,6 @@
 - [x] SmallParcel: pull Extensiv order weight as default weight for rate calculations
 - [x] Feature: Shared username/password login — bypass Manus OAuth, add simple PIN/password login page so team can log in with one shared credential without Manus accounts
 - [ ] Feature: "Remember me" checkbox on shared login form — checked = 1-year session, unchecked = 8-hour session (expires on browser close)
+- [ ] Rename: Update app title and branding from "GD Allocation Agent" to "GD Genius" throughout codebase (VITE_APP_TITLE, HTML title, login form, sidebar, page titles)
+- [ ] Feature: Add items.getBySkuList(skus: string[]) public tRPC procedure returning { sku, lengthIn, widthIn, heightIn, weightLb } — API-key protected for GD Robotics integration
+- [ ] Feature: items.getBySkuList API — public tRPC procedure protected by API key, fetches SKU dims/weight from Extensiv item master, returns { sku, lengthIn, widthIn, heightIn, weightLb } for GD Robotics integration

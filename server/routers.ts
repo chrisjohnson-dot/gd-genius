@@ -9104,6 +9104,7 @@ import { onboardingRouter } from "./routers/onboarding";
 import { pullTrackerRouter } from "./routers/pullTracker";
 import { associatesRouter } from "./routers/associates";
 import { pullAlertsRouter } from "./routers/pullAlerts";
+import { itemsRouter } from "./routers/items";
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9127,5 +9128,6 @@ export const appRouterV4 = router({
   pullTracker: pullTrackerRouter,
   associates: associatesRouter,
   pullAlerts: pullAlertsRouter,
+  items: itemsRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

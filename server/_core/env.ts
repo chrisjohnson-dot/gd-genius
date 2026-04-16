@@ -9,4 +9,5 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   sharedLoginUsername: process.env.SHARED_LOGIN_USERNAME ?? "",
   sharedLoginPassword: process.env.SHARED_LOGIN_PASSWORD ?? "",
+  gdRoboticsApiKey: process.env.GD_ROBOTICS_API_KEY ?? "",
 };

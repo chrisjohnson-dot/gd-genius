@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm';
 const DEFAULT_STEPS = [
   // Admin steps
   { role: 'admin', stepOrder: 1, stepKey: 'admin_welcome', title: 'Welcome to GD Genius', description: "GD Genius is your all-in-one warehouse operations platform. Let's take a quick tour of the key features.", targetRoute: '/', actionType: 'read' as const },
-  { role: 'admin', stepOrder: 2, stepKey: 'admin_allocation', title: 'Order Allocation', description: 'The Allocation Agent matches open orders to available inventory using FEFO rules. Start by configuring your Extensiv connection.', targetRoute: '/allocation', actionType: 'navigate' as const },
+  { role: 'admin', stepOrder: 2, stepKey: 'admin_allocation', title: 'Order Allocation', description: 'GD Genius matches open orders to available inventory using FEFO rules. Start by configuring your Extensiv connection.', targetRoute: '/allocation', actionType: 'navigate' as const },
   { role: 'admin', stepOrder: 3, stepKey: 'admin_live_ops', title: 'Live Ops View', description: 'Monitor your warehouse pipeline in real-time — from unallocated orders through QC to ship-ready.', targetRoute: '/live-ops', actionType: 'navigate' as const },
   { role: 'admin', stepOrder: 4, stepKey: 'admin_clients', title: 'Client Profiles', description: 'Manage fulfillment rules, QC requirements, and billing settings for each client.', targetRoute: '/clients', actionType: 'navigate' as const },
   { role: 'admin', stepOrder: 5, stepKey: 'admin_workload', title: 'Workload Planning', description: 'Use predictive workload planning to forecast staffing needs and identify bottlenecks before they happen.', targetRoute: '/workload', actionType: 'navigate' as const },

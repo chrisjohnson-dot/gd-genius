@@ -8,7 +8,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
-import { getExtensivConfigs, getExtensivConfigById } from "../db";
+import { getExtensivConfigs, getExtensivConfigById, getLastSyncTimeByConfig } from "../db";
 import {
   fetchCustomers,
   fetchAllFacilities,
@@ -84,12 +84,16 @@ async function enrichConfig(config: ExtensivConfig) {
     })
   );
 
+  // Fetch the most recent order sync timestamp for this config in parallel with the above
+  const lastSyncedAt = await getLastSyncTimeByConfig(config.id);
+
   return {
     configId: config.id,
     configName: config.name,
     customers,
     facilities,
     customerFacilities,
+    lastSyncedAt,   // ISO Date (or null if no orders have been synced yet)
   };
 }
 

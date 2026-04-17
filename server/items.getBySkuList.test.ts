@@ -34,6 +34,7 @@ vi.mock("./_core/env", () => ({
 
 // ── Mock DB and Extensiv API for listConfigs tests ────────────────────────────
 vi.mock("./db", () => ({
+  getLastSyncTimeByConfig: vi.fn().mockResolvedValue(new Date("2026-04-17T00:00:00.000Z")),
   getExtensivConfigs: vi.fn().mockResolvedValue([
     {
       id: 1,
@@ -154,6 +155,7 @@ describe("items.listConfigs — response shape", () => {
     expect(result.configs).toHaveLength(1);
     const cfg = result.configs[0]!;
     expect(cfg).toMatchObject({ configId: 1, configName: "Main Warehouse" });
+    expect(cfg.lastSyncedAt).toEqual(new Date("2026-04-17T00:00:00.000Z"));
 
     expect(cfg.customers).toEqual([
       { customerId: 101, customerName: "Acme Corp" },
@@ -226,6 +228,16 @@ describe("items.getConfig — response shape", () => {
     ]);
     const acme = result.customerFacilities.find((cf) => cf.customerId === 101);
     expect(acme?.facilityIds).toEqual([10, 11]);
+    expect(result.lastSyncedAt).toEqual(new Date("2026-04-17T00:00:00.000Z"));
+  });
+
+  it("returns null lastSyncedAt when no orders have been synced", async () => {
+    const { getLastSyncTimeByConfig } = await import("./db");
+    vi.mocked(getLastSyncTimeByConfig).mockResolvedValueOnce(null);
+
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    const result = await caller.getConfig({ configId: 1 });
+    expect(result.lastSyncedAt).toBeNull();
   });
 
   it("throws NOT_FOUND for an inactive configId", async () => {

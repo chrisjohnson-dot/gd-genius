@@ -755,6 +755,22 @@ export async function getLastSyncTime(): Promise<Date | null> {
   return rows[0]?.lastSyncedAt ?? null;
 }
 
+/**
+ * Get the most recent lastSyncedAt for a specific Extensiv config.
+ * Returns null if no orders have been synced for this config yet.
+ */
+export async function getLastSyncTimeByConfig(configId: number): Promise<Date | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ lastSyncedAt: orderTracking.lastSyncedAt })
+    .from(orderTracking)
+    .where(eq(orderTracking.configId, configId))
+    .orderBy(desc(orderTracking.lastSyncedAt))
+    .limit(1);
+  return rows[0]?.lastSyncedAt ?? null;
+}
+
 // ─── Shipwell Config Helpers ──────────────────────────────────────────────────
 
 /** Get the active Shipwell config (there should only be one). */

@@ -67,6 +67,10 @@ vi.mock("./extensiv/api", () => ({
     { id: 101, name: "Acme Corp" },
     { id: 102, name: "Beta LLC" },
   ]),
+  fetchAllFacilities: vi.fn().mockResolvedValue([
+    { id: 10, name: "TOR-Toronto" },
+    { id: 11, name: "CAL-Calgary" },
+  ]),
   fetchItemDimsBySkus: vi.fn().mockResolvedValue([]),
   clearItemDimsCache: vi.fn(),
 }));
@@ -107,7 +111,7 @@ describe("items.listConfigs — API key authentication", () => {
 // ── listConfigs — response shape ──────────────────────────────────────────────
 
 describe("items.listConfigs — response shape", () => {
-  it("returns only active configs with their customers", async () => {
+  it("returns only active configs with their customers and facilities", async () => {
     const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
     const result = await caller.listConfigs();
 
@@ -121,6 +125,10 @@ describe("items.listConfigs — response shape", () => {
       { customerId: 101, customerName: "Acme Corp" },
       { customerId: 102, customerName: "Beta LLC" },
     ]);
+    expect(result.configs[0]!.facilities).toEqual([
+      { facilityId: 10, facilityName: "TOR-Toronto" },
+      { facilityId: 11, facilityName: "CAL-Calgary" },
+    ]);
   });
 
   it("returns an empty customers array when fetchCustomers throws", async () => {
@@ -131,6 +139,20 @@ describe("items.listConfigs — response shape", () => {
     const result = await caller.listConfigs();
 
     expect(result.configs[0]!.customers).toEqual([]);
+    // facilities should still be populated even when customers fails
+    expect(result.configs[0]!.facilities).toHaveLength(2);
+  });
+
+  it("returns an empty facilities array when fetchAllFacilities throws", async () => {
+    const { fetchAllFacilities } = await import("./extensiv/api");
+    vi.mocked(fetchAllFacilities).mockRejectedValueOnce(new Error("Network error"));
+
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    const result = await caller.listConfigs();
+
+    expect(result.configs[0]!.facilities).toEqual([]);
+    // customers should still be populated even when facilities fails
+    expect(result.configs[0]!.customers).toHaveLength(2);
   });
 });
 

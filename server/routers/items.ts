@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { getExtensivConfigs, getExtensivConfigById } from "../db";
-import { fetchCustomers, fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
+import { fetchCustomers, fetchAllFacilities, fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
 
 /**
  * apiKeyProcedure — a publicProcedure middleware that validates the
@@ -53,7 +53,8 @@ export const itemsRouter = router({
    * Output: { configs: Array<{
    *   configId: number,
    *   configName: string,
-   *   customers: Array<{ customerId: number, customerName: string }>
+   *   customers:  Array<{ customerId:  number, customerName:  string }>,
+   *   facilities: Array<{ facilityId:  number, facilityName: string }>
    * }> }
    */
   listConfigs: apiKeyProcedure
@@ -64,17 +65,31 @@ export const itemsRouter = router({
       const results = await Promise.all(
         activeConfigs.map(async (config) => {
           let customers: Array<{ customerId: number; customerName: string }> = [];
-          try {
-            const raw = await fetchCustomers(config);
-            customers = raw.map((c) => ({ customerId: c.id, customerName: c.name }));
-          } catch (err) {
-            // Surface partial results — a single config failure shouldn't block the rest
-            console.warn(`[items.listConfigs] Failed to fetch customers for config ${config.id}:`, err);
-          }
+          let facilities: Array<{ facilityId: number; facilityName: string }> = [];
+
+          // Fetch customers and facilities in parallel; degrade gracefully on failure
+          await Promise.all([
+            fetchCustomers(config)
+              .then((raw) => {
+                customers = raw.map((c) => ({ customerId: c.id, customerName: c.name }));
+              })
+              .catch((err) => {
+                console.warn(`[items.listConfigs] Failed to fetch customers for config ${config.id}:`, err);
+              }),
+            fetchAllFacilities(config)
+              .then((raw) => {
+                facilities = raw.map((f) => ({ facilityId: f.id, facilityName: f.name }));
+              })
+              .catch((err) => {
+                console.warn(`[items.listConfigs] Failed to fetch facilities for config ${config.id}:`, err);
+              }),
+          ]);
+
           return {
             configId: config.id,
             configName: config.name,
             customers,
+            facilities,
           };
         })
       );

@@ -654,6 +654,19 @@ export async function fetchItemDimsBySkus(
   return skus.map((sku) => dimsMap.get(sku) ?? { sku, lengthIn: null, widthIn: null, heightIn: null, weightLb: null });
 }
 
+/**
+ * Evict the dims cache for a specific Extensiv config + customer,
+ * or clear the entire cache when no arguments are provided.
+ * The next call to fetchItemDimsBySkus will re-fetch from Extensiv.
+ */
+export function clearItemDimsCache(tplGuid?: string, customerId?: number): void {
+  if (tplGuid !== undefined && customerId !== undefined) {
+    _itemDimsCache.delete(`${tplGuid}:${customerId}`);
+  } else {
+    _itemDimsCache.clear();
+  }
+}
+
 // Move inventory to staging location
 // NOTE: Extensiv requires destination.nameKey.name — sending only id causes 400 ModelValidationException.
 export async function moveInventory(

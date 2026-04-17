@@ -1,7 +1,7 @@
 /**
  * Items router — exposes SKU dimensions/weights from the Extensiv item master.
- * The getBySkuList procedure is secured by x-api-key header authentication
- * and is intended for consumption by GD Robotics.
+ * All procedures are secured by x-api-key header authentication and are
+ * intended for consumption by GD Robotics.
  */
 
 import { z } from "zod";
@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { getExtensivConfigById } from "../db";
-import { fetchItemDimsBySkus } from "../extensiv/api";
+import { fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
 
 /**
  * apiKeyProcedure — a publicProcedure middleware that validates the
@@ -49,7 +49,7 @@ export const itemsRouter = router({
    * Authentication: x-api-key header (GD_ROBOTICS_API_KEY)
    *
    * Input:  { configId: number, customerId: number, skus: string[] }
-   * Output: Array<{ sku, lengthIn, widthIn, heightIn, weightLb }>
+   * Output: { items: Array<{ sku, lengthIn, widthIn, heightIn, weightLb }> }
    *         — null values indicate the SKU was not found in Extensiv
    */
   getBySkuList: apiKeyProcedure
@@ -71,5 +71,45 @@ export const itemsRouter = router({
 
       const dims = await fetchItemDimsBySkus(config, input.customerId, input.skus);
       return { items: dims };
+    }),
+
+  /**
+   * POST /api/trpc/items.clearDimsCache
+   *
+   * Evicts the in-memory dims cache so the next getBySkuList call re-fetches
+   * fresh data from Extensiv. Use this after updating item dimensions in the
+   * WMS without waiting for the 1-hour TTL to expire.
+   *
+   * Authentication: x-api-key header (GD_ROBOTICS_API_KEY)
+   *
+   * Input:  { configId?: number, customerId?: number }
+   *         — both must be provided together to clear a specific customer's cache;
+   *           omit both to flush the entire cache across all customers.
+   * Output: { cleared: true, scope: "customer" | "all" }
+   */
+  clearDimsCache: apiKeyProcedure
+    .input(
+      z.object({
+        configId: z.number().int().positive().optional(),
+        customerId: z.number().int().positive().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      if (input.configId !== undefined && input.customerId !== undefined) {
+        // Targeted clear: look up tplGuid for this config so the cache key matches
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: `Extensiv config ${input.configId} not found`,
+          });
+        }
+        clearItemDimsCache(config.tplGuid, input.customerId);
+        return { cleared: true, scope: "customer" as const };
+      }
+
+      // Global clear
+      clearItemDimsCache();
+      return { cleared: true, scope: "all" as const };
     }),
 });

@@ -71,6 +71,12 @@ vi.mock("./extensiv/api", () => ({
     { id: 10, name: "TOR-Toronto" },
     { id: 11, name: "CAL-Calgary" },
   ]),
+  // Acme Corp (101) belongs to both facilities; Beta LLC (102) only to TOR (10)
+  fetchCustomersForFacility: vi.fn().mockImplementation((_config, facilityId: number) => {
+    if (facilityId === 10) return Promise.resolve([{ id: 101, name: "Acme Corp" }, { id: 102, name: "Beta LLC" }]);
+    if (facilityId === 11) return Promise.resolve([{ id: 101, name: "Acme Corp" }]);
+    return Promise.resolve([]);
+  }),
   fetchItemDimsBySkus: vi.fn().mockResolvedValue([]),
   clearItemDimsCache: vi.fn(),
 }));
@@ -111,24 +117,29 @@ describe("items.listConfigs — API key authentication", () => {
 // ── listConfigs — response shape ──────────────────────────────────────────────
 
 describe("items.listConfigs — response shape", () => {
-  it("returns only active configs with their customers and facilities", async () => {
+  it("returns only active configs with customers, facilities, and customerFacilities map", async () => {
     const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
     const result = await caller.listConfigs();
 
     // Only the active config (id=1) should appear; inactive (id=2) is filtered out
     expect(result.configs).toHaveLength(1);
-    expect(result.configs[0]).toMatchObject({
-      configId: 1,
-      configName: "Main Warehouse",
-    });
-    expect(result.configs[0]!.customers).toEqual([
+    const cfg = result.configs[0]!;
+    expect(cfg).toMatchObject({ configId: 1, configName: "Main Warehouse" });
+
+    expect(cfg.customers).toEqual([
       { customerId: 101, customerName: "Acme Corp" },
       { customerId: 102, customerName: "Beta LLC" },
     ]);
-    expect(result.configs[0]!.facilities).toEqual([
+    expect(cfg.facilities).toEqual([
       { facilityId: 10, facilityName: "TOR-Toronto" },
       { facilityId: 11, facilityName: "CAL-Calgary" },
     ]);
+
+    // Acme (101) → both facilities; Beta (102) → TOR only
+    const acme = cfg.customerFacilities.find((cf) => cf.customerId === 101);
+    const beta = cfg.customerFacilities.find((cf) => cf.customerId === 102);
+    expect(acme?.facilityIds).toEqual([10, 11]);
+    expect(beta?.facilityIds).toEqual([10]);
   });
 
   it("returns an empty customers array when fetchCustomers throws", async () => {

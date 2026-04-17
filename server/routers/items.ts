@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { getExtensivConfigs, getExtensivConfigById } from "../db";
-import { fetchCustomers, fetchAllFacilities, fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
+import { fetchCustomers, fetchAllFacilities, fetchCustomersForFacility, fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
 
 /**
  * apiKeyProcedure — a publicProcedure middleware that validates the
@@ -51,10 +51,14 @@ export const itemsRouter = router({
    *
    * Input:  none
    * Output: { configs: Array<{
-   *   configId: number,
-   *   configName: string,
-   *   customers:  Array<{ customerId:  number, customerName:  string }>,
-   *   facilities: Array<{ facilityId:  number, facilityName: string }>
+   *   configId:          number,
+   *   configName:        string,
+   *   customers:         Array<{ customerId:  number, customerName:  string }>,
+   *   facilities:        Array<{ facilityId:  number, facilityName: string }>,
+   *   customerFacilities: Array<{
+   *     customerId:  number,
+   *     facilityIds: number[]
+   *   }>
    * }> }
    */
   listConfigs: apiKeyProcedure
@@ -85,11 +89,51 @@ export const itemsRouter = router({
               }),
           ]);
 
+          // Build customerFacilities map: for each facility, fetch which customers belong to it,
+          // then invert into a per-customer list of facilityIds.
+          // We reuse the already-fetched customers list to avoid a second full customer fetch.
+          const customerFacilityMap = new Map<number, Set<number>>();
+
+          // Initialise an entry for every known customer so the map is complete even if
+          // fetchCustomersForFacility returns nothing for some facilities.
+          for (const c of customers) {
+            customerFacilityMap.set(c.customerId, new Set());
+          }
+
+          if (facilities.length > 0) {
+            await Promise.all(
+              facilities.map(async ({ facilityId }) => {
+                try {
+                  const facilityCustomers = await fetchCustomersForFacility(config, facilityId);
+                  for (const fc of facilityCustomers) {
+                    if (!customerFacilityMap.has(fc.id)) {
+                      customerFacilityMap.set(fc.id, new Set());
+                    }
+                    customerFacilityMap.get(fc.id)!.add(facilityId);
+                  }
+                } catch (err) {
+                  console.warn(
+                    `[items.listConfigs] Failed to fetch customers for facility ${facilityId} in config ${config.id}:`,
+                    err
+                  );
+                }
+              })
+            );
+          }
+
+          const customerFacilities = Array.from(customerFacilityMap.entries()).map(
+            ([customerId, facilityIds]) => ({
+              customerId,
+              facilityIds: Array.from(facilityIds).sort((a, b) => a - b),
+            })
+          );
+
           return {
             configId: config.id,
             configName: config.name,
             customers,
             facilities,
+            customerFacilities,
           };
         })
       );

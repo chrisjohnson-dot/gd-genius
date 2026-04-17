@@ -1,5 +1,5 @@
 /**
- * Tests for items.listConfigs, items.getBySkuList, and items.clearDimsCache.
+ * Tests for items.listConfigs, items.getConfig, items.getBySkuList, and items.clearDimsCache.
  *
  * Verifies:
  *  - Requests with a wrong/missing x-api-key are rejected with UNAUTHORIZED
@@ -7,6 +7,7 @@
  *  - Input validation rejects empty SKU arrays and oversized lists
  *  - clearDimsCache returns the correct scope response
  *  - listConfigs returns the expected shape when the DB returns configs
+ *  - getConfig returns the enriched shape for a valid configId, NOT_FOUND for missing/inactive
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -59,7 +60,35 @@ vi.mock("./db", () => ({
       updatedAt: new Date(),
     },
   ]),
-  getExtensivConfigById: vi.fn().mockResolvedValue(undefined),
+  getExtensivConfigById: vi.fn().mockImplementation((id: number) => {
+    if (id === 1)
+      return Promise.resolve({
+        id: 1,
+        name: "Main Warehouse",
+        clientId: "client-1",
+        clientSecret: "secret-1",
+        tplGuid: "guid-1",
+        userLoginId: 42,
+        baseUrl: "https://secure-wms.com",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    if (id === 2)
+      return Promise.resolve({
+        id: 2,
+        name: "Inactive Config",
+        clientId: "client-2",
+        clientSecret: "secret-2",
+        tplGuid: "guid-2",
+        userLoginId: 43,
+        baseUrl: "https://secure-wms.com",
+        isActive: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    return Promise.resolve(undefined);
+  }),
 }));
 
 vi.mock("./extensiv/api", () => ({
@@ -164,6 +193,49 @@ describe("items.listConfigs — response shape", () => {
     expect(result.configs[0]!.facilities).toEqual([]);
     // customers should still be populated even when facilities fails
     expect(result.configs[0]!.customers).toHaveLength(2);
+  });
+});
+
+// ── getConfig — auth + response tests ───────────────────────────────────────
+
+describe("items.getConfig — API key authentication", () => {
+  it("rejects requests with a missing x-api-key header", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(undefined));
+    await expect(caller.getConfig({ configId: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects requests with an incorrect x-api-key header", async () => {
+    const caller = itemsRouter.createCaller(makeCtx("wrong-key"));
+    await expect(caller.getConfig({ configId: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+describe("items.getConfig — response shape", () => {
+  it("returns the enriched config for a valid active configId", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    const result = await caller.getConfig({ configId: 1 });
+
+    expect(result).toMatchObject({ configId: 1, configName: "Main Warehouse" });
+    expect(result.customers).toEqual([
+      { customerId: 101, customerName: "Acme Corp" },
+      { customerId: 102, customerName: "Beta LLC" },
+    ]);
+    expect(result.facilities).toEqual([
+      { facilityId: 10, facilityName: "TOR-Toronto" },
+      { facilityId: 11, facilityName: "CAL-Calgary" },
+    ]);
+    const acme = result.customerFacilities.find((cf) => cf.customerId === 101);
+    expect(acme?.facilityIds).toEqual([10, 11]);
+  });
+
+  it("throws NOT_FOUND for an inactive configId", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    await expect(caller.getConfig({ configId: 2 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("throws NOT_FOUND for a non-existent configId", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    await expect(caller.getConfig({ configId: 999 })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
 

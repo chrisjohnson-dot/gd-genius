@@ -9,7 +9,91 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { getExtensivConfigs, getExtensivConfigById } from "../db";
-import { fetchCustomers, fetchAllFacilities, fetchCustomersForFacility, fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
+import {
+  fetchCustomers,
+  fetchAllFacilities,
+  fetchCustomersForFacility,
+  fetchItemDimsBySkus,
+  clearItemDimsCache,
+} from "../extensiv/api";
+import type { ExtensivConfig } from "../../drizzle/schema";
+
+// ── Shared enrichment ─────────────────────────────────────────────────────────
+
+/**
+ * Enriches a raw Extensiv config row with customers, facilities, and the
+ * customerFacilities cross-reference map. Used by both listConfigs and getConfig
+ * so the response shape is always identical.
+ */
+async function enrichConfig(config: ExtensivConfig) {
+  let customers: Array<{ customerId: number; customerName: string }> = [];
+  let facilities: Array<{ facilityId: number; facilityName: string }> = [];
+
+  // Fetch customers and facilities in parallel; degrade gracefully on failure
+  await Promise.all([
+    fetchCustomers(config)
+      .then((raw) => {
+        customers = raw.map((c) => ({ customerId: c.id, customerName: c.name }));
+      })
+      .catch((err) => {
+        console.warn(`[items] Failed to fetch customers for config ${config.id}:`, err);
+      }),
+    fetchAllFacilities(config)
+      .then((raw) => {
+        facilities = raw.map((f) => ({ facilityId: f.id, facilityName: f.name }));
+      })
+      .catch((err) => {
+        console.warn(`[items] Failed to fetch facilities for config ${config.id}:`, err);
+      }),
+  ]);
+
+  // Build customerFacilities map: for each facility, fetch which customers belong
+  // to it, then invert into a per-customer list of facilityIds.
+  const customerFacilityMap = new Map<number, Set<number>>();
+
+  // Pre-seed every known customer so the map is always complete
+  for (const c of customers) {
+    customerFacilityMap.set(c.customerId, new Set());
+  }
+
+  if (facilities.length > 0) {
+    await Promise.all(
+      facilities.map(async ({ facilityId }) => {
+        try {
+          const facilityCustomers = await fetchCustomersForFacility(config, facilityId);
+          for (const fc of facilityCustomers) {
+            if (!customerFacilityMap.has(fc.id)) {
+              customerFacilityMap.set(fc.id, new Set());
+            }
+            customerFacilityMap.get(fc.id)!.add(facilityId);
+          }
+        } catch (err) {
+          console.warn(
+            `[items] Failed to fetch customers for facility ${facilityId} in config ${config.id}:`,
+            err
+          );
+        }
+      })
+    );
+  }
+
+  const customerFacilities = Array.from(customerFacilityMap.entries()).map(
+    ([customerId, facilityIds]) => ({
+      customerId,
+      facilityIds: Array.from(facilityIds).sort((a, b) => a - b),
+    })
+  );
+
+  return {
+    configId: config.id,
+    configName: config.name,
+    customers,
+    facilities,
+    customerFacilities,
+  };
+}
+
+// ── API key middleware ─────────────────────────────────────────────────────────
 
 /**
  * apiKeyProcedure — a publicProcedure middleware that validates the
@@ -38,107 +122,66 @@ const apiKeyProcedure = publicProcedure.use(async ({ ctx, next }) => {
   return next({ ctx });
 });
 
+// ── Router ────────────────────────────────────────────────────────────────────
+
 export const itemsRouter = router({
   /**
    * GET /api/trpc/items.listConfigs
    *
    * Returns all active Extensiv configs stored in GD Genius, each enriched
-   * with the list of customers (customerId + name) that belong to it.
+   * with customers, facilities, and the customerFacilities cross-reference map.
    * Use this to discover valid configId / customerId pairs before calling
    * getBySkuList or clearDimsCache.
    *
    * Authentication: x-api-key header (GD_ROBOTICS_API_KEY)
    *
    * Input:  none
-   * Output: { configs: Array<{
-   *   configId:          number,
-   *   configName:        string,
-   *   customers:         Array<{ customerId:  number, customerName:  string }>,
-   *   facilities:        Array<{ facilityId:  number, facilityName: string }>,
-   *   customerFacilities: Array<{
-   *     customerId:  number,
-   *     facilityIds: number[]
-   *   }>
-   * }> }
+   * Output: { configs: Array<EnrichedConfig> }
+   *   EnrichedConfig = {
+   *     configId:           number,
+   *     configName:         string,
+   *     customers:          Array<{ customerId: number, customerName: string }>,
+   *     facilities:         Array<{ facilityId: number, facilityName: string }>,
+   *     customerFacilities: Array<{ customerId: number, facilityIds: number[] }>
+   *   }
    */
-  listConfigs: apiKeyProcedure
-    .query(async () => {
-      const configs = await getExtensivConfigs();
-      const activeConfigs = configs.filter((c) => c.isActive);
+  listConfigs: apiKeyProcedure.query(async () => {
+    const configs = await getExtensivConfigs();
+    const activeConfigs = configs.filter((c) => c.isActive);
+    const results = await Promise.all(activeConfigs.map(enrichConfig));
+    return { configs: results };
+  }),
 
-      const results = await Promise.all(
-        activeConfigs.map(async (config) => {
-          let customers: Array<{ customerId: number; customerName: string }> = [];
-          let facilities: Array<{ facilityId: number; facilityName: string }> = [];
-
-          // Fetch customers and facilities in parallel; degrade gracefully on failure
-          await Promise.all([
-            fetchCustomers(config)
-              .then((raw) => {
-                customers = raw.map((c) => ({ customerId: c.id, customerName: c.name }));
-              })
-              .catch((err) => {
-                console.warn(`[items.listConfigs] Failed to fetch customers for config ${config.id}:`, err);
-              }),
-            fetchAllFacilities(config)
-              .then((raw) => {
-                facilities = raw.map((f) => ({ facilityId: f.id, facilityName: f.name }));
-              })
-              .catch((err) => {
-                console.warn(`[items.listConfigs] Failed to fetch facilities for config ${config.id}:`, err);
-              }),
-          ]);
-
-          // Build customerFacilities map: for each facility, fetch which customers belong to it,
-          // then invert into a per-customer list of facilityIds.
-          // We reuse the already-fetched customers list to avoid a second full customer fetch.
-          const customerFacilityMap = new Map<number, Set<number>>();
-
-          // Initialise an entry for every known customer so the map is complete even if
-          // fetchCustomersForFacility returns nothing for some facilities.
-          for (const c of customers) {
-            customerFacilityMap.set(c.customerId, new Set());
-          }
-
-          if (facilities.length > 0) {
-            await Promise.all(
-              facilities.map(async ({ facilityId }) => {
-                try {
-                  const facilityCustomers = await fetchCustomersForFacility(config, facilityId);
-                  for (const fc of facilityCustomers) {
-                    if (!customerFacilityMap.has(fc.id)) {
-                      customerFacilityMap.set(fc.id, new Set());
-                    }
-                    customerFacilityMap.get(fc.id)!.add(facilityId);
-                  }
-                } catch (err) {
-                  console.warn(
-                    `[items.listConfigs] Failed to fetch customers for facility ${facilityId} in config ${config.id}:`,
-                    err
-                  );
-                }
-              })
-            );
-          }
-
-          const customerFacilities = Array.from(customerFacilityMap.entries()).map(
-            ([customerId, facilityIds]) => ({
-              customerId,
-              facilityIds: Array.from(facilityIds).sort((a, b) => a - b),
-            })
-          );
-
-          return {
-            configId: config.id,
-            configName: config.name,
-            customers,
-            facilities,
-            customerFacilities,
-          };
-        })
-      );
-
-      return { configs: results };
+  /**
+   * GET /api/trpc/items.getConfig
+   *
+   * Returns a single active Extensiv config by its configId, enriched with
+   * customers, facilities, and the customerFacilities cross-reference map.
+   * Throws NOT_FOUND if the configId does not exist or is inactive.
+   *
+   * Authentication: x-api-key header (GD_ROBOTICS_API_KEY)
+   *
+   * Input:  { configId: number }
+   * Output: EnrichedConfig (same shape as a single entry from listConfigs)
+   *   {
+   *     configId:           number,
+   *     configName:         string,
+   *     customers:          Array<{ customerId: number, customerName: string }>,
+   *     facilities:         Array<{ facilityId: number, facilityName: string }>,
+   *     customerFacilities: Array<{ customerId: number, facilityIds: number[] }>
+   *   }
+   */
+  getConfig: apiKeyProcedure
+    .input(z.object({ configId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config || !config.isActive) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Extensiv config ${input.configId} not found or inactive`,
+        });
+      }
+      return enrichConfig(config);
     }),
 
   /**

@@ -223,6 +223,63 @@ export const itemsRouter = router({
     }),
 
   /**
+   * POST /api/trpc/items.refreshConfig
+   *
+   * Forces a manual refresh of the cached configuration data for a specific
+   * configId. This clears the dims cache for that config and re-fetches
+   * customers, facilities, and the customerFacilities map directly from
+   * Extensiv, returning the freshly-populated enriched config immediately.
+   *
+   * Use this after making structural changes in Extensiv (adding/removing
+   * customers, facilities, or item master entries) without waiting for the
+   * next scheduled sync cycle.
+   *
+   * Authentication: x-api-key header (GD_ROBOTICS_API_KEY)
+   *
+   * Input:  { configId: number }
+   * Output: EnrichedConfig (same shape as getConfig) with refreshedAt timestamp
+   *   {
+   *     configId:           number,
+   *     configName:         string,
+   *     customers:          Array<{ customerId: number, customerName: string }>,
+   *     facilities:         Array<{ facilityId: number, facilityName: string }>,
+   *     customerFacilities: Array<{ customerId: number, facilityIds: number[] }>,
+   *     lastSyncedAt:       Date | null,
+   *     refreshedAt:        Date   // UTC timestamp of when this refresh was performed
+   *   }
+   */
+  refreshConfig: apiKeyProcedure
+    .input(z.object({ configId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config || !config.isActive) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Extensiv config ${input.configId} not found or inactive`,
+        });
+      }
+
+      // Re-fetch the enriched config data live from Extensiv first so we have
+      // the up-to-date customer list before clearing their individual cache entries.
+      const enriched = await enrichConfig(config);
+
+      // Clear the dims cache for every customer under this config so the next
+      // getBySkuList call re-fetches fresh item master data from Extensiv.
+      // clearItemDimsCache requires both tplGuid + customerId to target a specific
+      // bucket; iterating customers is the correct way to flush only this config.
+      for (const { customerId } of enriched.customers) {
+        clearItemDimsCache(config.tplGuid, customerId);
+      }
+      const refreshedAt = new Date();
+
+      console.log(
+        `[items] Manual config refresh for configId=${input.configId} completed at ${refreshedAt.toISOString()}`
+      );
+
+      return { ...enriched, refreshedAt };
+    }),
+
+  /**
    * POST /api/trpc/items.clearDimsCache
    *
    * Evicts the in-memory dims cache so the next getBySkuList call re-fetches

@@ -251,6 +251,60 @@ describe("items.getConfig — response shape", () => {
   });
 });
 
+// ── refreshConfig — auth + behaviour tests ───────────────────────────────────
+
+describe("items.refreshConfig — API key authentication", () => {
+  it("rejects requests with a missing x-api-key header", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(undefined));
+    await expect(caller.refreshConfig({ configId: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects requests with an incorrect x-api-key header", async () => {
+    const caller = itemsRouter.createCaller(makeCtx("wrong-key"));
+    await expect(caller.refreshConfig({ configId: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+describe("items.refreshConfig — behaviour", () => {
+  it("returns the enriched config with a refreshedAt timestamp for a valid active configId", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    const before = new Date();
+    const result = await caller.refreshConfig({ configId: 1 });
+    const after = new Date();
+
+    expect(result).toMatchObject({ configId: 1, configName: "Main Warehouse" });
+    expect(result.refreshedAt).toBeInstanceOf(Date);
+    expect(result.refreshedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(result.refreshedAt.getTime()).toBeLessThanOrEqual(after.getTime());
+    // enriched fields should still be present
+    expect(result.customers).toHaveLength(2);
+    expect(result.facilities).toHaveLength(2);
+  });
+
+  it("clears the dims cache for each customer in the config", async () => {
+    const { clearItemDimsCache } = await import("./extensiv/api");
+    vi.mocked(clearItemDimsCache).mockClear();
+
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    await caller.refreshConfig({ configId: 1 });
+
+    // Should have been called once per customer (Acme=101, Beta=102)
+    expect(clearItemDimsCache).toHaveBeenCalledTimes(2);
+    expect(clearItemDimsCache).toHaveBeenCalledWith("guid-1", 101);
+    expect(clearItemDimsCache).toHaveBeenCalledWith("guid-1", 102);
+  });
+
+  it("throws NOT_FOUND for an inactive configId", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    await expect(caller.refreshConfig({ configId: 2 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("throws NOT_FOUND for a non-existent configId", async () => {
+    const caller = itemsRouter.createCaller(makeCtx(VALID_KEY));
+    await expect(caller.refreshConfig({ configId: 999 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
 // ── getBySkuList — auth tests ─────────────────────────────────────────────────
 
 describe("items.getBySkuList — API key authentication", () => {

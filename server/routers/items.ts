@@ -8,8 +8,8 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
-import { getExtensivConfigById } from "../db";
-import { fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
+import { getExtensivConfigs, getExtensivConfigById } from "../db";
+import { fetchCustomers, fetchItemDimsBySkus, clearItemDimsCache } from "../extensiv/api";
 
 /**
  * apiKeyProcedure — a publicProcedure middleware that validates the
@@ -39,6 +39,49 @@ const apiKeyProcedure = publicProcedure.use(async ({ ctx, next }) => {
 });
 
 export const itemsRouter = router({
+  /**
+   * GET /api/trpc/items.listConfigs
+   *
+   * Returns all active Extensiv configs stored in GD Genius, each enriched
+   * with the list of customers (customerId + name) that belong to it.
+   * Use this to discover valid configId / customerId pairs before calling
+   * getBySkuList or clearDimsCache.
+   *
+   * Authentication: x-api-key header (GD_ROBOTICS_API_KEY)
+   *
+   * Input:  none
+   * Output: { configs: Array<{
+   *   configId: number,
+   *   configName: string,
+   *   customers: Array<{ customerId: number, customerName: string }>
+   * }> }
+   */
+  listConfigs: apiKeyProcedure
+    .query(async () => {
+      const configs = await getExtensivConfigs();
+      const activeConfigs = configs.filter((c) => c.isActive);
+
+      const results = await Promise.all(
+        activeConfigs.map(async (config) => {
+          let customers: Array<{ customerId: number; customerName: string }> = [];
+          try {
+            const raw = await fetchCustomers(config);
+            customers = raw.map((c) => ({ customerId: c.id, customerName: c.name }));
+          } catch (err) {
+            // Surface partial results — a single config failure shouldn't block the rest
+            console.warn(`[items.listConfigs] Failed to fetch customers for config ${config.id}:`, err);
+          }
+          return {
+            configId: config.id,
+            configName: config.name,
+            customers,
+          };
+        })
+      );
+
+      return { configs: results };
+    }),
+
   /**
    * POST /api/trpc/items.getBySkuList
    *

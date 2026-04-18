@@ -90,6 +90,9 @@ import {
   deleteReturnsItem,
   getReturnsDashboardStats,
   getFailedReturnSessions,
+  getReturnClientInstructions,
+  countUnreadReturnClientInstructions,
+  markReturnClientInstructionsRead,
   getAllCortexConnections,
   getCortexConnection,
   upsertCortexConnection,
@@ -3198,6 +3201,8 @@ const returnsRouter = router({
       disposition: z.enum(["restock", "quarantine", "destroy", "return_to_vendor"]).default("restock"),
       lotNumber: z.string().optional(),
       notes: z.string().optional(),
+      upcCode: z.string().optional(),
+      photos: z.string().optional(), // JSON-serialized string[]
     }))
     .mutation(async ({ input, ctx }) => {
       const id = await addReturnsItem({
@@ -3218,6 +3223,8 @@ const returnsRouter = router({
       disposition: z.enum(["restock", "quarantine", "destroy", "return_to_vendor"]).optional(),
       lotNumber: z.string().optional(),
       notes: z.string().optional(),
+      upcCode: z.string().optional(),
+      photos: z.string().optional(), // JSON-serialized string[]
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
@@ -3312,6 +3319,37 @@ const returnsRouter = router({
       const descMap = await fetchItemDescriptions(config, input.clientId);
       const description = descMap.get(input.sku) ?? null;
       return { sku: input.sku, description };
+    }),
+  // Client instructions for a session (from ClearSight approval responses)
+  getClientInstructions: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      return getReturnClientInstructions(input.sessionId);
+    }),
+  // Unread instruction count for the badge
+  countUnreadInstructions: protectedProcedure.query(async () => {
+    const count = await countUnreadReturnClientInstructions();
+    return { count };
+  }),
+  // Mark instructions as read
+  markInstructionsRead: protectedProcedure
+    .input(z.object({ ids: z.array(z.number()).min(1), readByName: z.string() }))
+    .mutation(async ({ input }) => {
+      await markReturnClientInstructionsRead(input.ids, input.readByName);
+      return { success: true };
+    }),
+  // Upload a scan station photo (base64 data URL → S3), returns the public URL
+  uploadScanPhoto: protectedProcedure
+    .input(z.object({
+      filename: z.string().min(1),
+      dataUrl: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const base64 = input.dataUrl.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64, "base64");
+      const key = `scan-station/${input.filename}`;
+      const { url } = await storagePut(key, buffer, "image/png");
+      return { url };
     }),
 });
 // ─── Cortex Integration Router ────────────────────────────────────────────────

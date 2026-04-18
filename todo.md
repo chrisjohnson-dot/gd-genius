@@ -1463,3 +1463,20 @@
 - [ ] Rename: Update app title and branding from "GD Allocation Agent" to "GD Genius" throughout codebase (VITE_APP_TITLE, HTML title, login form, sidebar, page titles)
 - [ ] Feature: Add items.getBySkuList(skus: string[]) public tRPC procedure returning { sku, lengthIn, widthIn, heightIn, weightLb } — API-key protected for GD Robotics integration
 - [ ] Feature: items.getBySkuList API — public tRPC procedure protected by API key, fetches SKU dims/weight from Extensiv item master, returns { sku, lengthIn, widthIn, heightIn, weightLb } for GD Robotics integration
+
+## Returns Scan Station (Multi-Camera + OCR)
+- [ ] ReturnsScanStation page: associate presses Enter to trigger capture
+- [ ] Multi-camera enumeration: detect all connected cameras (top + front + sides)
+- [ ] Simultaneous capture from all cameras on Enter keypress
+- [ ] 360 stitcher: stitch captured frames into draggable/scrollable 360 viewer
+- [ ] UPC barcode detection from captured images (ZXing.js or QuaggaJS)
+- [ ] Lot code OCR from captured images (Tesseract.js)
+- [ ] Auto-populate returns form with extracted UPC and lot code
+- [ ] Upload all captured images to S3 and link to returns_items record
+- [ ] Add photos column to returns_items schema
+- [ ] Sidebar nav entry for Scan Station under RETURNS section
+
+## Returns Client Instructions (in progress)
+- [ ] Client instructions panel in ReturnsDashboard with unread badge
+- [ ] Per-session instructions view with approve/question/reject/flag chips
+- [ ] Mark as read mutation wired to UI

@@ -29,6 +29,7 @@ import ShippingIntegration from "@/pages/ShippingIntegration";
 import ClientVisibility from "@/pages/ClientVisibility";
 import ReturnsDashboard from "@/pages/ReturnsDashboard";
 import ProcessReturns from "@/pages/ProcessReturns";
+import ReturnsScanStation from "@/pages/ReturnsScanStation";
 import CortexSettings from "@/pages/CortexSettings";
 import QcScanner from "@/pages/QcScanner";
 import FlaggedScans from "@/pages/FlaggedScans";
@@ -115,6 +116,7 @@ function AppRoutes() {
         <Route path="/returns" component={ReturnsDashboard} />
         <Route path="/returns/process" component={ProcessReturns} />
         <Route path="/returns/session/:id" component={ProcessReturns} />
+        <Route path="/returns/scan-station" component={ReturnsScanStation} />
         <Route path="/cortex-settings" component={CortexSettings} />
         <Route path="/qc/scanner" component={QcScanner} />
         <Route path="/qc/flagged" component={FlaggedScans} />

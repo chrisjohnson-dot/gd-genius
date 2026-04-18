@@ -440,11 +440,66 @@ export const returnsItems = mysqlTable("returns_items", {
   notes: text("notes"),
   // Scanned by (user name)
   scannedByName: varchar("scannedByName", { length: 256 }),
+  // Client approval — only populated for restock items sent to ClearSight for approval
+  // pending = awaiting client response | approved = client approved restock
+  // rejected = client rejected restock | questioned = client has a question
+  // flagged = client flagged for follow-up
+  clientApprovalStatus: mysqlEnum("clientApprovalStatus", [
+    "pending",
+    "approved",
+    "rejected",
+    "questioned",
+    "flagged",
+  ]),
+  // Free-text note from the client alongside their approval decision
+  clientApprovalNote: text("clientApprovalNote"),
+  // Timestamp when ClearSight last updated the approval status
+  clientApprovalUpdatedAt: timestamp("clientApprovalUpdatedAt"),
+  // UPC barcode auto-detected by the scan station camera
+  upcCode: varchar("upcCode", { length: 64 }),
+  // JSON array of S3 photo URLs captured by the scan station (all angles)
+  photos: text("photos"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type ReturnsItem = typeof returnsItems.$inferSelect;
 export type InsertReturnsItem = typeof returnsItems.$inferInsert;
+
+/**
+ * Client instructions sent from ClearSight back to GD Genius associates.
+ * Each row is a single message from the client about a specific return item
+ * (or the session as a whole when itemId is null).
+ * Associates see a red badge counter for unread instructions in the Returns section.
+ */
+export const returnClientInstructions = mysqlTable("return_client_instructions", {
+  id: int("id").autoincrement().primaryKey(),
+  // The returns session this instruction belongs to
+  sessionId: int("sessionId").notNull(),
+  // The specific item this instruction is about (null = session-level instruction)
+  itemId: int("itemId"),
+  // Extensiv client ID (so we can filter by client)
+  clientId: int("clientId").notNull(),
+  clientName: varchar("clientName", { length: 256 }).notNull().default(""),
+  // The instruction message from the client
+  message: text("message").notNull(),
+  // The approval decision that triggered this instruction (if any)
+  approvalStatus: mysqlEnum("approvalStatus", [
+    "approved",
+    "rejected",
+    "questioned",
+    "flagged",
+  ]),
+  // Whether the associate has read/acknowledged this instruction
+  isRead: boolean("isRead").notNull().default(false),
+  readAt: timestamp("readAt"),
+  readByName: varchar("readByName", { length: 256 }),
+  // Source identifier from ClearSight (for idempotency)
+  clearsightInstructionId: varchar("clearsightInstructionId", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ReturnClientInstruction = typeof returnClientInstructions.$inferSelect;
+export type InsertReturnClientInstruction = typeof returnClientInstructions.$inferInsert;
 
 // ─── GD Cortex Integration ─────────────────────────────────────────────────────
 // Stores connection config for each connected Cortex platform (ClearSight, OpFi)

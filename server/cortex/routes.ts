@@ -18,6 +18,8 @@ import {
   getCortexReturnByReturnNumber,
   getProcessedCortexReturns,
   updateCortexReturn,
+  upsertReturnClientInstruction,
+  updateReturnsItemApproval,
 } from "../db";
 import { fireCortexWebhook } from "./webhook";
 
@@ -233,6 +235,111 @@ export function registerCortexRoutes(app: Express): void {
       res.json({ success: true });
     } catch (err) {
       console.error("[Cortex] internal update-return error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ── Receive client approval decision from ClearSight ─────────────────────
+  // ClearSight POSTs this when the client approves/rejects/questions/flags a
+  // restock item from a closed returns session.
+  //
+  // Body:
+  //   sessionId          number   — GD Genius returns_sessions.id
+  //   clientId           number?  — ClearSight client ID
+  //   clientName         string?  — Human-readable client name
+  //   items              array?   — one entry per restock item
+  //     itemId           number   — returns_items.id
+  //     sku              string
+  //     approvalStatus   "approved"|"rejected"|"questioned"|"flagged"
+  //     note             string?  — optional client message
+  //   instructions       array?   — optional session-level messages
+  //     message          string
+  //     itemId           number?
+  //     approvalStatus   string?
+  //     clearsightInstructionId  string?  — idempotency key
+  app.post("/api/returns/approval", async (req: Request, res: Response) => {
+    if (!(await requireApiKey(req, res, "clearsight"))) return;
+
+    const body = req.body as {
+      sessionId: number;
+      clientId?: number;
+      clientName?: string;
+      items?: Array<{
+        itemId: number;
+        sku: string;
+        approvalStatus: "approved" | "rejected" | "questioned" | "flagged";
+        note?: string;
+      }>;
+      instructions?: Array<{
+        message: string;
+        itemId?: number;
+        approvalStatus?: "approved" | "rejected" | "questioned" | "flagged";
+        clearsightInstructionId?: string;
+      }>;
+    };
+
+    if (!body.sessionId) {
+      res.status(400).json({ error: "sessionId is required" });
+      return;
+    }
+
+    try {
+      const clientId = body.clientId ?? 0;
+      const clientName = body.clientName ?? "";
+      let itemsUpdated = 0;
+      let instructionsCreated = 0;
+
+      // 1. Update approval status on each item
+      if (Array.isArray(body.items)) {
+        for (const item of body.items) {
+          if (!item.itemId || !item.approvalStatus) continue;
+          await updateReturnsItemApproval(item.itemId, item.approvalStatus, item.note ?? null);
+          itemsUpdated++;
+          // Auto-create an instruction row for non-approved decisions so associates see them
+          if (item.approvalStatus !== "approved") {
+            await upsertReturnClientInstruction({
+              sessionId: body.sessionId,
+              itemId: item.itemId,
+              clientId,
+              clientName,
+              message: item.note ?? `Item ${item.sku} was ${item.approvalStatus} by client`,
+              approvalStatus: item.approvalStatus,
+              isRead: false,
+              readAt: null,
+              readByName: null,
+              clearsightInstructionId: null,
+            });
+            instructionsCreated++;
+          }
+        }
+      }
+
+      // 2. Store any explicit session-level instructions
+      if (Array.isArray(body.instructions)) {
+        for (const instr of body.instructions) {
+          if (!instr.message) continue;
+          await upsertReturnClientInstruction({
+            sessionId: body.sessionId,
+            itemId: instr.itemId ?? null,
+            clientId,
+            clientName,
+            message: instr.message,
+            approvalStatus: instr.approvalStatus ?? null,
+            isRead: false,
+            readAt: null,
+            readByName: null,
+            clearsightInstructionId: instr.clearsightInstructionId ?? null,
+          });
+          instructionsCreated++;
+        }
+      }
+
+      console.log(
+        `[Cortex] /api/returns/approval session=${body.sessionId} itemsUpdated=${itemsUpdated} instructionsCreated=${instructionsCreated}`
+      );
+      res.json({ success: true, itemsUpdated, instructionsCreated });
+    } catch (err) {
+      console.error("[Cortex] /api/returns/approval error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });

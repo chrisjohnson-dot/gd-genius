@@ -330,6 +330,13 @@
       "when": 1775762782477,
       "tag": "0046_perfect_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1776478131577,
+      "tag": "0047_chilly_magdalene",
+      "breakpoints": true
     }
   ]
 }

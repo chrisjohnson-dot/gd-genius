@@ -50,6 +50,7 @@ import {
   Building2,
   BarChart2,
   BookOpen,
+  Camera,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -107,8 +108,9 @@ const shippingItems = [
 ];
 
 const returnsItems = [
-  { href: "/returns",         label: "Returns Dashboard", icon: RotateCcw },
-  { href: "/returns/process", label: "Process Returns",   icon: ScanBarcode },
+  { href: "/returns",              label: "Returns Dashboard", icon: RotateCcw },
+  { href: "/returns/process",      label: "Process Returns",   icon: ScanBarcode },
+  { href: "/returns/scan-station", label: "Scan Station",       icon: Camera },
 ];
 
 const purchaseOrderItems = [

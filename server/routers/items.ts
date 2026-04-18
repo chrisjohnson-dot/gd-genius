@@ -97,6 +97,57 @@ async function enrichConfig(config: ExtensivConfig) {
   };
 }
 
+// ── listConfigs cache ────────────────────────────────────────────────────────
+
+const LIST_CONFIGS_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+type EnrichedConfig = Awaited<ReturnType<typeof enrichConfig>>;
+
+interface ListConfigsCacheEntry {
+  configs: EnrichedConfig[];
+  cachedAt: Date;
+  expiresAt: Date;
+}
+
+let _listConfigsCache: ListConfigsCacheEntry | null = null;
+
+/** Returns the cached listConfigs result if still valid, otherwise null. */
+function getListConfigsCache(): ListConfigsCacheEntry | null {
+  if (!_listConfigsCache) return null;
+  if (Date.now() > _listConfigsCache.expiresAt.getTime()) {
+    _listConfigsCache = null;
+    return null;
+  }
+  return _listConfigsCache;
+}
+
+/** Stores a fresh listConfigs result in the cache. */
+function setListConfigsCache(configs: EnrichedConfig[]): ListConfigsCacheEntry {
+  const now = new Date();
+  _listConfigsCache = {
+    configs,
+    cachedAt: now,
+    expiresAt: new Date(now.getTime() + LIST_CONFIGS_TTL_MS),
+  };
+  return _listConfigsCache;
+}
+
+/**
+ * Invalidates the listConfigs cache for a specific configId (or entirely).
+ * Called by refreshConfig to ensure the next listConfigs call re-fetches.
+ */
+export function invalidateListConfigsCache(configId?: number): void {
+  if (configId === undefined) {
+    // Full flush
+    _listConfigsCache = null;
+    return;
+  }
+  if (!_listConfigsCache) return;
+  // Partial invalidation: remove the stale entry and force a full re-fetch
+  // on the next listConfigs call (simpler and safer than patching in place).
+  _listConfigsCache = null;
+}
+
 // ── API key middleware ─────────────────────────────────────────────────────────
 
 /**
@@ -150,10 +201,27 @@ export const itemsRouter = router({
    *   }
    */
   listConfigs: apiKeyProcedure.query(async () => {
+    const cached = getListConfigsCache();
+    if (cached) {
+      return {
+        configs: cached.configs,
+        cachedAt: cached.cachedAt,
+        expiresAt: cached.expiresAt,
+        fromCache: true as const,
+      };
+    }
+
     const configs = await getExtensivConfigs();
     const activeConfigs = configs.filter((c) => c.isActive);
     const results = await Promise.all(activeConfigs.map(enrichConfig));
-    return { configs: results };
+    const entry = setListConfigsCache(results);
+
+    return {
+      configs: results,
+      cachedAt: entry.cachedAt,
+      expiresAt: entry.expiresAt,
+      fromCache: false as const,
+    };
   }),
 
   /**
@@ -270,6 +338,11 @@ export const itemsRouter = router({
       for (const { customerId } of enriched.customers) {
         clearItemDimsCache(config.tplGuid, customerId);
       }
+
+      // Invalidate the listConfigs cache so the next listConfigs call reflects
+      // the freshly-fetched data rather than serving a stale cached response.
+      invalidateListConfigsCache(input.configId);
+
       const refreshedAt = new Date();
 
       console.log(

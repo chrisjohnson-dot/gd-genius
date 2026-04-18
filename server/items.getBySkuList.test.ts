@@ -10,7 +10,7 @@
  *  - getConfig returns the enriched shape for a valid configId, NOT_FOUND for missing/inactive
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
 
 // ── Mock ENV before importing anything that uses it ───────────────────────────
@@ -112,7 +112,15 @@ vi.mock("./extensiv/api", () => ({
 }));
 
 // ── Import the router AFTER all mocks are registered ─────────────────────────
-import { itemsRouter } from "./routers/items";
+import { itemsRouter, invalidateListConfigsCache } from "./routers/items";
+
+// ── Reset the in-memory listConfigs cache before each test ───────────────────
+// Without this, the cache populated by the first test leaks into subsequent
+// tests that mock fetchCustomers/fetchAllFacilities to throw, causing them to
+// receive the cached (non-empty) result instead of the degraded one.
+beforeEach(() => {
+  invalidateListConfigsCache();
+});
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

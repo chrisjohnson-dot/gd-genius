@@ -47,10 +47,13 @@ import {
   InsertSlaShipToRule,
   returnsSessions,
   returnsItems,
+  returnClientInstructions,
   ReturnsSession,
   InsertReturnsSession,
   ReturnsItem,
   InsertReturnsItem,
+  ReturnClientInstruction,
+  InsertReturnClientInstruction,
   cortexConnections,
   cortexReturns,
   CortexConnection,
@@ -1739,7 +1742,7 @@ export async function getReturnsItems(sessionId: number) {
 
 export async function updateReturnsItem(
   id: number,
-  data: Partial<Pick<InsertReturnsItem, "sku" | "description" | "quantity" | "condition" | "disposition" | "lotNumber" | "notes">>
+  data: Partial<Pick<InsertReturnsItem, "sku" | "description" | "quantity" | "condition" | "disposition" | "lotNumber" | "notes" | "upcCode" | "photos">>
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -4478,4 +4481,75 @@ export async function updatePalletSessionOpfiStatus(
       opfiError: error ?? null,
     })
     .where(eq(receivePalletSessions.id, sessionId));
+}
+
+// ─── Return Client Instructions ──────────────────────────────────────────────
+
+/** Insert a new client instruction from ClearSight. Idempotent on clearsightInstructionId. */
+export async function upsertReturnClientInstruction(
+  data: Omit<InsertReturnClientInstruction, "id" | "createdAt" | "updatedAt">
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Idempotency: if we already have this clearsightInstructionId, skip insert
+  if (data.clearsightInstructionId) {
+    const existing = await db
+      .select({ id: returnClientInstructions.id })
+      .from(returnClientInstructions)
+      .where(eq(returnClientInstructions.clearsightInstructionId, data.clearsightInstructionId))
+      .limit(1);
+    if (existing.length > 0) return existing[0].id;
+  }
+  const result = await db.insert(returnClientInstructions).values(data);
+  return (result as unknown as { insertId: number }).insertId;
+}
+
+/** Get all instructions for a session, newest first. */
+export async function getReturnClientInstructions(sessionId: number): Promise<ReturnClientInstruction[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(returnClientInstructions)
+    .where(eq(returnClientInstructions.sessionId, sessionId))
+    .orderBy(desc(returnClientInstructions.createdAt));
+}
+
+/** Count unread instructions across all sessions (for the badge). */
+export async function countUnreadReturnClientInstructions(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select({ cnt: count() })
+    .from(returnClientInstructions)
+    .where(eq(returnClientInstructions.isRead, false));
+  return result[0]?.cnt ?? 0;
+}
+
+/** Mark one or more instructions as read. */
+export async function markReturnClientInstructionsRead(
+  ids: number[],
+  readByName: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  if (ids.length === 0) return;
+  await db
+    .update(returnClientInstructions)
+    .set({ isRead: true, readAt: new Date(), readByName })
+    .where(inArray(returnClientInstructions.id, ids));
+}
+
+/** Update a returns_item's clientApprovalStatus and note. */
+export async function updateReturnsItemApproval(
+  itemId: number,
+  status: "pending" | "approved" | "rejected" | "questioned" | "flagged",
+  note: string | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(returnsItems)
+    .set({ clientApprovalStatus: status, clientApprovalNote: note, clientApprovalUpdatedAt: new Date() })
+    .where(eq(returnsItems.id, itemId));
 }

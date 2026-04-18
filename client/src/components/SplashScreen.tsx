@@ -171,7 +171,7 @@ export function SplashScreen({ onDone }: SplashScreenProps) {
           transition: `opacity 600ms ease ${ENTER_MS + 200}ms`,
         }}
       >
-        Empowering Warehouse Operations.
+        Empowering Warehouse Operations
       </p>
 
       {/* ── Keyframes (namespaced with gd- prefix to avoid collisions) ──────── */}

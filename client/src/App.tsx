@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { SplashScreen } from "./components/SplashScreen";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useRoute } from "wouter";
@@ -177,6 +179,8 @@ function Router() {
 }
 
 function App() {
+  const [splashDone, setSplashDone] = useState(false);
+  if (!splashDone) return <SplashScreen onDone={() => setSplashDone(true)} />;
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>

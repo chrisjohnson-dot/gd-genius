@@ -49,6 +49,12 @@ export interface ExtensivOrder {
     totalWeight?: number;
     /** Number of cartons / pallets */
     totalCartons?: number;
+    /** True if the EDI 945 (Warehouse Shipping Advice) has been transmitted to the trading partner */
+    asnSent?: boolean;
+    /** 0 = not eligible, 1 = eligible but not yet sent */
+    asnCandidate?: number;
+    /** Date the order was processed/closed by Extensiv (readonly.processDate) */
+    processDate?: string;
   };
   referenceNum: string;
   poNum?: string;
@@ -1377,4 +1383,76 @@ export async function markOrderPacked(
 
   if (putResp.status === 200 || putResp.status === 204) return { success: true };
   return { success: false, error: "HTTP " + putResp.status + ": " + JSON.stringify(putResp.data) };
+}
+
+/**
+ * Fetch closed/shipped orders from Extensiv within a date range.
+ * Uses readonly.processDate (the date Extensiv closed the order) for filtering.
+ * Returns orders with asnSent, asnCandidate, and processDate populated from the raw response.
+ *
+ * @param config   Extensiv client config
+ * @param fromDate ISO date string (e.g. "2026-04-10T00:00:00")
+ * @param toDate   ISO date string (e.g. "2026-04-17T23:59:59")
+ */
+export async function fetchShippedOrders(
+  config: ExtensivClientConfig,
+  fromDate: string,
+  toDate: string
+): Promise<ExtensivOrder[]> {
+  const client = createExtensivClient(config);
+  const allOrders: ExtensivOrder[] = [];
+  let pgnum = 1;
+  const pgsiz = 500;
+
+  // RQL: closed orders with processDate in range
+  const rql = `readonly.isClosed==true;readonly.processDate=gt=${fromDate};readonly.processDate=lt=${toDate}`;
+
+  while (true) {
+    const data = (await client.get("/orders", {
+      pgsiz,
+      pgnum,
+      rql,
+      detail: "all",
+    })) as {
+      totalResults?: number;
+      _embedded?: { "http://api.3plCentral.com/rels/orders/order"?: Array<Record<string, unknown>> };
+    };
+
+    const rawOrders = data?._embedded?.["http://api.3plCentral.com/rels/orders/order"] ?? [];
+
+    // Map raw response to ExtensivOrder, picking up asnSent/asnCandidate/processDate
+    const mapped: ExtensivOrder[] = rawOrders.map((raw) => {
+      const ro = (raw.readOnly ?? {}) as Record<string, unknown>;
+      return {
+        ...(raw as unknown as ExtensivOrder),
+        readOnly: {
+          orderId: ro.orderId as number,
+          status: ro.status as number ?? 3,
+          fullyAllocated: ro.fullyAllocated as boolean ?? true,
+          isClosed: ro.isClosed as boolean ?? true,
+          customerIdentifier: ro.customerIdentifier as { id: number; name: string } ?? { id: 0, name: "" },
+          facilityIdentifier: ro.facilityIdentifier as { id: number; name: string } ?? { id: 0, name: "" },
+          creationDate: ro.creationDate as string ?? "",
+          shipDate: ro.shipDate as string | undefined,
+          trackingNumber: ro.trackingNumber as string | undefined,
+          bolNumber: ro.bolNumber as string | undefined,
+          carrierCode: ro.carrierCode as string | undefined,
+          carrierName: ro.carrierName as string | undefined,
+          shipVia: ro.shipVia as string | undefined,
+          totalWeight: ro.totalWeight as number | undefined,
+          totalCartons: ro.totalCartons as number | undefined,
+          asnSent: ro.asnSent as boolean | undefined,
+          asnCandidate: ro.asnCandidate as number | undefined,
+          processDate: ro.processDate as string | undefined,
+        },
+      };
+    });
+
+    allOrders.push(...mapped);
+    if (rawOrders.length < pgsiz) break;
+    pgnum++;
+  }
+
+  console.log(`[Extensiv] fetchShippedOrders: fetched ${allOrders.length} closed orders from ${fromDate} to ${toDate}`);
+  return allOrders;
 }

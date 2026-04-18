@@ -239,7 +239,7 @@ import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdue
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
-  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked } from "./extensiv/api";
+  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -9143,6 +9143,123 @@ import { pullTrackerRouter } from "./routers/pullTracker";
 import { associatesRouter } from "./routers/associates";
 import { pullAlertsRouter } from "./routers/pullAlerts";
 import { itemsRouter } from "./routers/items";
+
+// ─── EDI 945 Monitor ──────────────────────────────────────────────────────────
+const ediMonitorRouter = router({
+  /**
+   * Fetch recently shipped orders from Extensiv and cross-reference ClearSight
+   * retailer EDI requirements to surface real 945 failures.
+   *
+   * Status values:
+   *   "sent"         — asnSent = true (945 transmitted OK)
+   *   "not_required" — asnSent = false but retailer does not require EDI
+   *   "missing"      — asnSent = false AND retailer requires EDI (action needed)
+   *   "unknown"      — asnSent = false and retailer not found in ClearSight list
+   */
+  getShippedOrders: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      daysBack: z.number().min(1).max(90).default(7),
+    }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+
+      const now = new Date();
+      const from = new Date(now.getTime() - input.daysBack * 24 * 60 * 60 * 1000);
+      const fromStr = from.toISOString().replace("Z", "");
+      const toStr = now.toISOString().replace("Z", "");
+
+      // Fetch shipped orders from Extensiv
+      let orders: Awaited<ReturnType<typeof fetchShippedOrders>> = [];
+      try {
+        orders = await fetchShippedOrders(
+          { tplGuid: config.tplGuid, clientId: config.clientId, clientSecret: config.clientSecret, userLoginId: config.userLoginId, baseUrl: config.baseUrl },
+          fromStr,
+          toStr
+        );
+      } catch (err) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Extensiv fetch failed: ${err instanceof Error ? err.message : String(err)}` });
+      }
+
+      // Fetch EDI retailer list from ClearSight
+      let ediRetailers: Array<{ name: string; requiresEdi: boolean; aliases?: string[] }> = [];
+      try {
+        const conn = await getCortexConnection("clearsight");
+        if (conn?.enabled && conn.baseUrl && conn.outboundApiKey) {
+          const url = conn.baseUrl.replace(/\/$/, "") + "/api/retailers";
+          const res = await fetch(url, {
+            headers: { "X-API-Key": conn.outboundApiKey },
+            signal: AbortSignal.timeout(8_000),
+          });
+          if (res.ok) {
+            const body = await res.json() as { retailers?: typeof ediRetailers };
+            ediRetailers = body.retailers ?? [];
+          } else {
+            console.warn(`[EDI Monitor] ClearSight /api/retailers returned HTTP ${res.status}`);
+          }
+        }
+      } catch (err) {
+        console.warn("[EDI Monitor] Failed to fetch ClearSight retailer list:", err);
+      }
+
+      // Build a lookup: retailer name (lowercased) → requiresEdi
+      const retailerMap = new Map<string, boolean>();
+      for (const r of ediRetailers) {
+        retailerMap.set(r.name.toLowerCase(), r.requiresEdi);
+        for (const alias of (r.aliases ?? [])) {
+          retailerMap.set(alias.toLowerCase(), r.requiresEdi);
+        }
+      }
+
+      // Enrich each order with EDI status
+      const enriched = orders.map((order) => {
+        const customerName = order.readOnly.customerIdentifier?.name ?? "";
+        const asnSent = order.readOnly.asnSent ?? false;
+
+        let ediStatus: "sent" | "missing" | "not_required" | "unknown";
+        if (asnSent) {
+          ediStatus = "sent";
+        } else {
+          const requiresEdi = retailerMap.get(customerName.toLowerCase());
+          if (requiresEdi === true) {
+            ediStatus = "missing";
+          } else if (requiresEdi === false) {
+            ediStatus = "not_required";
+          } else {
+            ediStatus = "unknown";
+          }
+        }
+
+        return {
+          orderId: order.readOnly.orderId,
+          referenceNum: order.referenceNum,
+          poNum: order.poNum ?? null,
+          customerName,
+          facilityName: order.readOnly.facilityIdentifier?.name ?? "",
+          shipDate: order.readOnly.shipDate ?? null,
+          processDate: order.readOnly.processDate ?? null,
+          trackingNumber: order.readOnly.trackingNumber ?? null,
+          carrierName: order.readOnly.carrierName ?? null,
+          asnSent,
+          asnCandidate: order.readOnly.asnCandidate ?? 0,
+          ediStatus,
+        };
+      });
+
+      const summary = {
+        total: enriched.length,
+        sent: enriched.filter(o => o.ediStatus === "sent").length,
+        missing: enriched.filter(o => o.ediStatus === "missing").length,
+        notRequired: enriched.filter(o => o.ediStatus === "not_required").length,
+        unknown: enriched.filter(o => o.ediStatus === "unknown").length,
+        clearSightConnected: ediRetailers.length > 0,
+      };
+
+      return { orders: enriched, summary };
+    }),
+});
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9167,5 +9284,6 @@ export const appRouterV4 = router({
   associates: associatesRouter,
   pullAlerts: pullAlertsRouter,
   items: itemsRouter,
+  ediMonitor: ediMonitorRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

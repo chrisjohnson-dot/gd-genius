@@ -51,6 +51,7 @@ import {
   BarChart2,
   BookOpen,
   Camera,
+  Wifi,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -105,6 +106,7 @@ const ltlItems = [
 const shippingItems = [
   { href: "/shipping",         label: "Shipping Dashboard", icon: Ship },
   { href: "/shipping/history", label: "Shipping History",   icon: ScrollText },
+  { href: "/edi-monitor",      label: "EDI 945 Monitor",    icon: Wifi },
 ];
 
 const returnsItems = [

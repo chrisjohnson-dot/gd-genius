@@ -129,6 +129,12 @@ import {
   rateWizardShipments,
   RateWizardShipment,
   InsertRateWizardShipment,
+  ediRetailers,
+  EdiRetailer,
+  InsertEdiRetailer,
+  ediEscalations,
+  EdiEscalation,
+  InsertEdiEscalation,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -4552,4 +4558,79 @@ export async function updateReturnsItemApproval(
     .update(returnsItems)
     .set({ clientApprovalStatus: status, clientApprovalNote: note, clientApprovalUpdatedAt: new Date() })
     .where(eq(returnsItems.id, itemId));
+}
+
+// ─── EDI Retailers ────────────────────────────────────────────────────────────
+
+export async function getEdiRetailers(): Promise<EdiRetailer[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(ediRetailers).orderBy(ediRetailers.name);
+}
+
+export async function getEdiRetailerById(id: number): Promise<EdiRetailer | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(ediRetailers).where(eq(ediRetailers.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createEdiRetailer(data: Omit<InsertEdiRetailer, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const now = Date.now();
+  const result = await db.insert(ediRetailers).values({ ...data, createdAt: now, updatedAt: now });
+  const raw = result as unknown;
+  const insertId = Array.isArray(raw) ? (raw[0] as Record<string,unknown>).insertId : (raw as Record<string,unknown>).insertId;
+  return insertId as number;
+}
+
+export async function updateEdiRetailer(id: number, data: Partial<InsertEdiRetailer>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(ediRetailers).set({ ...data, updatedAt: Date.now() }).where(eq(ediRetailers.id, id));
+}
+
+export async function deleteEdiRetailer(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(ediRetailers).where(eq(ediRetailers.id, id));
+}
+
+// ─── EDI Escalations ─────────────────────────────────────────────────────────
+
+export async function createEdiEscalation(data: Omit<InsertEdiEscalation, 'id' | 'flaggedAt'>): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(ediEscalations).values({ ...data, flaggedAt: Date.now() });
+  const raw = result as unknown;
+  const insertId = Array.isArray(raw) ? (raw[0] as Record<string,unknown>).insertId : (raw as Record<string,unknown>).insertId;
+  return insertId as number;
+}
+
+export async function getEdiEscalations(configId?: number): Promise<EdiEscalation[]> {
+  const db = await getDb();
+  if (!db) return [];
+  if (configId !== undefined) {
+    return db.select().from(ediEscalations)
+      .where(eq(ediEscalations.configId, configId))
+      .orderBy(desc(ediEscalations.flaggedAt));
+  }
+  return db.select().from(ediEscalations).orderBy(desc(ediEscalations.flaggedAt));
+}
+
+export async function resolveEdiEscalation(id: number, resolvedBy: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(ediEscalations)
+    .set({ status: 'resolved', resolvedAt: Date.now(), resolvedBy })
+    .where(eq(ediEscalations.id, id));
+}
+
+export async function dismissEdiEscalation(id: number, resolvedBy: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(ediEscalations)
+    .set({ status: 'dismissed', resolvedAt: Date.now(), resolvedBy })
+    .where(eq(ediEscalations.id, id));
 }

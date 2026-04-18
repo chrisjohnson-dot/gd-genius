@@ -2171,3 +2171,34 @@ export const routingGuides = mysqlTable('routing_guides', {
 
 export type RoutingGuide = typeof routingGuides.$inferSelect;
 export type InsertRoutingGuide = typeof routingGuides.$inferInsert;
+
+// EDI Retailers — which retailers require 945 EDI transmissions
+export const ediRetailers = mysqlTable('edi_retailers', {
+  id: int('id').primaryKey().autoincrement(),
+  name: varchar('name', { length: 255 }).notNull(),
+  requiresEdi: boolean('requires_edi').notNull().default(true),
+  aliases: json('aliases').$type<string[]>().notNull().default([]),
+  notes: text('notes'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+});
+export type EdiRetailer = typeof ediRetailers.$inferSelect;
+export type InsertEdiRetailer = typeof ediRetailers.$inferInsert;
+
+// EDI Escalations — ops flagging a Missing 945 order for manual follow-up
+export const ediEscalations = mysqlTable('edi_escalations', {
+  id: int('id').primaryKey().autoincrement(),
+  configId: int('config_id').notNull(),
+  orderNumber: varchar('order_number', { length: 128 }).notNull(),
+  customerName: varchar('customer_name', { length: 255 }),
+  shipDate: varchar('ship_date', { length: 32 }),
+  trackingNumber: varchar('tracking_number', { length: 128 }),
+  flaggedBy: varchar('flagged_by', { length: 255 }).notNull(),
+  flaggedAt: bigint('flagged_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+  notes: text('notes'),
+  resolvedAt: bigint('resolved_at', { mode: 'number' }),
+  resolvedBy: varchar('resolved_by', { length: 255 }),
+  status: mysqlEnum('status', ['open', 'resolved', 'dismissed']).notNull().default('open'),
+});
+export type EdiEscalation = typeof ediEscalations.$inferSelect;
+export type InsertEdiEscalation = typeof ediEscalations.$inferInsert;

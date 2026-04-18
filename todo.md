@@ -1480,3 +1480,8 @@
 - [ ] Client instructions panel in ReturnsDashboard with unread badge
 - [ ] Per-session instructions view with approve/question/reject/flag chips
 - [ ] Mark as read mutation wired to UI
+
+## EDI 945 Monitor Enhancements
+- [ ] Add ClearSight /api/retailers endpoint (DB schema: edi_retailers table, CRUD tRPC procedures, REST route)
+- [ ] Add notifyOwner alert when Missing 945 orders detected on auto-refresh
+- [ ] Add flag/escalate action button on Missing rows with audit log entry

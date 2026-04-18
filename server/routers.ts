@@ -232,6 +232,15 @@ import {
   upsertProductionSkuConfig,
   listProductionSkuConfigs,
   deleteProductionSkuConfig,
+  getEdiRetailers,
+  getEdiRetailerById,
+  createEdiRetailer,
+  updateEdiRetailer,
+  deleteEdiRetailer,
+  createEdiEscalation,
+  getEdiEscalations,
+  resolveEdiEscalation,
+  dismissEdiEscalation,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { getCarrierMarkups, getMarkupPct, applyMarkup, testOpFiConnection } from "./opfiRateSheets";
@@ -9260,6 +9269,96 @@ const ediMonitorRouter = router({
     }),
 });
 
+// ─── EDI Retailers Router ─────────────────────────────────────────────────────
+const ediRetailersRouter = router({
+  list: protectedProcedure.query(async () => getEdiRetailers()),
+
+  get: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const r = await getEdiRetailerById(input.id);
+      if (!r) throw new TRPCError({ code: "NOT_FOUND" });
+      return r;
+    }),
+
+  create: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      requiresEdi: z.boolean().default(true),
+      aliases: z.array(z.string()).default([]),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const id = await createEdiRetailer(input);
+      return { id };
+    }),
+
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().min(1).optional(),
+      requiresEdi: z.boolean().optional(),
+      aliases: z.array(z.string()).optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateEdiRetailer(id, data);
+      return { success: true };
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteEdiRetailer(input.id);
+      return { success: true };
+    }),
+});
+
+// ─── EDI Escalations Router ──────────────────────────────────────────────────
+const ediEscalationsRouter = router({
+  list: protectedProcedure
+    .input(z.object({ configId: z.number().optional() }))
+    .query(async ({ input }) => getEdiEscalations(input.configId)),
+
+  flag: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      orderNumber: z.string(),
+      customerName: z.string().optional(),
+      shipDate: z.string().optional(),
+      trackingNumber: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const flaggedBy = ctx.user?.name ?? "Unknown";
+      const id = await createEdiEscalation({ ...input, flaggedBy });
+      // Notify owner
+      try {
+        const { notifyOwner } = await import('./_core/notification.js');
+        await notifyOwner({
+          title: `EDI 945 Escalation: Order ${input.orderNumber}`,
+          content: `Order ${input.orderNumber} (${input.customerName ?? 'unknown customer'}) flagged for manual EDI 945 follow-up by ${flaggedBy}.${input.notes ? ` Notes: ${input.notes}` : ''}`,
+        });
+      } catch { /* non-blocking */ }
+      return { id };
+    }),
+
+  resolve: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await resolveEdiEscalation(input.id, ctx.user?.name ?? "Unknown");
+      return { success: true };
+    }),
+
+  dismiss: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await dismissEdiEscalation(input.id, ctx.user?.name ?? "Unknown");
+      return { success: true };
+    }),
+});
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -9285,5 +9384,7 @@ export const appRouterV4 = router({
   pullAlerts: pullAlertsRouter,
   items: itemsRouter,
   ediMonitor: ediMonitorRouter,
+  ediRetailers: ediRetailersRouter,
+  ediEscalations: ediEscalationsRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

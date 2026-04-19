@@ -93,7 +93,11 @@ function AutoPopulateDialog({
   });
 
   const initMappings = (customerList: Array<{ id: number; name: string }>) => {
-    setMappings(customerList.map((c) => ({ customerId: c.id, customerName: c.name, stagingPrefix: "" })));
+    setMappings(
+      [...customerList]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((c) => ({ customerId: c.id, customerName: c.name, stagingPrefix: "" }))
+    );
   };
   const handleFacilitySelect = (facilityId: number) => {
     setSelectedFacilityId(facilityId); setMappings([]); setPreviewResult(null); setStep("configure");

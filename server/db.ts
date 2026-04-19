@@ -229,10 +229,12 @@ export async function deleteExtensivConfig(id: number): Promise<void> {
 
 // ─── Location Configs ────────────────────────────────────────────────────────
 
-export async function getLocationConfigs(configId: number): Promise<LocationConfig[]> {
+export async function getLocationConfigs(configId: number, facilityId?: number): Promise<LocationConfig[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(locationConfigs).where(eq(locationConfigs.configId, configId));
+  const conditions = [eq(locationConfigs.configId, configId)];
+  if (facilityId != null) conditions.push(eq(locationConfigs.facilityId, facilityId));
+  return db.select().from(locationConfigs).where(and(...conditions));
 }
 
 export async function getLocationConfigsByCustomer(

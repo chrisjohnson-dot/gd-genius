@@ -307,8 +307,8 @@ function LocationAssignmentsTab() {
   );
 
   const { data: locations, isLoading } = trpc.locations.list.useQuery(
-    { configId: activeConfigId! },
-    { enabled: !!activeConfigId }
+    { configId: activeConfigId!, facilityId: activeFacilityId ?? undefined },
+    { enabled: !!activeConfigId && !!activeFacilityId }
   );
   const { data: extLocations } = trpc.extensiv.locations.useQuery(
     { configId: testConfigId!, facilityId: testFacilityId! },

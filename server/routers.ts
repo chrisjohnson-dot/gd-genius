@@ -372,9 +372,9 @@ const _appRouter = router({
   // ─── Location Config ───────────────────────────────────────────────────────
   locations: router({
     list: protectedProcedure
-      .input(z.object({ configId: z.number() }))
+      .input(z.object({ configId: z.number(), facilityId: z.number().optional() }))
       .query(async ({ input }) => {
-        return getLocationConfigs(input.configId);
+        return getLocationConfigs(input.configId, input.facilityId);
       }),
 
     listByCustomer: protectedProcedure

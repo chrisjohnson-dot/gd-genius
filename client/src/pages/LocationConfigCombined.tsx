@@ -3,15 +3,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import {
-  AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Database,
+  AlertCircle, CheckCircle2, Check, ChevronDown, ChevronRight, ChevronsUpDown, Database,
   Eye, FlaskConical, Info, Loader2, MapPin, Pencil, Plus, Save,
-  Sparkles, Trash2,
+  Search, Sparkles, Trash2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -222,6 +224,59 @@ function AutoPopulateDialog({
   );
 }
 
+// ── Customer autocomplete combobox ──────────────────────────────────────────
+function CustomerCombobox({
+  customers,
+  value,
+  onChange,
+}: {
+  customers: Array<{ id: number; name: string }>;
+  value: number | null;
+  onChange: (id: number, name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = customers.find((c) => c.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          {selected ? selected.name : <span className="text-muted-foreground">Type to search customers…</span>}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search customers…" autoFocus />
+          <CommandList>
+            <CommandEmpty>No customers found.</CommandEmpty>
+            <CommandGroup>
+              {customers.map((c) => (
+                <CommandItem
+                  key={c.id}
+                  value={c.name}
+                  onSelect={() => {
+                    onChange(c.id, c.name);
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${value === c.id ? "opacity-100" : "opacity-0"}`} />
+                  {c.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function LocationAssignmentsTab() {
   const utils = trpc.useUtils();
   const { data: configs } = trpc.config.list.useQuery();
@@ -234,6 +289,9 @@ function LocationAssignmentsTab() {
   const [testFacilityId, setTestFacilityId] = useState<number | null>(null);
   const [runTest, setRunTest] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  // Lookup state: trigger a lookup when user clicks "Look up in Extensiv"
+  const [lookupTrigger, setLookupTrigger] = useState(false);
+  const [lookupDone, setLookupDone] = useState(false);
 
   const activeConfigId = selectedConfigId ?? configs?.[0]?.id ?? null;
 
@@ -241,6 +299,12 @@ function LocationAssignmentsTab() {
     { configId: activeConfigId! }, { enabled: !!activeConfigId }
   );
   const activeFacilityId = selectedFacilityId ?? facilities?.[0]?.id ?? null;
+
+  // Customers for the active facility — used to populate the customer dropdown
+  const { data: facilityCustomers } = trpc.extensiv.customersForFacility.useQuery(
+    { configId: activeConfigId!, facilityId: activeFacilityId! },
+    { enabled: !!activeConfigId && !!activeFacilityId }
+  );
 
   const { data: locations, isLoading } = trpc.locations.list.useQuery(
     { configId: activeConfigId! },
@@ -250,6 +314,47 @@ function LocationAssignmentsTab() {
     { configId: testConfigId!, facilityId: testFacilityId! },
     { enabled: !!testConfigId && !!testFacilityId && runTest }
   ) as { data?: Array<{ id: number; name: string }> };
+
+  // Extensiv location lookup — fires when user clicks "Look up in Extensiv"
+  const lookupEnabled =
+    lookupTrigger &&
+    !!activeConfigId &&
+    !!activeFacilityId &&
+    !!editForm.locationName?.trim();
+  const { data: lookupResult, isFetching: lookupFetching, error: lookupError } =
+    trpc.extensiv.lookupLocation.useQuery(
+      { configId: activeConfigId!, facilityId: activeFacilityId!, locationName: editForm.locationName ?? "" },
+      {
+        enabled: lookupEnabled,
+        retry: false,
+      }
+    );
+
+  // When lookup resolves, apply the result to the form
+  useEffect(() => {
+    if (!lookupTrigger || lookupFetching || lookupDone) return;
+    if (lookupError) {
+      toast.error("Extensiv lookup failed — please enter the IDs manually");
+      setLookupTrigger(false);
+      return;
+    }
+    if (lookupResult === undefined) return; // still loading
+    if (lookupResult === null) {
+      toast.warning(`"${editForm.locationName}" was not found in Extensiv for this facility`);
+      setLookupTrigger(false);
+      return;
+    }
+    setEditForm((prev) => ({
+      ...prev,
+      locationId: lookupResult.locationId,
+      ...(lookupResult.customerId != null && !prev.customerId
+        ? { customerId: lookupResult.customerId, customerName: lookupResult.customerName ?? prev.customerName }
+        : {}),
+    }));
+    toast.success("Extensiv IDs filled in automatically");
+    setLookupTrigger(false);
+    setLookupDone(true);
+  }, [lookupTrigger, lookupFetching, lookupDone, lookupResult, lookupError, editForm.locationName]);
 
   const saveMutation = trpc.locations.save.useMutation({
     onSuccess: () => { utils.locations.list.invalidate(); toast.success("Location saved"); setEditOpen(false); },
@@ -266,6 +371,8 @@ function LocationAssignmentsTab() {
   });
 
   const openEdit = (loc?: typeof locations extends (infer T)[] | undefined ? T : never) => {
+    setLookupTrigger(false);
+    setLookupDone(false);
     if (loc) {
       setEditForm({
         id: (loc as { id: number }).id,
@@ -286,7 +393,8 @@ function LocationAssignmentsTab() {
 
   const handleSave = () => {
     if (!editForm.customerId || !editForm.locationId || !editForm.locationType) {
-      toast.error("All fields are required"); return;
+      toast.error("Customer, location name, and location type are required. Use \"Look up in Extensiv\" to fill IDs automatically.");
+      return;
     }
     saveMutation.mutate(editForm as Parameters<typeof saveMutation.mutate>[0]);
   };
@@ -390,11 +498,57 @@ function LocationAssignmentsTab() {
         )}
       </div>
 
-      {/* Edit dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      {/* Add / Edit Location dialog — simplified: Customer autocomplete + Location Name + Type + Extensiv lookup */}
+      <Dialog open={editOpen} onOpenChange={(o) => { if (!o) { setLookupTrigger(false); setLookupDone(false); } setEditOpen(o); }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editForm.id ? "Edit Location" : "Add Location"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
+
+            {/* ── Customer autocomplete ── */}
+            <div className="space-y-1.5">
+              <Label>Customer</Label>
+              <CustomerCombobox
+                customers={(facilityCustomers ?? []).sort((a, b) => a.name.localeCompare(b.name))}
+                value={editForm.customerId ?? null}
+                onChange={(id, name) => setEditForm((f) => ({ ...f, customerId: id, customerName: name }))}
+              />
+            </div>
+
+            {/* ── Location Name + Look up button ── */}
+            <div className="space-y-1.5">
+              <Label>Location Name</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. HR-Stage"
+                  value={editForm.locationName ?? ""}
+                  onChange={(e) => { setEditForm((f) => ({ ...f, locationName: e.target.value })); setLookupDone(false); }}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!editForm.locationName?.trim() || lookupFetching}
+                  onClick={() => { setLookupDone(false); setLookupTrigger(true); }}
+                  title="Look up this location name in Extensiv and auto-fill the ID"
+                >
+                  {lookupFetching
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : lookupDone
+                      ? <Check className="h-3.5 w-3.5 text-green-600" />
+                      : <Search className="h-3.5 w-3.5" />}
+                  <span className="ml-1.5 hidden sm:inline">{lookupDone ? "Found" : "Look up"}</span>
+                </Button>
+              </div>
+              {lookupDone && editForm.locationId && (
+                <p className="text-xs text-muted-foreground">Extensiv ID: <span className="font-mono">{editForm.locationId}</span> — confirmed</p>
+              )}
+              {!lookupDone && !editForm.locationId && editForm.locationName && (
+                <p className="text-xs text-muted-foreground">Click Look up to auto-fill the Extensiv location ID.</p>
+              )}
+            </div>
+
+            {/* ── Location Type ── */}
             <div className="space-y-1.5">
               <Label>Location Type</Label>
               <Select value={editForm.locationType ?? "staging"} onValueChange={(v) => setEditForm({ ...editForm, locationType: v as LocationType })}>
@@ -406,22 +560,7 @@ function LocationAssignmentsTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Location Name</Label>
-              <Input placeholder="e.g. HR-Stage" value={editForm.locationName ?? ""} onChange={(e) => setEditForm({ ...editForm, locationName: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Location ID (Extensiv)</Label>
-              <Input type="number" placeholder="Numeric ID" value={editForm.locationId ?? ""} onChange={(e) => setEditForm({ ...editForm, locationId: Number(e.target.value) })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Customer Name</Label>
-              <Input placeholder="e.g. Halo Reach" value={editForm.customerName ?? ""} onChange={(e) => setEditForm({ ...editForm, customerName: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Customer ID (Extensiv)</Label>
-              <Input type="number" placeholder="Numeric ID" value={editForm.customerId ?? ""} onChange={(e) => setEditForm({ ...editForm, customerId: Number(e.target.value) })} />
-            </div>
+
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>

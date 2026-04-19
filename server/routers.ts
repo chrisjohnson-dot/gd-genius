@@ -695,6 +695,23 @@ const _appRouter = router({
         return fetchCustomers(config);
       }),
 
+    /**
+     * Looks up a location by name in Extensiv for a given facility.
+     * Returns the matching location's id and the customer's id, or null if not found.
+     * Used by the Add Location dialog to auto-fill IDs from a location name.
+     */
+    lookupLocation: protectedProcedure
+      .input(z.object({ configId: z.number(), facilityId: z.number(), locationName: z.string() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const locations = await fetchExtensivLocations(config, input.facilityId);
+        const needle = input.locationName.trim().toLowerCase();
+        const match = locations.find((l) => l.name.trim().toLowerCase() === needle);
+        if (!match) return null;
+        return { locationId: match.locationId, locationName: match.name, customerId: null, customerName: null };
+      }),
+
     openOrders: protectedProcedure
       .input(
         z.object({

@@ -194,6 +194,9 @@ export default function AllocationReview() {
   const hasPickFaceMoves = consolidatedRows.some((r) => r.toPickFace > 0);
   const toStagingCount = pullListEarly.filter((p) => p.movement === "to_staging" || !p.movement).length;
   const toPickFaceCount = pullListEarly.filter((p) => p.movement === "to_pick_face").length;
+  // Derive the actual pick face location name for the column header
+  const pickFaceColLabel = consolidatedRows.find((r) => r.toPickFace > 0 && r.pickFaceLocationName && r.pickFaceLocationName !== "Pick Face")?.pickFaceLocationName ?? "Pick Face";
+  const stagingColLabel = consolidatedRows.find((r) => r.toStaging > 0 && r.stagingLocationName && r.stagingLocationName !== "Staging")?.stagingLocationName ?? "Staging";
 
   // ── Early returns (after all hooks) ─────────────────────────────────────
   if (isLoading) {
@@ -413,9 +416,9 @@ export default function AllocationReview() {
                           <th className="text-left px-4 py-3 font-medium">Expiry</th>
                           <th className="text-left px-4 py-3 font-medium">Source Location</th>
                           <th className="text-right px-4 py-3 font-medium">On Hand</th>
-                          <th className="text-right px-4 py-3 font-medium text-purple-700 dark:text-purple-400">→ Staging</th>
+                          <th className="text-right px-4 py-3 font-medium text-purple-700 dark:text-purple-400">→ {stagingColLabel}</th>
                           {hasPickFaceMoves && (
-                            <th className="text-right px-4 py-3 font-medium text-blue-700 dark:text-blue-400">→ Pick Face</th>
+                            <th className="text-right px-4 py-3 font-medium text-blue-700 dark:text-blue-400">→ {pickFaceColLabel}</th>
                           )}
                         </tr>
                       </thead>

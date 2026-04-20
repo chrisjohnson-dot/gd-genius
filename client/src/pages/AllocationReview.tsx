@@ -424,7 +424,11 @@ export default function AllocationReview() {
                       </thead>
                       <tbody>
                         {consolidatedRows.map((row) => (
-                          <tr key={row.key} className="border-b border-border/50 hover:bg-muted/30">
+                          <tr key={row.key} className={`border-b border-border/50 hover:bg-muted/30 ${
+                            row.toPickFace > 0
+                              ? "bg-blue-50/60 dark:bg-blue-950/20 border-l-2 border-l-blue-400 dark:border-l-blue-600"
+                              : ""
+                          }`}>
                             <td className="px-4 py-2 font-mono text-xs">{row.sku}</td>
                             <td className="px-4 py-2 text-xs text-muted-foreground">{row.description ?? "—"}</td>
                             <td className="px-4 py-2 text-xs">{row.lotNumber ?? "—"}</td>

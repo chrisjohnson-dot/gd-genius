@@ -357,9 +357,8 @@ function LocationAssignmentsTab() {
           <div className="flex flex-wrap gap-2">
             {facilities.map((f) => (
               <Button key={f.id} variant={activeFacilityId === f.id ? "default" : "outline"} size="sm"
-                onClick={() => { setSelectedFacilityId(f.id); setSelectedCustomerId(null); }}
-                title={f.name}>
-                {facilityShortName(f.name)}
+                onClick={() => { setSelectedFacilityId(f.id); setSelectedCustomerId(null); }}>
+                {f.name}
               </Button>
             ))}
           </div>

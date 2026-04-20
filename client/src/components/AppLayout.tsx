@@ -508,6 +508,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Brand */}
         <div className="pl-2 pr-4 pt-4 pb-3.5 border-b border-white/[0.06]">
           <img src={GD_LOGO} alt="GD Genius" className="h-[115px] w-auto" />
+          <p className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#94a3b8]/50 mt-1 pl-1">Empowering Warehouse Operations</p>
         </div>
 
         {/* Navigation */}

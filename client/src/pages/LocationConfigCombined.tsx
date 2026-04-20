@@ -452,11 +452,34 @@ function LocationAssignmentsTab() {
                     {lookupResults.map((r) => {
                       const isChecked = r.locationId in selectedRows;
                       const rowType = selectedRows[r.locationId] ?? "staging";
+                      // Check if this location is already configured for the selected customer
+                      const alreadyConfigured = (locations ?? []).some(
+                        (l) => (l as { locationId: number; customerId: number }).locationId === r.locationId &&
+                               (l as { locationId: number; customerId: number }).customerId === editForm.customerId
+                      );
+                      const existingEntry = alreadyConfigured
+                        ? (locations ?? []).find(
+                            (l) => (l as { locationId: number; customerId: number }).locationId === r.locationId &&
+                                   (l as { locationId: number; customerId: number }).customerId === editForm.customerId
+                          ) as { locationType: LocationType } | undefined
+                        : undefined;
                       return (
-                        <li key={r.locationId} className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors ${isChecked ? "bg-primary/5" : "hover:bg-accent/40"}`}>
+                        <li
+                          key={r.locationId}
+                          className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                            alreadyConfigured
+                              ? "opacity-50 cursor-not-allowed bg-muted/30"
+                              : isChecked
+                                ? "bg-primary/5"
+                                : "hover:bg-accent/40"
+                          }`}
+                          title={alreadyConfigured ? `Already configured as ${locTypeLabel[existingEntry?.locationType ?? "staging"]}` : undefined}
+                        >
                           <Checkbox
-                            checked={isChecked}
+                            checked={alreadyConfigured ? true : isChecked}
+                            disabled={alreadyConfigured}
                             onCheckedChange={(checked) => {
+                              if (alreadyConfigured) return;
                               setSelectedRows((prev) => {
                                 const next = { ...prev };
                                 if (checked) { next[r.locationId] = "staging"; }
@@ -466,9 +489,16 @@ function LocationAssignmentsTab() {
                             }}
                             className="shrink-0"
                           />
-                          <span className="font-medium flex-1 truncate">{r.locationName}</span>
-                          <span className="text-xs text-muted-foreground font-mono shrink-0">ID {r.locationId}</span>
-                          {isChecked && (
+                          <span className={`font-medium flex-1 truncate ${alreadyConfigured ? "line-through" : ""}`}>{r.locationName}</span>
+                          {alreadyConfigured ? (
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded shrink-0">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {locTypeLabel[existingEntry?.locationType ?? "staging"]}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground font-mono shrink-0">ID {r.locationId}</span>
+                          )}
+                          {!alreadyConfigured && isChecked && (
                             <Select
                               value={rowType}
                               onValueChange={(v) => setSelectedRows((prev) => ({ ...prev, [r.locationId]: v as LocationType }))}

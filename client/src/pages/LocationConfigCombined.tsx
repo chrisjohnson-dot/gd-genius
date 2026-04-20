@@ -118,6 +118,8 @@ function LocationAssignmentsTab() {
   const [testFacilityId, setTestFacilityId] = useState<number | null>(null);
   const [runTest, setRunTest] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  // Customer filter — user picks a customer before seeing locations
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   // Lookup state: trigger a lookup when user clicks "Look up in Extensiv"
   const [lookupTrigger, setLookupTrigger] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
@@ -290,7 +292,29 @@ function LocationAssignmentsTab() {
     saveMutation.mutate(editForm as Parameters<typeof saveMutation.mutate>[0]);
   };
 
-  const displayedLocations = showInactive ? locations : (locations ?? []).filter((l) => (l as { isActive?: boolean }).isActive !== false);
+  // Derive sorted unique customers from the loaded locations list
+  const allCustomers = Array.from(
+    new Map(
+      (locations ?? []).map((l) => [
+        (l as { customerId: number }).customerId,
+        { id: (l as { customerId: number }).customerId, name: (l as { customerName: string }).customerName },
+      ])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  // Also include customers from facilityCustomers that may not have locations yet
+  const allCustomersMerged = Array.from(
+    new Map([
+      ...allCustomers,
+      ...(facilityCustomers ?? []).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })),
+    ].map((c) => [c.id, c]))
+    .values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  const activeCustomerId = selectedCustomerId;
+
+  const displayedLocations = (showInactive ? (locations ?? []) : (locations ?? []).filter((l) => (l as { isActive?: boolean }).isActive !== false))
+    .filter((l) => !activeCustomerId || (l as { customerId: number }).customerId === activeCustomerId);
 
   return (
     <>
@@ -310,9 +334,41 @@ function LocationAssignmentsTab() {
           <div className="flex flex-wrap gap-2">
             {facilities.map((f) => (
               <Button key={f.id} variant={activeFacilityId === f.id ? "default" : "outline"} size="sm"
-                onClick={() => setSelectedFacilityId(f.id)}>
+                onClick={() => { setSelectedFacilityId(f.id); setSelectedCustomerId(null); }}>
                 {f.name}
               </Button>
+            ))}
+          </div>
+        )}
+
+        {/* Customer filter — pick a customer to narrow the list */}
+        {allCustomersMerged.length > 0 && (
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-muted-foreground font-medium shrink-0">Customer:</span>
+            <button
+              type="button"
+              onClick={() => setSelectedCustomerId(null)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                activeCustomerId === null
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
+              }`}
+            >
+              All
+            </button>
+            {allCustomersMerged.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedCustomerId(c.id)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  activeCustomerId === c.id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
+                }`}
+              >
+                {c.name}
+              </button>
             ))}
           </div>
         )}

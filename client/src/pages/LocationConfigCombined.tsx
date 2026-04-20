@@ -38,6 +38,22 @@ const locTypeBadge: Record<LocationType, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a compact warehouse code from a full facility name.
+ * Takes the prefix before the first " - " or "-", then removes interior vowels.
+ * Examples: "RENO - Reno" → "RNO", "TOR-Toronto" → "TOR", "COL-Columbus" → "COL"
+ */
+function facilityShortName(name: string): string {
+  const prefix = name.split(/\s*-\s*/)[0].trim().toUpperCase();
+  if (prefix.length <= 3) return prefix;
+  // Keep first letter, remove interior vowels
+  return prefix[0] + prefix.slice(1).replace(/[AEIOU]/g, "");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TAB 1 — Location Assignments  (was LocationConfig.tsx)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -341,8 +357,9 @@ function LocationAssignmentsTab() {
           <div className="flex flex-wrap gap-2">
             {facilities.map((f) => (
               <Button key={f.id} variant={activeFacilityId === f.id ? "default" : "outline"} size="sm"
-                onClick={() => { setSelectedFacilityId(f.id); setSelectedCustomerId(null); }}>
-                {f.name}
+                onClick={() => { setSelectedFacilityId(f.id); setSelectedCustomerId(null); }}
+                title={f.name}>
+                {facilityShortName(f.name)}
               </Button>
             ))}
           </div>

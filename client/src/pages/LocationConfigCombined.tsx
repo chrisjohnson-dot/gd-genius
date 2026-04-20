@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle, CheckCircle2, Check, ChevronDown, ChevronRight, ChevronsUpDown, Database,
-  Eye, FlaskConical, Info, Loader2, MapPin, Pencil, Plus, Save,
+  Download, Eye, FlaskConical, Hash, Info, Loader2, MapPin, Pencil, Plus, Save,
   Search, Sparkles, Trash2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -701,6 +701,13 @@ function WarehouseStructureTab() {
   const [expandedFacility, setExpandedFacility] = useState<number | null>(null);
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   const [exampleInputs, setExampleInputs] = useState<Record<number, string>>({});
+  // Bay range dialog state
+  const [bayRangeDialog, setBayRangeDialog] = useState<{ facilityId: number; aisleIdx: number } | null>(null);
+  const [bayRangeInput, setBayRangeInput] = useState("");
+  const [bayRangePrefix, setBayRangePrefix] = useState("");
+  const [bayRangeSides, setBayRangeSides] = useState("");
+  // Extensiv import state
+  const [importing, setImporting] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (dbConfigs.length === 0) return;
@@ -723,6 +730,58 @@ function WarehouseStructureTab() {
     onSuccess: () => { utils.whLocationConfig.list.invalidate(); utils.whLocationConfig.get.invalidate(); }
   });
 
+  /** Expand a levels string: "A-E" → ["A","B","C","D","E"], "A,B,C" → ["A","B","C"] */
+  function expandLevels(raw: string): string[] {
+    const rangeMatch = raw.trim().match(/^([A-Za-z0-9])-([A-Za-z0-9])$/);
+    if (rangeMatch) {
+      const start = rangeMatch[1], end = rangeMatch[2];
+      const startCode = start.charCodeAt(0), endCode = end.charCodeAt(0);
+      if (startCode <= endCode) {
+        return Array.from({ length: endCode - startCode + 1 }, (_, i) => String.fromCharCode(startCode + i));
+      }
+    }
+    return raw.split(",").map((l) => l.trim()).filter(Boolean);
+  }
+
+  /** Generate bay IDs from a range string like "001-050" or "1-50" */
+  function expandBayRange(rangeStr: string): string[] {
+    const m = rangeStr.trim().match(/^(\d+)[-–](\d+)$/);
+    if (!m) return [];
+    const start = parseInt(m[1], 10), end = parseInt(m[2], 10);
+    if (isNaN(start) || isNaN(end) || start > end || end - start > 999) return [];
+    const pad = m[1].length; // preserve leading zeros from start
+    return Array.from({ length: end - start + 1 }, (_, i) => String(start + i).padStart(pad, "0"));
+  }
+
+  /** Parse Extensiv location names into AisleRule[] */
+  function parseExtensivLocations(names: string[], fmt: string): AisleRule[] {
+    const aisleMap = new Map<string, { bays: Map<string, Set<string>>; levels: Set<string> }>();
+    for (const name of names) {
+      const parts = name.split("-");
+      if (parts.length < 2) continue;
+      const aisle = parts[0];
+      const bay = parts[1] ?? "";
+      const level = fmt === "AISLE-BAY-LR-LEVEL" ? (parts[3] ?? "") : (parts[2] ?? "");
+      const side = fmt === "AISLE-BAY-LR-LEVEL" ? (parts[2] ?? "") : "";
+      if (!aisleMap.has(aisle)) aisleMap.set(aisle, { bays: new Map(), levels: new Set() });
+      const aisleEntry = aisleMap.get(aisle)!;
+      if (!aisleEntry.bays.has(bay)) aisleEntry.bays.set(bay, new Set());
+      if (side) aisleEntry.bays.get(bay)!.add(side);
+      if (level) aisleEntry.levels.add(level);
+    }
+    return Array.from(aisleMap.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([aislePrefix, data]) => ({
+      aislePrefix,
+      description: "",
+      levels: Array.from(data.levels).sort(),
+      bays: Array.from(data.bays.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([bayId, sides]) => ({
+        bayId,
+        bayPrefix: "",
+        sideValues: Array.from(sides).sort().join(","),
+        hasLeftRight: sides.size > 0,
+      })),
+    }));
+  }
+
   function getDraft(fid: number): LocalDraft { return drafts[fid] ?? DEFAULT_DRAFT; }
   function updateDraft(fid: number, u: Partial<LocalDraft>) { setDrafts((p) => ({ ...p, [fid]: { ...getDraft(fid), ...u } })); }
   function addAisleRule(fid: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: [...d.aisleRules, { aislePrefix: "", description: "", bays: [], levels: [] }] }); }
@@ -731,6 +790,21 @@ function WarehouseStructureTab() {
   function addBay(fid: number, ai: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: [...r.bays, { bayId: "", bayPrefix: "", sideValues: "", hasLeftRight: false }] } : r) }); }
   function updateBay(fid: number, ai: number, bi: number, u: Partial<BayRule>) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.map((b, j) => j === bi ? { ...b, ...u } : b) } : r) }); }
   function removeBay(fid: number, ai: number, bi: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.filter((_, j) => j !== bi) } : r) }); }
+
+  async function handleImportFromExtensiv(fid: number, fname: string) {
+    if (!selectedConfigId) return;
+    setImporting((s) => ({ ...s, [fid]: true }));
+    try {
+      const locs = await utils.extensiv.locations.fetch({ configId: selectedConfigId, facilityId: fid });
+      if (!locs || locs.length === 0) { toast.warning("No locations found in Extensiv for this facility"); return; }
+      const fmt = getDraft(fid).locationFormat;
+      const names = locs.map((l: { name?: string; locationName?: string }) => (l.name ?? l.locationName ?? "")).filter(Boolean);
+      const aisleRules = parseExtensivLocations(names, fmt);
+      updateDraft(fid, { aisleRules });
+      toast.success(`Imported ${aisleRules.length} aisle${aisleRules.length !== 1 ? "s" : ""} from Extensiv (${names.length} locations)`);
+    } catch { toast.error("Failed to import from Extensiv"); }
+    finally { setImporting((s) => ({ ...s, [fid]: false })); }
+  }
 
   async function handleSave(fid: number, fname: string) {
     const d = getDraft(fid);
@@ -880,16 +954,32 @@ function WarehouseStructureTab() {
                               </div>
                               <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                  <Label className="text-xs">Levels (comma-separated)</Label>
+                                  <Label className="text-xs">Levels</Label>
+                                  <span className="text-[10px] text-muted-foreground">Enter A-E to expand to A,B,C,D,E</span>
                                 </div>
-                                <Input placeholder="e.g. A,B,C" value={rule.levels.join(",")} onChange={(e) => updateAisleRule(facility.id, ai, { levels: e.target.value.split(",").map((l) => l.trim()).filter(Boolean) })} className="h-8 text-sm" />
+                                <Input
+                                  placeholder="e.g. A,B,C or A-E"
+                                  value={rule.levels.join(",")}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    // Auto-expand range on blur or if user typed a complete X-Y pattern
+                                    updateAisleRule(facility.id, ai, { levels: expandLevels(raw) });
+                                  }}
+                                  onBlur={(e) => updateAisleRule(facility.id, ai, { levels: expandLevels(e.target.value) })}
+                                  className="h-8 text-sm"
+                                />
                               </div>
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <Label className="text-xs">Bays</Label>
-                                  <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={() => addBay(facility.id, ai)}>
-                                    <Plus className="h-3 w-3" /> Add Bay
-                                  </Button>
+                                  <div className="flex items-center gap-1">
+                                    <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={() => { setBayRangeDialog({ facilityId: facility.id, aisleIdx: ai }); setBayRangeInput(""); setBayRangePrefix(""); setBayRangeSides(""); }}>
+                                      <Hash className="h-3 w-3" /> Range
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={() => addBay(facility.id, ai)}>
+                                      <Plus className="h-3 w-3" /> Add Bay
+                                    </Button>
+                                  </div>
                                 </div>
                                 {rule.bays.length === 0 ? (
                                   <p className="text-xs text-muted-foreground italic">No bays yet.</p>
@@ -941,9 +1031,12 @@ function WarehouseStructureTab() {
                       <Label className="text-xs font-semibold">Notes (optional)</Label>
                       <Input placeholder="Any notes about this warehouse's layout…" value={draft.notes} onChange={(e) => updateDraft(facility.id, { notes: e.target.value })} />
                     </div>
-                    <div className="flex items-center gap-2 pt-1">
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
                       <Button size="sm" className="gap-1.5" onClick={() => handleSave(facility.id, facility.name)} disabled={isSavingNow}>
                         {isSavingNow ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</> : <><Save className="h-3.5 w-3.5" />Save Config</>}
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => handleImportFromExtensiv(facility.id, facility.name)} disabled={importing[facility.id]}>
+                        {importing[facility.id] ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Importing…</> : <><Download className="h-3.5 w-3.5" />Import from Extensiv</>}
                       </Button>
                       {isSaved && (
                         <Button size="sm" variant="ghost" className="text-destructive gap-1.5" onClick={() => handleDelete(facility.id, facility.name)}>
@@ -958,6 +1051,41 @@ function WarehouseStructureTab() {
           })}
         </div>
       )}
+
+      {/* Bay Range Dialog */}
+      <Dialog open={!!bayRangeDialog} onOpenChange={(open) => { if (!open) setBayRangeDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Add Bay Range</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Bay Range (e.g. 001-050)</Label>
+              <Input placeholder="001-050" value={bayRangeInput} onChange={(e) => setBayRangeInput(e.target.value)} className="font-mono" />
+              <p className="text-[10px] text-muted-foreground">{(() => { const ids = expandBayRange(bayRangeInput); return ids.length > 0 ? `Will generate ${ids.length} bays: ${ids.slice(0,3).join(", ")}${ids.length > 3 ? " …" : ""}` : bayRangeInput ? "Enter format: 001-050" : ""; })()}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Bay Prefix (optional)</Label>
+              <Input placeholder="e.g. B" value={bayRangePrefix} onChange={(e) => setBayRangePrefix(e.target.value)} className="font-mono max-w-[80px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Sides (optional, e.g. L,R or 1,2)</Label>
+              <Input placeholder="L,R" value={bayRangeSides} onChange={(e) => setBayRangeSides(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBayRangeDialog(null)}>Cancel</Button>
+            <Button onClick={() => {
+              if (!bayRangeDialog) return;
+              const ids = expandBayRange(bayRangeInput);
+              if (ids.length === 0) { toast.error("Invalid range — use format 001-050"); return; }
+              const newBays: BayRule[] = ids.map((id) => ({ bayId: id, bayPrefix: bayRangePrefix, sideValues: bayRangeSides, hasLeftRight: bayRangeSides.trim().length > 0 }));
+              const d = getDraft(bayRangeDialog.facilityId);
+              updateDraft(bayRangeDialog.facilityId, { aisleRules: d.aisleRules.map((r, i) => i === bayRangeDialog.aisleIdx ? { ...r, bays: [...r.bays, ...newBays] } : r) });
+              toast.success(`Added ${ids.length} bays`);
+              setBayRangeDialog(null);
+            }}>Add {expandBayRange(bayRangeInput).length > 0 ? `${expandBayRange(bayRangeInput).length} Bays` : "Bays"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

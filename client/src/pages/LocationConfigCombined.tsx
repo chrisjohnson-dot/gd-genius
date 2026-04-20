@@ -635,7 +635,7 @@ function LocationAssignmentsTab() {
 // TAB 2 — Warehouse Structure  (was WhLocationConfig.tsx)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type BayRule = { bayId: string; hasLeftRight: boolean };
+type BayRule = { bayId: string; bayPrefix?: string; sideValues?: string; hasLeftRight: boolean };
 type AisleRule = { aislePrefix: string; description?: string; bays: BayRule[]; levels: string[] };
 type LocalDraft = { locationFormat: string; aisleRules: AisleRule[]; notes: string };
 
@@ -653,15 +653,40 @@ const DEFAULT_DRAFT: LocalDraft = { locationFormat: "AISLE-BAY-LEVEL", aisleRule
 
 function buildExampleLocation(draft: LocalDraft): string {
   const fmt = draft.locationFormat;
-  const aisle = draft.aisleRules[0]?.aislePrefix || "A";
-  const bay = draft.aisleRules[0]?.bays[0]?.bayId || "001";
-  const hasLR = draft.aisleRules[0]?.bays[0]?.hasLeftRight ?? false;
-  const level = draft.aisleRules[0]?.levels[0] || "C";
+  const rule = draft.aisleRules[0];
+  const aisle = rule?.aislePrefix || "A";
+  const bayRule = rule?.bays[0];
+  const bayPrefix = bayRule?.bayPrefix ?? "";
+  const bay = bayPrefix + (bayRule?.bayId || "001");
+  const sideVals = bayRule?.sideValues?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+  const side = sideVals[0] ?? (bayRule?.hasLeftRight ? "L" : "");
+  const level = rule?.levels[0] || "C";
   if (fmt === "AISLE-BAY-LEVEL") return `${aisle}-${bay}-${level}`;
   if (fmt === "AISLE-BAY") return `${aisle}-${bay}`;
-  if (fmt === "AISLE-BAY-LR-LEVEL") return `${aisle}-${bay}-${hasLR ? "L" : "R"}-${level}`;
+  if (fmt === "AISLE-BAY-LR-LEVEL") return `${aisle}-${bay}-${side || "L"}-${level}`;
   if (fmt === "ZONE-AISLE-BAY") return `WH1-${aisle}-${bay}`;
   return `${aisle}-${bay}-${level}`;
+}
+
+/** Parse an example location string and return partial draft fields */
+function parseExampleLocation(example: string, fmt: string): Partial<{ aislePrefix: string; bayPrefix: string; bayId: string; sideValues: string; levels: string[] }> {
+  const parts = example.split("-");
+  if (parts.length < 2) return {};
+  if (fmt === "AISLE-BAY-LEVEL" && parts.length >= 3) {
+    return { aislePrefix: parts[0], bayId: parts[1], levels: [parts[2]] };
+  }
+  if (fmt === "AISLE-BAY" && parts.length >= 2) {
+    return { aislePrefix: parts[0], bayId: parts[1] };
+  }
+  if (fmt === "AISLE-BAY-LR-LEVEL" && parts.length >= 4) {
+    return { aislePrefix: parts[0], bayId: parts[1], sideValues: parts[2], levels: [parts[3]] };
+  }
+  if (fmt === "ZONE-AISLE-BAY" && parts.length >= 3) {
+    return { aislePrefix: parts[1], bayId: parts[2] };
+  }
+  // Generic: first part = aisle, last part = level if 3+, middle = bay
+  if (parts.length >= 3) return { aislePrefix: parts[0], bayId: parts[1], levels: [parts[parts.length - 1]] };
+  return { aislePrefix: parts[0], bayId: parts[1] };
 }
 
 function WarehouseStructureTab() {
@@ -675,6 +700,7 @@ function WarehouseStructureTab() {
   const [drafts, setDrafts] = useState<Record<number, LocalDraft>>({});
   const [expandedFacility, setExpandedFacility] = useState<number | null>(null);
   const [saving, setSaving] = useState<Record<number, boolean>>({});
+  const [exampleInputs, setExampleInputs] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (dbConfigs.length === 0) return;
@@ -702,7 +728,7 @@ function WarehouseStructureTab() {
   function addAisleRule(fid: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: [...d.aisleRules, { aislePrefix: "", description: "", bays: [], levels: [] }] }); }
   function updateAisleRule(fid: number, idx: number, rule: Partial<AisleRule>) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === idx ? { ...r, ...rule } : r) }); }
   function removeAisleRule(fid: number, idx: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.filter((_, i) => i !== idx) }); }
-  function addBay(fid: number, ai: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: [...r.bays, { bayId: "", hasLeftRight: false }] } : r) }); }
+  function addBay(fid: number, ai: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: [...r.bays, { bayId: "", bayPrefix: "", sideValues: "", hasLeftRight: false }] } : r) }); }
   function updateBay(fid: number, ai: number, bi: number, u: Partial<BayRule>) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.map((b, j) => j === bi ? { ...b, ...u } : b) } : r) }); }
   function removeBay(fid: number, ai: number, bi: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.filter((_, j) => j !== bi) } : r) }); }
 
@@ -790,7 +816,34 @@ function WarehouseStructureTab() {
                   <div className="p-5 space-y-5 border-t border-border/40">
                     <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
                       <Eye className="h-4 w-4 text-primary shrink-0" />
-                      <div><p className="text-xs font-semibold text-foreground">Example location</p><p className="text-sm font-mono text-primary mt-0.5">{exampleLocation}</p></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground mb-1">Example location</p>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            className="h-7 text-sm font-mono bg-background/60 border-primary/30 flex-1 max-w-[200px]"
+                            placeholder={exampleLocation}
+                            value={exampleInputs[facility.id] ?? ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setExampleInputs((p) => ({ ...p, [facility.id]: val }));
+                              if (val.includes("-")) {
+                                const parsed = parseExampleLocation(val, draft.locationFormat);
+                                if (parsed.aislePrefix || parsed.bayId) {
+                                  const d = getDraft(facility.id);
+                                  const existingAisle = d.aisleRules[0] ?? { aislePrefix: "", bays: [], levels: [] };
+                                  const existingBay = existingAisle.bays[0] ?? { bayId: "", bayPrefix: "", sideValues: "", hasLeftRight: false };
+                                  const updatedBay: BayRule = { ...existingBay, ...(parsed.bayId ? { bayId: parsed.bayId } : {}), ...(parsed.bayPrefix ? { bayPrefix: parsed.bayPrefix } : {}), ...(parsed.sideValues ? { sideValues: parsed.sideValues } : {}) };
+                                  const updatedAisle: AisleRule = { ...existingAisle, ...(parsed.aislePrefix ? { aislePrefix: parsed.aislePrefix } : {}), ...(parsed.levels ? { levels: parsed.levels } : {}), bays: [updatedBay, ...existingAisle.bays.slice(1)] };
+                                  updateDraft(facility.id, { aisleRules: [updatedAisle, ...d.aisleRules.slice(1)] });
+                                }
+                              }
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground">→</span>
+                          <span className="text-sm font-mono text-primary">{exampleLocation}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-1">Type a real location (e.g. E-30-50) to auto-fill the fields below</p>
+                      </div>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-semibold">Location Format</Label>
@@ -842,14 +895,36 @@ function WarehouseStructureTab() {
                                   <p className="text-xs text-muted-foreground italic">No bays yet.</p>
                                 ) : (
                                   <div className="space-y-1.5">
+                                    {/* Column headers */}
+                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground px-0.5">
+                                      <span className="w-14 shrink-0">Prefix</span>
+                                      <span className="flex-1">Bay ID</span>
+                                      <span className="w-24 shrink-0">Sides (e.g. L,R or 1,2)</span>
+                                      <span className="w-7" />
+                                    </div>
                                     {rule.bays.map((bay, bi) => (
                                       <div key={bi} className="flex items-center gap-2">
-                                        <Input placeholder="Bay ID e.g. 001" value={bay.bayId} onChange={(e) => updateBay(facility.id, ai, bi, { bayId: e.target.value })} className="h-7 text-xs flex-1" />
-                                        <div className="flex items-center gap-1.5">
-                                          <Checkbox id={`lr-${facility.id}-${ai}-${bi}`} checked={bay.hasLeftRight} onCheckedChange={(v) => updateBay(facility.id, ai, bi, { hasLeftRight: !!v })} />
-                                          <label htmlFor={`lr-${facility.id}-${ai}-${bi}`} className="text-xs cursor-pointer">L/R</label>
-                                        </div>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeBay(facility.id, ai, bi)}>
+                                        <Input
+                                          placeholder="e.g. B"
+                                          value={bay.bayPrefix ?? ""}
+                                          onChange={(e) => updateBay(facility.id, ai, bi, { bayPrefix: e.target.value })}
+                                          className="h-7 text-xs w-14 shrink-0 font-mono"
+                                          title="Bay prefix (prepended to bay ID)"
+                                        />
+                                        <Input
+                                          placeholder="e.g. 030"
+                                          value={bay.bayId}
+                                          onChange={(e) => updateBay(facility.id, ai, bi, { bayId: e.target.value })}
+                                          className="h-7 text-xs flex-1 font-mono"
+                                        />
+                                        <Input
+                                          placeholder="L,R or 1,2"
+                                          value={bay.sideValues ?? ""}
+                                          onChange={(e) => updateBay(facility.id, ai, bi, { sideValues: e.target.value, hasLeftRight: e.target.value.trim().length > 0 })}
+                                          className="h-7 text-xs w-24 shrink-0"
+                                          title="Comma-separated side values (leave blank if no sides)"
+                                        />
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeBay(facility.id, ai, bi)}>
                                           <Trash2 className="h-3 w-3" />
                                         </Button>
                                       </div>

@@ -719,59 +719,55 @@ function LocationAssignmentsTab() {
 // TAB 2 — Warehouse Structure  (was WhLocationConfig.tsx)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type BayRule = { bayId: string; bayPrefix?: string; sideValues?: string; hasLeftRight: boolean };
-type AisleRule = { aislePrefix: string; description?: string; bays: BayRule[]; levels: string[] };
-type LocalDraft = { locationFormat: string; aisleRules: AisleRule[]; notes: string };
+// Segment roles the user can assign to each dash-separated part of a location
+type SegmentRole = "aisle" | "bay" | "side" | "level" | "ignore";
+
+const SEGMENT_ROLE_LABELS: Record<SegmentRole, string> = {
+  aisle: "Aisle",
+  bay: "Bay",
+  side: "Side (L/R)",
+  level: "Level",
+  ignore: "Ignore",
+};
+
+const SEGMENT_ROLE_COLORS: Record<SegmentRole, string> = {
+  aisle: "bg-blue-500/15 text-blue-400 border-blue-500/30 hover:bg-blue-500/25",
+  bay: "bg-green-500/15 text-green-400 border-green-500/30 hover:bg-green-500/25",
+  side: "bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25",
+  level: "bg-purple-500/15 text-purple-400 border-purple-500/30 hover:bg-purple-500/25",
+  ignore: "bg-muted/30 text-muted-foreground border-border/40 hover:bg-muted/50",
+};
+
+const SEGMENT_ROLE_CYCLE: SegmentRole[] = ["aisle", "bay", "side", "level", "ignore"];
+
+// Derive a locationFormat string from segment roles for backward compat storage
+function rolesToFormat(roles: SegmentRole[]): string {
+  const hasAisle = roles.includes("aisle");
+  const hasBay = roles.includes("bay");
+  const hasSide = roles.includes("side");
+  const hasLevel = roles.includes("level");
+  if (hasAisle && hasBay && hasSide && hasLevel) return "AISLE-BAY-LR-LEVEL";
+  if (hasAisle && hasBay && hasLevel) return "AISLE-BAY-LEVEL";
+  if (hasAisle && hasBay) return "AISLE-BAY";
+  return "CUSTOM";
+}
+
+// Derive default roles from a saved locationFormat
+function formatToRoles(fmt: string, segCount: number): SegmentRole[] {
+  if (fmt === "AISLE-BAY-LEVEL" && segCount >= 3) return ["aisle", "bay", "level", ...Array(Math.max(0, segCount - 3)).fill("ignore")] as SegmentRole[];
+  if (fmt === "AISLE-BAY" && segCount >= 2) return ["aisle", "bay", ...Array(Math.max(0, segCount - 2)).fill("ignore")] as SegmentRole[];
+  if (fmt === "AISLE-BAY-LR-LEVEL" && segCount >= 4) return ["aisle", "bay", "side", "level", ...Array(Math.max(0, segCount - 4)).fill("ignore")] as SegmentRole[];
+  // Auto-assign: first=aisle, last=level if 3+, middle=bay
+  if (segCount === 1) return ["aisle"];
+  if (segCount === 2) return ["aisle", "bay"];
+  return ["aisle", "bay", ...Array(Math.max(0, segCount - 3)).fill("ignore"), "level"] as SegmentRole[];
+}
+
+type AisleRule = { aislePrefix: string; description?: string; bays: { bayId: string; bayPrefix?: string; sideValues?: string; hasLeftRight: boolean }[]; levels: string[] };
+type LocalDraft = { locationFormat: string; aisleRules: AisleRule[]; notes: string; segmentRoles?: SegmentRole[]; exampleLocation?: string };
 
 const GD_WAREHOUSES_FALLBACK = ["Columbus", "Reno", "Toronto", "Calgary"];
-
-const FORMAT_OPTIONS = [
-  { value: "AISLE-BAY-LEVEL",    label: "AISLE-BAY-LEVEL  (e.g. D-017-C)" },
-  { value: "AISLE-BAY",          label: "AISLE-BAY  (e.g. A-001)" },
-  { value: "AISLE-BAY-LR-LEVEL", label: "AISLE-BAY-L/R-LEVEL  (e.g. D-017-L-C)" },
-  { value: "ZONE-AISLE-BAY",     label: "ZONE-AISLE-BAY  (e.g. WH1-D-017)" },
-  { value: "CUSTOM",             label: "Custom / Other" },
-];
-
 const DEFAULT_DRAFT: LocalDraft = { locationFormat: "AISLE-BAY-LEVEL", aisleRules: [], notes: "" };
-
-function buildExampleLocation(draft: LocalDraft): string {
-  const fmt = draft.locationFormat;
-  const rule = draft.aisleRules[0];
-  const aisle = rule?.aislePrefix || "A";
-  const bayRule = rule?.bays[0];
-  const bayPrefix = bayRule?.bayPrefix ?? "";
-  const bay = bayPrefix + (bayRule?.bayId || "001");
-  const sideVals = bayRule?.sideValues?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
-  const side = sideVals[0] ?? (bayRule?.hasLeftRight ? "L" : "");
-  const level = rule?.levels[0] || "C";
-  if (fmt === "AISLE-BAY-LEVEL") return `${aisle}-${bay}-${level}`;
-  if (fmt === "AISLE-BAY") return `${aisle}-${bay}`;
-  if (fmt === "AISLE-BAY-LR-LEVEL") return `${aisle}-${bay}-${side || "L"}-${level}`;
-  if (fmt === "ZONE-AISLE-BAY") return `WH1-${aisle}-${bay}`;
-  return `${aisle}-${bay}-${level}`;
-}
-
-/** Parse an example location string and return partial draft fields */
-function parseExampleLocation(example: string, fmt: string): Partial<{ aislePrefix: string; bayPrefix: string; bayId: string; sideValues: string; levels: string[] }> {
-  const parts = example.split("-");
-  if (parts.length < 2) return {};
-  if (fmt === "AISLE-BAY-LEVEL" && parts.length >= 3) {
-    return { aislePrefix: parts[0], bayId: parts[1], levels: [parts[2]] };
-  }
-  if (fmt === "AISLE-BAY" && parts.length >= 2) {
-    return { aislePrefix: parts[0], bayId: parts[1] };
-  }
-  if (fmt === "AISLE-BAY-LR-LEVEL" && parts.length >= 4) {
-    return { aislePrefix: parts[0], bayId: parts[1], sideValues: parts[2], levels: [parts[3]] };
-  }
-  if (fmt === "ZONE-AISLE-BAY" && parts.length >= 3) {
-    return { aislePrefix: parts[1], bayId: parts[2] };
-  }
-  // Generic: first part = aisle, last part = level if 3+, middle = bay
-  if (parts.length >= 3) return { aislePrefix: parts[0], bayId: parts[1], levels: [parts[parts.length - 1]] };
-  return { aislePrefix: parts[0], bayId: parts[1] };
-}
 
 function WarehouseStructureTab() {
   const utils = trpc.useUtils();
@@ -870,7 +866,7 @@ function WarehouseStructureTab() {
   function updateAisleRule(fid: number, idx: number, rule: Partial<AisleRule>) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === idx ? { ...r, ...rule } : r) }); }
   function removeAisleRule(fid: number, idx: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.filter((_, i) => i !== idx) }); }
   function addBay(fid: number, ai: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: [...r.bays, { bayId: "", bayPrefix: "", sideValues: "", hasLeftRight: false }] } : r) }); }
-  function updateBay(fid: number, ai: number, bi: number, u: Partial<BayRule>) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.map((b, j) => j === bi ? { ...b, ...u } : b) } : r) }); }
+  function updateBay(fid: number, ai: number, bi: number, u: Partial<AisleRule["bays"][0]>) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.map((b, j) => j === bi ? { ...b, ...u } : b) } : r) }); }
   function removeBay(fid: number, ai: number, bi: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.filter((_, j) => j !== bi) } : r) }); }
 
   async function handleSave(fid: number, fname: string) {
@@ -940,7 +936,6 @@ function WarehouseStructureTab() {
             const isOpen = expandedFacility === facility.id;
             const isSaved = !!dbRow;
             const isSavingNow = saving[facility.id] ?? false;
-            const exampleLocation = buildExampleLocation(draft);
             return (
               <div key={facility.id} className="border border-border/60 rounded-xl overflow-hidden">
                 <button className="w-full flex items-center gap-3 px-5 py-4 bg-muted/20 hover:bg-muted/40 transition-colors text-left"
@@ -953,176 +948,127 @@ function WarehouseStructureTab() {
                   {isSaved && dbRow.updatedBy && <span className="text-[10px] text-muted-foreground hidden sm:inline">by {dbRow.updatedBy}</span>}
                   {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                 </button>
-                {isOpen && (
-                  <div className="p-5 space-y-5 border-t border-border/40">
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                      <Eye className="h-4 w-4 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-foreground mb-1">Example location</p>
-                        <div className="flex items-center gap-2">
+                {isOpen && (() => {
+                  // ── Segment labeling state (derived from draft) ──────────────
+                  const exampleVal = exampleInputs[facility.id] ?? draft.exampleLocation ?? "";
+                  const segments = exampleVal ? exampleVal.split("-") : [];
+                  const roles: SegmentRole[] = draft.segmentRoles && draft.segmentRoles.length === segments.length
+                    ? draft.segmentRoles
+                    : formatToRoles(draft.locationFormat, segments.length);
+
+                  function cycleRole(idx: number) {
+                    const current = roles[idx];
+                    const next = SEGMENT_ROLE_CYCLE[(SEGMENT_ROLE_CYCLE.indexOf(current) + 1) % SEGMENT_ROLE_CYCLE.length];
+                    const newRoles = roles.map((r, i) => i === idx ? next : r) as SegmentRole[];
+                    updateDraft(facility.id, { segmentRoles: newRoles, locationFormat: rolesToFormat(newRoles) });
+                  }
+
+                  // Build confirmation summary from roles + example
+                  const aisleIdx = roles.indexOf("aisle");
+                  const bayIdx = roles.indexOf("bay");
+                  const sideIdx = roles.indexOf("side");
+                  const levelIdx = roles.indexOf("level");
+                  const summary = [
+                    aisleIdx >= 0 && segments[aisleIdx] ? `Aisle: ${segments[aisleIdx]}` : null,
+                    bayIdx >= 0 && segments[bayIdx] ? `Bay: ${segments[bayIdx]}` : null,
+                    sideIdx >= 0 && segments[sideIdx] ? `Side: ${segments[sideIdx]}` : null,
+                    levelIdx >= 0 && segments[levelIdx] ? `Level: ${segments[levelIdx]}` : null,
+                  ].filter(Boolean);
+
+                  return (
+                    <div className="p-5 space-y-5 border-t border-border/40">
+                      {/* Step 1: Type example location */}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold">Step 1 — Enter an example location</Label>
+                        <div className="flex items-center gap-3">
                           <Input
-                            className="h-7 text-sm font-mono bg-background/60 border-primary/30 flex-1 max-w-[200px]"
-                            placeholder={exampleLocation}
-                            value={exampleInputs[facility.id] ?? ""}
+                            className="h-9 text-sm font-mono max-w-[220px]"
+                            placeholder="e.g. E-42-40-B"
+                            value={exampleVal}
                             onChange={(e) => {
                               const val = e.target.value;
                               setExampleInputs((p) => ({ ...p, [facility.id]: val }));
-                              if (val.includes("-")) {
-                                const parsed = parseExampleLocation(val, draft.locationFormat);
-                                if (parsed.aislePrefix || parsed.bayId) {
-                                  const d = getDraft(facility.id);
-                                  const existingAisle = d.aisleRules[0] ?? { aislePrefix: "", bays: [], levels: [] };
-                                  const existingBay = existingAisle.bays[0] ?? { bayId: "", bayPrefix: "", sideValues: "", hasLeftRight: false };
-                                  const updatedBay: BayRule = { ...existingBay, ...(parsed.bayId ? { bayId: parsed.bayId } : {}), ...(parsed.bayPrefix ? { bayPrefix: parsed.bayPrefix } : {}), ...(parsed.sideValues ? { sideValues: parsed.sideValues } : {}) };
-                                  const updatedAisle: AisleRule = { ...existingAisle, ...(parsed.aislePrefix ? { aislePrefix: parsed.aislePrefix } : {}), ...(parsed.levels ? { levels: parsed.levels } : {}), bays: [updatedBay, ...existingAisle.bays.slice(1)] };
-                                  updateDraft(facility.id, { aisleRules: [updatedAisle, ...d.aisleRules.slice(1)] });
-                                }
+                              // Reset roles when segment count changes
+                              const segs = val.split("-");
+                              const currentRoles = draft.segmentRoles;
+                              if (!currentRoles || currentRoles.length !== segs.length) {
+                                const newRoles = formatToRoles(draft.locationFormat, segs.length);
+                                updateDraft(facility.id, { exampleLocation: val, segmentRoles: newRoles, locationFormat: rolesToFormat(newRoles) });
+                              } else {
+                                updateDraft(facility.id, { exampleLocation: val });
                               }
                             }}
                           />
-                          <span className="text-xs text-muted-foreground">→</span>
-                          <span className="text-sm font-mono text-primary">{exampleLocation}</span>
+                          {exampleVal && segments.length >= 2 && (
+                            <span className="text-xs text-muted-foreground">{segments.length} segment{segments.length !== 1 ? "s" : ""} detected</span>
+                          )}
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-1">Type a real location (e.g. E-30-50) to auto-fill the fields below</p>
                       </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">Location Format</Label>
-                      <Select value={draft.locationFormat} onValueChange={(v) => updateDraft(facility.id, { locationFormat: v })}>
-                        <SelectTrigger className="w-full max-w-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>{FORMAT_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">Aisles, Bays &amp; Levels</Label>
-                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => addAisleRule(facility.id)}>
-                          <Plus className="h-3.5 w-3.5" /> Add Aisle
-                        </Button>
-                      </div>
-                      {draft.aisleRules.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">No aisles configured yet. Click "Add Aisle" to start.</p>
-                      ) : (
-                        <div className="space-y-4">
-                          {draft.aisleRules.map((rule, ai) => (
-                            <div key={ai} className="border border-border/40 rounded-lg p-4 space-y-3">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 space-y-1">
-                                  <Label className="text-xs">Aisle Prefix</Label>
-                                  <Input placeholder="e.g. A" value={rule.aislePrefix} onChange={(e) => updateAisleRule(facility.id, ai, { aislePrefix: e.target.value })} className="h-8 text-sm" />
-                                </div>
-                                <div className="flex-1 space-y-1">
-                                  <Label className="text-xs">Description (optional)</Label>
-                                  <Input placeholder="e.g. Main aisle" value={rule.description ?? ""} onChange={(e) => updateAisleRule(facility.id, ai, { description: e.target.value })} className="h-8 text-sm" />
-                                </div>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive mt-5" onClick={() => removeAisleRule(facility.id, ai)}>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
+
+                      {/* Step 2: Label each segment */}
+                      {segments.length >= 2 && (
+                        <div className="space-y-3">
+                          <div>
+                            <Label className="text-xs font-semibold">Step 2 — Identify each segment</Label>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">Click a segment to cycle through: Aisle → Bay → Side (L/R) → Level → Ignore</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {segments.map((seg, idx) => (
+                              <div key={idx} className="flex flex-col items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => cycleRole(idx)}
+                                  className={`px-3 py-1.5 rounded-lg border text-sm font-mono font-semibold transition-colors cursor-pointer ${SEGMENT_ROLE_COLORS[roles[idx] ?? "ignore"]}`}
+                                >
+                                  {seg}
+                                </button>
+                                <span className="text-[10px] text-muted-foreground font-medium">{SEGMENT_ROLE_LABELS[roles[idx] ?? "ignore"]}</span>
                               </div>
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <Label className="text-xs">Levels</Label>
-                                  <span className="text-[10px] text-muted-foreground">Enter A-E to expand to A,B,C,D,E</span>
-                                </div>
-                                <Input
-                                  placeholder="e.g. A,B,C or A-E"
-                                  value={rule.levels.join(",")}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    // Auto-expand range on blur or if user typed a complete X-Y pattern
-                                    updateAisleRule(facility.id, ai, { levels: expandLevels(raw) });
-                                  }}
-                                  onBlur={(e) => updateAisleRule(facility.id, ai, { levels: expandLevels(e.target.value) })}
-                                  className="h-8 text-sm"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label className="text-xs">Bays</Label>
-                                  <div className="flex items-center gap-1">
-                                    <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={() => { setBayRangeDialog({ facilityId: facility.id, aisleIdx: ai }); setBayRangeInput(""); setBayRangePrefix(""); setBayRangeSides(""); }}>
-                                      <Hash className="h-3 w-3" /> Range
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={() => addBay(facility.id, ai)}>
-                                      <Plus className="h-3 w-3" /> Add Bay
-                                    </Button>
-                                  </div>
-                                </div>
-                                {rule.bays.length === 0 ? (
-                                  <p className="text-xs text-muted-foreground italic">No bays yet.</p>
-                                ) : (
-                                  <div className="space-y-1.5">
-                                    {/* Column headers */}
-                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground px-0.5">
-                                      <span className="w-14 shrink-0">Prefix</span>
-                                      <span className="flex-1">Bay ID</span>
-                                      <span className="w-24 shrink-0">Sides (e.g. L,R or 1,2)</span>
-                                      <span className="w-7" />
-                                    </div>
-                                    {rule.bays.map((bay, bi) => (
-                                      <div key={bi} className="flex items-center gap-2">
-                                        <Input
-                                          placeholder="e.g. B"
-                                          value={bay.bayPrefix ?? ""}
-                                          onChange={(e) => updateBay(facility.id, ai, bi, { bayPrefix: e.target.value })}
-                                          className="h-7 text-xs w-14 shrink-0 font-mono"
-                                          title="Bay prefix (prepended to bay ID)"
-                                        />
-                                        <Input
-                                          placeholder="e.g. 030"
-                                          value={bay.bayId}
-                                          onChange={(e) => updateBay(facility.id, ai, bi, { bayId: e.target.value })}
-                                          className="h-7 text-xs flex-1 font-mono"
-                                        />
-                                        <Input
-                                          placeholder="L,R or 1,2"
-                                          value={bay.sideValues ?? ""}
-                                          onChange={(e) => updateBay(facility.id, ai, bi, { sideValues: e.target.value, hasLeftRight: e.target.value.trim().length > 0 })}
-                                          className="h-7 text-xs w-24 shrink-0"
-                                          title="Comma-separated side values (leave blank if no sides)"
-                                        />
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeBay(facility.id, ai, bi)}>
-                                          <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       )}
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">Notes (optional)</Label>
-                      <Input placeholder="Any notes about this warehouse's layout…" value={draft.notes} onChange={(e) => updateDraft(facility.id, { notes: e.target.value })} />
-                    </div>
-                    <div className="flex items-center gap-2 pt-1 flex-wrap">
-                      <Button size="sm" className="gap-1.5" onClick={() => handleSave(facility.id, facility.name)} disabled={isSavingNow}>
-                        {isSavingNow ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</> : <><Save className="h-3.5 w-3.5" />Save Config</>}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 text-muted-foreground"
-                        onClick={() => {
-                          if (!confirm(`Reset all aisle/bay/level rules for ${facility.name} to blank? This won't affect the saved config until you click Save.`)) return;
-                          updateDraft(facility.id, { aisleRules: [], locationFormat: "AISLE-BAY-LEVEL", notes: "" });
-                          setExampleInputs((p) => ({ ...p, [facility.id]: "" }));
-                          toast.info("Draft reset to blank — click Save Config to persist");
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Reset to Defaults
-                      </Button>
-                      {isSaved && (
-                        <Button size="sm" variant="ghost" className="text-destructive gap-1.5" onClick={() => handleDelete(facility.id, facility.name)}>
-                          <Trash2 className="h-3.5 w-3.5" /> Clear Saved Config
-                        </Button>
+
+                      {/* Step 3: Confirmation */}
+                      {summary.length > 0 && (
+                        <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
+                          <p className="text-xs font-semibold text-green-400 mb-1.5">Confirmed pattern</p>
+                          <div className="flex flex-wrap gap-3">
+                            {summary.map((s) => (
+                              <span key={s} className="text-xs font-mono text-foreground bg-muted/40 px-2 py-0.5 rounded">{s}</span>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-2">Format saved as: <span className="font-mono">{rolesToFormat(roles)}</span></p>
+                        </div>
                       )}
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        <Button size="sm" className="gap-1.5" onClick={() => handleSave(facility.id, facility.name)} disabled={isSavingNow}>
+                          {isSavingNow ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</> : <><Save className="h-3.5 w-3.5" />Save Config</>}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-muted-foreground"
+                          onClick={() => {
+                            if (!confirm(`Reset config for ${facility.name}?`)) return;
+                            updateDraft(facility.id, { aisleRules: [], locationFormat: "AISLE-BAY-LEVEL", notes: "", segmentRoles: undefined, exampleLocation: "" });
+                            setExampleInputs((p) => ({ ...p, [facility.id]: "" }));
+                            toast.info("Draft reset — click Save Config to persist");
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Reset
+                        </Button>
+                        {isSaved && (
+                          <Button size="sm" variant="ghost" className="text-destructive gap-1.5" onClick={() => handleDelete(facility.id, facility.name)}>
+                            <Trash2 className="h-3.5 w-3.5" /> Clear Saved Config
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             );
           })}
@@ -1154,7 +1100,7 @@ function WarehouseStructureTab() {
               if (!bayRangeDialog) return;
               const ids = expandBayRange(bayRangeInput);
               if (ids.length === 0) { toast.error("Invalid range — use format 001-050"); return; }
-              const newBays: BayRule[] = ids.map((id) => ({ bayId: id, bayPrefix: bayRangePrefix, sideValues: bayRangeSides, hasLeftRight: bayRangeSides.trim().length > 0 }));
+              const newBays: AisleRule["bays"] = ids.map((id) => ({ bayId: id, bayPrefix: bayRangePrefix, sideValues: bayRangeSides, hasLeftRight: bayRangeSides.trim().length > 0 }));
               const d = getDraft(bayRangeDialog.facilityId);
               updateDraft(bayRangeDialog.facilityId, { aisleRules: d.aisleRules.map((r, i) => i === bayRangeDialog.aisleIdx ? { ...r, bays: [...r.bays, ...newBays] } : r) });
               toast.success(`Added ${ids.length} bays`);

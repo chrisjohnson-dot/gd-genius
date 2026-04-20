@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle, CheckCircle2, Check, ChevronDown, ChevronRight, ChevronsUpDown, Database,
-  Download, Eye, FlaskConical, Hash, Info, Loader2, MapPin, Pencil, Plus, Save,
+  Eye, FlaskConical, Hash, Info, Loader2, MapPin, Pencil, Plus, Save,
   Search, Trash2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -791,8 +791,6 @@ function WarehouseStructureTab() {
   const [bayRangeInput, setBayRangeInput] = useState("");
   const [bayRangePrefix, setBayRangePrefix] = useState("");
   const [bayRangeSides, setBayRangeSides] = useState("");
-  // Extensiv import state
-  const [importing, setImporting] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (dbConfigs.length === 0) return;
@@ -875,21 +873,6 @@ function WarehouseStructureTab() {
   function addBay(fid: number, ai: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: [...r.bays, { bayId: "", bayPrefix: "", sideValues: "", hasLeftRight: false }] } : r) }); }
   function updateBay(fid: number, ai: number, bi: number, u: Partial<BayRule>) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.map((b, j) => j === bi ? { ...b, ...u } : b) } : r) }); }
   function removeBay(fid: number, ai: number, bi: number) { const d = getDraft(fid); updateDraft(fid, { aisleRules: d.aisleRules.map((r, i) => i === ai ? { ...r, bays: r.bays.filter((_, j) => j !== bi) } : r) }); }
-
-  async function handleImportFromExtensiv(fid: number, fname: string) {
-    if (!selectedConfigId) return;
-    setImporting((s) => ({ ...s, [fid]: true }));
-    try {
-      const locs = await utils.extensiv.locations.fetch({ configId: selectedConfigId, facilityId: fid });
-      if (!locs || locs.length === 0) { toast.warning("No locations found in Extensiv for this facility"); return; }
-      const fmt = getDraft(fid).locationFormat;
-      const names = locs.map((l: { name?: string; locationName?: string }) => (l.name ?? l.locationName ?? "")).filter(Boolean);
-      const aisleRules = parseExtensivLocations(names, fmt);
-      updateDraft(fid, { aisleRules });
-      toast.success(`Imported ${aisleRules.length} aisle${aisleRules.length !== 1 ? "s" : ""} from Extensiv (${names.length} locations)`);
-    } catch { toast.error("Failed to import from Extensiv"); }
-    finally { setImporting((s) => ({ ...s, [fid]: false })); }
-  }
 
   async function handleSave(fid: number, fname: string) {
     const d = getDraft(fid);
@@ -1119,9 +1102,6 @@ function WarehouseStructureTab() {
                     <div className="flex items-center gap-2 pt-1 flex-wrap">
                       <Button size="sm" className="gap-1.5" onClick={() => handleSave(facility.id, facility.name)} disabled={isSavingNow}>
                         {isSavingNow ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</> : <><Save className="h-3.5 w-3.5" />Save Config</>}
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => handleImportFromExtensiv(facility.id, facility.name)} disabled={importing[facility.id]}>
-                        {importing[facility.id] ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Importing…</> : <><Download className="h-3.5 w-3.5" />Import from Extensiv</>}
                       </Button>
                       <Button
                         size="sm"

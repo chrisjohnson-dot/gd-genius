@@ -148,14 +148,17 @@ function LocationAssignmentsTab() {
   ) as { data?: Array<{ id: number; name: string }> };
 
   // Extensiv location lookup — fires when user clicks "Look up in Extensiv"
+  // Use editForm values as primary source (set when dialog opens) with activeConfigId/facilityId as fallback
+  const lookupConfigId = editForm.configId ?? activeConfigId;
+  const lookupFacilityId = editForm.facilityId ?? activeFacilityId;
   const lookupEnabled =
     lookupTrigger &&
-    !!activeConfigId &&
-    !!activeFacilityId &&
+    !!lookupConfigId &&
+    !!lookupFacilityId &&
     !!editForm.locationName?.trim();
   const { data: lookupResult, isFetching: lookupFetching, error: lookupError } =
     trpc.extensiv.lookupLocation.useQuery(
-      { configId: activeConfigId!, facilityId: activeFacilityId!, locationName: editForm.locationName ?? "" },
+      { configId: lookupConfigId ?? 0, facilityId: lookupFacilityId ?? 0, locationName: editForm.locationName ?? "" },
       {
         enabled: lookupEnabled,
         retry: false,
@@ -437,16 +440,19 @@ function LocationAssignmentsTab() {
               {/* Multi-select results list */}
               {lookupResults && lookupResults.length > 0 && (
                 <div className="border rounded-lg overflow-hidden mt-1">
+                  {/* Global type selector + select-all header */}
                   <div className="flex items-center gap-3 px-3 py-2 bg-muted/50 border-b">
                     <Checkbox
                       checked={
                         lookupResults.length > 0 &&
-                        lookupResults.every((r) => r.locationId in selectedRows)
+                        lookupResults.filter((r) => !(locations ?? []).some((l) => (l as { locationId: number; customerId: number }).locationId === r.locationId && (l as { locationId: number; customerId: number }).customerId === editForm.customerId)).every((r) => r.locationId in selectedRows)
                       }
                       onCheckedChange={(checked) => {
                         if (checked) {
                           const all: Record<number, LocationType> = {};
-                          lookupResults.forEach((r) => { all[r.locationId] = selectedRows[r.locationId] ?? "staging"; });
+                          lookupResults
+                            .filter((r) => !(locations ?? []).some((l) => (l as { locationId: number; customerId: number }).locationId === r.locationId && (l as { locationId: number; customerId: number }).customerId === editForm.customerId))
+                            .forEach((r) => { all[r.locationId] = selectedRows[r.locationId] ?? (editForm.locationType as LocationType) ?? inferLocationType(r.locationName); });
                           setSelectedRows(all);
                         } else {
                           setSelectedRows({});
@@ -460,6 +466,29 @@ function LocationAssignmentsTab() {
                         ? `${Object.keys(selectedRows).length} of ${lookupResults.length} selected`
                         : `${lookupResults.length} location${lookupResults.length !== 1 ? "s" : ""} found — check to add`}
                     </p>
+                    {/* Global type override — applies to all checked rows */}
+                    <Select
+                      value={editForm.locationType ?? "staging"}
+                      onValueChange={(v) => {
+                        const t = v as LocationType;
+                        setEditForm((f) => ({ ...f, locationType: t }));
+                        // Apply to all currently selected rows
+                        setSelectedRows((prev) => {
+                          const next = { ...prev };
+                          Object.keys(next).forEach((k) => { next[Number(k)] = t; });
+                          return next;
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-6 text-xs w-28 shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="staging">Staging</SelectItem>
+                        <SelectItem value="pick_face">Pick Face</SelectItem>
+                        <SelectItem value="warehouse">Warehouse</SelectItem>
+                      </SelectContent>
+                    </Select>
                     {Object.keys(selectedRows).length > 0 && (
                       <button type="button" className="text-[10px] text-muted-foreground hover:underline shrink-0"
                         onClick={() => setSelectedRows({})}>Clear</button>
@@ -515,20 +544,11 @@ function LocationAssignmentsTab() {
                           ) : (
                             <span className="text-xs text-muted-foreground font-mono shrink-0">ID {r.locationId}</span>
                           )}
+                          {/* Per-row type badge — shows the type that will be applied (from global selector) */}
                           {!alreadyConfigured && isChecked && (
-                            <Select
-                              value={rowType}
-                              onValueChange={(v) => setSelectedRows((prev) => ({ ...prev, [r.locationId]: v as LocationType }))}
-                            >
-                              <SelectTrigger className="h-6 text-xs w-28 shrink-0">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="staging">Staging</SelectItem>
-                                <SelectItem value="pick_face">Pick Face</SelectItem>
-                                <SelectItem value="warehouse">Warehouse</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
+                              {locTypeLabel[rowType]}
+                            </span>
                           )}
                         </li>
                       );
@@ -552,7 +572,7 @@ function LocationAssignmentsTab() {
               )}
             </div>
 
-            {/* ── Location Type — hidden when multi-select is active ── */}
+            {/* ── Location Type — shown when no lookup results (single-save mode) ── */}
             {!lookupResults && (
               <div className="space-y-1.5">
                 <Label>Location Type</Label>

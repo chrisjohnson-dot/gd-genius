@@ -313,6 +313,13 @@ function LocationAssignmentsTab() {
 
   const activeCustomerId = selectedCustomerId;
 
+  // Build set of customer IDs that have at least one active pick_face configured
+  const customerIdsWithPickFace = new Set(
+    (locations ?? [])
+      .filter((l) => (l as { locationType: LocationType; isActive?: boolean }).locationType === "pick_face" && (l as { isActive?: boolean }).isActive !== false)
+      .map((l) => (l as { customerId: number }).customerId)
+  );
+
   const displayedLocations = (showInactive ? (locations ?? []) : (locations ?? []).filter((l) => (l as { isActive?: boolean }).isActive !== false))
     .filter((l) => !activeCustomerId || (l as { customerId: number }).customerId === activeCustomerId);
 
@@ -356,20 +363,34 @@ function LocationAssignmentsTab() {
             >
               All
             </button>
-            {allCustomersMerged.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setSelectedCustomerId(c.id)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  activeCustomerId === c.id
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
+            {allCustomersMerged.map((c) => {
+              const missingPF = !customerIdsWithPickFace.has(c.id);
+              const isActive = activeCustomerId === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedCustomerId(c.id)}
+                  title={missingPF ? `${c.name} — no pick face configured` : c.name}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    isActive
+                      ? missingPF
+                        ? "bg-orange-500 text-white border-orange-500"
+                        : "bg-primary text-primary-foreground border-primary"
+                      : missingPF
+                        ? "bg-orange-50 text-orange-700 border-orange-300 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-700 hover:border-orange-400"
+                        : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
+                  }`}
+                >
+                  {missingPF && (
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      isActive ? "bg-white" : "bg-orange-500"
+                    }`} />
+                  )}
+                  {c.name}
+                </button>
+              );
+            })}
           </div>
         )}
 

@@ -426,6 +426,8 @@ export async function generatePickFacePullSheetPDF(
 
   // Helper: draw one row of pick face data
   function drawPfRow(item: typeof pfItems[0], y: number, globalIdx: number) {
+    // Safety guard: skip rows that would overflow the page boundary
+    if (y + ROW_H > PAGE_H - FOOTER_H) return;
     if (globalIdx % 2 === 1) doc.rect(tableL, y, tableR - tableL, ROW_H).fill(ROW_ALT);
     doc.moveTo(tableL, y + ROW_H).lineTo(tableR, y + ROW_H).stroke(GD_BORDER);
     const textY = y + 7;
@@ -642,6 +644,8 @@ export async function generateWarehousePullSheetPDF(
 
   // Helper: draw one warehouse row
   function drawWhRow(row: WhRow, y: number, globalIdx: number) {
+    // Safety guard: skip rows that would overflow the page boundary
+    if (y + ROW_H > PAGE_H - FOOTER_H) return;
     if (globalIdx % 2 === 1) doc.rect(tableL, y, tableR - tableL, ROW_H).fill(ROW_ALT);
     doc.moveTo(tableL, y + ROW_H).lineTo(tableR, y + ROW_H).stroke(GD_BORDER);
     const textY = y + ROW_H / 2 - 4;
@@ -941,6 +945,8 @@ export async function generatePackListPDF(
 
     // ── Row drawing helper ─────────────────────────────────────────────────
     const drawPackRow = (item: PackListItem, globalIdx: number, y: number) => {
+      // Safety guard: skip rows that would overflow the page boundary
+      if (y + ROW_H > PAGE_H - FOOTER_H) return;
       if (globalIdx % 2 === 1) {
         doc.rect(tableL, y, tableR - tableL, ROW_H).fill(ROW_ALT);
       }

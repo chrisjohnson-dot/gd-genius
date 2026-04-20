@@ -528,8 +528,12 @@ function LocationAssignmentsTab() {
                               if (alreadyConfigured) return;
                               setSelectedRows((prev) => {
                                 const next = { ...prev };
-                                if (checked) { next[r.locationId] = "staging"; }
-                                else { delete next[r.locationId]; }
+                                if (checked) {
+                                  // Use the current global type from the header selector
+                                  next[r.locationId] = (editForm.locationType as LocationType) ?? inferLocationType(r.locationName);
+                                } else {
+                                  delete next[r.locationId];
+                                }
                                 return next;
                               });
                             }}

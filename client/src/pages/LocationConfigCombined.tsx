@@ -979,17 +979,14 @@ function WarehouseStructureTab() {
                     updateDraft(facility.id, { segmentRoles: newRoles, locationFormat: rolesToFormat(newRoles) });
                   }
 
-                  // Build confirmation summary from roles + example
-                  const aisleIdx = roles.indexOf("aisle");
-                  const bayIdx = roles.indexOf("bay");
-                  const sideIdx = roles.indexOf("side");
-                  const levelIdx = roles.indexOf("level");
-                  const summary = [
-                    aisleIdx >= 0 && segments[aisleIdx] ? `Aisle: ${segments[aisleIdx]}` : null,
-                    bayIdx >= 0 && segments[bayIdx] ? `Bay: ${segments[bayIdx]}` : null,
-                    sideIdx >= 0 && segments[sideIdx] ? `Side: ${segments[sideIdx]}` : null,
-                    levelIdx >= 0 && segments[levelIdx] ? `Level: ${segments[levelIdx]}` : null,
-                  ].filter(Boolean);
+                  // Build confirmation summary in the same order as the example location segments
+                  const summary = segments
+                    .map((seg, idx) => {
+                      const role = roles[idx];
+                      if (!role || role === "ignore") return null;
+                      return { label: SEGMENT_ROLE_LABELS[role], value: seg, role };
+                    })
+                    .filter(Boolean) as { label: string; value: string; role: SegmentRole }[];
 
                   return (
                     <div className="p-5 space-y-5 border-t border-border/40">
@@ -1050,8 +1047,10 @@ function WarehouseStructureTab() {
                         <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
                           <p className="text-xs font-semibold text-green-400 mb-1.5">Confirmed pattern</p>
                           <div className="flex flex-wrap gap-3">
-                            {summary.map((s) => (
-                              <span key={s} className="text-xs font-mono text-foreground bg-muted/40 px-2 py-0.5 rounded">{s}</span>
+                            {summary.map((s, i) => (
+                              <span key={i} className={`text-xs font-mono px-2 py-0.5 rounded border ${SEGMENT_ROLE_COLORS[s.role]}`}>
+                                <span className="opacity-60 text-[10px] mr-1">{s.label}:</span>{s.value}
+                              </span>
                             ))}
                           </div>
                           <p className="text-[10px] text-muted-foreground mt-2">Format saved as: <span className="font-mono">{rolesToFormat(roles)}</span></p>

@@ -816,6 +816,10 @@ export const whLocationConfigs = mysqlTable("wh_location_configs", {
   locationFormat: varchar("location_format", { length: 64 }).notNull().default("AISLE-BAY-LEVEL"),
   /** Optional free-text notes about this warehouse's numbering scheme */
   notes: text("notes"),
+  /** Example location string used to define the segment pattern (e.g. E-42-40-B) */
+  exampleLocation: varchar("example_location", { length: 255 }),
+  /** JSON array of segment roles matching the example location segments (e.g. ["aisle","bay","bay","level"]) */
+  segmentRoles: text("segment_roles"),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   updatedBy: varchar("updated_by", { length: 255 }),
 });

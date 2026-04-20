@@ -794,7 +794,15 @@ function WarehouseStructureTab() {
       for (const row of dbConfigs) {
         if (!next[row.facilityId]) {
           const legacyRules = (row.aisleRules as AisleRule[]).map((r) => ({ ...r, bays: r.bays ?? [] }));
-          next[row.facilityId] = { locationFormat: (row as { locationFormat?: string }).locationFormat ?? "AISLE-BAY-LEVEL", aisleRules: legacyRules, notes: row.notes ?? "" };
+          const dbRow = row as { locationFormat?: string; exampleLocation?: string | null; segmentRoles?: string | null };
+          const parsedSegmentRoles = dbRow.segmentRoles ? (() => { try { return JSON.parse(dbRow.segmentRoles!) as SegmentRole[]; } catch { return undefined; } })() : undefined;
+          next[row.facilityId] = {
+            locationFormat: dbRow.locationFormat ?? "AISLE-BAY-LEVEL",
+            aisleRules: legacyRules,
+            notes: row.notes ?? "",
+            exampleLocation: dbRow.exampleLocation ?? undefined,
+            segmentRoles: parsedSegmentRoles,
+          };
         }
       }
       return next;
@@ -871,10 +879,18 @@ function WarehouseStructureTab() {
 
   async function handleSave(fid: number, fname: string) {
     const d = getDraft(fid);
-    if (d.aisleRules.some((r) => !r.aislePrefix.trim())) { toast.error("All aisle rules must have a prefix."); return; }
     setSaving((s) => ({ ...s, [fid]: true }));
     try {
-      await upsertMutation.mutateAsync({ configId: selectedConfigId!, facilityId: fid, facilityName: fname, aisleRules: d.aisleRules, notes: d.notes || null, locationFormat: d.locationFormat });
+      await upsertMutation.mutateAsync({
+        configId: selectedConfigId!,
+        facilityId: fid,
+        facilityName: fname,
+        aisleRules: d.aisleRules,
+        notes: d.notes || null,
+        locationFormat: d.locationFormat,
+        exampleLocation: d.exampleLocation ?? null,
+        segmentRoles: d.segmentRoles ?? null,
+      });
       toast.success(`WH Location Config saved for ${fname}`);
     } catch { toast.error("Failed to save config."); }
     finally { setSaving((s) => ({ ...s, [fid]: false })); }

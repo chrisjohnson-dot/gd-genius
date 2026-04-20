@@ -5594,6 +5594,8 @@ const whLocationConfigRouter = router({
         ),
         notes: z.string().nullable().optional(),
         locationFormat: z.string().optional(),
+        exampleLocation: z.string().nullable().optional(),
+        segmentRoles: z.array(z.string()).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -5604,7 +5606,9 @@ const whLocationConfigRouter = router({
         input.aisleRules,
         input.notes ?? null,
         ctx.user.name ?? ctx.user.openId,
-        input.locationFormat
+        input.locationFormat,
+        input.exampleLocation ?? null,
+        input.segmentRoles ?? null
       );
       return { success: true };
     }),

@@ -292,6 +292,7 @@ function LocationAssignmentsTab() {
   // Lookup state: trigger a lookup when user clicks "Look up in Extensiv"
   const [lookupTrigger, setLookupTrigger] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
+  const [lookupResults, setLookupResults] = useState<Array<{ locationId: number; locationName: string }> | null>(null);
 
   const activeConfigId = selectedConfigId ?? configs?.[0]?.id ?? null;
 
@@ -330,30 +331,31 @@ function LocationAssignmentsTab() {
       }
     );
 
-  // When lookup resolves, apply the result to the form
+  // When lookup resolves, store results list for user to pick from
   useEffect(() => {
     if (!lookupTrigger || lookupFetching || lookupDone) return;
     if (lookupError) {
-      toast.error("Extensiv lookup failed — please enter the IDs manually");
+      toast.error("Extensiv lookup failed — please try again");
       setLookupTrigger(false);
       return;
     }
     if (lookupResult === undefined) return; // still loading
-    if (lookupResult === null) {
-      toast.warning(`"${editForm.locationName}" was not found in Extensiv for this facility`);
-      setLookupTrigger(false);
+    setLookupTrigger(false);
+    if (!lookupResult || lookupResult.length === 0) {
+      toast.warning(`No locations matching "${editForm.locationName}" found in Extensiv`);
+      setLookupResults([]);
       return;
     }
-    setEditForm((prev) => ({
-      ...prev,
-      locationId: lookupResult.locationId,
-      ...(lookupResult.customerId != null && !prev.customerId
-        ? { customerId: lookupResult.customerId, customerName: lookupResult.customerName ?? prev.customerName }
-        : {}),
-    }));
-    toast.success("Extensiv IDs filled in automatically");
-    setLookupTrigger(false);
-    setLookupDone(true);
+    if (lookupResult.length === 1) {
+      // Auto-select if only one match
+      setEditForm((prev) => ({ ...prev, locationId: lookupResult[0].locationId, locationName: lookupResult[0].locationName }));
+      toast.success("Location confirmed");
+      setLookupDone(true);
+      setLookupResults(null);
+    } else {
+      // Show list for user to pick
+      setLookupResults(lookupResult);
+    }
   }, [lookupTrigger, lookupFetching, lookupDone, lookupResult, lookupError, editForm.locationName]);
 
   const saveMutation = trpc.locations.save.useMutation({
@@ -373,6 +375,7 @@ function LocationAssignmentsTab() {
   const openEdit = (loc?: typeof locations extends (infer T)[] | undefined ? T : never) => {
     setLookupTrigger(false);
     setLookupDone(false);
+    setLookupResults(null);
     if (loc) {
       setEditForm({
         id: (loc as { id: number }).id,
@@ -510,7 +513,7 @@ function LocationAssignmentsTab() {
       </div>
 
       {/* Add / Edit Location dialog — simplified: Customer autocomplete + Location Name + Type + Extensiv lookup */}
-      <Dialog open={editOpen} onOpenChange={(o) => { if (!o) { setLookupTrigger(false); setLookupDone(false); } setEditOpen(o); }}>
+      <Dialog open={editOpen} onOpenChange={(o) => { if (!o) { setLookupTrigger(false); setLookupDone(false); setLookupResults(null); } setEditOpen(o); }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editForm.id ? "Edit Location" : "Add Location"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
@@ -530,9 +533,13 @@ function LocationAssignmentsTab() {
               <Label>Location Name</Label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="e.g. HR-Stage"
+                  placeholder="e.g. K18-"
                   value={editForm.locationName ?? ""}
-                  onChange={(e) => { setEditForm((f) => ({ ...f, locationName: e.target.value })); setLookupDone(false); }}
+                  onChange={(e) => {
+                    setEditForm((f) => ({ ...f, locationName: e.target.value, locationId: undefined }));
+                    setLookupDone(false);
+                    setLookupResults(null);
+                  }}
                   className="flex-1"
                 />
                 <Button
@@ -540,8 +547,8 @@ function LocationAssignmentsTab() {
                   variant="outline"
                   size="sm"
                   disabled={!editForm.locationName?.trim() || lookupFetching}
-                  onClick={() => { setLookupDone(false); setLookupTrigger(true); }}
-                  title="Look up this location name in Extensiv and auto-fill the ID"
+                  onClick={() => { setLookupDone(false); setLookupResults(null); setLookupTrigger(true); }}
+                  title="Search Extensiv for locations matching this name"
                 >
                   {lookupFetching
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -551,11 +558,41 @@ function LocationAssignmentsTab() {
                   <span className="ml-1.5 hidden sm:inline">{lookupDone ? "Found" : "Look up"}</span>
                 </Button>
               </div>
-              {lookupDone && editForm.locationId && (
-                <p className="text-xs text-muted-foreground">Extensiv ID: <span className="font-mono">{editForm.locationId}</span> — confirmed</p>
+
+              {/* Results list — shown when multiple matches are returned */}
+              {lookupResults && lookupResults.length > 0 && (
+                <div className="border rounded-lg overflow-hidden mt-1">
+                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/50 border-b">
+                    {lookupResults.length} location{lookupResults.length !== 1 ? "s" : ""} found — click to select
+                  </p>
+                  <ul className="max-h-48 overflow-y-auto divide-y divide-border">
+                    {lookupResults.map((r) => (
+                      <li key={r.locationId}>
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-between gap-2"
+                          onClick={() => {
+                            setEditForm((prev) => ({ ...prev, locationId: r.locationId, locationName: r.locationName }));
+                            setLookupResults(null);
+                            setLookupDone(true);
+                          }}
+                        >
+                          <span className="font-medium">{r.locationName}</span>
+                          <span className="text-xs text-muted-foreground font-mono shrink-0">ID {r.locationId}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
-              {!lookupDone && !editForm.locationId && editForm.locationName && (
-                <p className="text-xs text-muted-foreground">Click Look up to auto-fill the Extensiv location ID.</p>
+              {lookupResults && lookupResults.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">No matching locations found in Extensiv for this facility.</p>
+              )}
+              {lookupDone && editForm.locationId && (
+                <p className="text-xs text-green-600 dark:text-green-400">✓ {editForm.locationName} (ID {editForm.locationId})</p>
+              )}
+              {!lookupDone && !lookupResults && !editForm.locationId && editForm.locationName && (
+                <p className="text-xs text-muted-foreground">Click Look up to search Extensiv for matching locations.</p>
               )}
             </div>
 

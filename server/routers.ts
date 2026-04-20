@@ -707,9 +707,9 @@ const _appRouter = router({
         if (!config) throw new TRPCError({ code: "NOT_FOUND" });
         const locations = await fetchExtensivLocations(config, input.facilityId);
         const needle = input.locationName.trim().toLowerCase();
-        const match = locations.find((l) => l.name.trim().toLowerCase() === needle);
-        if (!match) return null;
-        return { locationId: match.locationId, locationName: match.name, customerId: null, customerName: null };
+        // Return all locations whose name contains the search string (prefix or substring match)
+        const matches = locations.filter((l) => l.name.trim().toLowerCase().includes(needle));
+        return matches.map((l) => ({ locationId: l.locationId, locationName: l.name }));
       }),
 
     openOrders: protectedProcedure

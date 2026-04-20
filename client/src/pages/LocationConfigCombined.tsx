@@ -1106,9 +1106,22 @@ function WarehouseStructureTab() {
                       <Button size="sm" variant="outline" className="gap-1.5" onClick={() => handleImportFromExtensiv(facility.id, facility.name)} disabled={importing[facility.id]}>
                         {importing[facility.id] ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Importing…</> : <><Download className="h-3.5 w-3.5" />Import from Extensiv</>}
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-muted-foreground"
+                        onClick={() => {
+                          if (!confirm(`Reset all aisle/bay/level rules for ${facility.name} to blank? This won't affect the saved config until you click Save.`)) return;
+                          updateDraft(facility.id, { aisleRules: [], locationFormat: "AISLE-BAY-LEVEL", notes: "" });
+                          setExampleInputs((p) => ({ ...p, [facility.id]: "" }));
+                          toast.info("Draft reset to blank — click Save Config to persist");
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Reset to Defaults
+                      </Button>
                       {isSaved && (
                         <Button size="sm" variant="ghost" className="text-destructive gap-1.5" onClick={() => handleDelete(facility.id, facility.name)}>
-                          <Trash2 className="h-3.5 w-3.5" /> Clear Config
+                          <Trash2 className="h-3.5 w-3.5" /> Clear Saved Config
                         </Button>
                       )}
                     </div>

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { History, Loader2, Printer, Search, Trash2, X } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 
 function VerificationBadge({ status }: { status: string | null | undefined }) {
@@ -142,10 +142,12 @@ export default function RunHistory() {
     onError: (err) => toast.error(`Could not mark as printed: ${err.message}`),
   });
 
+  const [, navigate] = useLocation();
+
   function handlePrintDocuments(runId: number, alreadyPrinted: boolean) {
     const firstPrintParam = alreadyPrinted ? "" : "?firstPrint=1";
     const pdfUrl = encodeURIComponent(`/api/pdf/all-documents/${runId}${firstPrintParam}`);
-    window.open(`/print?url=${pdfUrl}`, "_blank", "noopener,noreferrer");
+    navigate(`/print?url=${pdfUrl}`);
     markPrinted.mutate({ runId });
   }
 
@@ -264,8 +266,7 @@ export default function RunHistory() {
                     <th className="text-right">Allocated</th>
                     <th className="text-right">Skipped</th>
                     <th>Status</th>
-                    <th>Verification</th>
-                    <th></th>
+                    <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -313,29 +314,27 @@ export default function RunHistory() {
                         <td className="text-right font-semibold" style={{ color: "#059669" }}>{run.allocatedCount}</td>
                         <td className="text-right" style={{ color: "#d97706" }}>{run.skippedCount}</td>
                         <td>
-                          <StatusPill status={run.status} />
+                          <div className="flex flex-col gap-1">
+                            <StatusPill status={run.status} />
+                            {run.status === "confirmed" && (
+                              <VerificationBadge status={(run as typeof run & { verificationStatus?: string }).verificationStatus} />
+                            )}
+                          </div>
                         </td>
                         <td>
-                          {run.status === "confirmed" ? (
-                            <VerificationBadge status={(run as typeof run & { verificationStatus?: string }).verificationStatus} />
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-1 justify-end">
-                            <Button variant="ghost" size="sm" asChild className="text-primary hover:text-primary/80 text-xs">
+                          <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                            <Button variant="ghost" size="sm" asChild className="text-primary hover:text-primary/80 text-xs h-7 px-2">
                               <Link href={`/history/${run.id}`}>View</Link>
                             </Button>
                             {run.status === "proposed" && (
-                              <Button variant="ghost" size="sm" asChild className="text-primary hover:text-primary/80 text-xs">
+                              <Button variant="ghost" size="sm" asChild className="text-primary hover:text-primary/80 text-xs h-7 px-2">
                                 <Link href={`/review/${run.id}`}>Review</Link>
                               </Button>
                             )}
                             <Button
                               variant="outline"
                               size="sm"
-                              className="gap-1.5 text-xs"
+                              className="gap-1 text-xs h-7 px-2 whitespace-nowrap"
                               style={hasPrinted
                                 ? { borderColor: "#fca5a5", color: "#dc2626" }
                                 : { borderColor: "#6ee7b7", color: "#059669" }
@@ -347,19 +346,19 @@ export default function RunHistory() {
                                 : "Print all three documents"
                               }
                             >
-                              <Printer className="h-3.5 w-3.5" />
-                              Print Documents
+                              <Printer className="h-3 w-3" />
+                              Print
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
                               onClick={() => setPendingDeleteId(run.id)}
                               disabled={deleteRun.isPending && pendingDeleteId === run.id}
                             >
                               {deleteRun.isPending && pendingDeleteId === run.id
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : <Trash2 className="h-4 w-4" />
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Trash2 className="h-3.5 w-3.5" />
                               }
                             </Button>
                           </div>

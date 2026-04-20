@@ -336,6 +336,19 @@ export default function AllocationReview() {
           </Card>
         )}
 
+        {/* Missing pick face config warning */}
+        {isProposed && toPickFaceCount === 0 && allocatedOrders.length > 0 && (
+          <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-900">
+            <CardContent className="py-3 flex items-start gap-3">
+              <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                <span className="font-semibold text-orange-800 dark:text-orange-300">No pick face configured</span>
+                <span className="text-orange-700 dark:text-orange-400 ml-2">— all inventory will be moved directly to staging. If a pick face location should be used, set it up in Location Config before confirming.</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Tabs */}
         <Tabs defaultValue="pull">
           <TabsList>

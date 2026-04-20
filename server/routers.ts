@@ -964,6 +964,23 @@ const _appRouter = router({
         const config = await getExtensivConfigById(input.configId);
         if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
 
+        // ── Pre-flight: validate location config completeness for every customer ──
+        const preflightErrors: string[] = [];
+        for (const customer of input.customers) {
+          if (customer.orderIds.length === 0) continue;
+          const lcData = await getLocationConfigsByCustomer(input.configId, customer.customerId);
+          const hasStaging = lcData.some((lc) => lc.locationType === "staging");
+          if (!hasStaging) {
+            preflightErrors.push(`${customer.customerName}: no staging location configured`);
+          }
+        }
+        if (preflightErrors.length > 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Location config incomplete — fix these before running:\n• ${preflightErrors.join("\n• ")}`,
+          });
+        }
+
         // Run allocation engine per customer, merge all results
         const allAllocated: ReturnType<typeof runAllocationEngine>["allocatedOrders"] = [];
         const allSkipped: ReturnType<typeof runAllocationEngine>["skippedOrders"] = [];

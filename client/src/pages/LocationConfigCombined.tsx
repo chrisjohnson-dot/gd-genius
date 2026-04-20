@@ -472,8 +472,15 @@ function LocationAssignmentsTab() {
           </CardContent></Card>
         ) : (
           <div className="space-y-2">
-            {displayedLocations.map((loc) => {
-              const l = loc as { id: number; locationName: string; customerName: string; locationType: LocationType; isActive?: boolean };
+            {(() => {
+              // Build a set of customer names that have a pick_face configured
+              const customersWithPickFace = new Set(
+                (displayedLocations as Array<{ id: number; locationName: string; customerName: string; locationType: LocationType; isActive?: boolean }>)
+                  .filter((l) => l.locationType === "pick_face" && l.isActive !== false)
+                  .map((l) => l.customerName)
+              );
+              return (displayedLocations as Array<{ id: number; locationName: string; customerName: string; locationType: LocationType; isActive?: boolean }>).map((l) => {
+              const missingPickFace = l.locationType === "staging" && !customersWithPickFace.has(l.customerName);
               return (
                 <div key={l.id} className={`flex items-center gap-3 p-3 rounded-xl border ${l.isActive === false ? "opacity-50" : ""}`}>
                   <Badge className={`${locTypeBadge[l.locationType]} text-xs shrink-0`}>{locTypeLabel[l.locationType]}</Badge>
@@ -481,9 +488,12 @@ function LocationAssignmentsTab() {
                     <p className="text-sm font-medium truncate">{l.locationName}</p>
                     <p className="text-xs text-muted-foreground">{l.customerName}</p>
                   </div>
+                  {missingPickFace && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 shrink-0 font-medium">No pick face</span>
+                  )}
                   <div className="flex items-center gap-1 shrink-0">
                     <Switch checked={l.isActive !== false} onCheckedChange={() => toggleMutation?.mutate({ id: l.id })} />
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(loc as Parameters<typeof openEdit>[0])}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(l as Parameters<typeof openEdit>[0])}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
@@ -493,7 +503,8 @@ function LocationAssignmentsTab() {
                   </div>
                 </div>
               );
-            })}
+            });
+            })()}
           </div>
         )}
       </div>

@@ -13,7 +13,7 @@ import { trpc } from "@/lib/trpc";
 import {
   AlertCircle, CheckCircle2, Check, ChevronDown, ChevronRight, ChevronsUpDown, Database,
   Download, Eye, FlaskConical, Hash, Info, Loader2, MapPin, Pencil, Plus, Save,
-  Search, Sparkles, Trash2,
+  Search, Trash2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -53,176 +53,6 @@ interface LocationForm {
   locationType: LocationType;
 }
 
-interface StagingMapping {
-  customerId: number;
-  customerName: string;
-  stagingPrefix: string;
-}
-
-function AutoPopulateDialog({
-  open,
-  onClose,
-  configId,
-  onSuccess,
-}: {
-  open: boolean;
-  onClose: () => void;
-  configId: number;
-  onSuccess: () => void;
-}) {
-  const { data: facilities, isLoading: facilitiesLoading } = trpc.extensiv.facilities.useQuery(
-    { configId },
-    { enabled: open }
-  );
-  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
-  const { data: customers, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
-    { configId, facilityId: selectedFacilityId ?? 0 },
-    { enabled: !!selectedFacilityId }
-  );
-  const [mappings, setMappings] = useState<StagingMapping[]>([]);
-  const [previewResult, setPreviewResult] = useState<{
-    totalLocations: number; seeded: number; skipped: number;
-    preview: Array<{ customerId: number; customerName: string; locationId: number; locationName: string; locationType: string }>;
-  } | null>(null);
-  const [step, setStep] = useState<"configure" | "preview" | "done">("configure");
-
-  const seedMutation = trpc.locations.seedFromExtensiv.useMutation({
-    onSuccess: (data) => {
-      if (data.dryRun) { setPreviewResult(data); setStep("preview"); }
-      else { toast.success(`Seeded ${data.seeded} staging location${data.seeded !== 1 ? "s" : ""} successfully!`); onSuccess(); onClose(); }
-    },
-    onError: (e) => toast.error(`Failed: ${e.message}`),
-  });
-
-  const initMappings = (customerList: Array<{ id: number; name: string }>) => {
-    setMappings(
-      [...customerList]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((c) => ({ customerId: c.id, customerName: c.name, stagingPrefix: "" }))
-    );
-  };
-  const handleFacilitySelect = (facilityId: number) => {
-    setSelectedFacilityId(facilityId); setMappings([]); setPreviewResult(null); setStep("configure");
-  };
-  const updateMapping = (customerId: number, prefix: string) => {
-    setMappings((prev) => prev.map((m) => (m.customerId === customerId ? { ...m, stagingPrefix: prefix } : m)));
-  };
-  const buildPayload = (dryRun: boolean) => {
-    const selectedFacility = facilities?.find((f) => f.id === selectedFacilityId);
-    return {
-      configId, facilityId: selectedFacilityId!, facilityName: selectedFacility?.name,
-      customerMappings: mappings.filter((m) => m.stagingPrefix.trim()).map((m) => ({
-        customerId: m.customerId, customerName: m.customerName,
-        stagingPrefixes: m.stagingPrefix.split(",").map((p) => p.trim()).filter(Boolean),
-      })),
-      dryRun,
-    };
-  };
-  const handlePreview = () => {
-    if (!selectedFacilityId) { toast.error("Select a facility first"); return; }
-    const payload = buildPayload(true);
-    if (payload.customerMappings.length === 0) { toast.error("Enter at least one staging prefix"); return; }
-    seedMutation.mutate(payload);
-  };
-  const handleConfirm = () => { seedMutation.mutate(buildPayload(false)); };
-  if (customers && mappings.length === 0 && customers.length > 0) initMappings(customers);
-
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            Set Up Staging Locations from Extensiv
-          </DialogTitle>
-        </DialogHeader>
-        {step === "configure" && (
-          <div className="space-y-5 py-2">
-            <div className="p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 rounded-md text-xs text-purple-800 dark:text-purple-300 space-y-1">
-              <p className="font-semibold">What is a staging location?</p>
-              <p>Staging is a temporary holding area. During allocation, inventory moves from warehouse and pick face locations into staging. Each client has one staging location in Extensiv (e.g. <code>HR-Stage</code>, <code>ONCO-Staging</code>).</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">1. Select Facility</Label>
-              {facilitiesLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading facilities...</div>
-              ) : (
-                <Select value={selectedFacilityId ? String(selectedFacilityId) : ""} onValueChange={(v) => handleFacilitySelect(Number(v))}>
-                  <SelectTrigger><SelectValue placeholder="Select a facility..." /></SelectTrigger>
-                  <SelectContent>{(facilities ?? []).map((f) => <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>)}</SelectContent>
-                </Select>
-              )}
-            </div>
-            {selectedFacilityId && (
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">2. Staging Location Prefix per Client</Label>
-                <p className="text-xs text-muted-foreground">Enter the prefix that identifies each client's staging location in Extensiv. Leave blank to skip a client.</p>
-                {customersLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading clients...</div>
-                ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {mappings.map((m) => (
-                      <div key={m.customerId} className="flex items-center gap-3">
-                        <div className="w-44 shrink-0"><p className="text-sm font-medium truncate">{m.customerName}</p><p className="text-xs text-muted-foreground">ID: {m.customerId}</p></div>
-                        <Input placeholder="e.g. HR  or  BIG" value={m.stagingPrefix} onChange={(e) => updateMapping(m.customerId, e.target.value)} className="flex-1" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md text-xs text-blue-800 dark:text-blue-300">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>A <strong>dry run preview</strong> runs first — you'll see exactly which staging locations will be saved before anything is committed.</span>
-            </div>
-          </div>
-        )}
-        {step === "preview" && previewResult && (
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 bg-muted rounded-lg"><p className="text-2xl font-bold">{previewResult.totalLocations}</p><p className="text-xs text-muted-foreground">Total Extensiv Locations</p></div>
-              <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg"><p className="text-2xl font-bold text-green-700 dark:text-green-400">{previewResult.seeded}</p><p className="text-xs text-muted-foreground">Staging locations found</p></div>
-            </div>
-            {previewResult.seeded === 0 ? (
-              <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md text-xs text-red-800 dark:text-red-300">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>No staging locations found with the given prefixes. Check that the prefix matches the start of the location name in Extensiv.</span>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {previewResult.preview.map((loc, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg text-sm">
-                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    <div className="flex-1 min-w-0"><p className="font-medium truncate">{loc.locationName}</p><p className="text-xs text-muted-foreground">{loc.customerName}</p></div>
-                    <Badge className={locTypeBadge[loc.locationType as LocationType] ?? ""}>{locTypeLabel[loc.locationType as LocationType] ?? loc.locationType}</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        <DialogFooter>
-          {step === "configure" && (
-            <>
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button onClick={handlePreview} disabled={seedMutation.isPending} className="gap-1.5">
-                {seedMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" />Running preview...</> : <><FlaskConical className="h-4 w-4" />Preview</>}
-              </Button>
-            </>
-          )}
-          {step === "preview" && (
-            <>
-              <Button variant="outline" onClick={() => setStep("configure")}>Back</Button>
-              <Button onClick={handleConfirm} disabled={seedMutation.isPending || previewResult?.seeded === 0} className="gap-1.5">
-                {seedMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" />Saving...</> : `Confirm & Save ${previewResult?.seeded ?? 0} Locations`}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ── Customer autocomplete combobox ──────────────────────────────────────────
 function CustomerCombobox({
@@ -282,7 +112,6 @@ function LocationAssignmentsTab() {
   const { data: configs } = trpc.config.list.useQuery();
   const [selectedConfigId, setSelectedConfigId] = useState<number | null>(null);
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
-  const [autoPopOpen, setAutoPopOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<Partial<LocationForm>>({});
   const [testConfigId, setTestConfigId] = useState<number | null>(null);
@@ -293,6 +122,8 @@ function LocationAssignmentsTab() {
   const [lookupTrigger, setLookupTrigger] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
   const [lookupResults, setLookupResults] = useState<Array<{ locationId: number; locationName: string }> | null>(null);
+  // Multi-select: map locationId → chosen type (undefined = not selected)
+  const [selectedRows, setSelectedRows] = useState<Record<number, LocationType>>({});
 
   const activeConfigId = selectedConfigId ?? configs?.[0]?.id ?? null;
 
@@ -362,6 +193,35 @@ function LocationAssignmentsTab() {
     onSuccess: () => { utils.locations.list.invalidate(); toast.success("Location saved"); setEditOpen(false); },
     onError: (e) => toast.error(e.message),
   });
+  const saveManyMutation = trpc.locations.save.useMutation({
+    onError: (e) => toast.error(e.message),
+  });
+
+  const handleSaveSelected = async () => {
+    const entries = Object.entries(selectedRows) as [string, LocationType][];
+    if (entries.length === 0) { toast.error("Select at least one location"); return; }
+    if (!editForm.customerId || !editForm.configId || !editForm.facilityId) {
+      toast.error("Customer is required"); return;
+    }
+    let saved = 0;
+    for (const [locIdStr, locType] of entries) {
+      const locId = Number(locIdStr);
+      const locName = lookupResults?.find((r) => r.locationId === locId)?.locationName ?? "";
+      await saveManyMutation.mutateAsync({
+        configId: editForm.configId,
+        facilityId: editForm.facilityId,
+        customerId: editForm.customerId,
+        customerName: editForm.customerName,
+        locationId: locId,
+        locationName: locName,
+        locationType: locType,
+      });
+      saved++;
+    }
+    utils.locations.list.invalidate();
+    toast.success(`${saved} location${saved !== 1 ? "s" : ""} saved`);
+    setEditOpen(false);
+  };
   const deleteMutation = trpc.locations.delete.useMutation({
     onSuccess: () => { utils.locations.list.invalidate(); toast.success("Location removed"); },
     onError: (e) => toast.error(e.message),
@@ -376,6 +236,7 @@ function LocationAssignmentsTab() {
     setLookupTrigger(false);
     setLookupDone(false);
     setLookupResults(null);
+    setSelectedRows({});
     if (loc) {
       setEditForm({
         id: (loc as { id: number }).id,
@@ -438,9 +299,6 @@ function LocationAssignmentsTab() {
             <Button variant="outline" size="sm" className="gap-1.5 text-xs"
               onClick={() => { setTestConfigId(activeConfigId); setTestFacilityId(activeFacilityId); setRunTest(true); }}>
               <FlaskConical className="h-3.5 w-3.5" /> Test Extensiv Locations
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setAutoPopOpen(true)}>
-              <Sparkles className="h-3.5 w-3.5" /> Auto-Populate Staging
             </Button>
             <Button size="sm" className="gap-1.5 text-xs" onClick={() => openEdit()}>
               <Plus className="h-3.5 w-3.5" /> Add Location
@@ -559,30 +417,69 @@ function LocationAssignmentsTab() {
                 </Button>
               </div>
 
-              {/* Results list — shown when multiple matches are returned */}
+              {/* Multi-select results list */}
               {lookupResults && lookupResults.length > 0 && (
                 <div className="border rounded-lg overflow-hidden mt-1">
-                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/50 border-b">
-                    {lookupResults.length} location{lookupResults.length !== 1 ? "s" : ""} found — click to select
-                  </p>
-                  <ul className="max-h-48 overflow-y-auto divide-y divide-border">
-                    {lookupResults.map((r) => (
-                      <li key={r.locationId}>
-                        <button
-                          type="button"
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-between gap-2"
-                          onClick={() => {
-                            setEditForm((prev) => ({ ...prev, locationId: r.locationId, locationName: r.locationName }));
-                            setLookupResults(null);
-                            setLookupDone(true);
-                          }}
-                        >
-                          <span className="font-medium">{r.locationName}</span>
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {lookupResults.length} location{lookupResults.length !== 1 ? "s" : ""} found — check to add
+                    </p>
+                    <div className="flex gap-1.5">
+                      <button type="button" className="text-[10px] text-primary hover:underline"
+                        onClick={() => {
+                          const all: Record<number, LocationType> = {};
+                          lookupResults.forEach((r) => { all[r.locationId] = selectedRows[r.locationId] ?? "staging"; });
+                          setSelectedRows(all);
+                        }}>Select all</button>
+                      <span className="text-muted-foreground text-[10px]">·</span>
+                      <button type="button" className="text-[10px] text-muted-foreground hover:underline"
+                        onClick={() => setSelectedRows({})}>Clear</button>
+                    </div>
+                  </div>
+                  <ul className="max-h-56 overflow-y-auto divide-y divide-border">
+                    {lookupResults.map((r) => {
+                      const isChecked = r.locationId in selectedRows;
+                      const rowType = selectedRows[r.locationId] ?? "staging";
+                      return (
+                        <li key={r.locationId} className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors ${isChecked ? "bg-primary/5" : "hover:bg-accent/40"}`}>
+                          <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              setSelectedRows((prev) => {
+                                const next = { ...prev };
+                                if (checked) { next[r.locationId] = "staging"; }
+                                else { delete next[r.locationId]; }
+                                return next;
+                              });
+                            }}
+                            className="shrink-0"
+                          />
+                          <span className="font-medium flex-1 truncate">{r.locationName}</span>
                           <span className="text-xs text-muted-foreground font-mono shrink-0">ID {r.locationId}</span>
-                        </button>
-                      </li>
-                    ))}
+                          {isChecked && (
+                            <Select
+                              value={rowType}
+                              onValueChange={(v) => setSelectedRows((prev) => ({ ...prev, [r.locationId]: v as LocationType }))}
+                            >
+                              <SelectTrigger className="h-6 text-xs w-28 shrink-0">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="staging">Staging</SelectItem>
+                                <SelectItem value="pick_face">Pick Face</SelectItem>
+                                <SelectItem value="warehouse">Warehouse</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
+                  {Object.keys(selectedRows).length > 0 && (
+                    <div className="px-3 py-2 bg-muted/30 border-t text-xs text-muted-foreground">
+                      {Object.keys(selectedRows).length} selected
+                    </div>
+                  )}
                 </div>
               )}
               {lookupResults && lookupResults.length === 0 && (
@@ -596,37 +493,41 @@ function LocationAssignmentsTab() {
               )}
             </div>
 
-            {/* ── Location Type ── */}
-            <div className="space-y-1.5">
-              <Label>Location Type</Label>
-              <Select value={editForm.locationType ?? "staging"} onValueChange={(v) => setEditForm({ ...editForm, locationType: v as LocationType })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staging">Staging</SelectItem>
-                  <SelectItem value="pick_face">Pick Face</SelectItem>
-                  <SelectItem value="warehouse">Warehouse</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* ── Location Type — hidden when multi-select is active ── */}
+            {!lookupResults && (
+              <div className="space-y-1.5">
+                <Label>Location Type</Label>
+                <Select value={editForm.locationType ?? "staging"} onValueChange={(v) => setEditForm({ ...editForm, locationType: v as LocationType })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staging">Staging</SelectItem>
+                    <SelectItem value="pick_face">Pick Face</SelectItem>
+                    <SelectItem value="warehouse">Warehouse</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save"}
-            </Button>
+            {lookupResults && lookupResults.length > 0 ? (
+              <Button
+                onClick={handleSaveSelected}
+                disabled={saveManyMutation.isPending || Object.keys(selectedRows).length === 0}
+              >
+                {saveManyMutation.isPending
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</>
+                  : `Save ${Object.keys(selectedRows).length > 0 ? Object.keys(selectedRows).length + " " : ""}Selected`}
+              </Button>
+            ) : (
+              <Button onClick={handleSave} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {activeConfigId && (
-        <AutoPopulateDialog
-          open={autoPopOpen}
-          onClose={() => setAutoPopOpen(false)}
-          configId={activeConfigId}
-          onSuccess={() => utils.locations.list.invalidate()}
-        />
-      )}
     </>
   );
 }

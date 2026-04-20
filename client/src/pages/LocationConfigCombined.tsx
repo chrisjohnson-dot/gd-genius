@@ -784,7 +784,7 @@ function WarehouseStructureTab() {
       for (const row of dbConfigs) {
         if (!next[row.facilityId]) {
           const legacyRules = (row.aisleRules as AisleRule[]).map((r) => ({ ...r, bays: r.bays ?? [] }));
-          next[row.facilityId] = { locationFormat: "AISLE-BAY-LEVEL", aisleRules: legacyRules, notes: row.notes ?? "" };
+          next[row.facilityId] = { locationFormat: (row as { locationFormat?: string }).locationFormat ?? "AISLE-BAY-LEVEL", aisleRules: legacyRules, notes: row.notes ?? "" };
         }
       }
       return next;
@@ -879,7 +879,7 @@ function WarehouseStructureTab() {
     if (d.aisleRules.some((r) => !r.aislePrefix.trim())) { toast.error("All aisle rules must have a prefix."); return; }
     setSaving((s) => ({ ...s, [fid]: true }));
     try {
-      await upsertMutation.mutateAsync({ configId: selectedConfigId!, facilityId: fid, facilityName: fname, aisleRules: d.aisleRules, notes: d.notes || null });
+      await upsertMutation.mutateAsync({ configId: selectedConfigId!, facilityId: fid, facilityName: fname, aisleRules: d.aisleRules, notes: d.notes || null, locationFormat: d.locationFormat });
       toast.success(`WH Location Config saved for ${fname}`);
     } catch { toast.error("Failed to save config."); }
     finally { setSaving((s) => ({ ...s, [fid]: false })); }

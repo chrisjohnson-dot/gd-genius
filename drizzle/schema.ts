@@ -812,6 +812,8 @@ export const whLocationConfigs = mysqlTable("wh_location_configs", {
    * [{ aislePrefix: string, levels: string[], description?: string }]
    */
   aisleRules: text("aisle_rules").notNull(),
+  /** Location naming format (e.g. AISLE-BAY-LEVEL, AISLE-BAY-LR-LEVEL, CUSTOM) */
+  locationFormat: varchar("location_format", { length: 64 }).notNull().default("AISLE-BAY-LEVEL"),
   /** Optional free-text notes about this warehouse's numbering scheme */
   notes: text("notes"),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),

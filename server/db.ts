@@ -2587,18 +2587,20 @@ export async function upsertWhLocationConfig(
   facilityName: string,
   aisleRules: AisleRule[],
   notes: string | null,
-  updatedBy: string
+  updatedBy: string,
+  locationFormat?: string
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
   const now = Date.now();
   const rulesJson = JSON.stringify(aisleRules);
+  const fmt = locationFormat ?? "AISLE-BAY-LEVEL";
   // Try update first, then insert
   const existing = await getWhLocationConfig(configId, facilityId);
   if (existing) {
     await db
       .update(whLocationConfigs)
-      .set({ facilityName, aisleRules: rulesJson, notes, updatedAt: now, updatedBy })
+      .set({ facilityName, aisleRules: rulesJson, locationFormat: fmt, notes, updatedAt: now, updatedBy })
       .where(
         and(
           eq(whLocationConfigs.configId, configId),
@@ -2611,6 +2613,7 @@ export async function upsertWhLocationConfig(
       facilityId,
       facilityName,
       aisleRules: rulesJson,
+      locationFormat: fmt,
       notes,
       updatedAt: now,
       updatedBy,

@@ -163,6 +163,14 @@ function LocationAssignmentsTab() {
     );
 
   // When lookup resolves, store results list for user to pick from
+  // Infer location type from name patterns
+  const inferLocationType = (name: string): LocationType => {
+    const n = name.toLowerCase();
+    if (/pick.?face|pickface|pick.?loc|pf[\s\-_]/.test(n)) return "pick_face";
+    if (/stag(e|ing)|stg[\s\-_]|\bstg\b/.test(n)) return "staging";
+    return "warehouse";
+  };
+
   useEffect(() => {
     if (!lookupTrigger || lookupFetching || lookupDone) return;
     if (lookupError) {
@@ -180,12 +188,21 @@ function LocationAssignmentsTab() {
     if (lookupResult.length === 1) {
       // Auto-select if only one match
       setEditForm((prev) => ({ ...prev, locationId: lookupResult[0].locationId, locationName: lookupResult[0].locationName }));
+      // Also pre-set the location type based on the name
+      const inferredType = inferLocationType(lookupResult[0].locationName);
+      setEditForm((prev) => ({ ...prev, locationType: inferredType }));
       toast.success("Location confirmed");
       setLookupDone(true);
       setLookupResults(null);
     } else {
-      // Show list for user to pick
+      // Show list for user to pick — pre-select rows with inferred types
       setLookupResults(lookupResult);
+      // Pre-populate selectedRows with inferred types for all non-already-configured rows
+      const preSelected: Record<number, LocationType> = {};
+      lookupResult.forEach((r) => {
+        preSelected[r.locationId] = inferLocationType(r.locationName);
+      });
+      setSelectedRows(preSelected);
     }
   }, [lookupTrigger, lookupFetching, lookupDone, lookupResult, lookupError, editForm.locationName]);
 

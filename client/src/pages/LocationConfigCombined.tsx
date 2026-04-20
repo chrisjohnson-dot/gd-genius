@@ -206,6 +206,13 @@ function LocationAssignmentsTab() {
         preSelected[r.locationId] = inferLocationType(r.locationName);
       });
       setSelectedRows(preSelected);
+
+      // Auto-set the global type selector to the most common inferred type across results
+      const typeCounts: Record<LocationType, number> = { staging: 0, pick_face: 0, warehouse: 0 };
+      lookupResult.forEach((r) => { typeCounts[inferLocationType(r.locationName)]++; });
+      const dominantType = (Object.entries(typeCounts) as [LocationType, number][])
+        .sort((a, b) => b[1] - a[1])[0][0];
+      setEditForm((prev) => ({ ...prev, locationType: dominantType }));
     }
   }, [lookupTrigger, lookupFetching, lookupDone, lookupResult, lookupError, editForm.locationName]);
 

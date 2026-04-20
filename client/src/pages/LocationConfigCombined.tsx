@@ -420,21 +420,33 @@ function LocationAssignmentsTab() {
               {/* Multi-select results list */}
               {lookupResults && lookupResults.length > 0 && (
                 <div className="border rounded-lg overflow-hidden mt-1">
-                  <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {lookupResults.length} location{lookupResults.length !== 1 ? "s" : ""} found — check to add
-                    </p>
-                    <div className="flex gap-1.5">
-                      <button type="button" className="text-[10px] text-primary hover:underline"
-                        onClick={() => {
+                  <div className="flex items-center gap-3 px-3 py-2 bg-muted/50 border-b">
+                    <Checkbox
+                      checked={
+                        lookupResults.length > 0 &&
+                        lookupResults.every((r) => r.locationId in selectedRows)
+                      }
+                      onCheckedChange={(checked) => {
+                        if (checked) {
                           const all: Record<number, LocationType> = {};
                           lookupResults.forEach((r) => { all[r.locationId] = selectedRows[r.locationId] ?? "staging"; });
                           setSelectedRows(all);
-                        }}>Select all</button>
-                      <span className="text-muted-foreground text-[10px]">·</span>
-                      <button type="button" className="text-[10px] text-muted-foreground hover:underline"
+                        } else {
+                          setSelectedRows({});
+                        }
+                      }}
+                      className="shrink-0"
+                      aria-label="Select all locations"
+                    />
+                    <p className="text-xs text-muted-foreground flex-1">
+                      {Object.keys(selectedRows).length > 0
+                        ? `${Object.keys(selectedRows).length} of ${lookupResults.length} selected`
+                        : `${lookupResults.length} location${lookupResults.length !== 1 ? "s" : ""} found — check to add`}
+                    </p>
+                    {Object.keys(selectedRows).length > 0 && (
+                      <button type="button" className="text-[10px] text-muted-foreground hover:underline shrink-0"
                         onClick={() => setSelectedRows({})}>Clear</button>
-                    </div>
+                    )}
                   </div>
                   <ul className="max-h-56 overflow-y-auto divide-y divide-border">
                     {lookupResults.map((r) => {

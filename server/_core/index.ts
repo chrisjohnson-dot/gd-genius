@@ -21,6 +21,7 @@ import { startWebhookRetryScheduler } from "../scheduler/webhookRetry";
 import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
 import { startScanImagePurgeScheduler } from "../scheduler/scanImagePurge";
 import { startOpFiHealthCheckScheduler } from "../scheduler/opfiHealthCheck";
+import { startClearSightRulesSyncScheduler } from "../scheduler/clearsightRulesSync";
 import { checkOverdueSessions } from "../routers/pullAlerts";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -105,6 +106,8 @@ async function startServer() {
     startScanImagePurgeScheduler();
     // OpFi connection health check every 15 minutes
     startOpFiHealthCheckScheduler();
+    // Nightly ClearSight retailer rules sync at 02:30 UTC (stub — activates when ClearSight endpoint is ready)
+    startClearSightRulesSyncScheduler();
     // Pull session overdue alert check every 5 minutes
     const runPullAlertCheck = () => {
       checkOverdueSessions()

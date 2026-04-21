@@ -376,6 +376,30 @@ export default function AllocationRules() {
         </div>
       </div>
 
+      {/* ── ClearSight Retailer Rules Sync (stub) ───────────────────── */}
+      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5 space-y-2">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+            <span className="text-xs font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-400">ClearSight Retailer Rules Sync — Pending Setup</span>
+          </div>
+          <span className="text-xs text-amber-600 dark:text-amber-500 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full font-medium">Not yet active</span>
+        </div>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          When ClearSight is fully configured, retailer-specific allocation rules (minimum shelf life, FEFO/LIFO overrides, lot restrictions, and compliance requirements) will be synced nightly from ClearSight into each customer's rule set automatically.
+        </p>
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          Until then, configure retailer rules manually using the per-client cards below. Once the ClearSight sync is activated, manually set values will be overwritten by the nightly pull.
+        </p>
+        <div className="pt-1 flex items-center gap-4 text-xs text-amber-600 dark:text-amber-500">
+          <span>Sync frequency: <strong>Nightly</strong></span>
+          <span>·</span>
+          <span>Source: <strong>GD ClearSight API</strong></span>
+          <span>·</span>
+          <span>Status: <strong>Awaiting ClearSight endpoint setup</strong></span>
+        </div>
+      </div>
+
       {isLoading && (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (

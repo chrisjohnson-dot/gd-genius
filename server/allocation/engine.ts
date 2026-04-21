@@ -548,10 +548,12 @@ export function runAllocationEngine(
     // Resolve pick face location for replenishment
     const pfId = pickFaceLocationId ?? (pickFaceRecords[0]?.locationIdentifier?.id ?? 0);
     const pfName = pickFaceLocationName ?? (pickFaceRecords[0]?.locationIdentifier?.nameKey?.name ?? "Pick Face");
-    // A pick face is considered "configured" for this SKU if:
-    //   a) an explicit pick face location was provided by the caller, OR
-    //   b) there are inventory records already in a pick face location for this SKU
-    const hasPf = (pickFaceLocationId != null && pickFaceLocationId > 0) || pickFaceRecords.length > 0;
+    // A pick face is considered active for this SKU ONLY if there are actual inventory
+    // records for this SKU in a pick face location. The customer-level pickFaceLocationId
+    // is used purely as the *destination* for replenishment moves — it does NOT mean every
+    // SKU has a pick face. If a SKU has never been stocked in the pick face, surplus must
+    // stay in the warehouse (not be routed to the pick face location).
+    const hasPf = pickFaceRecords.length > 0;
 
     const { stagingMoves, pickFaceMoves, satisfied } = planSkuMovements(
       totalNeeded,

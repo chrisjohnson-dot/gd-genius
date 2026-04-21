@@ -458,10 +458,12 @@ export async function generatePickFacePullSheetPDF(
     const lot = item.lotNumber && item.lotNumber !== "0" ? item.lotNumber : "-";
     doc.fillColor(lot === "-" ? GD_GRAY : GD_DKGRAY).fontSize(8).font("Helvetica")
       .text(lot, cx.lot, textY, { width: 97, lineBreak: false });
+    // ONHAND QTY column: sourceQty = total available in pick face location (light gray)
+    const onHandStr = item.sourceQty != null ? String(item.sourceQty) : "—";
     doc.fillColor(GD_GRAY).fontSize(9).font("Helvetica")
-      .text(String(item.qty), cx.unhand, textY, { width: QTY_W, align: "right", lineBreak: false });
-    const totalReq = item.totalRequired ?? item.sourceQty;
-    const stagingQty = item.movement !== "to_pick_face" ? (totalReq != null ? String(totalReq) : "—") : "—";
+      .text(onHandStr, cx.unhand, textY, { width: QTY_W, align: "right", lineBreak: false });
+    // MOVE TO STAGING column: item.qty = qty being moved to staging (bold navy)
+    const stagingQty = item.movement !== "to_pick_face" ? String(item.qty) : "—";
     doc.fillColor(stagingQty !== "—" ? GD_NAVY : GD_GRAY).fontSize(9).font(stagingQty !== "—" ? "Helvetica-Bold" : "Helvetica")
       .text(stagingQty, cx.staging, textY, { width: DEST_W, align: "right", lineBreak: false });
     doc.roundedRect(cx.chk, y + ROW_H / 2 - 7, 14, 14, 2).fillAndStroke(WHITE, GD_BORDER);

@@ -468,6 +468,10 @@ export default function RunDetail() {
                   <h3 className="text-[15px] font-bold flex items-center gap-2">
                     <Truck className="h-4 w-4 text-purple-500" />Move Summary
                   </h3>
+                  <a href={`/api/pdf/move-summary/${runId}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+                    <FileDown className="h-4 w-4" />Export PDF
+                  </a>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" />

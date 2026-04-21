@@ -8,6 +8,7 @@ import {
   generatePackListPDF,
 } from "./generator";
 import type { PullListItem, PackListItem, OrderPackData } from "./generator";
+import { generateMoveSummaryPDF } from "./moveSummaryGenerator";
 import { generateAuditPickTicketsPDF } from "./auditGenerator";
 import type { AuditPickTicket } from "./auditGenerator";
 import { generateAuditShippingDocumentsPDF } from "./auditShippingGenerator";
@@ -215,6 +216,33 @@ export function registerPdfRoutes(app: Express) {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="work-files-run-${runId}.pdf"`);
     res.end(Buffer.from(mergedBytes));
+  });
+
+  // ── Move Summary PDF ─────────────────────────────────────────────────────────
+  app.get("/api/pdf/move-summary/:runId", async (req: Request, res: Response) => {
+    if (!(await requireAuth(req, res))) return;
+    const runId = Number(req.params.runId);
+    if (isNaN(runId)) { res.status(400).json({ error: "Invalid runId" }); return; }
+    const run = await getAllocationRunById(runId);
+    if (!run) { res.status(404).json({ error: "Run not found" }); return; }
+    const orders = await getAllocationRunOrders(runId);
+    const allocated = orders.filter((o) => o.status === "allocated");
+    const runPullList = run.pullList as PullListItem[] | null | undefined;
+    const pullList: PullListItem[] = Array.isArray(runPullList) && runPullList.length > 0
+      ? runPullList
+      : allocated.flatMap((o) => {
+          const detail = o.allocationDetail as { pullListItems?: PullListItem[] } | null;
+          return detail?.pullListItems ?? [];
+        });
+    await generateMoveSummaryPDF(res, pullList, {
+      runId: run.id,
+      facilityName: run.facilityName,
+      customerName: run.customerName,
+      customerNames: run.customerNames,
+      createdAt: run.createdAt,
+      allocatedCount: run.allocatedCount ?? 0,
+      skippedCount: run.skippedCount ?? 0,
+    });
   });
 
   // ── Legacy pull-list endpoint (backward compat → redirects to pick-face) ─

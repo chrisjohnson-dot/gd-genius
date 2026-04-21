@@ -726,10 +726,12 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
   const { data: rules = [], isLoading } = trpc.sla.listShipToRules.useQuery({ clientId: client.clientId });
   const [newShipTo, setNewShipTo] = useState("");
   const [newDays, setNewDays] = useState(2);
+  const [newMatchType, setNewMatchType] = useState<"exact" | "contains" | "starts_with">("contains");
   const [newNotes, setNewNotes] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editShipTo, setEditShipTo] = useState("");
   const [editDays, setEditDays] = useState(2);
+  const [editMatchType, setEditMatchType] = useState<"exact" | "contains" | "starts_with">("contains");
   const [editNotes, setEditNotes] = useState("");
   const upsert = trpc.sla.upsertShipToRule.useMutation({
     onSuccess: () => { utils.sla.listShipToRules.invalidate({ clientId: client.clientId }); setNewShipTo(""); setNewDays(2); setNewNotes(""); setEditId(null); toast.success("Ship-to SLA saved"); },
@@ -739,8 +741,10 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
     onSuccess: () => { utils.sla.listShipToRules.invalidate({ clientId: client.clientId }); toast.success("Ship-to SLA removed"); },
     onError: () => toast.error("Failed to delete"),
   });
-  const startEdit = (r: { id: number; shipToName: string; slaDays: number; notes: string | null }) => {
-    setEditId(r.id); setEditShipTo(r.shipToName); setEditDays(r.slaDays); setEditNotes(r.notes ?? "");
+  const startEdit = (r: { id: number; shipToName: string; matchType?: string | null; slaDays: number; notes: string | null }) => {
+    setEditId(r.id); setEditShipTo(r.shipToName); setEditDays(r.slaDays);
+    setEditMatchType((r.matchType as "exact" | "contains" | "starts_with") ?? "contains");
+    setEditNotes(r.notes ?? "");
   };
   return (
     <div className="space-y-4">
@@ -780,10 +784,18 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
           <CardTitle className="text-sm flex items-center gap-2"><Plus className="h-4 w-4 text-primary" />Add Ship-to SLA Rule</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div className="sm:col-span-1">
               <Label className="text-xs mb-1 block">Ship-to Customer Name</Label>
-              <Input placeholder="e.g. Walmart DC #6045" value={newShipTo} onChange={(e) => setNewShipTo(e.target.value)} className="h-8 text-sm" />
+              <Input placeholder="e.g. Walmart" value={newShipTo} onChange={(e) => setNewShipTo(e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Match Type</Label>
+              <select value={newMatchType} onChange={(e) => setNewMatchType(e.target.value as "exact" | "contains" | "starts_with")} className="h-8 text-sm border border-input rounded-md px-2 bg-background w-full">
+                <option value="contains">Contains</option>
+                <option value="starts_with">Starts with</option>
+                <option value="exact">Exact</option>
+              </select>
             </div>
             <div>
               <Label className="text-xs mb-1 block">SLA Days</Label>
@@ -797,7 +809,7 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
           <Button
             size="sm" className="mt-3 gap-1.5"
             disabled={!newShipTo.trim() || upsert.isPending}
-            onClick={() => upsert.mutate({ clientId: client.clientId, clientName: client.clientName, shipToName: newShipTo.trim(), slaDays: newDays, notes: newNotes || null })}
+            onClick={() => upsert.mutate({ clientId: client.clientId, clientName: client.clientName, shipToName: newShipTo.trim(), matchType: newMatchType, slaDays: newDays, notes: newNotes || null })}
           >
             {upsert.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Add Rule
@@ -827,6 +839,7 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
               <table className="w-full text-sm border-collapse">
                 <thead><tr className="border-b border-border bg-muted/40">
                   <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Ship-to Customer</th>
+                  <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Match Type</th>
                   <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">SLA Days</th>
                   <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground">Notes</th>
                   <th className="px-4 py-2.5 text-center font-semibold text-muted-foreground">Actions</th>
@@ -837,6 +850,13 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
                       <td className="px-4 py-2">
                         <Input value={editShipTo} onChange={(e) => setEditShipTo(e.target.value)} className="h-7 text-sm" />
                       </td>
+                      <td className="px-4 py-2">
+                        <select value={editMatchType} onChange={(e) => setEditMatchType(e.target.value as "exact" | "contains" | "starts_with")} className="h-7 text-sm border border-input rounded-md px-2 bg-background w-full">
+                          <option value="contains">Contains</option>
+                          <option value="starts_with">Starts with</option>
+                          <option value="exact">Exact</option>
+                        </select>
+                      </td>
                       <td className="px-4 py-2 text-center">
                         <Input type="number" min={1} max={365} value={editDays} onChange={(e) => setEditDays(Number(e.target.value))} className="w-16 h-7 text-center text-sm mx-auto" />
                       </td>
@@ -846,7 +866,7 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
                       <td className="px-4 py-2 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <Button size="sm" className="h-6 text-[10px] px-2" disabled={!editShipTo.trim() || upsert.isPending}
-                            onClick={() => upsert.mutate({ id: r.id, clientId: client.clientId, clientName: client.clientName, shipToName: editShipTo.trim(), slaDays: editDays, notes: editNotes || null })}>
+                            onClick={() => upsert.mutate({ id: r.id, clientId: client.clientId, clientName: client.clientName, shipToName: editShipTo.trim(), matchType: editMatchType, slaDays: editDays, notes: editNotes || null })}>
                             {upsert.isPending ? <RefreshCw className="h-2.5 w-2.5 animate-spin" /> : "Save"}
                           </Button>
                           <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => setEditId(null)}>Cancel</Button>
@@ -856,6 +876,11 @@ function ShipToSlaPanel({ client, onBack }: { client: ClientSlaRow; onBack: () =
                   ) : (
                     <tr key={r.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => startEdit(r)}>
                       <td className="px-4 py-2.5 font-medium">{r.shipToName}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                          {r.matchType === "contains" ? "Contains" : r.matchType === "starts_with" ? "Starts with" : "Exact"}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5 text-center">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                           {r.slaDays}d

@@ -1485,3 +1485,14 @@
 - [ ] Add ClearSight /api/retailers endpoint (DB schema: edi_retailers table, CRUD tRPC procedures, REST route)
 - [ ] Add notifyOwner alert when Missing 945 orders detected on auto-refresh
 - [ ] Add flag/escalate action button on Missing rows with audit log entry
+
+## GD Genius Comments Doc (Apr 21 2026)
+
+- [ ] Item 1: Remove the 99+ badge from beside Open Orders – B2B tab
+- [ ] Item 2: Collapse "Orders Out of SLA" by warehouse on B2B and D2C tabs
+- [ ] Item 3: Remove "Mark as Allocated" button from warehouse-specific view (system-driven only)
+- [ ] Item 4: Simplify Open Orders columns — keep Required Ship Date with (days late) in brackets; remove Req Ship, Overdue, Age, Comment Box columns; allow sort by oldest days late
+- [ ] Item 5: SLA Performance — add CONTAINS matching for ship-to customer name; add day-of-week ship rule (e.g. all orders containing 'Bulk Barn' ship following Wednesday)
+- [ ] Item 6: Run Allocation Tool — remove "Select All Clients" button
+- [ ] Item 7: Run Allocation Tool order table — redesign to show TX#, Create Date, PO#, Ship To, City, Lines, Pieces columns with checkboxes and Select All per customer
+- [ ] Item 8: Purchase Orders — replace free-text Customer Name with autocomplete from Extensiv customer list

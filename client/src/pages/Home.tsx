@@ -830,11 +830,7 @@ function WarehouseCard({
           City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
         </th>
         <th onClick={() => toggleSort("requiredShipDate")} className="cursor-pointer select-none">
-          Req. Ship <SortIcon col="requiredShipDate" sortKey={sortKey} sortDir={sortDir} />
-        </th>
-        <th className="text-right">Overdue</th>
-        <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none text-right">
-          Age <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
+          Req. Ship Date <SortIcon col="requiredShipDate" sortKey={sortKey} sortDir={sortDir} />
         </th>
         <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right">
           Pcs <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
@@ -884,26 +880,22 @@ function WarehouseCard({
         </td>
         <td className="text-xs whitespace-nowrap">
           {o.requiredShipDate ? (
-            <RequiredShipDateBadge dateStr={o.requiredShipDate} />
+            <span className="inline-flex items-center gap-1.5">
+              <RequiredShipDateBadge dateStr={o.requiredShipDate} />
+              {(() => {
+                const today = new Date(); today.setHours(0,0,0,0);
+                const target = new Date(o.requiredShipDate); target.setHours(0,0,0,0);
+                const diff = Math.round((today.getTime() - target.getTime()) / 86400000);
+                if (diff <= 0) return null;
+                const cls = diff >= 3
+                  ? "text-[10px] font-bold text-red-700"
+                  : "text-[10px] font-bold text-amber-700";
+                return <span className={cls}>({diff}d late)</span>;
+              })()}
+            </span>
           ) : (
             <span className="text-muted-foreground">—</span>
           )}
-        </td>
-        <td className="text-right">
-          {(() => {
-            if (!o.requiredShipDate) return <span className="text-muted-foreground text-xs">—</span>;
-            const today = new Date(); today.setHours(0,0,0,0);
-            const target = new Date(o.requiredShipDate); target.setHours(0,0,0,0);
-            const diff = Math.round((today.getTime() - target.getTime()) / 86400000);
-            if (diff <= 0) return <span className="text-muted-foreground text-xs">—</span>;
-            const cls = diff >= 3
-              ? "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200"
-              : "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200";
-            return <span className={cls}>{diff}d</span>;
-          })()}
-        </td>
-        <td className="text-muted-foreground text-xs text-right">
-          {age === 0 ? "Today" : `${age}d`}
         </td>
         <td className="text-muted-foreground text-xs text-right">
           {(o.totalPieces ?? 0) > 0 ? (o.totalPieces ?? 0).toLocaleString() : "—"}
@@ -958,7 +950,7 @@ function WarehouseCard({
                 <SendToShipwellButton order={o} onSent={onStatusChanged} />
               )
             ) : null}
-            <AdvanceButton order={o} onAdvanced={onStatusChanged} />
+            {o.lifecycleStatus !== "unallocated" && <AdvanceButton order={o} onAdvanced={onStatusChanged} />}
             <UndoButton order={o} onUndone={onStatusChanged} />
             <SlaExtensionButton order={o} onChanged={onStatusChanged} />
           </div>
@@ -1729,7 +1721,14 @@ function SlaBreachSummarySection({ onClientClick }: {
   onClientClick: (clientId: number, facilityId: number | null) => void;
 }) {
   const { data: breachGroups, isLoading } = trpc.sla.clientBreachSummary.useQuery();
+  // Start with all warehouses collapsed; user can expand individually
   const [collapsedWarehouses, setCollapsedWarehouses] = useState<Set<string>>(new Set());
+  const [initializedCollapse, setInitializedCollapse] = useState(false);
+  if (!isLoading && breachGroups && !initializedCollapse) {
+    const allWarehouses = new Set(breachGroups.map(g => g.facilityName ?? "Unknown"));
+    setCollapsedWarehouses(allWarehouses);
+    setInitializedCollapse(true);
+  }
   const toggleWarehouse = (name: string) => setCollapsedWarehouses(prev => {
     const next = new Set(prev);
     next.has(name) ? next.delete(name) : next.add(name);

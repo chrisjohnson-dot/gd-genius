@@ -60,7 +60,7 @@ import { Skeleton } from "./ui/skeleton";
 import { useKiosk } from "@/contexts/KioskContext";
 
 const dashboardItems = [
-  { href: "/",                 label: "Open Orders — B2B", icon: FolderOpen, badge: true },
+  { href: "/",                 label: "Open Orders — B2B", icon: FolderOpen },
   { href: "/open-orders-d2c", label: "Open Orders — D2C", icon: FolderOpen },
   { href: "/sla-performance",  label: "SLA Performance",   icon: TrendingUp },
   { href: "/exceptions",       label: "Requires Attention",  icon: AlertTriangle, exceptionsBadge: true },
@@ -524,7 +524,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   {...item}
                   active={location === item.href}
-                  badgeData={item.badge ? attentionBadge : undefined}
                   exceptionCount={item.exceptionsBadge ? exceptionsCount : undefined}
                   workloadCount={(item as any).workloadBadge ? workloadCriticalCount : undefined}
                   workloadWarehouses={(item as any).workloadBadge ? workloadCriticalWarehouses : undefined}

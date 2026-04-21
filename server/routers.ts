@@ -2972,6 +2972,7 @@ const _appRouter = router({
           clientId: z.number().int(),
           clientName: z.string().min(1).max(256),
           shipToName: z.string().min(1).max(256),
+          matchType: z.enum(["exact", "contains", "starts_with"]).default("exact"),
           slaDays: z.number().int().min(1).max(365),
           notes: z.string().nullable().optional(),
         })

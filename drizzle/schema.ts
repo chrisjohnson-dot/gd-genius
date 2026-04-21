@@ -289,6 +289,8 @@ export const slaRequirements = mysqlTable("sla_requirements", {
   clientName: varchar("clientName", { length: 256 }).notNull(),
   // Number of business days allowed from Create Date before SLA is breached
   slaDays: int("slaDays").notNull().default(2),
+  // Allowed ship days as comma-separated 0-6 values (0=Sun, 1=Mon … 6=Sat). NULL = any day.
+  shipDays: varchar("shipDays", { length: 16 }),
   // Optional notes / reason for custom SLA
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -328,6 +330,8 @@ export const slaShipToRules = mysqlTable("sla_ship_to_rules", {
   clientName: varchar("clientName", { length: 256 }).notNull(),
   // Ship-to customer name (free-text, matched against order shipTo.companyName)
   shipToName: varchar("shipToName", { length: 256 }).notNull(),
+  // How to match shipToName against the order's ship-to: exact | contains | starts_with
+  matchType: varchar("matchType", { length: 16 }).notNull().default("exact"),
   // SLA days for this specific ship-to
   slaDays: int("slaDays").notNull().default(2),
   // Optional notes / reason

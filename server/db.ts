@@ -1006,10 +1006,11 @@ export async function getOrderSlaStatuses(): Promise<
   const db = await getDb();
   if (!db) return [];
 
-  const [orders, requirements, allRules, channelRows, actionRows] = await Promise.all([
+  const [orders, requirements, allRules, allShipToRules, channelRows, actionRows] = await Promise.all([
     db.select().from(orderTracking),
     db.select().from(slaRequirements),
     db.select().from(slaRules),
+    db.select().from(slaShipToRules),
     db.select({ clientId: clientVisibility.clientId, configId: clientVisibility.configId, orderChannel: clientVisibility.orderChannel }).from(clientVisibility),
     db.select().from(slaOrderActions).orderBy(desc(slaOrderActions.performedAt)),
   ]);
@@ -1026,10 +1027,17 @@ export async function getOrderSlaStatuses(): Promise<
     }
   }
 
-  // Build a map of clientId → base slaDays for fast lookup
-  const slaMap = new Map<number, number>();
+  // Build a map of clientId → base slaDays + shipDays for fast lookup
+  const slaMap = new Map<number, { slaDays: number; shipDays: string | null }>();
   for (const req of requirements) {
-    slaMap.set(req.clientId, req.slaDays);
+    slaMap.set(req.clientId, { slaDays: req.slaDays, shipDays: req.shipDays ?? null });
+  }
+
+  // Build a map of clientId → ship-to rules array (with matchType)
+  const shipToRulesMap = new Map<number, Array<{ shipToName: string; matchType: string; slaDays: number }>>();
+  for (const r of allShipToRules) {
+    if (!shipToRulesMap.has(r.clientId)) shipToRulesMap.set(r.clientId, []);
+    shipToRulesMap.get(r.clientId)!.push({ shipToName: r.shipToName, matchType: r.matchType ?? "exact", slaDays: r.slaDays });
   }
 
   // Build a map of clientId → sub-rules array for matching savedElements
@@ -1042,9 +1050,38 @@ export async function getOrderSlaStatuses(): Promise<
   const DEFAULT_SLA_DAYS = 2;
   const now = Date.now();
 
+  /** Returns next allowed ship date at or after `fromDate` given shipDays string ("1,3,5" etc) */
+  function nextAllowedShipDate(fromDate: Date, shipDays: string): Date {
+    const allowed = new Set(shipDays.split(",").map(Number));
+    const d = new Date(fromDate);
+    for (let i = 0; i < 14; i++) {
+      if (allowed.has(d.getDay())) return d;
+      d.setDate(d.getDate() + 1);
+    }
+    return fromDate; // fallback
+  }
+
   return orders.map((order) => {
-    let slaDays = slaMap.get(order.clientId) ?? DEFAULT_SLA_DAYS;
+    const reqEntry = slaMap.get(order.clientId);
+    let slaDays = reqEntry?.slaDays ?? DEFAULT_SLA_DAYS;
+    const shipDays = reqEntry?.shipDays ?? null;
     let matchedRuleName: string | null = null;
+
+    // Apply ship-to rule override (CONTAINS / STARTS_WITH / EXACT matching)
+    const clientShipToRules = shipToRulesMap.get(order.clientId);
+    if (clientShipToRules && order.shipToName) {
+      const haystack = order.shipToName.toLowerCase();
+      const matched = clientShipToRules.find((r) => {
+        const needle = r.shipToName.toLowerCase();
+        if (r.matchType === "contains") return haystack.includes(needle);
+        if (r.matchType === "starts_with") return haystack.startsWith(needle);
+        return haystack === needle; // exact
+      });
+      if (matched) {
+        slaDays = matched.slaDays;
+        matchedRuleName = `Ship-to: ${matched.shipToName}`;
+      }
+    }
 
     // Try to match savedElements values against client sub-rules
     const clientRules = rulesMap.get(order.clientId);
@@ -1081,13 +1118,26 @@ export async function getOrderSlaStatuses(): Promise<
     // Apply any per-order extension (customer-requested later date)
     const extensionDays = order.slaExtensionDays ?? 0;
     const effectiveSlaDays = slaDays + extensionDays;
-    const daysRemaining = effectiveSlaDays - ageCalendarDays;
+
+    // If shipDays is configured, the SLA deadline is the next allowed ship day
+    // at or after (creationDate + effectiveSlaDays). This may push the deadline
+    // forward to the next valid shipping day, giving extra calendar days.
+    let adjustedSlaDays = effectiveSlaDays;
+    if (shipDays && order.creationDate) {
+      const createDate = new Date(order.creationDate);
+      const nominalDeadline = new Date(createDate.getTime() + effectiveSlaDays * 86_400_000);
+      const actualDeadline = nextAllowedShipDate(nominalDeadline, shipDays);
+      const diffMs = actualDeadline.getTime() - createDate.getTime();
+      adjustedSlaDays = Math.floor(diffMs / 86_400_000);
+    }
+
+    const daysRemaining = adjustedSlaDays - ageCalendarDays;
     const slaStatus: "in_sla" | "out_of_sla" =
       daysRemaining >= 0 ? "in_sla" : "out_of_sla";
 
     const orderChannel = channelMap.get(order.clientId) ?? "both";
     const slaActionStatus: "active" | "waived" | "removed" = actionMap.get(order.extensivOrderId) ?? "active";
-    return { ...order, slaDays: effectiveSlaDays, ageCalendarDays, slaStatus, daysRemaining, matchedRuleName, slaExtensionDays: extensionDays, orderChannel, slaActionStatus };
+    return { ...order, slaDays: adjustedSlaDays, ageCalendarDays, slaStatus, daysRemaining, matchedRuleName, slaExtensionDays: extensionDays, orderChannel, slaActionStatus };
   });
 }
 
@@ -1636,6 +1686,7 @@ export async function upsertShipToRule(input: {
   clientId: number;
   clientName: string;
   shipToName: string;
+  matchType?: string;
   slaDays: number;
   notes?: string | null;
 }): Promise<number> {
@@ -1644,7 +1695,7 @@ export async function upsertShipToRule(input: {
   if (input.id) {
     await db
       .update(slaShipToRules)
-      .set({ shipToName: input.shipToName, slaDays: input.slaDays, notes: input.notes ?? null })
+      .set({ shipToName: input.shipToName, matchType: input.matchType ?? "exact", slaDays: input.slaDays, notes: input.notes ?? null })
       .where(eq(slaShipToRules.id, input.id));
     return input.id;
   }
@@ -1652,6 +1703,7 @@ export async function upsertShipToRule(input: {
     clientId: input.clientId,
     clientName: input.clientName,
     shipToName: input.shipToName,
+    matchType: input.matchType ?? "exact",
     slaDays: input.slaDays,
     notes: input.notes ?? null,
   };

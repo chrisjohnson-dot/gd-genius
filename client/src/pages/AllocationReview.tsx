@@ -159,11 +159,9 @@ export default function AllocationReview() {
           existing.toPickFace += item.qty;
           existing.pickFaceLocationName = item.toLocationName;
         }
-        // Accumulate sourceQty: the total on-hand across all pull list items for this row
-        // (multiple records from the same location contribute their own sourceQty)
-        if (item.sourceQty) {
-          existing.sourceQty = (existing.sourceQty ?? 0) + item.sourceQty;
-        }
+        // Do NOT accumulate sourceQty here: to_staging and to_pick_face items for the
+        // same pallet share the same sourceQty (total on-hand for that pallet).
+        // Adding it again would double-count. sourceQty is already set when the row was created.
       } else {
         map.set(key, {
           key,

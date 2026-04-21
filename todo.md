@@ -1504,3 +1504,5 @@
 - [ ] Engine: smart per-SKU pick face routing — SKU-named locations (location name contains SKU) always route surplus there; client pick face locations route to existing SKU slot or first empty client pick face slot
 - [ ] Allocation Review: add Move Summary tab showing all planned inventory moves (from/to location, SKU, lot, qty) before confirmation
 - [ ] Dashboard: Requires Attention section flagging empty/low pick faces for SKUs with available warehouse replenishment stock
+- [ ] Bug: SKUs with their own pick face location (K18-70002, K18-00086) are being routed to a different SKU's pick face (K18-31008) instead of their own
+- [ ] Bug: Warehouse pull sheet On Hand qty is showing 2x the actual quantity

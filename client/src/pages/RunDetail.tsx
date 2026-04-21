@@ -236,10 +236,8 @@ export default function RunDetail() {
         row.qtyToPickFace += item.qty;
         if (!row.pickFaceLocationName) row.pickFaceLocationName = item.toLocationName;
       }
-      // Accumulate sourceQty across all records for this row
-      if (item.sourceQty) {
-        row.sourceQty = (row.sourceQty ?? 0) + item.sourceQty;
-      }
+      // Do NOT accumulate sourceQty: to_staging and to_pick_face items for the same pallet
+      // share the same sourceQty (total on-hand for that pallet). Adding it again would double-count.
     }
   }
   const consolidatedRows = Array.from(consolidatedRowMap.values());

@@ -568,12 +568,24 @@ export function runAllocationEngine(
     const configuredPfLocationIds = new Set(allPickFaceLocations.map((l) => l.locationId));
 
     // 1. SKU-named location: name contains the SKU (case-insensitive)
+    //    Check configured pick face locations first, then fall back to inventory pool
+    //    (handles the case where a pick face location exists in Extensiv but wasn't
+    //    manually added to Location Config).
     const skuNamedPf = allPickFaceLocations.find((l) =>
       l.locationName.toLowerCase().includes(sku.toLowerCase())
     );
+    // Also check inventory pool for any pick face record whose location name matches the SKU
+    const skuNamedPfFromInventory = !skuNamedPf
+      ? pickFaceRecords.find((r) =>
+          (r.locationIdentifier?.nameKey?.name ?? "").toLowerCase().includes(sku.toLowerCase())
+        )
+      : undefined;
     if (skuNamedPf) {
       pfId = skuNamedPf.locationId;
       pfName = skuNamedPf.locationName;
+    } else if (skuNamedPfFromInventory) {
+      pfId = skuNamedPfFromInventory.locationIdentifier?.id ?? 0;
+      pfName = skuNamedPfFromInventory.locationIdentifier?.nameKey?.name ?? "Pick Face";
     } else {
       // 2. Client pick face that already has this SKU in inventory
       const existingPfRecord = pickFaceRecords.find((r) =>

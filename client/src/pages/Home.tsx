@@ -1624,27 +1624,6 @@ export default function Home() {
         </div>{/* end sticky header */}
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-        {/* Verification Issues KPI card — only shown when there are unresolved issues */}
-        {!selectedFacility && (verifData?.count ?? 0) > 0 && (
-          <Link href="/history">
-            <div
-              className="flex items-center gap-3 rounded-xl px-4 py-3 border cursor-pointer hover:opacity-90 transition-opacity"
-              style={{ background: "#fee2e2", borderColor: "#fca5a5" }}
-            >
-              <ShieldAlert className="h-5 w-5 shrink-0" style={{ color: "#dc2626" }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold" style={{ color: "#991b1b" }}>
-                  {verifData!.count} Allocation Run{verifData!.count !== 1 ? "s" : ""} with Verification Issues
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: "#b91c1c" }}>
-                  Extensiv reported a mismatch or partial allocation — review in Run History
-                </p>
-              </div>
-              <span className="text-xs font-semibold shrink-0" style={{ color: "#dc2626" }}>View →</span>
-            </div>
-          </Link>
-        )}
-
         {/* Loading skeletons */}
         {isLoading && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

@@ -604,8 +604,11 @@ export async function generateWarehousePullSheetPDF(
         pickFaceLocationName: item.movement === "to_pick_face" ? (item.toLocationName ?? "") : "",
       });
     } else {
-      // Merge: onhandQty is the same pallet so keep the max (sourceQty)
-      existing.onhandQty = Math.max(existing.onhandQty, item.sourceQty ?? item.qty);
+      // Merge: accumulate onhandQty across all records that share this source location/SKU/lot
+      // (matches the on-screen consolidation logic in AllocationReview.tsx)
+      if (item.sourceQty) {
+        existing.onhandQty += item.sourceQty;
+      }
       if (item.movement === "to_staging")   existing.stagingQty  += reqQty;
       if (item.movement === "to_pick_face") {
         existing.pickFaceQty += reqQty;

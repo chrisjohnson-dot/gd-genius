@@ -181,8 +181,9 @@ describe("Allocation Engine — Core", () => {
 // ─── Pallet logic ─────────────────────────────────────────────────────────────
 
 describe("Allocation Engine — Pallet Logic", () => {
-  it("takes full pallet from warehouse when pick face is empty; sends needed qty to staging, surplus to pick face", () => {
-    // Pallet has 48 units, order needs 20
+  it("takes only required qty from warehouse when no pick face is configured; surplus stays in warehouse", () => {
+    // Pallet has 48 units, order needs 20. No pick face configured (no pick face inventory, no pfLocationId).
+    // New behavior: pull only 20 to staging; leave remaining 28 in warehouse (no pick face move).
     const orders = [makeOrder(1, "1001", [{ sku: "SKU-A", qty: 20 }])];
     const inventory = [
       makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 48, locationId: WAREHOUSE_LOC_ID }),
@@ -199,8 +200,7 @@ describe("Allocation Engine — Pallet Logic", () => {
 
     expect(toStaging).toHaveLength(1);
     expect(toStaging[0]!.qty).toBe(20); // exactly what's needed
-    expect(toPickFace).toHaveLength(1);
-    expect(toPickFace[0]!.qty).toBe(28); // 48 - 20 = surplus back to pick face
+    expect(toPickFace).toHaveLength(0); // no pick face configured — surplus stays in warehouse
   });
 
   it("takes whole pallet when order needs exactly the full pallet qty (no surplus)", () => {
@@ -272,9 +272,9 @@ describe("Allocation Engine — Pallet Logic", () => {
     const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
     expect(stagingQty).toBe(30);
 
-    // 48 - 30 = 18 surplus → pick face
+    // No pick face configured — surplus stays in warehouse, not routed to pick face
     const pickFaceQty = toPickFace.reduce((s, p) => s + p.qty, 0);
-    expect(pickFaceQty).toBe(18);
+    expect(pickFaceQty).toBe(0);
   });
 
   it("pulls multiple pallets when demand exceeds one pallet", () => {
@@ -297,9 +297,9 @@ describe("Allocation Engine — Pallet Logic", () => {
     const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
     expect(stagingQty).toBe(90);
 
-    // First pallet fully consumed (48), second pallet: 90-48=42 needed, 48-42=6 surplus
+    // No pick face configured — second pallet surplus stays in warehouse
     const pickFaceQty = toPickFace.reduce((s, p) => s + p.qty, 0);
-    expect(pickFaceQty).toBe(6);
+    expect(pickFaceQty).toBe(0);
   });
 
   it("skips second order if staging pool is exhausted after first order assignment", () => {

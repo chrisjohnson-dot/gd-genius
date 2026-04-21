@@ -269,6 +269,12 @@ function planSkuMovements(
   locationPriorityPatterns: Array<{ pattern: string; label: string }> = [],
   /** Records already in staging — must be consumed BEFORE the pick face */
   stagingAlreadyThere: InventoryPoolRecord[] = [],
+  /**
+   * Whether a pick face is configured for this SKU.
+   * When false, warehouse pallet surplus stays in the warehouse location instead
+   * of being routed to a pick face.
+   */
+  hasPickFace = false,
 ): {
   stagingMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
   pickFaceMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
@@ -345,12 +351,19 @@ function planSkuMovements(
         // handle the remainder.
         break;
       }
-      // Pick face cannot cover the gap on its own, so we must split this pallet:
-      // send exactly `remaining` to staging and put the surplus to pick face.
+      // This pallet overshoots and the pick face cannot cover the gap.
+      // Send exactly `remaining` to staging.
       stagingMoves.push({ record: rec, qty: remaining });
       const surplus = palletQty - remaining;
-      pickFaceMoves.push({ record: rec, qty: surplus });
-      rec.remainingQty = 0;
+      if (surplus > 0 && hasPickFace) {
+        // A real pick face is configured — put the surplus there for replenishment.
+        pickFaceMoves.push({ record: rec, qty: surplus });
+        rec.remainingQty = 0;
+      } else {
+        // No pick face configured — leave the surplus in the warehouse location.
+        // Only reduce remainingQty by what we actually took.
+        rec.remainingQty = surplus;
+      }
       remaining = 0;
     }
   }
@@ -535,6 +548,10 @@ export function runAllocationEngine(
     // Resolve pick face location for replenishment
     const pfId = pickFaceLocationId ?? (pickFaceRecords[0]?.locationIdentifier?.id ?? 0);
     const pfName = pickFaceLocationName ?? (pickFaceRecords[0]?.locationIdentifier?.nameKey?.name ?? "Pick Face");
+    // A pick face is considered "configured" for this SKU if:
+    //   a) an explicit pick face location was provided by the caller, OR
+    //   b) there are inventory records already in a pick face location for this SKU
+    const hasPf = (pickFaceLocationId != null && pickFaceLocationId > 0) || pickFaceRecords.length > 0;
 
     const { stagingMoves, pickFaceMoves, satisfied } = planSkuMovements(
       totalNeeded,
@@ -546,6 +563,7 @@ export function runAllocationEngine(
       stagingLocationName,
       locationPriorityPatterns,
       stagingAlreadyThere,
+      hasPf,
     );
 
     // Always build the staging pool with whatever we could move, even if not fully satisfied.

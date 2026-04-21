@@ -159,9 +159,10 @@ export default function AllocationReview() {
           existing.toPickFace += item.qty;
           existing.pickFaceLocationName = item.toLocationName;
         }
-        // Use the largest sourceQty seen (same location, same pallet)
-        if (item.sourceQty && (!existing.sourceQty || item.sourceQty > existing.sourceQty)) {
-          existing.sourceQty = item.sourceQty;
+        // Accumulate sourceQty: the total on-hand across all pull list items for this row
+        // (multiple records from the same location contribute their own sourceQty)
+        if (item.sourceQty) {
+          existing.sourceQty = (existing.sourceQty ?? 0) + item.sourceQty;
         }
       } else {
         map.set(key, {
@@ -194,8 +195,8 @@ export default function AllocationReview() {
   const hasPickFaceMoves = consolidatedRows.some((r) => r.toPickFace > 0);
   const toStagingCount = pullListEarly.filter((p) => p.movement === "to_staging" || !p.movement).length;
   const toPickFaceCount = pullListEarly.filter((p) => p.movement === "to_pick_face").length;
-  // Derive the actual pick face location name for the column header
-  const pickFaceColLabel = consolidatedRows.find((r) => r.toPickFace > 0 && r.pickFaceLocationName && r.pickFaceLocationName !== "Pick Face")?.pickFaceLocationName ?? "Pick Face";
+  // Column headers: always use generic labels so location names don't appear in the header
+  const pickFaceColLabel = "Pick Face";
   const stagingColLabel = consolidatedRows.find((r) => r.toStaging > 0 && r.stagingLocationName && r.stagingLocationName !== "Staging")?.stagingLocationName ?? "Staging";
 
   // ── Early returns (after all hooks) ─────────────────────────────────────

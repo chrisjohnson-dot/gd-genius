@@ -236,6 +236,10 @@ export default function RunDetail() {
         row.qtyToPickFace += item.qty;
         if (!row.pickFaceLocationName) row.pickFaceLocationName = item.toLocationName;
       }
+      // Accumulate sourceQty across all records for this row
+      if (item.sourceQty) {
+        row.sourceQty = (row.sourceQty ?? 0) + item.sourceQty;
+      }
     }
   }
   const consolidatedRows = Array.from(consolidatedRowMap.values());

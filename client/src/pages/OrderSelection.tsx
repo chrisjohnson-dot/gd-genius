@@ -199,18 +199,33 @@ function CustomerOrdersPanel({
                     <p className="text-sm">No orders match "{searchQuery}"</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                    <table className="w-full text-sm border-collapse">
+                  <div className="max-h-[400px] overflow-y-auto">
+                    <table className="w-full text-sm border-collapse table-fixed">
+                      <colgroup>
+                        {/* checkbox */}
+                        <col style={{ width: "32px" }} />
+                        {/* TX # */}
+                        <col style={{ width: "90px" }} />
+                        {/* Date */}
+                        <col style={{ width: "68px" }} />
+                        {/* PO # */}
+                        <col style={{ width: "22%" }} />
+                        {/* Ship To — takes remaining space */}
+                        <col />
+                        {/* City */}
+                        <col style={{ width: "18%" }} />
+                        {/* Ln/Pcs */}
+                        <col style={{ width: "52px" }} />
+                      </colgroup>
                       <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                         <tr className="border-b border-border">
-                          <th className="w-8 px-2 py-2"></th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">TX #</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">Create Date</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">PO #</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">Ship To</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">City</th>
-                          <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">Lines</th>
-                          <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">Pcs</th>
+                          <th className="w-8 px-1 py-2"></th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">TX #</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">Date</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">PO #</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">Ship To</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">City</th>
+                          <th className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground">Ln/Pc</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -226,7 +241,7 @@ function CustomerOrdersPanel({
                           const state = shipTo?.state ?? "";
                           const cityState = city && state ? `${city}, ${state}` : city || state || "—";
                           const createdDate = order.readOnly.creationDate
-                            ? new Date(order.readOnly.creationDate).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "2-digit" })
+                            ? new Date(order.readOnly.creationDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                             : "—";
                           return (
                             <tr
@@ -238,29 +253,32 @@ function CustomerOrdersPanel({
                               }`}
                               onClick={() => onToggleOrder(extensivOrderId, customerRefNum, customer.id, customer.name, !isSelected)}
                             >
-                              <td className="px-2 py-2 text-center">
+                              <td className="px-1 py-2 text-center">
                                 <Checkbox
                                   checked={isSelected}
                                   onCheckedChange={(v) => onToggleOrder(extensivOrderId, customerRefNum, customer.id, customer.name, !!v)}
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               </td>
-                              <td className="px-3 py-2 font-medium text-xs whitespace-nowrap">
-                                <HighlightMatch text={String(extensivOrderId)} query={searchQuery} />
+                              <td className="px-2 py-2 font-medium text-xs">
+                                <div className="truncate"><HighlightMatch text={String(extensivOrderId)} query={searchQuery} /></div>
                                 {customerRefNum && (
-                                  <div className="text-[10px] text-muted-foreground">Ref: <HighlightMatch text={customerRefNum} query={searchQuery} /></div>
+                                  <div className="text-[10px] text-muted-foreground truncate">Ref: <HighlightMatch text={customerRefNum} query={searchQuery} /></div>
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{createdDate}</td>
-                              <td className="px-3 py-2 text-xs text-muted-foreground">
-                                {order.poNum ? <HighlightMatch text={order.poNum} query={searchQuery} /> : "—"}
+                              <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">{createdDate}</td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">
+                                <div className="truncate" title={order.poNum ?? undefined}>{order.poNum ? <HighlightMatch text={order.poNum} query={searchQuery} /> : "—"}</div>
                               </td>
-                              <td className="px-3 py-2 text-xs max-w-[160px] truncate" title={shipToName}>
-                                {shipToName ? <HighlightMatch text={shipToName} query={searchQuery} /> : "—"}
+                              <td className="px-2 py-2 text-xs">
+                                <div className="truncate" title={shipToName}>{shipToName ? <HighlightMatch text={shipToName} query={searchQuery} /> : "—"}</div>
                               </td>
-                              <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{cityState}</td>
-                              <td className="px-3 py-2 text-center text-xs">{lineCount > 0 ? lineCount : "—"}</td>
-                              <td className="px-3 py-2 text-center text-xs">{totalPieces > 0 ? totalPieces : "—"}</td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">
+                                <div className="truncate" title={cityState}>{cityState}</div>
+                              </td>
+                              <td className="px-2 py-2 text-center text-xs whitespace-nowrap">
+                                {lineCount > 0 ? lineCount : "—"}/{totalPieces > 0 ? totalPieces : "—"}
+                              </td>
                             </tr>
                           );
                         })}

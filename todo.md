@@ -1506,3 +1506,6 @@
 - [ ] Dashboard: Requires Attention section flagging empty/low pick faces for SKUs with available warehouse replenishment stock
 - [ ] Bug: SKUs with their own pick face location (K18-70002, K18-00086) are being routed to a different SKU's pick face (K18-31008) instead of their own
 - [ ] Bug: Warehouse pull sheet On Hand qty is showing 2x the actual quantity
+
+- [x] LocationConfig: fix broken No Lot Mixing toggle slider (saveRuleMutation missing required locationPriorityPatterns field causes silent error)
+- [x] LocationConfig: add multi-select checkboxes on location rows with a bulk delete button

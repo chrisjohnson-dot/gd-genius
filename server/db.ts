@@ -265,6 +265,13 @@ export async function deleteLocationConfig(id: number): Promise<void> {
   await db.delete(locationConfigs).where(eq(locationConfigs.id, id));
 }
 
+export async function deleteLocationConfigsByIds(ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(locationConfigs).where(inArray(locationConfigs.id, ids));
+}
+
 export async function deleteLocationConfigsByConfigAndCustomer(
   configId: number,
   customerId: number

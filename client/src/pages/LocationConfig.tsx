@@ -1,15 +1,24 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, CheckCircle2, FlaskConical, Loader2, MapPin, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  FlaskConical,
+  Loader2,
+  MapPin,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Switch } from "@/components/ui/switch";
 
 type LocationType = "staging" | "pick_face" | "warehouse";
 
@@ -31,17 +40,11 @@ const locTypeLabel: Record<LocationType, string> = {
   warehouse: "Warehouse",
 };
 
-const locTypeBadge: Record<LocationType, string> = {
-  staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  warehouse: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-};
-
 // ─── Auto-Populate Dialog ─────────────────────────────────────────────────────
 interface StagingMapping {
   customerId: number;
   customerName: string;
-  stagingPrefix: string; // e.g. "HR" matches "HR-Stage", "HR001-Stage", etc.
+  stagingPrefix: string;
 }
 
 function AutoPopulateDialog({
@@ -143,7 +146,6 @@ function AutoPopulateDialog({
     seedMutation.mutate(buildPayload(false));
   };
 
-  // Initialize mappings when customers load
   if (customers && mappings.length === 0 && customers.length > 0) {
     initMappings(customers);
   }
@@ -160,7 +162,6 @@ function AutoPopulateDialog({
 
         {step === "configure" && (
           <div className="space-y-5 py-2">
-            {/* What is staging */}
             <div className="p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 rounded-md text-xs text-purple-800 dark:text-purple-300 space-y-1">
               <p className="font-semibold">What is a staging location?</p>
               <p>
@@ -170,7 +171,6 @@ function AutoPopulateDialog({
               </p>
             </div>
 
-            {/* Step 1: Select Facility */}
             <div className="space-y-2">
               <Label className="text-sm font-semibold">1. Select Facility</Label>
               {facilitiesLoading ? (
@@ -194,7 +194,6 @@ function AutoPopulateDialog({
               )}
             </div>
 
-            {/* Step 2: Staging prefix per customer */}
             {selectedFacilityId && (
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">2. Staging Location Prefix per Client</Label>
@@ -254,48 +253,25 @@ function AutoPopulateDialog({
             {previewResult.seeded === 0 ? (
               <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md text-xs text-red-800 dark:text-red-300">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>
-                  No staging locations found. Make sure your staging locations in Extensiv end with <code>-Stage</code> or <code>-Staging</code>
-                  (e.g. <code>ONCO-Staging</code>, <code>HR-Stage</code>) and that the prefix you entered matches the beginning of the location name.
-                </span>
+                <span>No staging locations found. Check your prefixes and try again.</span>
               </div>
             ) : (
-              <>
-                <div>
-                  <p className="text-sm font-semibold mb-2">Staging locations to be saved:</p>
-                  <div className="space-y-1 max-h-64 overflow-y-auto text-xs">
-                    {previewResult.preview.map((item, i) => (
-                      <div key={i} className="flex items-center gap-2 py-1.5 border-b border-border last:border-0">
-                        <Badge className={locTypeBadge["staging"]}>Staging</Badge>
-                        <span className="font-mono font-medium">{item.locationName}</span>
-                        <span className="text-muted-foreground">→ {item.customerName}</span>
-                        <span className="text-muted-foreground ml-auto text-xs">ID: {item.locationId}</span>
-                      </div>
-                    ))}
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {previewResult.preview.map((item, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                    <span className="font-medium">{item.customerName}</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span>{item.locationName}</span>
+                    <span className="text-muted-foreground">(ID: {item.locationId})</span>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md text-xs text-amber-800 dark:text-amber-300">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>
-                    Confirming will save {previewResult.seeded} staging location{previewResult.seeded !== 1 ? "s" : ""}.
-                    Existing staging entries for these customers will not be deleted — use the delete buttons on the main page to clean up duplicates if needed.
-                  </span>
-                </div>
-              </>
+                ))}
+              </div>
             )}
           </div>
         )}
 
-        {step === "done" && (
-          <div className="text-center py-8">
-            <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
-            <p className="font-semibold">Staging locations saved successfully!</p>
-          </div>
-        )}
-
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
           {step === "configure" && (
             <Button
               onClick={handlePreview}
@@ -347,6 +323,14 @@ export default function LocationConfig() {
     onSuccess: () => { utils.locations.list.invalidate(); toast.success("Location deleted"); },
     onError: (e) => toast.error(e.message),
   });
+  const bulkDeleteMutation = trpc.locations.bulkDelete.useMutation({
+    onSuccess: (res) => {
+      utils.locations.list.invalidate();
+      toast.success(`Deleted ${res.deleted} location${res.deleted !== 1 ? "s" : ""}`);
+      setSelectedIds(new Set());
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const saveRuleMutation = trpc.customerRules.save.useMutation({
     onSuccess: () => { utils.customerRules.list.invalidate(); toast.success("Rule saved"); },
     onError: (e) => toast.error(e.message),
@@ -355,6 +339,8 @@ export default function LocationConfig() {
   const [open, setOpen] = useState(false);
   const [autoPopulateOpen, setAutoPopulateOpen] = useState(false);
   const [form, setForm] = useState<Partial<LocationForm>>({});
+  // Multi-select state: set of location IDs
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const openNew = () => {
     if (!selectedConfigId) { toast.error("Select a configuration first"); return; }
@@ -395,6 +381,20 @@ export default function LocationConfig() {
     });
   };
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected location${selectedIds.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    bulkDeleteMutation.mutate({ ids: Array.from(selectedIds) });
+  };
+
   // Group locations by customer
   const grouped = (locations ?? []).reduce<Record<string, typeof locations>>((acc, loc) => {
     const key = `${loc.customerId}:${loc.customerName ?? loc.customerId}`;
@@ -403,9 +403,12 @@ export default function LocationConfig() {
     return acc;
   }, {});
 
+  const allLocIds = (locations ?? []).map((l) => l.id);
+  const allSelected = allLocIds.length > 0 && allLocIds.every((id) => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0;
+
   return (
     <>
-
       <div className="p-7 space-y-6 max-w-4xl page-enter">
         <div className="flex items-center justify-between">
           <div>
@@ -433,33 +436,33 @@ export default function LocationConfig() {
 
         {/* Config selector */}
         <div className="bg-card border border-border rounded-2xl px-5 py-4">
-            <div className="flex items-center gap-4">
-              <Label className="shrink-0">Warehouse:</Label>
-              <Select
-                value={selectedConfigId ? String(selectedConfigId) : ""}
-                onValueChange={(v) => setSelectedConfigId(Number(v))}
-              >
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Select a warehouse..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {(configs ?? []).map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex items-center gap-4">
+            <Label className="shrink-0">Warehouse:</Label>
+            <Select
+              value={selectedConfigId ? String(selectedConfigId) : ""}
+              onValueChange={(v) => { setSelectedConfigId(Number(v)); setSelectedIds(new Set()); }}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Select a warehouse..." />
+              </SelectTrigger>
+              <SelectContent>
+                {(configs ?? []).map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* How staging works */}
         <div className="rounded-2xl border px-5 py-4" style={{ background: "#f5f3ff", borderColor: "#ddd6fe" }}>
-            <p className="text-sm font-semibold mb-1" style={{ color: "#5b21b6" }}>How Staging Works</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              During allocation, inventory moves from <strong>warehouse locations</strong> and <strong>pick face locations</strong> into
-              the client's <strong>staging area</strong>. Once the order is packed and shipped, staging is empty again.
-              Each client needs exactly one staging location configured here — this is the Extensiv location ID that
-              the allocation engine will move inventory into.
-            </p>
+          <p className="text-sm font-semibold mb-1" style={{ color: "#5b21b6" }}>How Staging Works</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            During allocation, inventory moves from <strong>warehouse locations</strong> and <strong>pick face locations</strong> into
+            the client's <strong>staging area</strong>. Once the order is packed and shipped, staging is empty again.
+            Each client needs exactly one staging location configured here — this is the Extensiv location ID that
+            the allocation engine will move inventory into.
+          </p>
         </div>
 
         {!selectedConfigId ? (
@@ -475,67 +478,128 @@ export default function LocationConfig() {
           </div>
         ) : Object.keys(grouped).length === 0 ? (
           <div className="bg-card border border-border rounded-2xl py-10 text-center">
-              <MapPin className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-muted-foreground text-sm">No staging locations configured yet.</p>
-              <div className="flex items-center justify-center gap-2 mt-3">
-                <Button variant="outline" size="sm" onClick={() => setAutoPopulateOpen(true)}>
-                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Auto-Detect from Extensiv
-                </Button>
-                <Button variant="outline" size="sm" onClick={openNew}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Manually
-                </Button>
-              </div>
+            <MapPin className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+            <p className="text-muted-foreground text-sm">No staging locations configured yet.</p>
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <Button variant="outline" size="sm" onClick={() => setAutoPopulateOpen(true)}>
+                <Sparkles className="h-3.5 w-3.5 mr-1" /> Auto-Detect from Extensiv
+              </Button>
+              <Button variant="outline" size="sm" onClick={openNew}>
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Manually
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {Object.entries(grouped).map(([key, locs]) => {
-              const [customerIdStr, customerName] = key.split(":");
-              const customerId = Number(customerIdStr);
-              const rule = (customerRulesList ?? []).find((r) => r.customerId === customerId);
-              const noLotMixing = rule?.noLotMixing ?? false;
+          <>
+            {/* Bulk action toolbar */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                    checked={allSelected}
+                    onChange={() => {
+                      if (allSelected) {
+                        setSelectedIds(new Set());
+                      } else {
+                        setSelectedIds(new Set(allLocIds));
+                      }
+                    }}
+                  />
+                  {someSelected ? `${selectedIds.size} selected` : "Select all"}
+                </label>
+              </div>
+              {someSelected && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleteMutation.isPending}
+                >
+                  {bulkDeleteMutation.isPending
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Trash2 className="h-3.5 w-3.5" />}
+                  Delete {selectedIds.size} location{selectedIds.size !== 1 ? "s" : ""}
+                </Button>
+              )}
+            </div>
 
-              return (
-                <div key={key} className="bg-card border border-border rounded-2xl overflow-hidden">
-                  <div className="px-5 py-4 border-b border-border">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] font-bold">
-                        {customerName}
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">(ID: {customerIdStr})</span>
-                      </span>
-                      {/* Lot Mixing Rule Toggle */}
-                      <div className="flex items-center gap-2 text-sm">
-                        <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">No Lot Mixing</span>
-                        <Switch
-                          checked={noLotMixing}
-                          onCheckedChange={(checked) => {
-                            if (!selectedConfigId) return;
-                            const existingRule = (customerRulesList ?? []).find((r) => r.customerId === customerId);
-                            saveRuleMutation.mutate({
-                              configId: selectedConfigId,
-                              customerId,
-                              customerName: customerName ?? undefined,
-                              noLotMixing: checked,
-                              autoRun: existingRule?.autoRun ?? false,
-                            });
-                          }}
-                        />
-                        <Badge
-                          className={noLotMixing
-                            ? "text-xs bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-0"
-                            : "text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-0"}
-                        >
-                          {noLotMixing ? "Enforced" : "Allowed"}
-                        </Badge>
+            <div className="space-y-4">
+              {Object.entries(grouped).map(([key, locs]) => {
+                const [customerIdStr, customerName] = key.split(":");
+                const customerId = Number(customerIdStr);
+                const rule = (customerRulesList ?? []).find((r) => r.customerId === customerId);
+                const noLotMixing = rule?.noLotMixing ?? false;
+
+                return (
+                  <div key={key} className="bg-card border border-border rounded-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[15px] font-bold">
+                          {customerName}
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">(ID: {customerIdStr})</span>
+                        </span>
+                        {/* Lot Mixing Rule Toggle */}
+                        <div className="flex items-center gap-2 text-sm">
+                          <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">No Lot Mixing</span>
+                          <Switch
+                            checked={noLotMixing}
+                            onCheckedChange={(checked) => {
+                              if (!selectedConfigId) return;
+                              saveRuleMutation.mutate({
+                                configId: selectedConfigId,
+                                customerId,
+                                customerName: customerName ?? undefined,
+                                noLotMixing: checked,
+                                autoRun: rule?.autoRun ?? false,
+                                locationPriorityPatterns: (rule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [],
+                                locationExclusionPatterns: (rule?.locationExclusionPatterns as Array<{ pattern: string; label: string }> | null) ?? [],
+                                minShelfLifeDays: rule?.minShelfLifeDays ?? null,
+                                notes: rule?.notes ?? null,
+                              });
+                            }}
+                          />
+                          <Badge
+                            className={noLotMixing
+                              ? "text-xs bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-0"
+                              : "text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-0"}
+                          >
+                            {noLotMixing ? "Enforced" : "Allowed"}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div>
                     <div className="divide-y divide-border">
                       {(locs ?? []).map((loc) => (
-                        <div key={loc.id} className="px-5 py-3 flex items-center justify-between">
+                        <div
+                          key={loc.id}
+                          className={`px-5 py-3 flex items-center justify-between transition-colors ${
+                            selectedIds.has(loc.id) ? "bg-primary/5" : ""
+                          }`}
+                        >
                           <div className="flex items-center gap-3">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold" style={loc.locationType === 'staging' ? {background:'#ede9fe',color:'#6d28d9'} : loc.locationType === 'pick_face' ? {background:'#dbeafe',color:'#1d4ed8'} : {background:'#ffedd5',color:'#c2410c'}}>{locTypeLabel[loc.locationType]}</span>
+                            {/* Row checkbox */}
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border accent-primary cursor-pointer shrink-0"
+                              checked={selectedIds.has(loc.id)}
+                              onChange={() => toggleSelect(loc.id)}
+                            />
+                            <span
+                              className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold"
+                              style={
+                                loc.locationType === "staging"
+                                  ? { background: "#ede9fe", color: "#6d28d9" }
+                                  : loc.locationType === "pick_face"
+                                  ? { background: "#dbeafe", color: "#1d4ed8" }
+                                  : { background: "#ffedd5", color: "#c2410c" }
+                              }
+                            >
+                              {locTypeLabel[loc.locationType]}
+                            </span>
                             <div>
                               <p className="text-sm font-medium">{loc.locationName}</p>
                               <p className="text-xs text-muted-foreground">
@@ -551,7 +615,9 @@ export default function LocationConfig() {
                               variant="ghost"
                               size="sm"
                               className="text-destructive hover:text-destructive"
-                              onClick={() => { if (confirm("Delete this staging location?")) deleteMutation.mutate({ id: loc.id }); }}
+                              onClick={() => {
+                                if (confirm("Delete this location?")) deleteMutation.mutate({ id: loc.id });
+                              }}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -560,10 +626,10 @@ export default function LocationConfig() {
                       ))}
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -581,7 +647,7 @@ export default function LocationConfig() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{form.id ? "Edit Staging Location" : "Add Staging Location"}</DialogTitle>
+            <DialogTitle>{form.id ? "Edit Location" : "Add Location"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-xs text-muted-foreground">
@@ -640,7 +706,6 @@ export default function LocationConfig() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </>
   );
 }

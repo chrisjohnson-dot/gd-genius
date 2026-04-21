@@ -20,6 +20,7 @@ import {
   getLocationConfigsByCustomer,
   upsertLocationConfig,
   deleteLocationConfig,
+  deleteLocationConfigsByIds,
   deleteLocationConfigsByConfigAndCustomer,
   createAllocationRun,
   updateAllocationRun,
@@ -407,6 +408,12 @@ const _appRouter = router({
       .mutation(async ({ input }) => {
         await deleteLocationConfig(input.id);
         return { success: true };
+      }),
+    bulkDelete: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()).min(1) }))
+      .mutation(async ({ input }) => {
+        await deleteLocationConfigsByIds(input.ids);
+        return { success: true, deleted: input.ids.length };
       }),
 
     bulkSave: protectedProcedure

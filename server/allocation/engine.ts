@@ -125,9 +125,69 @@ export interface AllocationSummaryItem {
 
 type InventoryPoolRecord = ExtensivInventoryRecord & { remainingQty: number };
 
-function getInventoryPriority(record: ExtensivInventoryRecord): number {
+// ─── Order note parsing ───────────────────────────────────────────────────────
+
+export type SortOverride = "fefo" | "lifo" | "fifo";
+
+export interface OrderNoteRules {
+  /** Explicit sort order extracted from notes (overrides FEFO default) */
+  sortOverride?: SortOverride;
+  /** Minimum remaining shelf life in days extracted from notes (overrides customer rule) */
+  minShelfLifeDays?: number;
+}
+
+/**
+ * Parse free-text order notes for FEFO/LIFO/FIFO overrides and minimum shelf
+ * life requirements.
+ *
+ * Recognised patterns (case-insensitive):
+ *   - "LIFO" or "no FEFO"            → sortOverride = "lifo"
+ *   - "FIFO" or "no expiry"          → sortOverride = "fifo"
+ *   - "min 90 days" / "min 90d"      → minShelfLifeDays = 90
+ *   - "min shelf life: 120"          → minShelfLifeDays = 120
+ *   - "minimum 60 days remaining"    → minShelfLifeDays = 60
+ */
+export function parseOrderNoteRules(notes: string | undefined | null): OrderNoteRules {
+  if (!notes) return {};
+  const result: OrderNoteRules = {};
+
+  // Sort override
+  if (/\bLIFO\b/i.test(notes) || /no\s+FEFO/i.test(notes)) {
+    result.sortOverride = "lifo";
+  } else if (/\bFIFO\b/i.test(notes) || /no\s+expir/i.test(notes)) {
+    result.sortOverride = "fifo";
+  }
+
+  // Minimum shelf life
+  const shelfMatch =
+    notes.match(/min(?:imum)?\s+shelf\s+life[:\s]+([\d]+)/i) ||
+    notes.match(/min(?:imum)?\s+([\d]+)\s*d(?:ays?)?\s+(?:remaining|shelf)/i) ||
+    notes.match(/min\s+([\d]+)\s*d(?:ays?)?/i) ||
+    notes.match(/([\d]+)\s*d(?:ays?)?\s+(?:remaining|shelf\s+life)/i);
+  if (shelfMatch) {
+    const days = parseInt(shelfMatch[1]!, 10);
+    if (!isNaN(days) && days > 0) result.minShelfLifeDays = days;
+  }
+
+  return result;
+}
+
+// ─── Inventory sort helpers ───────────────────────────────────────────────────
+
+function getInventoryPriority(record: ExtensivInventoryRecord, sortOverride?: SortOverride): number {
+  if (sortOverride === "lifo") {
+    // LIFO: latest expiry first; no-expiry records come last (highest receiveItemId first)
+    if (record.expirationDate) {
+      return -new Date(record.expirationDate).getTime();
+    }
+    return 1e15 - (record.receiveItemId ?? 0);
+  }
+  if (sortOverride === "fifo") {
+    // FIFO: ignore expiry, sort by receiveItemId ascending (oldest received first)
+    return record.receiveItemId ?? Number.MAX_SAFE_INTEGER;
+  }
+  // Default: FEFO — earliest expiry first; no-expiry falls back to lowest receiveItemId
   if (record.expirationDate) {
-    // Has expiry: sort by expiry date ascending (FEFO)
     return new Date(record.expirationDate).getTime();
   }
   // No expiry: fall back to receiveItemId ascending (oldest receive first = FIFO).
@@ -137,8 +197,21 @@ function getInventoryPriority(record: ExtensivInventoryRecord): number {
   return 1e15 + (record.receiveItemId ?? Number.MAX_SAFE_INTEGER);
 }
 
-function sortFEFO(records: InventoryPoolRecord[]): InventoryPoolRecord[] {
-  return [...records].sort((a, b) => getInventoryPriority(a) - getInventoryPriority(b));
+function sortFEFO(records: InventoryPoolRecord[], sortOverride?: SortOverride): InventoryPoolRecord[] {
+  return [...records].sort((a, b) => getInventoryPriority(a, sortOverride) - getInventoryPriority(b, sortOverride));
+}
+
+/**
+ * Filter inventory records that do not meet the minimum remaining shelf life.
+ * Records without an expiry date are always kept (they have no known expiry).
+ */
+function filterByShelfLife(records: InventoryPoolRecord[], minShelfLifeDays: number | undefined | null): InventoryPoolRecord[] {
+  if (!minShelfLifeDays || minShelfLifeDays <= 0) return records;
+  const cutoff = Date.now() + minShelfLifeDays * 86_400_000;
+  return records.filter((r) => {
+    if (!r.expirationDate) return true; // no expiry = always eligible
+    return new Date(r.expirationDate).getTime() >= cutoff;
+  });
 }
 
 // ─── SKU-level pallet decision ────────────────────────────────────────────────

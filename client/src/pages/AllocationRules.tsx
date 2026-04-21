@@ -335,6 +335,47 @@ export default function AllocationRules() {
         </div>
       </div>
 
+      {/* ── General Allocation Rules ──────────────────────────────────── */}
+      <div className="rounded-xl border border-border bg-muted/30 p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Global Rules — Applied to All Clients</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2 text-sm text-foreground">
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">1.</span>
+            <span><strong>FEFO (First Expired, First Out)</strong> — inventory with the earliest expiry date is always allocated first.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">2.</span>
+            <span><strong>Lowest MU ID fallback</strong> — when no expiry date exists, the oldest received unit (lowest receive item ID) is used instead.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">3.</span>
+            <span><strong>Staging-first priority</strong> — inventory already in the staging location is consumed before pulling from the pick face or warehouse.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">4.</span>
+            <span><strong>Whole-pallet warehouse pulls</strong> — warehouse pallets are pulled in full; a pallet is only split when the pick face cannot cover the remaining gap.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">5.</span>
+            <span><strong>Order note overrides</strong> — notes containing <code className="text-xs bg-muted px-1 rounded">LIFO</code>, <code className="text-xs bg-muted px-1 rounded">FIFO</code>, <code className="text-xs bg-muted px-1 rounded">no FEFO</code>, or <code className="text-xs bg-muted px-1 rounded">min N days</code> override the default sort or shelf-life floor for that order only.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">6.</span>
+            <span><strong>Minimum shelf life</strong> — inventory expiring within the customer's configured minimum shelf life window is excluded from allocation entirely.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">7.</span>
+            <span><strong>Location exclusions</strong> — locations matching a customer's exclusion patterns are never allocated from, regardless of available quantity.</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="mt-0.5 shrink-0 text-primary">8.</span>
+            <span><strong>No lot mixing</strong> — when enabled per client, a single order line will not be filled from multiple lot codes.</span>
+          </div>
+        </div>
+      </div>
+
       {isLoading && (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (

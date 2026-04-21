@@ -104,6 +104,12 @@ export const customerRules = mysqlTable("customer_rules", {
    * Example: [{"pattern":"^1[01]","label":"Building 1 (exclude)"}]
    */
   locationExclusionPatterns: json("locationExclusionPatterns").$type<Array<{ pattern: string; label: string }>>().default([]),
+  /**
+   * Minimum remaining shelf life (days) required for inventory to be eligible for allocation.
+   * Inventory records whose expiry date is within this many days of today are excluded.
+   * null = no minimum (accept any expiry date).
+   */
+  minShelfLifeDays: int("minShelfLifeDays"),
   notes: text("notes"),                                         // Free-form allocation notes / instructions
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

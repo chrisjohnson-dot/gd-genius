@@ -658,6 +658,12 @@ export default function AllocationReview() {
                               <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{item.qty.toLocaleString()}</td>
                             </tr>
                           ))}
+                        <tr className="border-t-2 border-border bg-muted/40">
+                              <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground" colSpan={7}>Total</td>
+                              <td className="px-4 py-2.5 text-right font-bold tabular-nums">
+                                {pullListEarly.reduce((sum, item) => sum + item.qty, 0).toLocaleString()}
+                              </td>
+                            </tr>
                       </tbody>
                     </table>
                   </div>

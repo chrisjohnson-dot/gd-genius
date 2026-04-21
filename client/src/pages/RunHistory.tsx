@@ -13,11 +13,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { History, Loader2, Printer, Search, Trash2, X } from "lucide-react";
+import { History, Loader2, Printer, Search, Trash2, X, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-function VerificationBadge({ status }: { status: string | null | undefined }) {
+function VerificationBadge({ status, onClick }: { status: string | null | undefined; onClick?: () => void }) {
   if (!status || status === "pending") {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
@@ -33,10 +34,13 @@ function VerificationBadge({ status }: { status: string | null | undefined }) {
     failed:   { bg: "#fee2e2", text: "#ef4444", dot: "#ef4444", label: "Failed" },
   };
   const s = map[status] ?? { bg: "#f3f4f6", text: "#6b7280", dot: "#9ca3af", label: status };
+  const isClickable = onClick && status !== "verified";
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold"
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold${isClickable ? " cursor-pointer hover:opacity-80 underline decoration-dotted" : ""}`}
       style={{ background: s.bg, color: s.text }}
+      onClick={isClickable ? onClick : undefined}
+      title={isClickable ? "Click to view details" : undefined}
     >
       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.dot }} />
       {s.label}
@@ -143,6 +147,7 @@ export default function RunHistory() {
   });
 
   const [, navigate] = useLocation();
+  const [mismatchRunId, setMismatchRunId] = useState<number | null>(null);
 
   function handlePrintDocuments(runId: number, alreadyPrinted: boolean) {
     const firstPrintParam = alreadyPrinted ? "" : "?firstPrint=1";
@@ -317,7 +322,10 @@ export default function RunHistory() {
                           <div className="flex flex-col gap-1">
                             <StatusPill status={run.status} />
                             {run.status === "confirmed" && (
-                              <VerificationBadge status={(run as typeof run & { verificationStatus?: string }).verificationStatus} />
+                              <VerificationBadge
+                                status={(run as typeof run & { verificationStatus?: string }).verificationStatus}
+                                onClick={() => setMismatchRunId(run.id)}
+                              />
                             )}
                           </div>
                         </td>
@@ -400,6 +408,9 @@ export default function RunHistory() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Mismatch Detail Modal */}
+      <MismatchDetailModal runId={mismatchRunId} onClose={() => setMismatchRunId(null)} />
+
       {/* Bulk delete dialog */}
       <AlertDialog open={pendingBulkDelete} onOpenChange={(open) => { if (!open && !bulkDeleting) setPendingBulkDelete(false); }}>
         <AlertDialogContent>
@@ -427,5 +438,108 @@ export default function RunHistory() {
       </AlertDialog>
 
     </>
+  );
+}
+// ─── Mismatch Detail Modal ────────────────────────────────────────────────────
+function MismatchDetailModal({ runId, onClose }: { runId: number | null; onClose: () => void }) {
+  const { data, isLoading } = trpc.allocation.mismatchDetail.useQuery(
+    { runId: runId! },
+    { enabled: runId !== null }
+  );
+
+  const statusIcon = (match: boolean) =>
+    match
+      ? <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "#059669" }} />
+      : <XCircle className="h-4 w-4 shrink-0" style={{ color: "#ef4444" }} />;
+
+  const orderStatusColor: Record<string, string> = {
+    verified: "#059669",
+    partial: "#b45309",
+    mismatch: "#ef4444",
+    failed: "#ef4444",
+  };
+
+  return (
+    <Dialog open={runId !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Verification Detail — Run #{runId}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {!isLoading && data && data.orders.length === 0 && (
+          <p className="text-sm text-muted-foreground py-6 text-center">No verification detail available for this run.</p>
+        )}
+
+        {!isLoading && data && data.orders.length > 0 && (
+          <div className="space-y-4 mt-2">
+            {data.verifiedAt && (
+              <p className="text-xs text-muted-foreground">
+                Verified at {new Date(data.verifiedAt).toLocaleString()}
+              </p>
+            )}
+            {data.orders.map((order) => (
+              <div key={order.orderId} className="border border-border rounded-xl overflow-hidden">
+                {/* Order header */}
+                <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">TX #{order.referenceNum}</span>
+                    {order.error && (
+                      <span className="text-xs text-muted-foreground">— {order.error}</span>
+                    )}
+                  </div>
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded"
+                    style={{
+                      background: order.status === "verified" ? "#d1fae5" : order.status === "partial" ? "#fef9c3" : "#fee2e2",
+                      color: orderStatusColor[order.status] ?? "#6b7280",
+                    }}
+                  >
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                    {order.fullyAllocated === false && " — Not fully allocated"}
+                  </span>
+                </div>
+
+                {/* SKU breakdown */}
+                {order.skuResults.length > 0 && (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20">
+                        <th className="px-4 py-2 text-left font-semibold text-muted-foreground w-6"></th>
+                        <th className="px-4 py-2 text-left font-semibold text-muted-foreground">SKU</th>
+                        <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Approved Qty</th>
+                        <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Extensiv Qty</th>
+                        <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Difference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {order.skuResults.map((sku, i) => (
+                        <tr key={i} className={`border-b border-border last:border-0 ${!sku.match ? "bg-red-50 dark:bg-red-950/20" : ""}`}>
+                          <td className="px-4 py-2">{statusIcon(sku.match)}</td>
+                          <td className="px-4 py-2 font-mono">{sku.sku}</td>
+                          <td className="px-4 py-2 text-right tabular-nums">{sku.approvedQty.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right tabular-nums">{sku.extensivQty.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-semibold" style={{ color: sku.extensivQty < sku.approvedQty ? "#ef4444" : sku.extensivQty > sku.approvedQty ? "#b45309" : "#059669" }}>
+                            {sku.extensivQty - sku.approvedQty > 0 ? "+" : ""}{(sku.extensivQty - sku.approvedQty).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1828,6 +1828,28 @@ const _appRouter = router({
         return { success: true };
       }),
 
+    mismatchDetail: protectedProcedure
+      .input(z.object({ runId: z.number() }))
+      .query(async ({ input }) => {
+        const run = await getAllocationRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        // verificationDetail is stored as OrderVerificationResult[] on the run
+        const detail = (run.verificationDetail ?? []) as Array<{
+          orderId: number;
+          referenceNum: string;
+          status: string;
+          fullyAllocated: boolean | null;
+          skuResults: Array<{ sku: string; approvedQty: number; extensivQty: number; match: boolean }>;
+          error?: string;
+        }>;
+        return {
+          runId: run.id,
+          verificationStatus: run.verificationStatus,
+          verifiedAt: run.verifiedAt,
+          orders: detail,
+        };
+      }),
+
     // ─── Open Orders Dashboard ──────────────────────────────────────────────
     openOrders: protectedProcedure
       .input(

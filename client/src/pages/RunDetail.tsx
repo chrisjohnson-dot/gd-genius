@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import {
   AlertCircle,
   ArrowLeft,
+  CheckCheck,
   CheckCircle2,
   FileDown,
   Loader2,
@@ -99,6 +100,38 @@ const locTypeBadge: Record<string, { bg: string; text: string }> = {
   pick_face: { bg: "#dbeafe", text: "#1d4ed8" },
   warehouse: { bg: "#ffedd5", text: "#c2410c" },
 };
+
+function MarkResolvedButton({ runId }: { runId: number }) {
+  const utils = trpc.useUtils();
+  const [loading, setLoading] = useState(false);
+  const resolveMutation = trpc.allocation.resolveVerification.useMutation({
+    onSuccess: () => {
+      toast.success("Verification flag cleared — run marked as resolved.");
+      utils.allocation.runDetail.invalidate({ runId });
+      utils.allocation.history.invalidate();
+      utils.allocation.unresolvedVerificationCount.invalidate();
+    },
+    onError: (e) => toast.error(`Failed to resolve: ${e.message}`),
+    onSettled: () => setLoading(false),
+  });
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="gap-1.5 ml-2"
+      style={{ borderColor: "#86efac", color: "#15803d", background: "#f0fdf4" }}
+      disabled={loading}
+      onClick={() => {
+        if (!confirm("Mark this run as resolved? This will clear the verification flag.")) return;
+        setLoading(true);
+        resolveMutation.mutate({ runId });
+      }}
+    >
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+      Mark Resolved
+    </Button>
+  );
+}
 
 function ReVerifyButton({ runId }: { runId: number }) {
   const utils = trpc.useUtils();
@@ -368,6 +401,7 @@ export default function RunDetail() {
                   </span>
                   {verifiedAt && <span className="ml-auto text-xs text-red-500">{new Date(verifiedAt).toLocaleString()}</span>}
                   <ReVerifyButton runId={run.id} />
+                  <MarkResolvedButton runId={run.id} />
                 </div>
                 <div className="divide-y divide-red-100 max-h-60 overflow-y-auto">
                   {problemOrders.map((o) => (
@@ -414,11 +448,104 @@ export default function RunDetail() {
         {/* Tabs */}
         <Tabs defaultValue="summary">
           <TabsList className="bg-muted/60 rounded-xl">
+            <TabsTrigger value="moves">Move Summary ({pullList.length})</TabsTrigger>
             <TabsTrigger value="pull">Pull List ({pullList.length})</TabsTrigger>
             <TabsTrigger value="pack">Pack List ({packList.length})</TabsTrigger>
             <TabsTrigger value="summary">Order Summary ({allocatedOrders.length})</TabsTrigger>
             <TabsTrigger value="orders">All Orders ({orders.length})</TabsTrigger>
           </TabsList>
+
+          {/* ── Move Summary ── */}
+          <TabsContent value="moves" className="mt-4">
+            {pullList.length === 0 ? (
+              <div className="bg-card border border-border rounded-2xl py-12 text-center text-muted-foreground">
+                <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No inventory movements for this run.</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                  <h3 className="text-[15px] font-bold flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-purple-500" />Move Summary
+                  </h3>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" />
+                      {toStagingMoves.length} to staging
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />
+                      {toPickFaceMoves.length} to pick face
+                    </span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full data-table">
+                    <thead>
+                      <tr>
+                        <th className="text-left px-4 py-3 font-medium">Type</th>
+                        <th className="text-left px-4 py-3 font-medium">SKU</th>
+                        <th className="text-left px-4 py-3 font-medium">Description</th>
+                        <th className="text-left px-4 py-3 font-medium">Lot</th>
+                        <th className="text-left px-4 py-3 font-medium">Expiry</th>
+                        <th className="text-left px-4 py-3 font-medium">From</th>
+                        <th className="text-left px-4 py-3 font-medium">To</th>
+                        <th className="text-right px-4 py-3 font-medium">Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pullList
+                        .slice()
+                        .sort((a, b) => {
+                          const typeOrder = (m: string) => m === "to_staging" ? 0 : 1;
+                          if (typeOrder(a.movement) !== typeOrder(b.movement)) return typeOrder(a.movement) - typeOrder(b.movement);
+                          return a.sku.localeCompare(b.sku);
+                        })
+                        .map((item, idx) => (
+                          <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/30">
+                            <td className="px-4 py-2.5">
+                              {item.movement === "to_staging" ? (
+                                <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">Staging</span>
+                              ) : (
+                                <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">Pick Face</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs font-semibold">{item.sku}</td>
+                            <td className="px-4 py-2.5 text-muted-foreground max-w-[180px] truncate text-xs">{item.description ?? "—"}</td>
+                            <td className="px-4 py-2.5 font-mono text-xs">{item.lotNumber ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-xs">
+                              {item.expirationDate
+                                ? new Date(item.expirationDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
+                                : "—"}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                item.fromLocationType === "pick_face"
+                                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+                                  : item.fromLocationType === "staging"
+                                  ? "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300"
+                                  : "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                              }`}>
+                                {item.fromLocationType === "pick_face" ? "pick face" : item.fromLocationType === "staging" ? "staging" : "wh"}
+                              </span>
+                              <span className="ml-1.5 font-mono text-xs">{item.fromLocationName}</span>
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs">{item.toLocationName}</td>
+                            <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{item.qty.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      <tr className="border-t-2 border-border bg-muted/40">
+                        <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground" colSpan={7}>Total</td>
+                        <td className="px-4 py-2.5 text-right font-bold tabular-nums">
+                          {pullList.reduce((sum, item) => sum + item.qty, 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </TabsContent>
 
           {/* ── Pull List ── */}
           <TabsContent value="pull" className="mt-4 space-y-4">

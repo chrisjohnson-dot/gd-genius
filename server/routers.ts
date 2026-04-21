@@ -126,6 +126,7 @@ import {
   upsertSlaDailySnapshot,
   updateRunVerification,
   updateRunOrderVerification,
+  resolveRunVerification,
   createPutAwayScan,
   listPutAwayScans,
   listPutAwayScansByConfig,
@@ -1831,6 +1832,21 @@ const _appRouter = router({
       .query(async () => {
         const count = await getUnresolvedVerificationCount();
         return { count };
+      }),
+    resolveVerification: protectedProcedure
+      .input(z.object({ runId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const run = await getAllocationRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+        await resolveRunVerification(input.runId);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "allocation.resolveVerification",
+          entityType: "allocation_run",
+          entityId: String(input.runId),
+          details: { previousStatus: run.verificationStatus },
+        });
+        return { success: true };
       }),
 
     runDetail: protectedProcedure

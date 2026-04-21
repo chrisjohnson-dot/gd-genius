@@ -1509,3 +1509,5 @@
 
 - [x] LocationConfig: fix broken No Lot Mixing toggle slider (saveRuleMutation missing required locationPriorityPatterns field causes silent error)
 - [x] LocationConfig: add multi-select checkboxes on location rows with a bulk delete button
+- [x] RunDetail: add "Mark Resolved" button to clear verificationStatus = 'failed' flags on confirmed runs
+- [x] RunDetail: add Move Summary tab matching the Allocation Review screen's pull list view

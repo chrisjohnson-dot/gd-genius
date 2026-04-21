@@ -2366,6 +2366,15 @@ export async function updateRunVerification(
 }
 
 /** Update a single run order's verification status and detail. */
+export async function resolveRunVerification(runId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(allocationRuns)
+    .set({ verificationStatus: "verified", verifiedAt: new Date() })
+    .where(eq(allocationRuns.id, runId));
+}
+
 export async function updateRunOrderVerification(
   runOrderId: number,
   status: VerificationStatus,

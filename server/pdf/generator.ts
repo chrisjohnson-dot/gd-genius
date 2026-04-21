@@ -401,7 +401,21 @@ export async function generatePickFacePullSheetPDF(
     (i) => i.fromLocationType === "pick_face"
   );
 
-  const ROW_H = 26; // taller rows to accommodate optional 2nd line
+  // Build a lookup: (sku|lot) → warehouse source location name
+  // When the engine pulls a warehouse pallet and routes the surplus to the pick face,
+  // it emits a movement="to_pick_face" entry whose fromLocationName is the warehouse location.
+  // We surface that on the pick face sheet so pickers know where the stock came from.
+  const warehouseSourceMap = new Map<string, string>();
+  for (const item of items) {
+    if (item.movement === "to_pick_face" && item.fromLocationType === "warehouse") {
+      const key = `${item.sku}||${item.lotNumber ?? ""}`;
+      if (!warehouseSourceMap.has(key)) {
+        warehouseSourceMap.set(key, item.fromLocationName);
+      }
+    }
+  }
+
+  const ROW_H = 28; // taller rows to accommodate optional 2nd line (warehouse source)
   // Rows that fit per page:
   //   Page 1 (full header): usable ≈ PAGE_H - FOOTER_H - fullHeaderH - tableHeaderH
   //                         fullHeaderH ≈ 120, tableHeaderH = 28  → ~(612-24-120-28)/26 ≈ 16
@@ -430,9 +444,15 @@ export async function generatePickFacePullSheetPDF(
     if (y + ROW_H > PAGE_H - FOOTER_H) return;
     if (globalIdx % 2 === 1) doc.rect(tableL, y, tableR - tableL, ROW_H).fill(ROW_ALT);
     doc.moveTo(tableL, y + ROW_H).lineTo(tableR, y + ROW_H).stroke(GD_BORDER);
-    const textY = y + 7;
+    const textY = y + 6;
+    // FROM LOC: pick face location name, with optional warehouse source below
     doc.fillColor(GD_DKGRAY).fontSize(8).font("Helvetica")
       .text(item.fromLocationName, cx.from, textY, { width: 127, lineBreak: false });
+    const whSource = warehouseSourceMap.get(`${item.sku}||${item.lotNumber ?? ""}`);
+    if (whSource) {
+      doc.fillColor(GD_GRAY).fontSize(6.5).font("Helvetica")
+        .text(`(from ${whSource})`, cx.from, textY + 10, { width: 127, lineBreak: false });
+    }
     doc.fillColor(GD_NAVY).fontSize(8.5).font("Helvetica-Bold")
       .text(item.sku, cx.sku, textY, { width: 162, lineBreak: false });
     const lot = item.lotNumber && item.lotNumber !== "0" ? item.lotNumber : "-";

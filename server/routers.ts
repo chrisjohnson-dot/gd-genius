@@ -1450,32 +1450,46 @@ const _appRouter = router({
                 try {
                   const { order } = await fetchOrderWithDetail(verifyConfig, runOrder.orderId);
                   const fullyAllocated = order.readOnly.fullyAllocated ?? false;
-                  const approvedQtyBySku = new Map<string, number>();
+
+                  // Build planned qty from our allocationDetail (what we submitted to Extensiv)
+                  const plannedQtyBySku = new Map<string, number>();
                   if (approvedDetail?.lineItems) {
                     for (const li of approvedDetail.lineItems) {
                       const total = li.allocations.reduce((s, a) => s + a.qty, 0);
-                      approvedQtyBySku.set(li.sku, (approvedQtyBySku.get(li.sku) ?? 0) + total);
+                      plannedQtyBySku.set(li.sku, (plannedQtyBySku.get(li.sku) ?? 0) + total);
                     }
                   }
+
+                  // Build Extensiv qty: prefer proposedAllocations (pre-confirm), fall back to item.qty
+                  // After confirmation, proposedAllocations is cleared; fullyAllocated is the reliable signal.
                   const extensivQtyBySku = new Map<string, number>();
                   if (order.orderItems) {
                     for (const item of order.orderItems) {
                       const sku = item.itemIdentifier.sku;
-                      const allocQty = (item.proposedAllocations ?? []).reduce((s, a) => s + a.qty, 0);
+                      const proposed = (item.proposedAllocations ?? []).reduce((s, a) => s + a.qty, 0);
+                      // If proposedAllocations has data, use it; otherwise fall back to item.qty
+                      // (item.qty is the ordered qty, not the allocated qty, but it's the best
+                      // available signal when the order is already confirmed/closed)
+                      const allocQty = proposed > 0 ? proposed : (fullyAllocated ? item.qty : 0);
                       extensivQtyBySku.set(sku, (extensivQtyBySku.get(sku) ?? 0) + allocQty);
                     }
                   }
+
                   const skuResults: OrderVerificationResult["skuResults"] = [];
-                  for (const [sku, approvedQty] of Array.from(approvedQtyBySku.entries())) {
+                  for (const [sku, approvedQty] of Array.from(plannedQtyBySku.entries())) {
                     const extensivQty = extensivQtyBySku.get(sku) ?? 0;
                     skuResults.push({ sku, approvedQty, extensivQty, match: extensivQty >= approvedQty });
                   }
-                  const allMatch = skuResults.every((r) => r.match);
+
+                  // Primary signal: Extensiv's fullyAllocated flag
                   let orderStatus: VerificationStatus;
-                  if (fullyAllocated && allMatch) orderStatus = "verified";
-                  else if (fullyAllocated && !allMatch) orderStatus = "mismatch";
-                  else if (!fullyAllocated && skuResults.some((r) => r.extensivQty > 0)) orderStatus = "partial";
-                  else orderStatus = "mismatch";
+                  if (fullyAllocated) {
+                    orderStatus = "verified";
+                  } else if (skuResults.some((r) => r.extensivQty > 0)) {
+                    orderStatus = "partial";
+                  } else {
+                    orderStatus = "mismatch";
+                  }
                   verifyResults.push({ orderId: runOrder.orderId, referenceNum: runOrder.referenceNum ?? String(runOrder.orderId), status: orderStatus, fullyAllocated, skuResults });
                   await updateRunOrderVerification(runOrder.id, orderStatus, skuResults);
                 } catch (err: unknown) {

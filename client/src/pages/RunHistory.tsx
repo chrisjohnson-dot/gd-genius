@@ -447,17 +447,15 @@ function MismatchDetailModal({ runId, onClose }: { runId: number | null; onClose
     { enabled: runId !== null }
   );
 
-  const statusIcon = (match: boolean) =>
-    match
-      ? <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "#059669" }} />
-      : <XCircle className="h-4 w-4 shrink-0" style={{ color: "#ef4444" }} />;
-
-  const orderStatusColor: Record<string, string> = {
-    verified: "#059669",
-    partial: "#b45309",
-    mismatch: "#ef4444",
-    failed: "#ef4444",
+  const orderStatusMeta: Record<string, { label: string; bg: string; fg: string; note: string }> = {
+    verified:  { label: "Confirmed",        bg: "#d1fae5", fg: "#059669", note: "Extensiv confirmed this order is fully allocated." },
+    partial:   { label: "Partially Allocated", bg: "#fef9c3", fg: "#b45309", note: "Extensiv shows some SKUs allocated but the order is not fully allocated." },
+    mismatch:  { label: "Not Allocated",    bg: "#fee2e2", fg: "#ef4444", note: "Extensiv did not confirm allocation for this order. Check Extensiv for details." },
+    failed:    { label: "Verification Error", bg: "#fee2e2", fg: "#ef4444", note: "Could not reach Extensiv to verify this order." },
+    pending:   { label: "Pending",          bg: "#f3f4f6", fg: "#6b7280", note: "Verification has not run yet." },
   };
+
+  const nonVerifiedOrders = data?.orders.filter((o) => o.status !== "verified") ?? [];
 
   return (
     <Dialog open={runId !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -465,7 +463,7 @@ function MismatchDetailModal({ runId, onClose }: { runId: number | null; onClose
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
-            Verification Detail — Run #{runId}
+            Allocation Verification — Run #{runId}
           </DialogTitle>
         </DialogHeader>
 
@@ -486,57 +484,81 @@ function MismatchDetailModal({ runId, onClose }: { runId: number | null; onClose
                 Verified at {new Date(data.verifiedAt).toLocaleString()}
               </p>
             )}
-            {data.orders.map((order) => (
-              <div key={order.orderId} className="border border-border rounded-xl overflow-hidden">
-                {/* Order header */}
-                <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-semibold">TX #{order.referenceNum}</span>
-                    {order.error && (
-                      <span className="text-xs text-muted-foreground">— {order.error}</span>
-                    )}
-                  </div>
-                  <span
-                    className="text-xs font-semibold px-2 py-0.5 rounded"
-                    style={{
-                      background: order.status === "verified" ? "#d1fae5" : order.status === "partial" ? "#fef9c3" : "#fee2e2",
-                      color: orderStatusColor[order.status] ?? "#6b7280",
-                    }}
-                  >
-                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                    {order.fullyAllocated === false && " — Not fully allocated"}
-                  </span>
-                </div>
 
-                {/* SKU breakdown */}
-                {order.skuResults.length > 0 && (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/20">
-                        <th className="px-4 py-2 text-left font-semibold text-muted-foreground w-6"></th>
-                        <th className="px-4 py-2 text-left font-semibold text-muted-foreground">SKU</th>
-                        <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Approved Qty</th>
-                        <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Extensiv Qty</th>
-                        <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Difference</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {order.skuResults.map((sku, i) => (
-                        <tr key={i} className={`border-b border-border last:border-0 ${!sku.match ? "bg-red-50 dark:bg-red-950/20" : ""}`}>
-                          <td className="px-4 py-2">{statusIcon(sku.match)}</td>
-                          <td className="px-4 py-2 font-mono">{sku.sku}</td>
-                          <td className="px-4 py-2 text-right tabular-nums">{sku.approvedQty.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-right tabular-nums">{sku.extensivQty.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-right tabular-nums font-semibold" style={{ color: sku.extensivQty < sku.approvedQty ? "#ef4444" : sku.extensivQty > sku.approvedQty ? "#b45309" : "#059669" }}>
-                            {sku.extensivQty - sku.approvedQty > 0 ? "+" : ""}{(sku.extensivQty - sku.approvedQty).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+            {/* Summary banner */}
+            {nonVerifiedOrders.length === 0 ? (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-sm">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                All {data.orders.length} order{data.orders.length !== 1 ? "s" : ""} confirmed as fully allocated in Extensiv.
               </div>
-            ))}
+            ) : (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {nonVerifiedOrders.length} of {data.orders.length} order{data.orders.length !== 1 ? "s" : ""} {nonVerifiedOrders.length === 1 ? "was" : "were"} not confirmed as fully allocated in Extensiv.
+              </div>
+            )}
+
+            {data.orders.map((order) => {
+              const meta = orderStatusMeta[order.status] ?? orderStatusMeta.pending;
+              return (
+                <div key={order.orderId} className="border border-border rounded-xl overflow-hidden">
+                  {/* Order header */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40">
+                    <div>
+                      <span className="font-mono text-sm font-semibold">TX #{order.referenceNum}</span>
+                      {order.error && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{order.error}</p>
+                      )}
+                    </div>
+                    <span
+                      className="text-xs font-semibold px-2 py-0.5 rounded"
+                      style={{ background: meta.bg, color: meta.fg }}
+                    >
+                      {meta.label}
+                    </span>
+                  </div>
+
+                  {/* Status explanation */}
+                  <div className="px-4 py-2 text-xs text-muted-foreground border-b border-border bg-muted/10">
+                    {meta.note}
+                  </div>
+
+                  {/* SKU breakdown — planned quantities */}
+                  {order.skuResults.length > 0 && (
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/20">
+                          <th className="px-4 py-2 text-left font-semibold text-muted-foreground">SKU</th>
+                          <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Planned Qty</th>
+                          <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Extensiv Qty</th>
+                          <th className="px-4 py-2 text-right font-semibold text-muted-foreground">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.skuResults.map((sku, i) => (
+                          <tr key={i} className={`border-b border-border last:border-0 ${!sku.match ? "bg-red-50 dark:bg-red-950/20" : ""}`}>
+                            <td className="px-4 py-2 font-mono">{sku.sku}</td>
+                            <td className="px-4 py-2 text-right tabular-nums">{sku.approvedQty.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right tabular-nums">
+                              {order.fullyAllocated
+                                ? <span className="text-emerald-600 font-semibold">{sku.extensivQty.toLocaleString()}</span>
+                                : <span className="text-muted-foreground">{sku.extensivQty > 0 ? sku.extensivQty.toLocaleString() : "—"}</span>
+                              }
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              {order.fullyAllocated
+                                ? <span className="inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" />Confirmed</span>
+                                : <span className="inline-flex items-center gap-1 text-red-500"><XCircle className="h-3.5 w-3.5" />Not confirmed</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </DialogContent>

@@ -1024,6 +1024,10 @@ const _appRouter = router({
           const pfConfig = locationConfigsData.find((lc) => lc.locationType === "pick_face");
           const configuredPfId = pfConfig?.locationId;
           const configuredPfName = pfConfig?.locationName;
+          // All pick face locations for smart per-SKU routing
+          const allPickFaceLocations = locationConfigsData
+            .filter((lc) => lc.locationType === "pick_face")
+            .map((lc) => ({ locationId: lc.locationId, locationName: lc.locationName }));
 
           // Look up per-customer rules (e.g. noLotMixing, locationPriorityPatterns)
           const customerRule = await getCustomerRule(input.configId, customer.customerId);
@@ -1044,7 +1048,8 @@ const _appRouter = router({
             configuredPfName,
             locationPriorityPatterns,
             locationExclusionPatterns,
-            customerMinShelfLifeDays
+            customerMinShelfLifeDays,
+            allPickFaceLocations
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -1222,6 +1227,10 @@ const _appRouter = router({
           const pfConfigQ = locationConfigsData.find((lc) => lc.locationType === "pick_face");
           const configuredPfIdQ = pfConfigQ?.locationId;
           const configuredPfNameQ = pfConfigQ?.locationName;
+          // All pick face locations for smart per-SKU routing
+          const allPickFaceLocationsQ = locationConfigsData
+            .filter((lc) => lc.locationType === "pick_face")
+            .map((lc) => ({ locationId: lc.locationId, locationName: lc.locationName }));
 
           // Customer rules
           const customerRule = await getCustomerRule(input.configId, customer.id);
@@ -1241,7 +1250,8 @@ const _appRouter = router({
             configuredPfNameQ,
             locationPriorityPatterns,
             locationExclusionPatterns,
-            customerMinShelfLifeDaysQ
+            customerMinShelfLifeDaysQ,
+            allPickFaceLocationsQ
           );
 
           allAllocated.push(...result.allocatedOrders);

@@ -362,6 +362,9 @@ export default function AllocationReview() {
             <TabsTrigger value="pack">
               Pack List ({packList.length})
             </TabsTrigger>
+            <TabsTrigger value="moves">
+              Move Summary ({pullListEarly.length})
+            </TabsTrigger>
             <TabsTrigger value="summary">
               Order Summary ({allocatedOrders.length})
             </TabsTrigger>
@@ -577,6 +580,91 @@ export default function AllocationReview() {
               </Card>
             </TabsContent>
           )}
+
+          {/* ── Move Summary Tab ─────────────────────────────────────────────── */}
+          <TabsContent value="moves" className="mt-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <div>
+                  <CardTitle className="text-sm">Move Summary</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    All planned inventory movements for this allocation run. Review before confirming.
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {pullListEarly.length === 0 ? (
+                  <div className="py-10 text-center text-muted-foreground">
+                    <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">No moves planned.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/50">
+                          <th className="text-left px-4 py-3 font-medium">Type</th>
+                          <th className="text-left px-4 py-3 font-medium">SKU</th>
+                          <th className="text-left px-4 py-3 font-medium">Description</th>
+                          <th className="text-left px-4 py-3 font-medium">Lot</th>
+                          <th className="text-left px-4 py-3 font-medium">Expiry</th>
+                          <th className="text-left px-4 py-3 font-medium">From</th>
+                          <th className="text-left px-4 py-3 font-medium">To</th>
+                          <th className="text-right px-4 py-3 font-medium">Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pullListEarly
+                          .slice()
+                          .sort((a, b) => {
+                            const typeOrder = (m: string) => m === "to_staging" ? 0 : 1;
+                            if (typeOrder(a.movement) !== typeOrder(b.movement)) return typeOrder(a.movement) - typeOrder(b.movement);
+                            return a.sku.localeCompare(b.sku);
+                          })
+                          .map((item, idx) => (
+                            <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/30">
+                              <td className="px-4 py-2.5">
+                                {item.movement === "to_staging" ? (
+                                  <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                                    Staging
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                    Pick Face
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 font-mono text-xs">{item.sku}</td>
+                              <td className="px-4 py-2.5 text-muted-foreground max-w-[180px] truncate text-xs">{item.description ?? "—"}</td>
+                              <td className="px-4 py-2.5 font-mono text-xs">{item.lotNumber ?? "—"}</td>
+                              <td className="px-4 py-2.5 text-xs">
+                                {item.expirationDate
+                                  ? new Date(item.expirationDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                  item.fromLocationType === "pick_face"
+                                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+                                    : item.fromLocationType === "staging"
+                                    ? "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300"
+                                    : "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                                }`}>
+                                  {item.fromLocationType === "pick_face" ? "pick face" : item.fromLocationType === "staging" ? "staging" : "wh"}
+                                </span>
+                                <span className="ml-1.5 font-mono text-xs">{item.fromLocationName}</span>
+                              </td>
+                              <td className="px-4 py-2.5 font-mono text-xs">{item.toLocationName}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{item.qty.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* ── Order Summary Tab ─────────────────────────────────────────────── */}
           <TabsContent value="summary" className="mt-4">

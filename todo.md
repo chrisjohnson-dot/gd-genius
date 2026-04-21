@@ -1499,3 +1499,8 @@
 - [x] FEFO engine: wire customerMinShelfLifeDays from customer rules into runAllocationEngine; apply per-order note overrides (parseOrderNoteRules); filter inventory by shelf life before pallet decision
 - [x] AllocationRules UI: add Min Shelf Life (days) input field per customer; save/load via customerRules.save/list tRPC endpoints
 - [x] DB: upsertCustomerRule now persists locationExclusionPatterns and minShelfLifeDays
+- [ ] Run History: add colour-coded Print Documents button (green = not yet printed, red = previously printed) that prints pick face pull list, warehouse pull list, and pack list in one click
+- [ ] Dashboard Requires Attention: add section flagging empty/low pick faces for SKUs that have replenishment stock available in the warehouse
+- [ ] Engine: smart per-SKU pick face routing — SKU-named locations (location name contains SKU) always route surplus there; client pick face locations route to existing SKU slot or first empty client pick face slot
+- [ ] Allocation Review: add Move Summary tab showing all planned inventory moves (from/to location, SKU, lot, qty) before confirmation
+- [ ] Dashboard: Requires Attention section flagging empty/low pick faces for SKUs with available warehouse replenishment stock

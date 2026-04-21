@@ -431,6 +431,14 @@ export function runAllocationEngine(
   locationExclusionPatterns: Array<{ pattern: string; label: string }> = [],
   /** Optional: customer-level minimum shelf life in days (can be overridden per order via order notes) */
   customerMinShelfLifeDays?: number | null,
+  /**
+   * All configured pick face locations for this customer (from location_configs).
+   * Used for smart per-SKU pick face routing:
+   *   1. SKU-named: location name contains the SKU number → always route there.
+   *   2. Client pick face with existing SKU stock → route there.
+   *   3. First empty client pick face (zero on-hand in inventory pool) → assign there.
+   */
+  allPickFaceLocations: Array<{ locationId: number; locationName: string }> = [],
 ): AllocationRunResult {
   // ── Build mutable inventory pool ─────────────────────────────────────────
   const inventoryPool = new Map<number, InventoryPoolRecord>();
@@ -545,15 +553,58 @@ export function runAllocationEngine(
 
     const allWarehouse = [...warehouseRecords];
 
-    // Resolve pick face location for replenishment
-    const pfId = pickFaceLocationId ?? (pickFaceRecords[0]?.locationIdentifier?.id ?? 0);
-    const pfName = pickFaceLocationName ?? (pickFaceRecords[0]?.locationIdentifier?.nameKey?.name ?? "Pick Face");
+    // ── Smart per-SKU pick face routing ─────────────────────────────────────
+    // Priority:
+    //   1. SKU-named location: any configured pick face whose name contains the SKU number.
+    //   2. Client pick face with existing SKU stock: SKU already present in a configured PF.
+    //   3. First empty client pick face: configured PF with zero on-hand in the inventory pool.
+    //   4. Fallback: legacy pickFaceLocationId/Name from caller (if provided).
+    //   5. No pick face: surplus stays in warehouse.
+    let pfId = 0;
+    let pfName = "Pick Face";
+
+    // Build a set of all inventory record IDs that belong to any configured pick face location
+    // so we can check on-hand quickly.
+    const configuredPfLocationIds = new Set(allPickFaceLocations.map((l) => l.locationId));
+
+    // 1. SKU-named location: name contains the SKU (case-insensitive)
+    const skuNamedPf = allPickFaceLocations.find((l) =>
+      l.locationName.toLowerCase().includes(sku.toLowerCase())
+    );
+    if (skuNamedPf) {
+      pfId = skuNamedPf.locationId;
+      pfName = skuNamedPf.locationName;
+    } else {
+      // 2. Client pick face that already has this SKU in inventory
+      const existingPfRecord = pickFaceRecords.find((r) =>
+        configuredPfLocationIds.has(r.locationIdentifier?.id ?? -1)
+      );
+      if (existingPfRecord) {
+        pfId = existingPfRecord.locationIdentifier?.id ?? 0;
+        pfName = existingPfRecord.locationIdentifier?.nameKey?.name ?? "Pick Face";
+      } else {
+        // 3. First empty configured pick face (no inventory records for ANY SKU at that location)
+        const occupiedPfLocationIds = new Set(
+          Array.from(inventoryPool.values())
+            .filter((r) => configuredPfLocationIds.has(r.locationIdentifier?.id ?? -1) && r.remainingQty > 0)
+            .map((r) => r.locationIdentifier?.id ?? -1)
+        );
+        const emptyPf = allPickFaceLocations.find((l) => !occupiedPfLocationIds.has(l.locationId));
+        if (emptyPf) {
+          pfId = emptyPf.locationId;
+          pfName = emptyPf.locationName;
+        } else if (pickFaceLocationId != null && pickFaceLocationId > 0) {
+          // 4. Fallback: legacy customer-level pick face location
+          pfId = pickFaceLocationId;
+          pfName = pickFaceLocationName ?? "Pick Face";
+        }
+        // 5. pfId remains 0 → no pick face move
+      }
+    }
+
     // A pick face is considered active for this SKU ONLY if there are actual inventory
-    // records for this SKU in a pick face location. The customer-level pickFaceLocationId
-    // is used purely as the *destination* for replenishment moves — it does NOT mean every
-    // SKU has a pick face. If a SKU has never been stocked in the pick face, surplus must
-    // stay in the warehouse (not be routed to the pick face location).
-    const hasPf = pickFaceRecords.length > 0;
+    // records for this SKU in a pick face location, OR a valid pick face destination was found.
+    const hasPf = pickFaceRecords.length > 0 || pfId > 0;
 
     const { stagingMoves, pickFaceMoves, satisfied } = planSkuMovements(
       totalNeeded,

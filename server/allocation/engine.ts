@@ -416,6 +416,8 @@ export function runAllocationEngine(
   locationPriorityPatterns: Array<{ pattern: string; label: string }> = [],
   /** Optional: list of location name patterns to EXCLUDE from allocation entirely (e.g. Building 1) */
   locationExclusionPatterns: Array<{ pattern: string; label: string }> = [],
+  /** Optional: customer-level minimum shelf life in days (can be overridden per order via order notes) */
+  customerMinShelfLifeDays?: number | null,
 ): AllocationRunResult {
   // ── Build mutable inventory pool ─────────────────────────────────────────
   const inventoryPool = new Map<number, InventoryPoolRecord>();
@@ -481,11 +483,37 @@ export function runAllocationEngine(
     });
   };
 
+  // ── Build per-order note rules map (sort override + per-order shelf life) ──
+  const orderNoteRulesMap = new Map<number, OrderNoteRules>();
+  for (const order of orders) {
+    orderNoteRulesMap.set(order.readOnly.orderId, parseOrderNoteRules(order.notes));
+  }
+
+  // Compute effective shelf life floor per SKU across all orders:
+  // take the maximum minShelfLifeDays requirement across all orders that need this SKU
+  // (most conservative wins — if any order needs 90 days, all inventory for that SKU
+  // must meet 90 days when pulling from the global pool).
+  const skuShelfLifeFloor = new Map<string, number>();
+  for (const order of orders) {
+    const noteRules = orderNoteRulesMap.get(order.readOnly.orderId) ?? {};
+    const effectiveShelfLife = noteRules.minShelfLifeDays ?? customerMinShelfLifeDays ?? 0;
+    if (effectiveShelfLife > 0) {
+      for (const item of order.orderItems ?? []) {
+        const sku = item.itemIdentifier.sku;
+        const current = skuShelfLifeFloor.get(sku) ?? 0;
+        if (effectiveShelfLife > current) skuShelfLifeFloor.set(sku, effectiveShelfLife);
+      }
+    }
+  }
+
   for (const [sku, totalNeeded] of Array.from(skuTotalDemand.entries())) {
+    const shelfLifeFloor = skuShelfLifeFloor.get(sku) ?? 0;
     const allSkuRecords = Array.from(inventoryPool.values()).filter(
       (r) => r.itemIdentifier.sku === sku && r.remainingQty > 0
         && !isExcludedLocation(r.locationIdentifier?.nameKey?.name)
     );
+    // Apply shelf life filter to all records for this SKU
+    const shelfLifeFiltered = shelfLifeFloor > 0 ? filterByShelfLife(allSkuRecords, shelfLifeFloor) : allSkuRecords;
 
     // Helper: resolve effective location type — use explicit config first, then name-based inference
     const resolveLocType = (r: InventoryPoolRecord): LocationType => {
@@ -498,9 +526,9 @@ export function runAllocationEngine(
     //   1. stagingAlreadyThere — items already in a staging location (consume FIRST)
     //   2. pickFaceRecords     — items in pick face locations (consume second)
     //   3. warehouseRecords    — full pallets in warehouse (pull only when needed)
-    const stagingAlreadyThere = allSkuRecords.filter((r) => resolveLocType(r) === "staging");
-    const pickFaceRecords = allSkuRecords.filter((r) => resolveLocType(r) === "pick_face");
-    const warehouseRecords = allSkuRecords.filter((r) => resolveLocType(r) === "warehouse");
+    const stagingAlreadyThere = shelfLifeFiltered.filter((r) => resolveLocType(r) === "staging");
+    const pickFaceRecords = shelfLifeFiltered.filter((r) => resolveLocType(r) === "pick_face");
+    const warehouseRecords = shelfLifeFiltered.filter((r) => resolveLocType(r) === "warehouse");
 
     const allWarehouse = [...warehouseRecords];
 

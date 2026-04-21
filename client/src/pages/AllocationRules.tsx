@@ -61,6 +61,7 @@ interface ClientRuleState {
   noLotMixing: boolean;
   autoRun: boolean;
   locationPriorityPatterns: PriorityPattern[];
+  minShelfLifeDays: number | null;
   notes: string;
   dirty: boolean;
   saving: boolean;
@@ -75,6 +76,7 @@ function buildInitialState(
     noLotMixing: boolean;
     autoRun: boolean;
     locationPriorityPatterns?: PriorityPattern[] | null;
+    minShelfLifeDays?: number | null;
     notes?: string | null;
   }>
 ): ClientRuleState[] {
@@ -89,6 +91,7 @@ function buildInitialState(
       noLotMixing: r?.noLotMixing ?? false,
       autoRun: r?.autoRun ?? false,
       locationPriorityPatterns: (r?.locationPriorityPatterns as PriorityPattern[] | null | undefined) ?? [],
+      minShelfLifeDays: r?.minShelfLifeDays ?? null,
       notes: r?.notes ?? "",
       dirty: false,
       saving: false,
@@ -280,6 +283,7 @@ export default function AllocationRules() {
         locationPriorityPatterns: c.locationPriorityPatterns.filter(
           (p) => p.pattern.trim() !== ""
         ),
+        minShelfLifeDays: c.minShelfLifeDays ?? null,
         notes: c.notes.trim() || null,
       });
       setClients((prev) =>
@@ -606,6 +610,32 @@ export default function AllocationRules() {
                         onCheckedChange={(v) =>
                           updateClient(c.customerId, { autoRun: v })
                         }
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Min Shelf Life ───────────────────────────────── */}
+                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <Label className="font-medium">Min Shelf Life (days)</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Inventory expiring within this many days will be excluded from allocation.
+                          Leave blank to use all eligible inventory. Can be overridden per order via order notes
+                          (e.g. "min 90 days").
+                        </p>
+                      </div>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="w-24 shrink-0"
+                        placeholder="e.g. 90"
+                        value={c.minShelfLifeDays ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                          updateClient(c.customerId, { minShelfLifeDays: isNaN(val as number) ? null : val });
+                        }}
                       />
                     </div>
                   </div>

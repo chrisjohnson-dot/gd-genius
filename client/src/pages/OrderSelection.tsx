@@ -178,87 +178,94 @@ function CustomerOrdersPanel({
               </div>
             ) : (
               <>
-                {/* Select All */}
-                <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border">
+                {/* Select All row */}
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border">
                   <Checkbox
                     id={`selectAll-${customer.id}`}
                     checked={allSelected}
                     data-state={someSelected ? "indeterminate" : allSelected ? "checked" : "unchecked"}
                     onCheckedChange={toggleSelectAll}
+                    className="ml-1"
                   />
-                  <Label htmlFor={`selectAll-${customer.id}`} className="text-sm font-medium cursor-pointer">
-                    Select All ({orders.length} orders{searchQuery && filteredOrders.length !== orders.length ? ` · ${filteredOrders.length} matching` : ""})
+                  <Label htmlFor={`selectAll-${customer.id}`} className="text-xs font-medium cursor-pointer text-muted-foreground">
+                    Select All ({orders.length} order{orders.length !== 1 ? "s" : ""}{searchQuery && filteredOrders.length !== orders.length ? ` · ${filteredOrders.length} matching` : ""})
                   </Label>
                 </div>
 
-                {/* Order list */}
+                {/* Order table */}
                 {searchQuery && filteredOrders.length === 0 ? (
                   <div className="text-center py-6 text-muted-foreground">
                     <Search className="h-6 w-6 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">No orders match "{searchQuery}"</p>
                   </div>
                 ) : (
-                  <div className="space-y-1 max-h-[360px] overflow-y-auto pr-1">
-                    {filteredOrders.map((order) => {
-                    // extensivOrderId = Extensiv Transaction ID (readOnly.orderId) — used for API calls and shown as primary bold label (Go Direct order #)
-                    // customerRefNum = client's internal order number (referenceNum) — shown as secondary label
-                    const extensivOrderId = order.readOnly.orderId;
-                    const customerRefNum = order.referenceNum;
-                    const isSelected = selectedOrders.has(extensivOrderId);
-                    const lineCount = order.orderItems?.length ?? 0;
-                    const totalPieces = order.orderItems?.reduce((sum: number, item: { qty?: number }) => sum + (item.qty ?? 0), 0) ?? 0;
-                    const shipTo = (order as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo;
-                    const shipToName = shipTo?.companyName ?? shipTo?.name ?? "";
-                    return (
-                      <div
-                        key={extensivOrderId}
-                        className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
-                          isSelected
-                            ? "bg-primary/8 border border-primary/20"
-                            : "hover:bg-muted/50 border border-transparent"
-                        }`}
-                        onClick={() =>
-                          onToggleOrder(extensivOrderId, customerRefNum, customer.id, customer.name, !isSelected)
-                        }
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={(v) =>
-                            onToggleOrder(extensivOrderId, customerRefNum, customer.id, customer.name, !!v)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            #<HighlightMatch text={String(extensivOrderId)} query={searchQuery} />
-                            {shipToName ? (
-                              <span className="ml-2 font-normal text-muted-foreground">
-                                — <HighlightMatch text={shipToName} query={searchQuery} />
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Customer Ref: <HighlightMatch text={customerRefNum} query={searchQuery} />
-                            {order.poNum ? <> · PO: <HighlightMatch text={order.poNum} query={searchQuery} /></> : ""}
-                            {" · "}Created:{" "}
-                            {new Date(order.readOnly.creationDate).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {lineCount > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              {lineCount} {lineCount === 1 ? "line" : "lines"}
-                            </Badge>
-                          )}
-                          {totalPieces > 0 && (
-                            <Badge variant="outline" className="text-xs">
-                              {totalPieces} {totalPieces === 1 ? "pc" : "pcs"}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    );
-                    })}
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
+                        <tr className="border-b border-border">
+                          <th className="w-8 px-2 py-2"></th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">TX #</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">Create Date</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">PO #</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">Ship To</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">City</th>
+                          <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">Lines</th>
+                          <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">Pcs</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredOrders.map((order) => {
+                          const extensivOrderId = order.readOnly.orderId;
+                          const customerRefNum = order.referenceNum;
+                          const isSelected = selectedOrders.has(extensivOrderId);
+                          const lineCount = order.orderItems?.length ?? 0;
+                          const totalPieces = order.orderItems?.reduce((sum: number, item: { qty?: number }) => sum + (item.qty ?? 0), 0) ?? 0;
+                          const shipTo = (order as unknown as { shipTo?: { companyName?: string; name?: string; city?: string; state?: string } }).shipTo;
+                          const shipToName = shipTo?.companyName ?? shipTo?.name ?? "";
+                          const city = shipTo?.city ?? "";
+                          const state = shipTo?.state ?? "";
+                          const cityState = city && state ? `${city}, ${state}` : city || state || "—";
+                          const createdDate = order.readOnly.creationDate
+                            ? new Date(order.readOnly.creationDate).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "2-digit" })
+                            : "—";
+                          return (
+                            <tr
+                              key={extensivOrderId}
+                              className={`cursor-pointer transition-colors ${
+                                isSelected
+                                  ? "bg-primary/8 hover:bg-primary/12"
+                                  : "hover:bg-muted/40"
+                              }`}
+                              onClick={() => onToggleOrder(extensivOrderId, customerRefNum, customer.id, customer.name, !isSelected)}
+                            >
+                              <td className="px-2 py-2 text-center">
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={(v) => onToggleOrder(extensivOrderId, customerRefNum, customer.id, customer.name, !!v)}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </td>
+                              <td className="px-3 py-2 font-medium text-xs whitespace-nowrap">
+                                <HighlightMatch text={String(extensivOrderId)} query={searchQuery} />
+                                {customerRefNum && (
+                                  <div className="text-[10px] text-muted-foreground">Ref: <HighlightMatch text={customerRefNum} query={searchQuery} /></div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{createdDate}</td>
+                              <td className="px-3 py-2 text-xs text-muted-foreground">
+                                {order.poNum ? <HighlightMatch text={order.poNum} query={searchQuery} /> : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-xs max-w-[160px] truncate" title={shipToName}>
+                                {shipToName ? <HighlightMatch text={shipToName} query={searchQuery} /> : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{cityState}</td>
+                              <td className="px-3 py-2 text-center text-xs">{lineCount > 0 ? lineCount : "—"}</td>
+                              <td className="px-3 py-2 text-center text-xs">{totalPieces > 0 ? totalPieces : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </>
@@ -845,19 +852,6 @@ export default function OrderSelection() {
             ) : (
               <Card>
                 <CardContent className="pt-4 pb-2">
-                  {/* Select All */}
-                  <div className="flex items-center gap-3 pb-3 mb-2 border-b border-border">
-                    <Checkbox
-                      id="selectAllClients"
-                      checked={!!allClientsSelected}
-                      data-state={someClientsSelected ? "indeterminate" : allClientsSelected ? "checked" : "unchecked"}
-                      onCheckedChange={handleSelectAllClients}
-                    />
-                    <Label htmlFor="selectAllClients" className="text-sm font-medium cursor-pointer">
-                      Select All Clients ({customers.length})
-                    </Label>
-                  </div>
-
                   {/* Client list */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                     {customers.map((customer) => {

@@ -1030,6 +1030,7 @@ const _appRouter = router({
           const noLotMixing = customerRule?.noLotMixing ?? false;
           const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const locationExclusionPatterns = (customerRule?.locationExclusionPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
+          const customerMinShelfLifeDays = customerRule?.minShelfLifeDays ?? null;
           // Run allocation engine for this customer
           const result = runAllocationEngine(
             orders,
@@ -1042,7 +1043,8 @@ const _appRouter = router({
             configuredPfId,
             configuredPfName,
             locationPriorityPatterns,
-            locationExclusionPatterns
+            locationExclusionPatterns,
+            customerMinShelfLifeDays
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -1226,6 +1228,7 @@ const _appRouter = router({
           const noLotMixing = customerRule?.noLotMixing ?? false;
           const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const locationExclusionPatterns = (customerRule?.locationExclusionPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
+          const customerMinShelfLifeDaysQ = customerRule?.minShelfLifeDays ?? null;
           const result = runAllocationEngine(
             orders,
             inventory,
@@ -1237,7 +1240,8 @@ const _appRouter = router({
             configuredPfIdQ,
             configuredPfNameQ,
             locationPriorityPatterns,
-            locationExclusionPatterns
+            locationExclusionPatterns,
+            customerMinShelfLifeDaysQ
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -2092,6 +2096,11 @@ const _appRouter = router({
             .array(z.object({ pattern: z.string(), label: z.string() }))
             .optional()
             .default([]),
+          locationExclusionPatterns: z
+            .array(z.object({ pattern: z.string(), label: z.string() }))
+            .optional()
+            .default([]),
+          minShelfLifeDays: z.number().int().positive().optional().nullable(),
           notes: z.string().optional().nullable(),
         })
       )
@@ -2106,6 +2115,8 @@ const _appRouter = router({
             noLotMixing: input.noLotMixing,
             autoRun: input.autoRun,
             locationPriorityPatterns: input.locationPriorityPatterns,
+            locationExclusionPatterns: input.locationExclusionPatterns,
+            minShelfLifeDays: input.minShelfLifeDays,
             notes: input.notes,
           },
         });

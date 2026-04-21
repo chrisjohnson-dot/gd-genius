@@ -507,6 +507,8 @@ export async function upsertCustomerRule(
         noLotMixing: rule.noLotMixing,
         autoRun: rule.autoRun,
         locationPriorityPatterns: rule.locationPriorityPatterns ?? [],
+        locationExclusionPatterns: rule.locationExclusionPatterns ?? [],
+        minShelfLifeDays: rule.minShelfLifeDays ?? null,
         notes: rule.notes ?? null,
         updatedAt: new Date(),
       },

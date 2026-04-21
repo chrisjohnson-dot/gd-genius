@@ -1492,7 +1492,10 @@
 - [ ] Item 2: Collapse "Orders Out of SLA" by warehouse on B2B and D2C tabs
 - [ ] Item 3: Remove "Mark as Allocated" button from warehouse-specific view (system-driven only)
 - [ ] Item 4: Simplify Open Orders columns — keep Required Ship Date with (days late) in brackets; remove Req Ship, Overdue, Age, Comment Box columns; allow sort by oldest days late
-- [ ] Item 5: SLA Performance — add CONTAINS matching for ship-to customer name; add day-of-week ship rule (e.g. all orders containing 'Bulk Barn' ship following Wednesday)
-- [ ] Item 6: Run Allocation Tool — remove "Select All Clients" button
-- [ ] Item 7: Run Allocation Tool order table — redesign to show TX#, Create Date, PO#, Ship To, City, Lines, Pieces columns with checkboxes and Select All per customer
-- [ ] Item 8: Purchase Orders — replace free-text Customer Name with autocomplete from Extensiv customer list
+- [x] Item 5: SLA Performance — add CONTAINS matching for ship-to customer name; add day-of-week ship rule (e.g. all orders containing 'Bulk Barn' ship following Wednesday)
+- [x] Item 6: Run Allocation Tool — remove "Select All Clients" button
+- [x] Item 7: Run Allocation Tool order table — redesign to show TX#, Create Date, PO#, Ship To, City, Lines, Pieces columns with checkboxes and Select All per customer
+- [x] Item 8: Purchase Orders — replace free-text Customer Name with autocomplete from Extensiv customer list
+- [x] FEFO engine: wire customerMinShelfLifeDays from customer rules into runAllocationEngine; apply per-order note overrides (parseOrderNoteRules); filter inventory by shelf life before pallet decision
+- [x] AllocationRules UI: add Min Shelf Life (days) input field per customer; save/load via customerRules.save/list tRPC endpoints
+- [x] DB: upsertCustomerRule now persists locationExclusionPatterns and minShelfLifeDays

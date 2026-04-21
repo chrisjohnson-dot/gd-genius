@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ import {
   DollarSign,
   LayoutGrid,
   RotateCcw,
+  ChevronsUpDown,
 } from "lucide-react";
 
 type PoType = "kitting" | "labor" | "materials";
@@ -91,6 +92,62 @@ function SimpleKpiCard({ label, value }: { label: string; value: string | number
     <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
       <div className="text-xs text-gray-500 font-medium mb-1">{label}</div>
       <div className="text-2xl font-extrabold text-gray-900 tracking-tight">{value}</div>
+    </div>
+  );
+}
+
+// ─── Customer Autocomplete ───────────────────────────────────────────────────
+function CustomerAutocomplete({ value, onChange, onSelectId }: {
+  value: string;
+  onChange: (name: string) => void;
+  onSelectId: (id: string) => void;
+}) {
+  const { data: configs } = trpc.config.list.useQuery();
+  const configId = configs && configs.length > 0 ? configs[0]!.id : null;
+  const { data: customers = [] } = trpc.extensiv.customers.useQuery(
+    { configId: configId! },
+    { enabled: !!configId }
+  );
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = value.trim()
+    ? customers.filter((c) => c.name.toLowerCase().includes(value.toLowerCase()))
+    : customers;
+
+  const handleSelect = (c: { id: number; name: string }) => {
+    onChange(c.name);
+    onSelectId(String(c.id));
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Type to search customers…"
+          className="pr-8"
+        />
+        <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
+          {filtered.map((c) => (
+            <div
+              key={c.id}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(c); }}
+            >
+              {c.name}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -161,8 +218,15 @@ function CreatePoDialog({ open, onClose, defaultType, onCreated }: {
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Customer Name *</Label><Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Acme Corp" /></div>
-            <div><Label>Customer ID</Label><Input value={customerId} onChange={(e) => setCustomerId(e.target.value)} placeholder="Optional" /></div>
+            <div>
+              <Label>Customer Name *</Label>
+              <CustomerAutocomplete
+                value={customerName}
+                onChange={setCustomerName}
+                onSelectId={setCustomerId}
+              />
+            </div>
+            <div><Label>Customer ID</Label><Input value={customerId} onChange={(e) => setCustomerId(e.target.value)} placeholder="Auto-filled or manual" /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

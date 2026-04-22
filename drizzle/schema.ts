@@ -2234,3 +2234,23 @@ export const ediEscalations = mysqlTable('edi_escalations', {
 });
 export type EdiEscalation = typeof ediEscalations.$inferSelect;
 export type InsertEdiEscalation = typeof ediEscalations.$inferInsert;
+
+// ─── Order Notes ──────────────────────────────────────────────────────────────
+// Timestamped, user-attributed notes attached to an order_tracking row.
+export const orderNotes = mysqlTable("order_notes", {
+  id: int("id").primaryKey().autoincrement(),
+  /** FK → order_tracking.id */
+  orderTrackingId: int("order_tracking_id").notNull(),
+  /** Extensiv TX ID — denormalised for fast lookup without a join */
+  extensivOrderId: int("extensiv_order_id").notNull(),
+  /** The note body */
+  body: text("body").notNull(),
+  /** Display name of the user who added the note */
+  authorName: varchar("author_name", { length: 256 }).notNull(),
+  /** Open ID of the user who added the note (for deduplication / audit) */
+  authorOpenId: varchar("author_open_id", { length: 256 }).notNull(),
+  /** UTC ms timestamp when the note was created */
+  createdAt: bigint("created_at", { mode: "number" }).notNull().$defaultFn(() => Date.now()),
+});
+export type OrderNote = typeof orderNotes.$inferSelect;
+export type InsertOrderNote = typeof orderNotes.$inferInsert;

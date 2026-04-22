@@ -227,9 +227,9 @@ function VeeqoPanel() {
         </div>
         <Badge className="bg-green-600 text-white text-xs">Active</Badge>
       </div>
-      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
-        <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
-        <span><strong>US Account Note:</strong> Veeqo's carrier label purchase API is only available for UK accounts. For US accounts, labels are generated via a direct carrier API and the tracking number is recorded in Veeqo.</span>
+      <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800 p-3 text-xs text-green-800 dark:text-green-300">
+        <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-green-500" />
+        <span><strong>Rate Shopping API enabled.</strong> Labels are purchased directly through Veeqo using the Rate Shopping API — rates from all connected carriers are fetched and the label is generated in one step.</span>
       </div>
     </div>
   );

@@ -7147,10 +7147,12 @@ const smallParcelRouter = router({
         let bookResult;
         try {
           bookResult = await veeqo.bookShipment({
-            rate_id: confirmedShipment!.serviceCode!,
-            remote_shipment_id: confirmedShipment!.remoteShipmentId!,
             request_token: confirmedShipment!.requestToken!,
-            notify_customer: false,
+            label_format: "PDF",
+            shipments: [{
+              remote_shipment_id: confirmedShipment!.remoteShipmentId!,
+              rate_id: confirmedShipment!.serviceCode!,
+            }],
           });
         } catch (err) {
           console.error(`[SmallParcel] Veeqo bookShipment error:`, err);
@@ -7160,19 +7162,37 @@ const smallParcelRouter = router({
           });
         }
 
-        trackingNumber = bookResult.tracking_number;
-        carrier = bookResult.carrier ?? confirmedShipment!.carrierCode ?? "Veeqo";
-        serviceLevel = bookResult.service ?? confirmedShipment!.serviceName ?? "";
-        labelUrl = `https://app.veeqo.com/shipments/${bookResult.id}`;
+        // New API response: { successful: { [remote_shipment_id]: VeeqoBookedShipment }, failed: {} }
+        const remoteId = confirmedShipment!.remoteShipmentId!;
+        const failedEntry = bookResult.failed?.[remoteId];
+        if (failedEntry) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Veeqo label booking failed: ${failedEntry.errors?.join("; ") ?? "unknown error"}`,
+          });
+        }
+        const bookedShipment = bookResult.successful?.[remoteId] ?? Object.values(bookResult.successful ?? {})[0];
+        if (!bookedShipment) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Veeqo booking returned no successful shipment.",
+          });
+        }
+        trackingNumber = bookedShipment.tracking_number;
+        carrier = bookedShipment.carrier_id ?? bookedShipment.service_carrier ?? confirmedShipment!.carrierCode ?? "Veeqo";
+        serviceLevel = bookedShipment.service_name ?? confirmedShipment!.serviceName ?? "";
+        labelUrl = `https://app.veeqo.com/shipments/${bookedShipment.external_shipment_id ?? remoteId}`;
 
-        // Use the ZPL/PDF label content from Veeqo if available, otherwise build a ZPL wrapper
-        if (bookResult.label_content && bookResult.label_format === "zpl") {
+        // Use the label content from Veeqo if available, otherwise build a fallback ZPL
+        const labelFormat = (bookedShipment.label_format ?? "").toUpperCase();
+        if (bookedShipment.label_content && labelFormat === "ZPL") {
           // Veeqo returned raw ZPL — decode from base64
-          labelZpl = Buffer.from(bookResult.label_content, "base64").toString("utf-8");
-        } else if (bookResult.label_content) {
-          // Veeqo returned PDF or other format — store as-is and build a simple ZPL for printing
-          // (the PDF URL will be used for browser-based printing)
+          labelZpl = Buffer.from(bookedShipment.label_content, "base64").toString("utf-8");
+        } else if (bookedShipment.label_content && labelFormat === "PDF") {
+          // Veeqo returned a PDF label — store base64 for browser printing, build fallback ZPL
           labelZpl = buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
+          // Store the PDF base64 in labelUrl for direct download
+          labelUrl = `data:application/pdf;base64,${bookedShipment.label_content}`;
         } else {
           labelZpl = buildFallbackZpl(trackingNumber, carrier, serviceLevel, session);
         }
@@ -8856,7 +8876,8 @@ const rateWizardRouter = router({
           } catch { /* skip */ }
         }
       }
-      const hasVeeqoCredentials = activeIntegration === 'veeqo' && !!(veeqoApiKey && veeqoConfigIds.length > 0);
+      // shipping_configuration_ids is optional in the new Rate Shopping API — just need the API key
+      const hasVeeqoCredentials = activeIntegration === 'veeqo' && !!veeqoApiKey;
 
       if (hasVeeqoCredentials && input.destPostal) {
         // ── Live Veeqo Rate Shopping ──────────────────────────────────────────
@@ -8867,68 +8888,77 @@ const rateWizardRouter = router({
           const originAccount = activeAccounts.find((a) => a.originAddress1 && a.originPostal);
           const shipFrom: VeeqoAddress = {
             name: originAccount?.originName ?? "Go Direct Logistics",
-            address1: originAccount?.originAddress1 ?? "123 Warehouse Dr",
+            address_line1: originAccount?.originAddress1 ?? "123 Warehouse Dr",
             city: originAccount?.originCity ?? "",
-            state: originAccount?.originState ?? "",
-            zip: originAccount?.originPostal ?? "",
-            country: originAccount?.originCountry ?? (input.destCountry === "CA" ? "CA" : "US"),
+            state_or_region: originAccount?.originState ?? "",
+            postal_code: originAccount?.originPostal ?? "",
+            country_code: originAccount?.originCountry ?? (input.destCountry === "CA" ? "CA" : "US"),
           };
 
           const shipTo: VeeqoAddress = {
             name: input.destName ?? input.destCity ?? "Recipient",
-            address1: input.destAddress1 ?? "",
+            address_line1: input.destAddress1 ?? "",
             city: input.destCity ?? "",
-            state: input.destState ?? "",
-            zip: input.destPostal,
-            country: input.destCountry,
-            is_residential: input.isResidential,
+            state_or_region: input.destState ?? "",
+            postal_code: input.destPostal,
+            country_code: input.destCountry,
           };
 
           const ratesResp = await veeqo.getRates({
-            ship_from: shipFrom,
-            ship_to: shipTo,
-            packages: [{
+            from_address: shipFrom,
+            to_address: shipTo,
+            parcels: [{
               weight: lbsToOz(input.weightLbs),
+              weight_unit: "oz",
               length: input.lengthIn,
               width: input.widthIn,
               height: input.heightIn,
+              dimension_unit: "in",
             }],
-            shipping_configuration_ids: veeqoConfigIds,
+            shipping_configuration_ids: veeqoConfigIds.map(String),
           });
 
+          // In the new API, remote_shipment_id and request_token are top-level (not per-quote)
+          const remoteShipmentId = ratesResp.remote_shipment_id;
           const requestToken = ratesResp.request_token;
 
-          for (const vRate of ratesResp.available) {
+          for (const vRate of ratesResp.quotes) {
             const rawCost = parseFloat(vRate.total_net_charge);
             if (!isFinite(rawCost)) continue;
-            const transitDays = vRate.expected_delivery_days ?? 99;
+
+            // Estimate transit days from delivery_date if provided
+            let transitDays = 99;
+            if (vRate.delivery_date) {
+              const diffMs = new Date(vRate.delivery_date).getTime() - Date.now();
+              if (diffMs > 0) transitDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            }
             if (maxTransitDays !== null && transitDays > maxTransitDays) continue;
 
-            // Determine carrier code from sub_carrier_id or carrier field
-            const carrierCode = vRate.service_carrier ?? vRate.carrier ?? "other";
+            // Determine carrier code from carrier field
+            const carrierCode = vRate.carrier ?? "other";
             if (excludedCarriers.includes(carrierCode)) continue;
 
             const totalCost = applyMarkup(rawCost, getMarkupPct(CARRIER_LABELS[carrierCode] ?? carrierCode, opfiMarkups));
             const surcharges: Array<{ label: string; amount: number }> = vRate.charges
-              .filter((c) => c.charge_type === "OPTIONAL" && parseFloat(c.price.replace(/[^0-9.]/g, "")) > 0)
-              .map((c) => ({ label: c.charge_title, amount: parseFloat(c.price.replace(/[^0-9.]/g, "")) }));
+              .filter((c) => c.chargeType === "OPTIONAL" && c.value > 0)
+              .map((c) => ({ label: c.chargeId, amount: c.value }));
 
             rates.push({
               rateId: vRate.code,
               carrierCode,
-              carrierName: CARRIER_LABELS[carrierCode] ?? vRate.sub_carrier_id ?? carrierCode,
+              carrierName: CARRIER_LABELS[carrierCode] ?? vRate.carrier_nice_name ?? carrierCode,
               service: vRate.title,
-              serviceCode: "",
+              serviceCode: vRate.code,
               transitDays,
               totalCost,
-              currency: input.destCountry === "CA" ? "CAD" : "USD",
+              currency: vRate.currency_code ?? (input.destCountry === "CA" ? "CAD" : "USD"),
               isPreferred: preferredCarrier === carrierCode,
               isCheapest: false,
               isFastest: false,
               surcharges,
               isMock: false,
               hasCredentials: true,
-              remoteShipmentId: vRate.remote_shipment_id,
+              remoteShipmentId,
               requestToken,
             });
           }

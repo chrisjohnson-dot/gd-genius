@@ -558,9 +558,40 @@ const _appRouter = router({
       .query(async ({ input }) => {
         const config = await getExtensivConfigById(input.configId);
         if (!config) throw new TRPCError({ code: "NOT_FOUND" });
-        const facilities = await fetchAllFacilities(config);
-        console.log(`[Extensiv] fetchAllFacilities returned ${facilities.length} facilities:`, JSON.stringify(facilities));
-        return facilities;
+        const apiFacilities = await fetchAllFacilities(config);
+        console.log(`[Extensiv] fetchAllFacilities returned ${apiFacilities.length} facilities:`, JSON.stringify(apiFacilities));
+
+        // Merge with facilities known from the order_tracking table so warehouses that
+        // Extensiv's /properties/facilities API returns with id=0 (or omits entirely)
+        // still appear in the UI. The DB is the authoritative source of facility names
+        // because it is populated by the order sync which reads facilityIdentifier from
+        // individual order records.
+        try {
+          const db = await (await import("./db.js")).getDb();
+          if (db) {
+            const { orderTracking } = await import("../drizzle/schema.js");
+            const { sql: drizzleSql } = await import("drizzle-orm");
+            const dbFacilities = await db
+              .selectDistinct({ facilityId: orderTracking.facilityId, facilityName: orderTracking.facilityName })
+              .from(orderTracking)
+              .where(drizzleSql`${orderTracking.facilityId} IS NOT NULL AND ${orderTracking.facilityName} IS NOT NULL`);
+            const merged = new Map<number, { id: number; name: string }>();
+            // DB rows first (most reliable)
+            for (const r of dbFacilities) {
+              if (r.facilityId && r.facilityName) merged.set(r.facilityId, { id: r.facilityId, name: r.facilityName });
+            }
+            // API results can override name if present
+            for (const f of apiFacilities) {
+              if (f.id > 0) merged.set(f.id, { id: f.id, name: f.name });
+            }
+            const result = Array.from(merged.values()).sort((a, b) => a.id - b.id);
+            console.log(`[Extensiv] facilities merged (api=${apiFacilities.length}, db=${dbFacilities.length}, total=${result.length}):`, JSON.stringify(result));
+            return result;
+          }
+        } catch (err) {
+          console.warn("[Extensiv] facilities DB merge failed, using API result only:", err);
+        }
+        return apiFacilities;
       }),
 
     // Debug endpoint: returns raw API responses for troubleshooting

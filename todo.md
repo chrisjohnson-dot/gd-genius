@@ -1512,3 +1512,4 @@
 - [x] RunDetail: add "Mark Resolved" button to clear verificationStatus = 'failed' flags on confirmed runs
 - [x] RunDetail: add Move Summary tab matching the Allocation Review screen's pull list view
 - [x] RunDetail Move Summary tab: add Export PDF link for the raw movement list
+- [x] AllocationReview: add column totals rows to Pull List, Pack List, Move Summary, and Order Summary tabs

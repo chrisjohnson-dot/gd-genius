@@ -458,6 +458,22 @@ export default function AllocationReview() {
                             )}
                           </tr>
                         ))}
+                        <tr className="border-t-2 border-border bg-muted/40">
+                          <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground" colSpan={5}>Total</td>
+                          <td className="px-4 py-2.5 text-right font-bold tabular-nums text-muted-foreground">
+                            {consolidatedRows.some(r => r.sourceQty != null)
+                              ? consolidatedRows.reduce((s, r) => s + (r.sourceQty ?? 0), 0).toLocaleString()
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-bold tabular-nums text-purple-700 dark:text-purple-400">
+                            {consolidatedRows.reduce((s, r) => s + r.toStaging, 0).toLocaleString()}
+                          </td>
+                          {hasPickFaceMoves && (
+                            <td className="px-4 py-2.5 text-right font-bold tabular-nums text-blue-700 dark:text-blue-400">
+                              {consolidatedRows.reduce((s, r) => s + r.toPickFace, 0).toLocaleString()}
+                            </td>
+                          )}
+                        </tr>
                       </tbody>
                     </table>
                   </div>
@@ -549,6 +565,18 @@ export default function AllocationReview() {
                           </tr>
                         ));
                       })}
+                      {(() => {
+                        const totalPackQty = allocatedOrders.reduce((s, o) => s + (o.detail?.packListItems ?? []).reduce((ss, i) => ss + i.qty, 0), 0);
+                        const totalPackLines = allocatedOrders.reduce((s, o) => s + (o.detail?.packListItems ?? []).length, 0);
+                        if (totalPackLines === 0) return null;
+                        return (
+                          <tr className="border-t-2 border-border bg-muted/40">
+                            <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground" colSpan={4}>Total ({totalPackLines} line{totalPackLines !== 1 ? "s" : ""})</td>
+                            <td className="px-4 py-2.5 text-right font-bold tabular-nums">{totalPackQty.toLocaleString()}</td>
+                            <td colSpan={3} />
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -657,11 +685,11 @@ export default function AllocationReview() {
                             </tr>
                           ))}
                         <tr className="border-t-2 border-border bg-muted/40">
-                              <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground" colSpan={7}>Total</td>
-                              <td className="px-4 py-2.5 text-right font-bold tabular-nums">
-                                {pullListEarly.reduce((sum, item) => sum + item.qty, 0).toLocaleString()}
-                              </td>
-                            </tr>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground" colSpan={7}>Total ({pullListEarly.length} move{pullListEarly.length !== 1 ? "s" : ""})</td>
+                          <td className="px-4 py-2.5 text-right font-bold tabular-nums">
+                            {pullListEarly.reduce((sum, item) => sum + item.qty, 0).toLocaleString()}
+                          </td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>
@@ -681,6 +709,23 @@ export default function AllocationReview() {
                   </CardContent>
                 </Card>
               )}
+              {allocatedOrders.length > 0 && (() => {
+                const grandTotalPieces = allocatedOrders.reduce((s, o) => {
+                  const lines = o.detail?.lineItems ?? [];
+                  return s + lines.reduce((ss, l) => ss + l.allocations.reduce((sss, a) => sss + a.qty, 0), 0);
+                }, 0);
+                const grandTotalLines = allocatedOrders.reduce((s, o) => s + (o.detail?.lineItems ?? []).length, 0);
+                return (
+                  <div className="flex items-center justify-between px-4 py-2.5 mb-1 rounded-lg bg-muted/40 border border-border">
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      {allocatedOrders.length} order{allocatedOrders.length !== 1 ? "s" : ""} &middot; {grandTotalLines} line{grandTotalLines !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {grandTotalPieces.toLocaleString()} pcs total
+                    </span>
+                  </div>
+                );
+              })()}
               {allocatedOrders.map((order) => {
                 const lineItems = order.detail?.lineItems ?? [];
                 const totalLines = lineItems.length;
@@ -743,6 +788,11 @@ export default function AllocationReview() {
                                 </tr>
                               ))
                             )}
+                            <tr className="border-t-2 border-border bg-muted/40">
+                              <td className="px-4 py-2 text-xs font-semibold text-muted-foreground" colSpan={2}>Order Total</td>
+                              <td className="px-4 py-2 text-right font-bold tabular-nums">{totalPieces.toLocaleString()}</td>
+                              <td colSpan={2} />
+                            </tr>
                           </tbody>
                         </table>
                       </div>

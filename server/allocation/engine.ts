@@ -625,7 +625,10 @@ export function runAllocationEngine(
       buildingPredicate = (locName: string): boolean => {
         const upper = locName.toUpperCase();
         if (extraPrefixes.some((p) => upper.startsWith(p))) return true;
-        const numMatch = locName.match(/^(\d+)/);
+        // Extract exactly the first 2 digits as the building number.
+        // Location names follow the format BB-AAANNN (e.g. 0404802 = building 04).
+        // Using /^(\d+)/ would match the full number (e.g. 404802 >= 12 is always true).
+        const numMatch = locName.match(/^(\d{2})/);
         if (!numMatch) return false;
         return parseInt(numMatch[1], 10) >= preferredBuildingMinPrefix;
       };

@@ -235,9 +235,35 @@ function filterByShelfLife(records: InventoryPoolRecord[], minShelfLifeDays: num
 function applyLocationPriority(
   records: InventoryPoolRecord[],
   patterns: Array<{ pattern: string; label: string }>,
+  /**
+   * When provided, records are first split into preferred-building (tier 0) and
+   * fallback-building (tier 1) groups BEFORE applying location-priority patterns
+   * and FEFO. This ensures the building preference always beats FEFO ordering.
+   */
+  isPreferredBuilding?: (locName: string) => boolean,
 ): InventoryPoolRecord[] {
-  if (patterns.length === 0) return sortFEFO(records);
-  const getTier = (rec: InventoryPoolRecord): number => {
+  // Determine the building tier (0 = preferred, 1 = fallback).
+  // This is the outermost sort key — it must never be overridden by FEFO.
+  const getBuildingTier = (rec: InventoryPoolRecord): number => {
+    if (!isPreferredBuilding) return 0;
+    const locName = rec.locationIdentifier?.nameKey?.name ?? "";
+    return isPreferredBuilding(locName) ? 0 : 1;
+  };
+
+  if (patterns.length === 0) {
+    if (!isPreferredBuilding) {
+      // No building preference and no patterns — preserve caller order (already FEFO-sorted per building group).
+      return [...records];
+    }
+    // Building preference only — sort by building tier first, then FEFO within each tier.
+    return [...records].sort((a, b) => {
+      const tierDiff = getBuildingTier(a) - getBuildingTier(b);
+      if (tierDiff !== 0) return tierDiff;
+      return getInventoryPriority(a) - getInventoryPriority(b);
+    });
+  }
+
+  const getPatternTier = (rec: InventoryPoolRecord): number => {
     const locName = rec.locationIdentifier?.nameKey?.name ?? "";
     for (let i = 0; i < patterns.length; i++) {
       try {
@@ -248,12 +274,15 @@ function applyLocationPriority(
     }
     return patterns.length;
   };
-  // Stable composite sort: tier ascending (primary), then FEFO/receiveItemId ascending (secondary).
-  // Using a single comparator avoids the instability of chaining two .sort() calls, which can
-  // discard the FEFO order when two records share the same tier.
+  // Stable composite sort:
+  //   1. Building tier (preferred building first) — outermost, never overridden
+  //   2. Location-priority pattern tier
+  //   3. FEFO / receiveItemId
   return [...records].sort((a, b) => {
-    const tierDiff = getTier(a) - getTier(b);
-    if (tierDiff !== 0) return tierDiff;
+    const buildingDiff = getBuildingTier(a) - getBuildingTier(b);
+    if (buildingDiff !== 0) return buildingDiff;
+    const patternDiff = getPatternTier(a) - getPatternTier(b);
+    if (patternDiff !== 0) return patternDiff;
     return getInventoryPriority(a) - getInventoryPriority(b);
   });
 }
@@ -275,6 +304,12 @@ function planSkuMovements(
    * of being routed to a pick face.
    */
   hasPickFace = false,
+  /**
+   * Optional building preference predicate. When provided, warehouse records
+   * whose location name satisfies this predicate are always consumed before
+   * fallback-building records, regardless of FEFO order.
+   */
+  isPreferredBuilding?: (locName: string) => boolean,
 ): {
   stagingMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
   pickFaceMoves: Array<{ record: InventoryPoolRecord; qty: number }>;
@@ -332,7 +367,7 @@ function planSkuMovements(
   // a small overage when the pick face already has available stock.
   // Note: the `remaining` variable was declared in Step 0 above; we continue reducing it here.
 
-  for (const rec of applyLocationPriority(warehouseRecords, locationPriorityPatterns)) {
+  for (const rec of applyLocationPriority(warehouseRecords, locationPriorityPatterns, isPreferredBuilding)) {
     if (remaining <= 0) break;
     const palletQty = rec.remainingQty; // full pallet
 
@@ -578,34 +613,24 @@ export function runAllocationEngine(
     // a non-numeric prefix like "CV") come BEFORE Building 1 locations.
     // Staging is already drained first (Step 0 in planSkuMovements).
     // Building 1 records are kept as fallback at the end.
-    let allWarehouse: InventoryPoolRecord[];
+    // Build the isPreferredBuilding predicate if a building preference is configured.
+    // This is passed directly into planSkuMovements → applyLocationPriority so that
+    // building tier is the outermost sort key and can never be overridden by FEFO.
+    let buildingPredicate: ((locName: string) => boolean) | undefined;
     if (preferredBuildingMinPrefix != null && preferredBuildingMinPrefix > 0) {
       const extraPrefixes = (preferredBuildingPrefixes ?? "")
         .split(",")
         .map((p) => p.trim().toUpperCase())
         .filter(Boolean);
-
-      const isPreferredBuilding = (locName: string): boolean => {
-        // Check non-numeric prefixes first (e.g. "CV")
+      buildingPredicate = (locName: string): boolean => {
         const upper = locName.toUpperCase();
         if (extraPrefixes.some((p) => upper.startsWith(p))) return true;
-        // Extract leading numeric digits
         const numMatch = locName.match(/^(\d+)/);
         if (!numMatch) return false;
         return parseInt(numMatch[1], 10) >= preferredBuildingMinPrefix;
       };
-
-      const preferred = warehouseRecords.filter((r) =>
-        isPreferredBuilding(r.locationIdentifier?.nameKey?.name ?? "")
-      );
-      const fallback = warehouseRecords.filter((r) =>
-        !isPreferredBuilding(r.locationIdentifier?.nameKey?.name ?? "")
-      );
-      // Within each group, keep FEFO / location-priority order (applied inside planSkuMovements)
-      allWarehouse = [...preferred, ...fallback];
-    } else {
-      allWarehouse = [...warehouseRecords];
     }
+    const allWarehouse = [...warehouseRecords];
 
     // ── Smart per-SKU pick face routing ─────────────────────────────────────
     // Priority:
@@ -683,6 +708,7 @@ export function runAllocationEngine(
       locationPriorityPatterns,
       stagingAlreadyThere,
       hasPf,
+      buildingPredicate,
     );
 
     // Always build the staging pool with whatever we could move, even if not fully satisfied.

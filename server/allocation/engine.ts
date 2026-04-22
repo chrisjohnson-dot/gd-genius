@@ -539,11 +539,16 @@ export function runAllocationEngine(
     // Apply shelf life filter to all records for this SKU
     const shelfLifeFiltered = shelfLifeFloor > 0 ? filterByShelfLife(allSkuRecords, shelfLifeFloor) : allSkuRecords;
 
-    // Helper: resolve effective location type — use explicit config first, then name-based inference
+    // Helper: resolve effective location type — use explicit config first, then name-based inference.
+    // SAFETY OVERRIDE: if the location name contains "staging" or ends with "-stage", always treat
+    // as staging regardless of what the DB says (prevents ACR-Staging being misclassified as pick_face).
     const resolveLocType = (r: InventoryPoolRecord): LocationType => {
+      const locName = r.locationIdentifier?.nameKey?.name ?? "";
+      // Staging name always wins — even over DB config
+      if (/staging/i.test(locName) || /-stage$/i.test(locName)) return "staging";
       const configured = locationTypeMap[r.locationIdentifier?.id ?? -1];
       if (configured) return configured;
-      return inferLocationTypeFromName(r.locationIdentifier?.nameKey?.name);
+      return inferLocationTypeFromName(locName);
     };
 
     // Separate inventory into three tiers:
@@ -637,21 +642,38 @@ export function runAllocationEngine(
     // Always build the staging pool with whatever we could move, even if not fully satisfied.
     // The per-order assignment step will skip individual orders that can't be fully covered.
 
+    // Pre-compute total available qty per source location for accurate On Hand display.
+    // A single location may have multiple inventory records (different lots/pallets);
+    // the pull list consolidates them into one row per SKU+location, so sourceQty
+    // must reflect the sum of all records at that location being moved.
+    const stagingLocTotals = new Map<number, number>();
+    for (const { record } of stagingMoves) {
+      const locId = record.locationIdentifier?.id ?? 0;
+      stagingLocTotals.set(locId, (stagingLocTotals.get(locId) ?? 0) + record.available);
+    }
+    const pickFaceLocTotals = new Map<number, number>();
+    for (const { record } of pickFaceMoves) {
+      const locId = record.locationIdentifier?.id ?? 0;
+      pickFaceLocTotals.set(locId, (pickFaceLocTotals.get(locId) ?? 0) + record.available);
+    }
+
     // Record staging pool for this SKU
     const pool: SkuStagingPool = { records: [], totalQty: 0 };
     for (const { record, qty } of stagingMoves) {
       pool.records.push({ record, qty, lotNumber: record.lotNumber, expirationDate: record.expirationDate });
       pool.totalQty += qty;
 
+      const stagingLocId = record.locationIdentifier?.id ?? 0;
       globalPullList.push({
         sku,
         description: descriptionMap.get(sku),
         receiveItemId: record.receiveItemId,
         qty,
-        sourceQty: record.available, // total available in source location at allocation time
-        fromLocationId: record.locationIdentifier?.id ?? 0,
+        // Use total available across all records at this location (not just this record)
+        sourceQty: stagingLocTotals.get(stagingLocId) ?? record.available,
+        fromLocationId: stagingLocId,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
-        fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
+        fromLocationType: locationTypeMap[stagingLocId] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
         toLocationId: stagingLocationId,
         toLocationName: stagingLocationName,
         movement: "to_staging",
@@ -663,15 +685,17 @@ export function runAllocationEngine(
 
     // Record pick face replenishment moves
     for (const { record, qty } of pickFaceMoves) {
+      const pfLocId = record.locationIdentifier?.id ?? 0;
       globalPullList.push({
         sku,
         description: descriptionMap.get(sku),
         receiveItemId: record.receiveItemId,
         qty,
-        sourceQty: record.available,
-        fromLocationId: record.locationIdentifier?.id ?? 0,
+        // Use total available across all records at this location (not just this record)
+        sourceQty: pickFaceLocTotals.get(pfLocId) ?? record.available,
+        fromLocationId: pfLocId,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
-        fromLocationType: locationTypeMap[record.locationIdentifier?.id ?? -1] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
+        fromLocationType: locationTypeMap[pfLocId] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
         toLocationId: pfId,
         toLocationName: pfName,
         movement: "to_pick_face",

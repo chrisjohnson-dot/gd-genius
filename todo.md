@@ -1516,3 +1516,5 @@
 - [x] Fix: Extensiv API staging move fails with "Pick Face" as destination — filter now excludes to_pick_face moves so only warehouse→staging moves are sent to Extensiv mover endpoint
 - [x] Fix: confirm procedure now aborts allocator step if any staging move fails — returns failed status immediately without calling Extensiv allocator
 - [ ] Engine: staging-first allocation — consume available, not-on-hold staging inventory before pick face or warehouse for each SKU
+- [ ] Fix: ACR-Staging stored as pick_face in location_configs DB — add engine safety override to treat any location with "staging" in name as staging regardless of DB type
+- [ ] Fix: sourceQty on pull list shows only first record's qty instead of total available across all records for that SKU at that location (e.g. ACR950 shows 12 instead of 14)

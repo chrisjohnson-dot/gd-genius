@@ -394,11 +394,16 @@ export default function SmallParcelHistory() {
                     <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {/* Reference + status */}
                       <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           <span className={`font-mono font-semibold text-sm truncate ${isVoided ? "line-through text-muted-foreground" : ""}`}>
                             {session.referenceNum ?? "—"}
                           </span>
+                          {/^\d{3}-\d{7}-\d{7}$/.test(session.referenceNum ?? "") && (
+                            <Badge className="text-[10px] px-1.5 py-0 h-4 bg-[#FF9900] text-white border-0 font-bold shrink-0">
+                              amazon
+                            </Badge>
+                          )}
                         </div>
                         <StatusBadge status={session.status} />
                       </div>

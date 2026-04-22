@@ -613,11 +613,11 @@ export default function LocationConfig() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Switch
-                              checked={loc.isActive !== false}
+                              checked={!!loc.isActive}
                               onCheckedChange={(checked) =>
                                 toggleActiveMutation.mutate({ id: loc.id, isActive: checked })
                               }
-                              title={loc.isActive !== false ? "Active — click to deactivate" : "Inactive — click to activate"}
+                              title={!!loc.isActive ? "Active — click to deactivate" : "Inactive — click to activate"}
                             />
                             <Button variant="ghost" size="sm" onClick={() => openEdit(loc)}>
                               <Pencil className="h-3.5 w-3.5" />

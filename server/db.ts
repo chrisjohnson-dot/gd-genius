@@ -493,14 +493,20 @@ export async function getCustomerRules(configId: number): Promise<CustomerRule[]
   return db.select().from(customerRules).where(eq(customerRules.configId, configId));
 }
 
-export async function getCustomerRule(configId: number, customerId: number): Promise<CustomerRule | undefined> {
+export async function getCustomerRule(configId: number, customerId: number, facilityId?: number): Promise<CustomerRule | undefined> {
   const db = await getDb();
   if (!db) return undefined;
+  // Prefer facility-specific row; fall back to any row for this customer
   const rows = await db
     .select()
     .from(customerRules)
     .where(and(eq(customerRules.configId, configId), eq(customerRules.customerId, customerId)))
-    .limit(1);
+    .orderBy(customerRules.id);
+  if (rows.length === 0) return undefined;
+  if (facilityId != null) {
+    const facilityRow = rows.find((r) => r.facilityId === facilityId);
+    if (facilityRow) return facilityRow;
+  }
   return rows[0];
 }
 
@@ -509,14 +515,16 @@ export async function upsertCustomerRule(
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db
-    .insert(customerRules)
-    .values(rule)
-    .onDuplicateKeyUpdate({
-      set: {
+  // Check if a row already exists for this (configId, customerId) and update it directly.
+  // This avoids duplicate rows that would occur if the DB unique index is not yet in place.
+  const existing = await getCustomerRule(rule.configId, rule.customerId);
+  if (existing) {
+    await db
+      .update(customerRules)
+      .set({
         customerName: rule.customerName,
-        facilityId: rule.facilityId,
-        facilityName: rule.facilityName,
+        facilityId: rule.facilityId ?? existing.facilityId,
+        facilityName: rule.facilityName ?? existing.facilityName,
         noLotMixing: rule.noLotMixing,
         autoRun: rule.autoRun,
         locationPriorityPatterns: rule.locationPriorityPatterns ?? [],
@@ -526,8 +534,29 @@ export async function upsertCustomerRule(
         preferredBuildingMinPrefix: rule.preferredBuildingMinPrefix ?? null,
         preferredBuildingPrefixes: rule.preferredBuildingPrefixes ?? null,
         updatedAt: new Date(),
-      },
-    });
+      })
+      .where(eq(customerRules.id, existing.id));
+  } else {
+    await db
+      .insert(customerRules)
+      .values(rule)
+      .onDuplicateKeyUpdate({
+        set: {
+          customerName: rule.customerName,
+          facilityId: rule.facilityId,
+          facilityName: rule.facilityName,
+          noLotMixing: rule.noLotMixing,
+          autoRun: rule.autoRun,
+          locationPriorityPatterns: rule.locationPriorityPatterns ?? [],
+          locationExclusionPatterns: rule.locationExclusionPatterns ?? [],
+          minShelfLifeDays: rule.minShelfLifeDays ?? null,
+          notes: rule.notes ?? null,
+          preferredBuildingMinPrefix: rule.preferredBuildingMinPrefix ?? null,
+          preferredBuildingPrefixes: rule.preferredBuildingPrefixes ?? null,
+          updatedAt: new Date(),
+        },
+      });
+  }
 }
 
 // ─── Schedule Config ─────────────────────────────────────────────────────────

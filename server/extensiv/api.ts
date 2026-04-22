@@ -311,9 +311,11 @@ export async function fetchOpenOrders(
   // We also do NOT filter by facilityid here — the facilityId in the customer's embedded
   // `facilities` array is often different from the facilityIdentifier.id on order records.
   // Instead we filter client-side after fetching.
-  // Filter to open/unallocated orders only (status 0=Open, 1=Complete/Ready, 2=some accounts)
-  // This dramatically reduces the payload for customers with many historical orders
-  const rql = `readonly.customerIdentifier.id==${customerId};readonly.status=in=(0,1,2);readonly.isClosed==false;readonly.fullyAllocated==false`;
+  // Fetch open orders (not closed, status 0-2) — includes both unallocated AND fully-allocated.
+  // We previously excluded fullyAllocated==true, but that caused allocated orders to vanish from
+  // our DB on the next sync (the deletion logic removed them because they were absent from the payload).
+  // Now we include them so our DB stays in sync with Extensiv order details.
+  const rql = `readonly.customerIdentifier.id==${customerId};readonly.status=in=(0,1,2);readonly.isClosed==false`;
   while (true) {
     const data = (await client.get("/orders", {
       pgsiz,
@@ -349,12 +351,11 @@ export async function fetchOpenOrders(
     console.warn(`[Extensiv] fetchOpenOrders: facilityId=${facilityId} matched 0 orders out of ${allOrders.length}. Falling back to all orders for customer ${customerId}. Order facility IDs: ${Array.from(new Set(allOrders.map(o => o.readOnly?.facilityIdentifier?.id))).join(', ')}`);
   }
 
-  // Filter: not closed, not fully allocated, status 0 (Open), 1 (Complete/Ready), or 2 (some accounts use this)
+  // Filter: not closed, status 0-2. Include fully-allocated orders so they remain in our DB.
   // Note: Extensiv order statuses: 0=Open, 1=Complete(ready for pick), 2=some accounts use for partial, 3=Closed, 4=Cancelled
   const filtered = ordersToFilter.filter(
     (o) =>
       !o.readOnly.isClosed &&
-      !o.readOnly.fullyAllocated &&
       o.readOnly.status !== undefined &&
       o.readOnly.status <= 2
   );

@@ -648,11 +648,11 @@ export async function upsertTrackedOrders(
 
   // Fetch existing tracked orders for this config+facility
   const existing = await db
-    .select({ id: orderTracking.id, extensivOrderId: orderTracking.extensivOrderId })
+    .select({ id: orderTracking.id, extensivOrderId: orderTracking.extensivOrderId, lifecycleStatus: orderTracking.lifecycleStatus })
     .from(orderTracking)
     .where(and(eq(orderTracking.configId, configId), eq(orderTracking.facilityId, facilityId)));
 
-  const existingMap = new Map(existing.map((r) => [r.extensivOrderId, r.id]));
+  const existingMap = new Map(existing.map((r) => [r.extensivOrderId, r]));
   const incomingIds = new Set(orders.map((o) => o.extensivOrderId));
 
   let inserted = 0;
@@ -660,7 +660,7 @@ export async function upsertTrackedOrders(
 
   for (const o of orders) {
     const now = new Date();
-    if (existingMap.has(o.extensivOrderId)) {
+    if (existingMap.get(o.extensivOrderId)) {
       // Update details only — do NOT touch lifecycleStatus
       await db
         .update(orderTracking)
@@ -734,12 +734,18 @@ export async function upsertTrackedOrders(
     }
   }
 
-  // Remove orders that are no longer in Extensiv (shipped/closed)
+  // Remove orders that are no longer in Extensiv (shipped/closed).
+  // IMPORTANT: Only delete orders that are still 'unallocated' in our DB.
+  // Orders that have been advanced (allocated, picking, qc, qc_complete, ship_ready)
+  // must be preserved even if Extensiv no longer returns them (e.g. fully allocated).
   let removed = 0;
-  for (const [extId, dbId] of Array.from(existingMap.entries())) {
+  for (const [extId, row] of Array.from(existingMap.entries())) {
     if (!incomingIds.has(extId)) {
-      await db.delete(orderTracking).where(eq(orderTracking.id, dbId));
-      removed++;
+      if (row.lifecycleStatus === "unallocated") {
+        await db.delete(orderTracking).where(eq(orderTracking.id, row.id));
+        removed++;
+      }
+      // else: order has been advanced — keep it in our DB even though Extensiv no longer returns it
     }
   }
 

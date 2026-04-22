@@ -1515,3 +1515,4 @@
 - [x] AllocationReview: add column totals rows to Pull List, Pack List, Move Summary, and Order Summary tabs
 - [x] Fix: Extensiv API staging move fails with "Pick Face" as destination — filter now excludes to_pick_face moves so only warehouse→staging moves are sent to Extensiv mover endpoint
 - [x] Fix: confirm procedure now aborts allocator step if any staging move fails — returns failed status immediately without calling Extensiv allocator
+- [ ] Engine: staging-first allocation — consume available, not-on-hold staging inventory before pick face or warehouse for each SKU

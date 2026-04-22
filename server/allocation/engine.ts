@@ -403,6 +403,9 @@ function planSkuMovements(
 export function inferLocationTypeFromName(name: string | undefined): LocationType {
   if (!name) return "warehouse";
   const trimmed = name.trim();
+  // Rule 0: any location containing "staging" or ending in "-stage" is always staging,
+  // regardless of prefix (e.g. ACR-Staging must NOT be classified as pick face).
+  if (/staging/i.test(trimmed) || /-stage$/i.test(trimmed)) return "staging";
   // Rule 1: ACR prefix → pick face
   if (/^ACR/i.test(trimmed)) return "pick_face";
   // Rule 2: explicit "Pick face" name

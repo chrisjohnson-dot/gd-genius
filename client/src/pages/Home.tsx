@@ -1223,8 +1223,9 @@ function WarehouseCard({
                       <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">Ship To</td>
                       <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">City</td>
                       <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">Age</td>
-                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{groupPieces > 0 ? groupPieces.toLocaleString() : ""}</td>
-                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{group.orders.length} ord</td>
+                      <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right whitespace-nowrap">
+                        {group.orders.length} ord{groupPieces > 0 ? ` · ${groupPieces.toLocaleString()} pcs` : ""}
+                      </td>
                       <td colSpan={2}></td>
                     </tr>,
                     ...group.orders.map((o) => orderRow(o, false)),
@@ -1465,10 +1466,9 @@ function WarehouseCard({
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">Ship To</td>
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium">City</td>
                         <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">Age</td>
-                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">
-                          {groupPieces > 0 ? groupPieces.toLocaleString() : ""}
+                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right whitespace-nowrap">
+                          {group.orders.length} ord{groupPieces > 0 ? ` · ${groupPieces.toLocaleString()} pcs` : ""}
                         </td>
-                        <td className="py-2 px-3 text-[10px] text-gray-400 font-medium text-right">{group.orders.length} ord</td>
                         <td colSpan={2}></td>
                       </tr>,
                       ...group.orders.map((o) => orderRow(o, false)),

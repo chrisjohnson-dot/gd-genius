@@ -492,9 +492,21 @@ export function runAllocationEngine(
   preferredBuildingPrefixes?: string | null,
 ): AllocationRunResult {
   // ── Build mutable inventory pool ─────────────────────────────────────────
+  // Helper to detect staging locations by name (same logic as resolveLocType below).
+  // Used here to allow staging records through even when isOnHold=true, because
+  // Extensiv marks pre-staged inventory as "on hold" internally — those records are
+  // our own pre-staged stock and must be consumed first.
+  const isStagingLocName = (locName: string | undefined): boolean =>
+    !!locName && (/staging/i.test(locName) || /-stage$/i.test(locName));
+
   const inventoryPool = new Map<number, InventoryPoolRecord>();
   for (const rec of inventory) {
-    if (!rec.isOnHold && !rec.quarantined && rec.available > 0) {
+    const locName = rec.locationIdentifier?.nameKey?.name;
+    const inStagingLoc = isStagingLocName(locName);
+    // Include record if:
+    //   • Not on hold AND not quarantined AND has available qty (normal warehouse/pick face stock)
+    //   • OR in a staging location (Extensiv marks pre-staged items as on-hold; we must still consume them)
+    if ((!rec.isOnHold && !rec.quarantined && rec.available > 0) || (inStagingLoc && rec.available > 0)) {
       inventoryPool.set(rec.receiveItemId, { ...rec, remainingQty: rec.available });
     }
   }

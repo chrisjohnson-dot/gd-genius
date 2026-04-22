@@ -1539,3 +1539,8 @@
 - [x] Fix: fetchInventoryFromPath now handles both ResourceList (flat array) and _embedded (HAL) response formats
 - [x] Fix: fetchInventory now skips to next endpoint attempt when 0 records returned (prevents silent empty-array fallthrough)
 - [x] All 742 tests passing, 0 TypeScript errors
+
+## Staging-First Allocation Fix (Apr 22 2026)
+- [x] Root cause: Extensiv marks ACR-Staging inventory records as isOnHold=true; engine's pool builder excluded all isOnHold records, so stagingAlreadyThere was always empty
+- [x] Fix: inventory pool builder now includes records in staging-named locations (name contains "staging" or ends with "-stage") regardless of isOnHold flag
+- [x] All 742 tests passing, 0 TypeScript errors

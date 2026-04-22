@@ -1053,6 +1053,7 @@ const _appRouter = router({
 
           // Fetch inventory for this customer
           const inventory = await fetchInventory(config, customer.customerId, input.facilityId);
+          const stagingRecs = inventory.filter(r => (r.locationIdentifier?.nameKey?.name ?? "").toLowerCase().includes("staging"));
 
           // Fetch item descriptions for this customer
           const descMap = await fetchItemDescriptions(config, customer.customerId);

@@ -1513,3 +1513,4 @@
 - [x] RunDetail: add Move Summary tab matching the Allocation Review screen's pull list view
 - [x] RunDetail Move Summary tab: add Export PDF link for the raw movement list
 - [x] AllocationReview: add column totals rows to Pull List, Pack List, Move Summary, and Order Summary tabs
+- [x] Fix: Extensiv API staging move fails with "Pick Face" as destination — filter now excludes to_pick_face moves so only warehouse→staging moves are sent to Extensiv mover endpoint

@@ -1360,10 +1360,15 @@ const _appRouter = router({
 
         // Step 1: Execute the global pull list moves (SKU-level, not per-order).
         // The pull list is stored at the run level; per-order pullListItems is always empty.
-        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string };
+        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string; movement?: string };
         const globalPullList = (run.pullList ?? []) as PullListEntry[];
-        // Group moves by destination (staging) location and only move non-staging items
-        const stagingMoves = globalPullList.filter((p) => p.fromLocationType !== "staging");
+        // Only send warehouse→staging moves to Extensiv here.
+        // Exclude items already in staging (fromLocationType === "staging") AND
+        // exclude pick-face replenishment moves (movement === "to_pick_face") — those
+        // have a pick face location as destination and must NOT be sent as staging moves.
+        const stagingMoves = globalPullList.filter(
+          (p) => p.fromLocationType !== "staging" && p.movement !== "to_pick_face"
+        );
         if (stagingMoves.length > 0) {
           // Group by toLocationId (there may be multiple staging locations in multi-customer runs)
           const movesByDest = new Map<number, { name: string; items: Array<{ receiveItemId: number; quantity: number }> }>();
@@ -1768,10 +1773,12 @@ const _appRouter = router({
         const config = await getExtensivConfigById(run.configId);
         if (!config) throw new TRPCError({ code: "NOT_FOUND" });
 
-        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string };
+         type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string; movement?: string };
         const globalPullList = (run.pullList ?? []) as PullListEntry[];
-        const stagingMoves = globalPullList.filter((p) => p.fromLocationType !== "staging");
-
+        // Only retry warehouse→staging moves; skip pick-face replenishment moves.
+        const stagingMoves = globalPullList.filter(
+          (p) => p.fromLocationType !== "staging" && p.movement !== "to_pick_face"
+        );
         if (stagingMoves.length === 0) {
           return { success: true, moved: 0, errors: [] };
         }

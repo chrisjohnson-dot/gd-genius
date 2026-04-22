@@ -637,6 +637,7 @@ export async function upsertTrackedOrders(
     notes: string | null;
     savedElements: string | null;  // JSON string of [{name,value}] from Extensiv
     extensivStatus: number;
+    fullyAllocated?: boolean;
     creationDate: string | null;
     requiredShipDate?: string | null;
   }>,
@@ -660,8 +661,15 @@ export async function upsertTrackedOrders(
 
   for (const o of orders) {
     const now = new Date();
-    if (existingMap.get(o.extensivOrderId)) {
-      // Update details only — do NOT touch lifecycleStatus
+    const existingRow = existingMap.get(o.extensivOrderId);
+    if (existingRow) {
+      // Auto-repair: if Extensiv says fullyAllocated but our DB still shows 'unallocated',
+      // advance the lifecycle to 'allocated'. This catches orders that were confirmed in
+      // Extensiv before the fix that writes lifecycleStatus on confirm.
+      const repairToAllocated =
+        o.fullyAllocated === true && existingRow.lifecycleStatus === "unallocated";
+
+      // Update details only — do NOT touch lifecycleStatus (except for the repair above)
       await db
         .update(orderTracking)
         .set({
@@ -679,6 +687,8 @@ export async function upsertTrackedOrders(
           creationDate: o.creationDate ?? undefined,
           requiredShipDate: o.requiredShipDate ?? undefined,
           lastSyncedAt: now,
+          // Auto-repair: advance lifecycle to 'allocated' if Extensiv says fullyAllocated
+          ...(repairToAllocated ? { lifecycleStatus: "allocated" as const, allocatedAt: now } : {}),
         })
         .where(
           and(
@@ -687,6 +697,9 @@ export async function upsertTrackedOrders(
             eq(orderTracking.facilityId, facilityId)
           )
         );
+      if (repairToAllocated) {
+        console.log(`[upsertTrackedOrders] Auto-repaired order ${o.extensivOrderId}: unallocated → allocated (Extensiv fullyAllocated=true)`);
+      }
       updated++;
     } else {
       // Insert new order as unallocated; use onDuplicateKeyUpdate as a safety net

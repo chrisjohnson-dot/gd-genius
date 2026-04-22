@@ -108,6 +108,7 @@ export async function syncOrdersNow(): Promise<{
                     notes: (oRaw.notes as string | null) ?? null,
                     savedElements: savedElementsJson,
                     extensivStatus: o.readOnly.status ?? 0,
+                    fullyAllocated: o.readOnly.fullyAllocated ?? false,
                     creationDate: o.readOnly.creationDate ?? null,
                     requiredShipDate: o.earliestShipDate ?? (oRaw.earliestShipDate as string | null) ?? null,
                   });

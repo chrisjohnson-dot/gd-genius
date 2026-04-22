@@ -1500,6 +1500,14 @@ const _appRouter = router({
 
             if (allocResult.success) {
               successCount++;
+              // Advance the order_tracking lifecycle to 'allocated' so it appears
+              // correctly in the Open Orders sheet immediately after confirmation.
+              try {
+                await updateOrderLifecycleStatus(runOrder.orderId, "allocated");
+                console.log(`[confirm] Lifecycle advanced to 'allocated' for order ${runOrder.orderId}`);
+              } catch (lcErr) {
+                console.error(`[confirm] Failed to advance lifecycle for order ${runOrder.orderId}:`, lcErr);
+              }
             } else {
               errors.push(
                 `Order ${runOrder.referenceNum}: allocate failed - ${allocResult.error}`

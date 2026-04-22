@@ -889,19 +889,7 @@ function WarehouseCard({
         </td>
         <td className="text-xs whitespace-nowrap">
           {o.requiredShipDate ? (
-            <span className="inline-flex items-center gap-1.5">
-              <RequiredShipDateBadge dateStr={o.requiredShipDate} />
-              {(() => {
-                const today = new Date(); today.setHours(0,0,0,0);
-                const target = new Date(o.requiredShipDate); target.setHours(0,0,0,0);
-                const diff = Math.round((today.getTime() - target.getTime()) / 86400000);
-                if (diff <= 0) return null;
-                const cls = diff >= 3
-                  ? "text-[10px] font-bold text-red-700"
-                  : "text-[10px] font-bold text-amber-700";
-                return <span className={cls}>({diff}d late)</span>;
-              })()}
-            </span>
+            <RequiredShipDateBadge dateStr={o.requiredShipDate} />
           ) : (
             <span className="text-muted-foreground">—</span>
           )}

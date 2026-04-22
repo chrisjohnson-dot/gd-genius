@@ -148,6 +148,33 @@ function mapRawCustomer(c: RawExtensivCustomer): ExtensivCustomer {
   return { id, name };
 }
 
+// Fetch all raw customers with embedded facilities and deactivated flag (for diagnostics)
+export async function fetchAllCustomersRaw(
+  config: ExtensivClientConfig
+): Promise<Array<{ id: number; name: string; deactivated: boolean; facilityIds: number[]; facilityNames: string[] }>> {
+  const client = createExtensivClient(config);
+  const allRaw: RawExtensivCustomer[] = [];
+  let pgnum = 1;
+  while (true) {
+    const data = (await client.get("/customers", { pgsiz: 500, pgnum })) as {
+      _embedded?: { "http://api.3plCentral.com/rels/customers/customer"?: RawExtensivCustomer[] };
+    };
+    const page = data?._embedded?.["http://api.3plCentral.com/rels/customers/customer"] ?? [];
+    allRaw.push(...page);
+    if (page.length < 500) break;
+    pgnum++;
+  }
+  return allRaw
+    .map((c) => ({
+      id: c.readOnly?.customerId ?? c.id ?? 0,
+      name: c.companyInfo?.companyName ?? c.name ?? `Customer ${c.readOnly?.customerId ?? c.id ?? 0}`,
+      deactivated: c.readOnly?.deactivated ?? false,
+      facilityIds: (c.facilities ?? []).map((f) => f.id),
+      facilityNames: (c.facilities ?? []).map((f) => f.name),
+    }))
+    .filter((c) => c.id > 0);
+}
+
 // Fetch all customers for a config
 export async function fetchCustomers(config: ExtensivClientConfig): Promise<ExtensivCustomer[]> {
   const client = createExtensivClient(config);

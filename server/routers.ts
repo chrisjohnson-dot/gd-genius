@@ -251,7 +251,7 @@ import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdue
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
-  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders } from "./extensiv/api";
+  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -369,6 +369,61 @@ const _appRouter = router({
           const message = err instanceof Error ? err.message : String(err);
           return { success: false, error: message };
         }
+      }),
+
+    /**
+     * Diagnostic: fetch all customers from Extensiv and classify each one as
+     * syncing or not-syncing (with the reason why it was filtered out).
+     */
+    diagnosticClients: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const config = await getExtensivConfigById(input.id);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+        const clientConfig = {
+          clientId: config.clientId,
+          clientSecret: config.clientSecret,
+          tplGuid: config.tplGuid,
+          userLoginId: config.userLoginId,
+          baseUrl: config.baseUrl,
+        };
+
+        // Fetch all facilities for this config
+        const facilities = await fetchAllFacilities(clientConfig);
+
+        // Fetch all raw customers (paginated) with their embedded facilities + deactivated flag
+        const allRaw = await fetchAllCustomersRaw(clientConfig);
+
+        // Build set of facility IDs we actually sync
+        const syncedFacilityIds = new Set(facilities.map((f) => f.id));
+
+        const results = allRaw.map((c) => {
+          const syncingFacilityNames = c.facilityNames.filter((_, i) => syncedFacilityIds.has(c.facilityIds[i]));
+
+          if (c.deactivated) {
+            return { id: c.id, name: c.name, status: "not_syncing" as const, reason: "Deactivated in Extensiv", facilityNames: c.facilityNames, syncingFacilityNames: [] };
+          }
+          if (c.facilityIds.length === 0) {
+            return { id: c.id, name: c.name, status: "not_syncing" as const, reason: "No facility assigned in Extensiv", facilityNames: [], syncingFacilityNames: [] };
+          }
+          if (syncingFacilityNames.length === 0) {
+            return {
+              id: c.id, name: c.name, status: "not_syncing" as const,
+              reason: `Assigned to facilit${c.facilityNames.length === 1 ? "y" : "ies"} not in sync scope: ${c.facilityNames.join(", ")}`,
+              facilityNames: c.facilityNames,
+              syncingFacilityNames: [],
+            };
+          }
+          return { id: c.id, name: c.name, status: "syncing" as const, reason: null, facilityNames: c.facilityNames, syncingFacilityNames };
+        }).sort((a, b) => a.name.localeCompare(b.name));
+
+        return {
+          totalCustomers: results.length,
+          syncing: results.filter((c) => c.status === "syncing").length,
+          notSyncing: results.filter((c) => c.status === "not_syncing").length,
+          facilities: facilities.map((f) => ({ id: f.id, name: f.name })),
+          customers: results,
+        };
       }),
   }),
 

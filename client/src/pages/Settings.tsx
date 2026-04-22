@@ -3,9 +3,125 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Copy, Loader2, Pencil, Plus, Settings2, Trash2, Webhook, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, Pencil, Plus, RefreshCw, Settings2, Trash2, Webhook, XCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+
+// ─── Client Sync Diagnostic Panel ────────────────────────────────────────────
+function ClientSyncDiagnostic({ configId, configName }: { configId: number; configName: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showSyncing, setShowSyncing] = useState(false);
+  const { data, isLoading, refetch, isFetching } = trpc.config.diagnosticClients.useQuery(
+    { id: configId },
+    { enabled: expanded, staleTime: 5 * 60 * 1000 }
+  );
+
+  const notSyncing = data?.customers.filter((c) => c.status === "not_syncing") ?? [];
+  const syncing = data?.customers.filter((c) => c.status === "syncing") ?? [];
+
+  return (
+    <div className="mt-3 rounded-xl border border-border overflow-hidden">
+      {/* Header toggle */}
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <span className="text-sm font-medium text-foreground">Client Sync Diagnostic</span>
+          {data && notSyncing.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: "#fef2f2", color: "#b91c1c" }}>
+              <AlertTriangle className="h-3 w-3" />{notSyncing.length} not syncing
+            </span>
+          )}
+          {data && notSyncing.length === 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: "#d1fae5", color: "#059669" }}>
+              <CheckCircle2 className="h-3 w-3" />All syncing
+            </span>
+          )}
+        </div>
+        {expanded && (
+          <button
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded"
+            onClick={(e) => { e.stopPropagation(); refetch(); }}
+            disabled={isFetching}
+          >
+            <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="px-4 py-3 space-y-3">
+          {isLoading || isFetching ? (
+            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Fetching all customers from Extensiv…
+            </div>
+          ) : data ? (
+            <>
+              {/* Summary bar */}
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{data.totalCustomers} total customers</span>
+                <span className="text-green-600 font-medium">{data.syncing} syncing</span>
+                {notSyncing.length > 0 && <span className="text-red-600 font-medium">{notSyncing.length} not syncing</span>}
+                <span>Facilities in scope: {data.facilities.map((f) => f.name).join(", ") || "none"}</span>
+              </div>
+
+              {/* Not-syncing list */}
+              {notSyncing.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Not Syncing</p>
+                  {notSyncing.map((c) => (
+                    <div key={c.id} className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-foreground">{c.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground font-mono">#{c.id}</span>
+                        <p className="text-xs text-red-700 mt-0.5">{c.reason}</p>
+                        {c.facilityNames.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Extensiv facilities: {c.facilityNames.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Syncing list (collapsible) */}
+              {syncing.length > 0 && (
+                <div className="space-y-1.5">
+                  <button
+                    className="flex items-center gap-1 text-xs font-semibold text-green-700 uppercase tracking-wide hover:text-green-900"
+                    onClick={() => setShowSyncing((v) => !v)}
+                  >
+                    {showSyncing ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    Syncing ({syncing.length})
+                  </button>
+                  {showSyncing && syncing.map((c) => (
+                    <div key={c.id} className="flex items-start gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-foreground">{c.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground font-mono">#{c.id}</span>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Facilities: {c.syncingFacilityNames.join(", ")}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">No data — click Refresh to load.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ConfigForm {
   id?: number;
@@ -173,6 +289,9 @@ export default function Settings() {
                   >
                     <Trash2 className="h-3.5 w-3.5" /> Delete
                   </Button>
+                </div>
+                <div className="px-6 pb-5">
+                  <ClientSyncDiagnostic configId={c.id} configName={c.name} />
                 </div>
               </div>
             ))}

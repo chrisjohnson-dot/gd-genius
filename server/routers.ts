@@ -1376,11 +1376,10 @@ const _appRouter = router({
             if (!movesByDest.has(p.toLocationId)) movesByDest.set(p.toLocationId, { name: p.toLocationName ?? "", items: [] });
             movesByDest.get(p.toLocationId)!.items.push({ receiveItemId: p.receiveItemId, quantity: p.qty });
           }
-          for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
+           for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
             console.log(`[confirm] Moving ${items.length} items to staging location ${destId} (${destName})`);
             const moveResult = await moveInventory(config, destId, destName, items, run.facilityId);
             if (!moveResult.success) {
-              // Log but don't abort — allocator may still work if inventory is already in staging
               console.error(`[confirm] Move to staging ${destId} failed: ${moveResult.error}`);
               errors.push(`Move to staging failed: ${moveResult.error}`);
             } else {
@@ -1390,7 +1389,24 @@ const _appRouter = router({
         } else {
           console.log(`[confirm] No staging moves needed (${globalPullList.length} pull list items, all already in staging)`);
         }
-
+        // ABORT if any staging move failed — do NOT call the allocator.
+        // Calling the allocator without inventory in staging would allocate orders
+        // against inventory still in the warehouse, leaving an inconsistent state.
+        if (errors.length > 0) {
+          await updateAllocationRun(input.runId, {
+            status: "failed",
+            confirmedAt: new Date(),
+            notes: errors.join("; "),
+          });
+          await createAuditLog({
+            userId: ctx.user.id,
+            action: "allocation.confirm",
+            entityType: "allocation_run",
+            entityId: String(input.runId),
+            details: { successCount: 0, errors, abortedReason: "staging_move_failed" },
+          });
+          return { success: false, successCount: 0, errors };
+        }
         for (const runOrder of allocatedOrders) {
           const detail = runOrder.allocationDetail as {
             lineItems: Array<{

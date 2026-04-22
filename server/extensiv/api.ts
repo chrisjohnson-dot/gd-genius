@@ -482,6 +482,79 @@ export async function fetchOrderWithDetail(
 }
 
 // Fetch inventory stock details for a customer/facility (all pages)
+// Normalize a raw Extensiv inventory record from PascalCase (ResourceList format) to
+// the camelCase ExtensivInventoryRecord interface. The /inventory/stockdetails endpoint
+// returns PascalCase fields (ReceiveItemId, LocationIdentifier.NameKey.Name, etc.) while
+// the HAL-embedded endpoints return camelCase. We normalize both to camelCase here.
+function normalizeInventoryRecord(raw: Record<string, unknown>): ExtensivInventoryRecord {
+  // Helper: get value by trying both PascalCase and camelCase key
+  function get<T>(obj: Record<string, unknown>, camelKey: string): T | undefined {
+    const pascalKey = camelKey.charAt(0).toUpperCase() + camelKey.slice(1);
+    return (obj[camelKey] ?? obj[pascalKey]) as T | undefined;
+  }
+
+  const itemId = get<Record<string, unknown>>(raw, "itemIdentifier") ?? {};
+  const locId = get<Record<string, unknown>>(raw, "locationIdentifier");
+  const palletId = get<Record<string, unknown>>(raw, "palletIdentifier");
+
+  // Normalize locationIdentifier: handle both { NameKey: { Name, FacilityIdentifier } } and { nameKey: { name } }
+  let locationIdentifier: ExtensivInventoryRecord["locationIdentifier"] | undefined;
+  if (locId) {
+    const locIdNum = (get<number>(locId, "id") ?? 0) as number;
+    const nameKeyRaw = get<Record<string, unknown>>(locId, "nameKey");
+    if (nameKeyRaw) {
+      const locName = (get<string>(nameKeyRaw, "name") ?? "") as string;
+      const facRaw = get<Record<string, unknown>>(nameKeyRaw, "facilityIdentifier");
+      locationIdentifier = {
+        id: locIdNum,
+        nameKey: {
+          name: locName,
+          facilityIdentifier: facRaw
+            ? {
+                name: (get<string>(facRaw, "name") ?? "") as string,
+                id: (get<number>(facRaw, "id") ?? 0) as number,
+              }
+            : undefined,
+        },
+      };
+    } else {
+      locationIdentifier = { id: locIdNum };
+    }
+  }
+
+  // Normalize palletIdentifier
+  let palletIdentifier: ExtensivInventoryRecord["palletIdentifier"] | undefined;
+  if (palletId) {
+    const palletIdNum = (get<number>(palletId, "id") ?? 0) as number;
+    const palletNameKeyRaw = get<Record<string, unknown>>(palletId, "nameKey");
+    palletIdentifier = {
+      id: palletIdNum,
+      nameKey: palletNameKeyRaw
+        ? { name: (get<string>(palletNameKeyRaw, "name") ?? "") as string }
+        : undefined,
+    };
+  }
+
+  return {
+    receiveItemId: (get<number>(raw, "receiveItemId") ?? 0) as number,
+    itemIdentifier: {
+      sku: (get<string>(itemId as Record<string, unknown>, "sku") ?? "") as string,
+      id: (get<number>(itemId as Record<string, unknown>, "id") ?? 0) as number,
+    },
+    description: get<string>(raw, "description"),
+    available: (get<number>(raw, "available") ?? 0) as number,
+    onHand: (get<number>(raw, "onHand") ?? 0) as number,
+    isOnHold: !!(get<boolean>(raw, "isOnHold")),
+    quarantined: !!(get<boolean>(raw, "quarantined")),
+    lotNumber: get<string>(raw, "lotNumber"),
+    serialNumber: get<string>(raw, "serialNumber"),
+    expirationDate: get<string>(raw, "expirationDate"),
+    receivedDate: get<string>(raw, "receivedDate"),
+    locationIdentifier,
+    palletIdentifier,
+  };
+}
+
 // Helper: paginated fetch from a given inventory endpoint path
 async function fetchInventoryFromPath(
   client: ReturnType<typeof createExtensivClient>,
@@ -493,22 +566,36 @@ async function fetchInventoryFromPath(
   const pgsiz = 500;
 
   while (true) {
-    const data = (await client.get(path, { ...baseParams, pgsiz, pgnum })) as {
-      totalResults?: number;
-      _embedded?: Record<string, unknown>;
-    };
+    const data = (await client.get(path, { ...baseParams, pgsiz, pgnum })) as Record<string, unknown>;
 
-    // The embedded key varies by endpoint — try common keys
-    const embedded = data?._embedded ?? {};
-    const records = (
-      (embedded["item"] as ExtensivInventoryRecord[] | undefined) ??
-      (embedded["http://api.3plCentral.com/rels/inventory/stockdetail"] as ExtensivInventoryRecord[] | undefined) ??
-      (embedded["http://api.3plCentral.com/rels/customers/itemsummary"] as ExtensivInventoryRecord[] | undefined) ??
-      []
-    );
+    // Handle two response formats:
+    // 1. HAL format: { _embedded: { "http://...": [...] } } — used by itemsummaries
+    // 2. Flat ResourceList format: { TotalResults: N, ResourceList: [...] } — used by /inventory/stockdetails
+    let rawRecords: Record<string, unknown>[] = [];
+
+    const resourceList = data["ResourceList"] ?? data["resourceList"];
+    if (Array.isArray(resourceList)) {
+      // Flat ResourceList format (PascalCase) — normalize each record
+      rawRecords = resourceList as Record<string, unknown>[];
+    } else {
+      // HAL embedded format — try common embedded keys
+      const embedded = (data["_embedded"] ?? {}) as Record<string, unknown>;
+      const halRecords =
+        (embedded["item"] as Record<string, unknown>[] | undefined) ??
+        (embedded["http://api.3plCentral.com/rels/inventory/stockdetail"] as Record<string, unknown>[] | undefined) ??
+        (embedded["http://api.3plCentral.com/rels/customers/itemsummary"] as Record<string, unknown>[] | undefined) ??
+        [];
+      rawRecords = halRecords;
+    }
+
+    const records = rawRecords.map(normalizeInventoryRecord);
     allRecords.push(...records);
 
+    // Pagination: use TotalResults (PascalCase) or totalResults (camelCase)
+    const totalResults = (data["TotalResults"] ?? data["totalResults"]) as number | undefined;
     if (records.length < pgsiz) break;
+    // Safety: if we've fetched all records, stop
+    if (totalResults !== undefined && allRecords.length >= totalResults) break;
     pgnum++;
   }
 
@@ -554,9 +641,15 @@ export async function fetchInventory(
   for (const attempt of endpointAttempts) {
     try {
       const records = await fetchInventoryFromPath(client, attempt.path, attempt.params);
-      // If we got records, return them (even 0 is valid — customer may have no stock)
-      // Only skip to next attempt if we got an error (caught below)
-      return records;
+      // If we got records, return them.
+      // If 0 records, try the next endpoint — 0 may mean the endpoint format isn't supported
+      // for this account (e.g. RQL not supported returns 200 with empty ResourceList).
+      // Exception: the last attempt (itemsummaries without filter) is authoritative — return even if 0.
+      if (records.length > 0 || attempt === endpointAttempts[endpointAttempts.length - 1]) {
+        console.log(`[fetchInventory] Using endpoint ${attempt.path} — ${records.length} records for customer ${customerId}`);
+        return records;
+      }
+      console.warn(`[fetchInventory] Endpoint ${attempt.path} returned 0 records, trying next...`);
     } catch (err: unknown) {
       const status = (err as { status?: number }).status;
       // 503 = service unavailable (wrong endpoint), 404 = not found — try next

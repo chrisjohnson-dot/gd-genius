@@ -1532,3 +1532,10 @@
 - [x] Engine: sort warehouse records so preferred-building locations (numeric prefix >= min, or matching extra prefixes like CV) come before other buildings; staging still drains first; other buildings used as fallback
 - [x] routers.ts: pass preferredBuildingMinPrefix and preferredBuildingPrefixes from customerRule to both runAllocationEngine call sites
 - [x] AllocationRules UI: add Building Preference section with Min aisle prefix input and Additional prefixes input; save/load via customerRules.save/list
+
+## Building Preference Fix — Extensiv API PascalCase (Apr 22 2026)
+- [x] Root cause: /inventory/stockdetails returns PascalCase ResourceList (not camelCase _embedded); fetchInventoryFromPath was looking for _embedded and returning 0 records, so locationIdentifier was always undefined and building preference never applied
+- [x] Fix: added normalizeInventoryRecord() to convert PascalCase Extensiv fields to camelCase ExtensivInventoryRecord interface
+- [x] Fix: fetchInventoryFromPath now handles both ResourceList (flat array) and _embedded (HAL) response formats
+- [x] Fix: fetchInventory now skips to next endpoint attempt when 0 records returned (prevents silent empty-array fallthrough)
+- [x] All 742 tests passing, 0 TypeScript errors

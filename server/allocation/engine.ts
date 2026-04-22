@@ -730,18 +730,14 @@ export function runAllocationEngine(
     // The per-order assignment step will skip individual orders that can't be fully covered.
 
     // Pre-compute total available qty per source location for accurate On Hand display.
-    // A single location may have multiple inventory records (different lots/pallets);
-    // the pull list consolidates them into one row per SKU+location, so sourceQty
-    // must reflect the sum of all records at that location being moved.
-    const stagingLocTotals = new Map<number, number>();
-    for (const { record } of stagingMoves) {
-      const locId = record.locationIdentifier?.id ?? 0;
-      stagingLocTotals.set(locId, (stagingLocTotals.get(locId) ?? 0) + record.available);
-    }
-    const pickFaceLocTotals = new Map<number, number>();
-    for (const { record } of pickFaceMoves) {
-      const locId = record.locationIdentifier?.id ?? 0;
-      pickFaceLocTotals.set(locId, (pickFaceLocTotals.get(locId) ?? 0) + record.available);
+    // sourceQty = total on-hand at that location across ALL inventory records for this SKU
+    // (not just the records being moved). This prevents under-reporting when only some
+    // pallets from a location are pulled, and prevents double-counting when the same
+    // pallet appears in both stagingMoves and pickFaceMoves (split-pallet scenario).
+    const allLocTotals = new Map<number, number>();
+    for (const r of allSkuRecords) {
+      const locId = r.locationIdentifier?.id ?? 0;
+      allLocTotals.set(locId, (allLocTotals.get(locId) ?? 0) + r.available);
     }
 
     // Record staging pool for this SKU
@@ -757,7 +753,7 @@ export function runAllocationEngine(
         receiveItemId: record.receiveItemId,
         qty,
         // Use total available across all records at this location (not just this record)
-        sourceQty: stagingLocTotals.get(stagingLocId) ?? record.available,
+        sourceQty: allLocTotals.get(stagingLocId) ?? record.available,
         fromLocationId: stagingLocId,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
         fromLocationType: locationTypeMap[stagingLocId] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
@@ -779,7 +775,7 @@ export function runAllocationEngine(
         receiveItemId: record.receiveItemId,
         qty,
         // Use total available across all records at this location (not just this record)
-        sourceQty: pickFaceLocTotals.get(pfLocId) ?? record.available,
+        sourceQty: allLocTotals.get(pfLocId) ?? record.available,
         fromLocationId: pfLocId,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
         fromLocationType: locationTypeMap[pfLocId] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),

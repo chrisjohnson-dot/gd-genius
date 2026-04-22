@@ -890,3 +890,245 @@ describe("Allocation Engine — Staging-First Priority", () => {
     expect(fromPickFace).toHaveLength(0);
   });
 });
+
+// ─── sourceQty (On Hand) accuracy ─────────────────────────────────────────────
+//
+// The pull list's sourceQty field must always reflect the TRUE total on-hand at
+// the source location, not just the qty being moved. These tests guard against
+// the double-count regression where the same pallet's available qty was summed
+// into both stagingLocTotals and pickFaceLocTotals when a pallet was split.
+
+describe("Allocation Engine — sourceQty (On Hand) Accuracy", () => {
+  const STAGING_ID   = 100;
+  const PICK_FACE_ID = 200;
+  const WAREHOUSE_ID = 300;
+
+  const ltMap: LocationTypeMap = {
+    [STAGING_ID]:   "staging",
+    [PICK_FACE_ID]: "pick_face",
+    [WAREHOUSE_ID]: "warehouse",
+  };
+
+  /**
+   * Split-pallet double-count regression test.
+   *
+   * Scenario: Pallet has 24 units; order needs 3 units; pick face exists.
+   *   Engine splits the pallet: 3 → staging (to_staging), 21 → pick face (to_pick_face).
+   *   Both pull list entries reference the SAME source pallet (available=24).
+   *
+   * Before the fix: stagingLocTotals and pickFaceLocTotals each summed record.available
+   *   independently, so the to_staging entry got sourceQty=24 and the to_pick_face entry
+   *   also got sourceQty=24. The PDF consolidation took the first value (24) — correct by
+   *   accident — but the underlying data was wrong and could produce 48 in other code paths.
+   *
+   * After the fix: allLocTotals is computed from allSkuRecords (all inventory at the location),
+   *   so sourceQty=24 for both entries regardless of how many pallets are moved.
+   */
+  it("split-pallet: sourceQty equals pallet on-hand (not sum of staging + pick-face qty)", () => {
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 3 }])];
+    const inventory = [
+      // Single pallet of 24; order only needs 3 → split: 3 to staging, 21 to pick face
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 24, locationId: WAREHOUSE_ID }),
+      // Pick face exists so surplus goes there
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 0,  locationId: PICK_FACE_ID }),
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map(),
+      /* noLotMixing */ false,
+      /* pickFaceLocationId */ PICK_FACE_ID,
+      /* pickFaceLocationName */ "ACR101"
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging  = result.pullList.filter((p) => p.movement === "to_staging"   && p.fromLocationId === WAREHOUSE_ID);
+    const toPickFace = result.pullList.filter((p) => p.movement === "to_pick_face" && p.fromLocationId === WAREHOUSE_ID);
+
+    // Quantities are correct
+    expect(toStaging).toHaveLength(1);
+    expect(toStaging[0]!.qty).toBe(3);
+    expect(toPickFace).toHaveLength(1);
+    expect(toPickFace[0]!.qty).toBe(21);
+
+    // sourceQty must equal the pallet's actual on-hand (24), NOT 3+21=24 by coincidence
+    // and NOT 24+24=48 (the double-count bug).
+    expect(toStaging[0]!.sourceQty).toBe(24);
+    expect(toPickFace[0]!.sourceQty).toBe(24);
+  });
+
+  /**
+   * Multiple pallets at the same location — only some are moved.
+   *
+   * Scenario: Location has 3 pallets of 24 each (72 total on-hand).
+   *   Order needs 48 → engine takes pallet A (24) and pallet B (24).
+   *   Pallet C (24) stays in the warehouse.
+   *
+   * sourceQty for each moved pallet's pull list entry must be 72 (total at location),
+   * not 48 (sum of moved pallets) or 24 (individual pallet qty).
+   */
+  it("multi-pallet location: sourceQty reflects total on-hand at location, not just moved pallets", () => {
+    const WAREHOUSE_ID_SAME = 400; // all three pallets share this location ID
+    const ltMapExt: LocationTypeMap = {
+      [STAGING_ID]:        "staging",
+      [PICK_FACE_ID]:      "pick_face",
+      [WAREHOUSE_ID_SAME]: "warehouse",
+    };
+
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 48 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 24, locationId: WAREHOUSE_ID_SAME }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 24, locationId: WAREHOUSE_ID_SAME }),
+      makeInventory({ receiveItemId: 3, sku: "SKU-A", available: 24, locationId: WAREHOUSE_ID_SAME }),
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, ltMapExt, STAGING_ID, "ACR-Staging", new Map()
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging" && p.fromLocationId === WAREHOUSE_ID_SAME);
+    const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
+    expect(stagingQty).toBe(48); // 2 pallets moved
+
+    // Every pull list entry for this location must show the full 72 on-hand
+    for (const entry of toStaging) {
+      expect(entry.sourceQty).toBe(72);
+    }
+  });
+
+  /**
+   * Single pallet, full take — no split.
+   *
+   * Scenario: Pallet has 24 units; order needs exactly 24.
+   *   No pick-face replenishment (no surplus).
+   *   sourceQty must equal 24.
+   */
+  it("full-pallet take: sourceQty equals pallet on-hand", () => {
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 24 }])];
+    const inventory = [
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 24, locationId: WAREHOUSE_ID }),
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, ltMap, STAGING_ID, "ACR-Staging", new Map()
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
+    expect(toStaging).toHaveLength(1);
+    expect(toStaging[0]!.qty).toBe(24);
+    expect(toStaging[0]!.sourceQty).toBe(24);
+  });
+
+  /**
+   * Staging-first: on-hold staging records included in pool.
+   *
+   * Extensiv marks pre-staged inventory as isOnHold=true. The engine must
+   * include those records in the pool (bypassing the on-hold filter) and
+   * consume them before touching pick face or warehouse.
+   */
+  it("staging-first: isOnHold=true records in staging location are included and consumed first", () => {
+    const ACR_STAGING_ID = 500;
+    const ltMapStaging: LocationTypeMap = {
+      [ACR_STAGING_ID]: "staging",
+      [PICK_FACE_ID]:   "pick_face",
+      [WAREHOUSE_ID]:   "warehouse",
+    };
+
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 10 }])];
+    const inventory = [
+      // Staging records marked on-hold by Extensiv — must still be consumed first
+      makeInventory({ receiveItemId: 1, sku: "SKU-A", available: 8,  locationId: ACR_STAGING_ID, isOnHold: true }),
+      makeInventory({ receiveItemId: 2, sku: "SKU-A", available: 5,  locationId: ACR_STAGING_ID, isOnHold: true }),
+      // Pick face and warehouse available as fallback
+      makeInventory({ receiveItemId: 3, sku: "SKU-A", available: 20, locationId: PICK_FACE_ID }),
+      makeInventory({ receiveItemId: 4, sku: "SKU-A", available: 48, locationId: WAREHOUSE_ID }),
+    ];
+
+    // Override location name so the safety override (/staging/i) fires for ACR_STAGING_ID
+    // by giving it a name that contains "Staging"
+    const inventoryWithStagingName = inventory.map((r) => {
+      if (r.locationIdentifier?.id === ACR_STAGING_ID) {
+        return {
+          ...r,
+          locationIdentifier: { id: ACR_STAGING_ID, nameKey: { name: "ACR-Staging" } },
+        };
+      }
+      return r;
+    });
+
+    const result = runAllocationEngine(
+      orders, inventoryWithStagingName, ltMapStaging, ACR_STAGING_ID, "ACR-Staging", new Map()
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
+    const stagingQty = toStaging.reduce((s, p) => s + p.qty, 0);
+    expect(stagingQty).toBe(10);
+
+    // All 10 units must come from ACR-Staging (on-hold records), not pick face or warehouse
+    const fromStagingLoc = toStaging.filter((p) => p.fromLocationId === ACR_STAGING_ID);
+    expect(fromStagingLoc.reduce((s, p) => s + p.qty, 0)).toBe(10);
+
+    const fromPickFace = toStaging.filter((p) => p.fromLocationId === PICK_FACE_ID);
+    expect(fromPickFace).toHaveLength(0);
+
+    const fromWarehouse = toStaging.filter((p) => p.fromLocationId === WAREHOUSE_ID);
+    expect(fromWarehouse).toHaveLength(0);
+  });
+
+  /**
+   * Building preference: 2-digit prefix comparison regression test.
+   *
+   * Locations 04xxx and 06xxx are Building 1 (not preferred).
+   * Locations 12xxx and 12REC are Building 2 (preferred).
+   * With preferredBuildingMinPrefix=12, Building 2 stock must be consumed first.
+   */
+  it("building preference: 2-digit prefix correctly classifies 04xxx as non-preferred and 12xxx as preferred", () => {
+    const WH_B1_ID = 600; // Building 1 — 0404802
+    const WH_B2_ID = 601; // Building 2 — 12050101
+
+    const ltMapBuilding: LocationTypeMap = {
+      [STAGING_ID]: "staging",
+      [WH_B1_ID]:   "warehouse",
+      [WH_B2_ID]:   "warehouse",
+    };
+
+    const makeNamed = (id: number, sku: string, avail: number, locId: number, locName: string) => ({
+      ...makeInventory({ receiveItemId: id, sku, available: avail, locationId: locId }),
+      locationIdentifier: { id: locId, nameKey: { name: locName } },
+    });
+
+    const orders = [makeOrder(1, "REF-001", [{ sku: "SKU-A", qty: 24 }])];
+    const inventory = [
+      makeNamed(1, "SKU-A", 24, WH_B1_ID, "0404802"),  // Building 1 — should be fallback
+      makeNamed(2, "SKU-A", 24, WH_B2_ID, "12050101"), // Building 2 — should be preferred
+    ];
+
+    const result = runAllocationEngine(
+      orders, inventory, ltMapBuilding, STAGING_ID, "ACR-Staging", new Map(),
+      /* noLotMixing */ false,
+      /* pickFaceLocationId */ undefined,
+      /* pickFaceLocationName */ undefined,
+      /* locationPriorityPatterns */ [],
+      /* locationExclusionPatterns */ [],
+      /* customerMinShelfLifeDays */ undefined,
+      /* allPickFaceLocations */ [],
+      /* preferredBuildingMinPrefix */ 12,
+      /* preferredBuildingPrefixes */ undefined
+    );
+
+    expect(result.allocatedOrders).toHaveLength(1);
+
+    const toStaging = result.pullList.filter((p) => p.movement === "to_staging");
+    expect(toStaging).toHaveLength(1);
+
+    // Must have pulled from Building 2 (12050101), not Building 1 (0404802)
+    expect(toStaging[0]!.fromLocationId).toBe(WH_B2_ID);
+    expect(toStaging[0]!.fromLocationName).toBe("12050101");
+  });
+});

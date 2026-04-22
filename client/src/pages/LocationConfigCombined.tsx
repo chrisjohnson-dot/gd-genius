@@ -764,10 +764,37 @@ function formatToRoles(fmt: string, segCount: number): SegmentRole[] {
 }
 
 type AisleRule = { aislePrefix: string; description?: string; bays: { bayId: string; bayPrefix?: string; sideValues?: string; hasLeftRight: boolean }[]; levels: string[] };
-type LocalDraft = { locationFormat: string; aisleRules: AisleRule[]; notes: string; segmentRoles?: SegmentRole[]; exampleLocation?: string };
+type LocalDraft = { locationFormat: string; aisleRules: AisleRule[]; notes: string; segmentRoles?: SegmentRole[]; exampleLocation?: string; segmentWidths?: number[] };
 
 const GD_WAREHOUSES_FALLBACK = ["Columbus", "Reno", "Toronto", "Calgary"];
-const DEFAULT_DRAFT: LocalDraft = { locationFormat: "AISLE-BAY-LEVEL", aisleRules: [], notes: "" };
+const DEFAULT_DRAFT: LocalDraft = { locationFormat: "AISLE-BAY-LEVEL", aisleRules: [], notes: "", segmentWidths: undefined };
+
+/** Detect whether an example location uses a separator or is fixed-width */
+function detectSeparator(val: string): string | null {
+  if (val.includes("-")) return "-";
+  if (val.includes(".")) return ".";
+  if (val.includes("_")) return "_";
+  return null; // fixed-width
+}
+
+/** Split a fixed-width string by widths array */
+function splitByWidths(val: string, widths: number[]): string[] {
+  const parts: string[] = [];
+  let pos = 0;
+  for (const w of widths) {
+    parts.push(val.slice(pos, pos + w));
+    pos += w;
+  }
+  return parts;
+}
+
+/** Build equal-width segments for a fixed-width string (default: 2-char each) */
+function defaultWidthsFor(val: string, numSegments: number): number[] {
+  const total = val.length;
+  const base = Math.floor(total / numSegments);
+  const rem = total % numSegments;
+  return Array.from({ length: numSegments }, (_, i) => base + (i < rem ? 1 : 0));
+}
 
 function WarehouseStructureTab() {
   const utils = trpc.useUtils();
@@ -796,12 +823,14 @@ function WarehouseStructureTab() {
           const legacyRules = (row.aisleRules as AisleRule[]).map((r) => ({ ...r, bays: r.bays ?? [] }));
           const dbRow = row as { locationFormat?: string; exampleLocation?: string | null; segmentRoles?: string | null };
           const parsedSegmentRoles = dbRow.segmentRoles ? (() => { try { return JSON.parse(dbRow.segmentRoles!) as SegmentRole[]; } catch { return undefined; } })() : undefined;
+          const parsedSegmentWidths = (dbRow as { segmentWidths?: string | null }).segmentWidths ? (() => { try { return JSON.parse((dbRow as { segmentWidths?: string | null }).segmentWidths!) as number[]; } catch { return undefined; } })() : undefined;
           next[row.facilityId] = {
             locationFormat: dbRow.locationFormat ?? "AISLE-BAY-LEVEL",
             aisleRules: legacyRules,
             notes: row.notes ?? "",
             exampleLocation: dbRow.exampleLocation ?? undefined,
             segmentRoles: parsedSegmentRoles,
+            segmentWidths: parsedSegmentWidths,
           };
         }
       }
@@ -890,6 +919,7 @@ function WarehouseStructureTab() {
         locationFormat: d.locationFormat,
         exampleLocation: d.exampleLocation ?? null,
         segmentRoles: d.segmentRoles ?? null,
+        segmentWidths: d.segmentWidths ?? null,
       });
       toast.success(`WH Location Config saved for ${fname}`);
     } catch { toast.error("Failed to save config."); }
@@ -967,7 +997,21 @@ function WarehouseStructureTab() {
                 {isOpen && (() => {
                   // ── Segment labeling state (derived from draft) ──────────────
                   const exampleVal = exampleInputs[facility.id] ?? draft.exampleLocation ?? "";
-                  const segments = exampleVal ? exampleVal.split("-") : [];
+                  const sep = exampleVal ? detectSeparator(exampleVal) : "-";
+                  const isFixedWidth = exampleVal.length > 0 && sep === null;
+
+                  // For separator-based: split on separator
+                  // For fixed-width: split by widths (default: 4 equal segments)
+                  const DEFAULT_NUM_SEGMENTS = 4;
+                  const widths: number[] = isFixedWidth
+                    ? (draft.segmentWidths && draft.segmentWidths.reduce((a, b) => a + b, 0) === exampleVal.length
+                        ? draft.segmentWidths
+                        : defaultWidthsFor(exampleVal, DEFAULT_NUM_SEGMENTS))
+                    : [];
+                  const segments: string[] = isFixedWidth
+                    ? splitByWidths(exampleVal, widths)
+                    : (exampleVal ? exampleVal.split(sep!) : []);
+
                   const roles: SegmentRole[] = draft.segmentRoles && draft.segmentRoles.length === segments.length
                     ? draft.segmentRoles
                     : formatToRoles(draft.locationFormat, segments.length);
@@ -977,6 +1021,21 @@ function WarehouseStructureTab() {
                     const next = SEGMENT_ROLE_CYCLE[(SEGMENT_ROLE_CYCLE.indexOf(current) + 1) % SEGMENT_ROLE_CYCLE.length];
                     const newRoles = roles.map((r, i) => i === idx ? next : r) as SegmentRole[];
                     updateDraft(facility.id, { segmentRoles: newRoles, locationFormat: rolesToFormat(newRoles) });
+                  }
+
+                  // Move a boundary left or right for fixed-width mode
+                  function moveBoundary(boundaryIdx: number, delta: number) {
+                    // boundaryIdx is the index of the boundary AFTER segment boundaryIdx-1
+                    // widths[boundaryIdx-1] increases/decreases, widths[boundaryIdx] decreases/increases
+                    const newWidths = [...widths];
+                    const left = boundaryIdx - 1;
+                    const right = boundaryIdx;
+                    if (newWidths[left] + delta < 1 || newWidths[right] - delta < 1) return;
+                    newWidths[left] += delta;
+                    newWidths[right] -= delta;
+                    const newSegments = splitByWidths(exampleVal, newWidths);
+                    const newRoles = roles.length === newSegments.length ? roles : formatToRoles(draft.locationFormat, newSegments.length);
+                    updateDraft(facility.id, { segmentWidths: newWidths, segmentRoles: newRoles as SegmentRole[], locationFormat: rolesToFormat(newRoles as SegmentRole[]) });
                   }
 
                   // Build confirmation summary in the same order as the example location segments
@@ -996,26 +1055,57 @@ function WarehouseStructureTab() {
                         <div className="flex items-center gap-3">
                           <Input
                             className="h-9 text-sm font-mono max-w-[220px]"
-                            placeholder="e.g. E-42-40-B"
+                            placeholder="e.g. E-42-40-B or 13290801"
                             value={exampleVal}
                             onChange={(e) => {
                               const val = e.target.value;
                               setExampleInputs((p) => ({ ...p, [facility.id]: val }));
-                              // Reset roles when segment count changes
-                              const segs = val.split("-");
-                              const currentRoles = draft.segmentRoles;
-                              if (!currentRoles || currentRoles.length !== segs.length) {
-                                const newRoles = formatToRoles(draft.locationFormat, segs.length);
-                                updateDraft(facility.id, { exampleLocation: val, segmentRoles: newRoles, locationFormat: rolesToFormat(newRoles) });
+                              const newSep = detectSeparator(val);
+                              const newIsFixed = val.length > 0 && newSep === null;
+                              if (newIsFixed) {
+                                // Fixed-width: init with equal widths
+                                const newWidths = defaultWidthsFor(val, DEFAULT_NUM_SEGMENTS);
+                                const newSegs = splitByWidths(val, newWidths);
+                                const newRoles = formatToRoles("CUSTOM", newSegs.length);
+                                updateDraft(facility.id, { exampleLocation: val, segmentWidths: newWidths, segmentRoles: newRoles, locationFormat: "CUSTOM" });
                               } else {
-                                updateDraft(facility.id, { exampleLocation: val });
+                                const segs = val ? val.split(newSep ?? "-") : [];
+                                const currentRoles = draft.segmentRoles;
+                                if (!currentRoles || currentRoles.length !== segs.length) {
+                                  const newRoles = formatToRoles(draft.locationFormat, segs.length);
+                                  updateDraft(facility.id, { exampleLocation: val, segmentRoles: newRoles, locationFormat: rolesToFormat(newRoles), segmentWidths: undefined });
+                                } else {
+                                  updateDraft(facility.id, { exampleLocation: val, segmentWidths: undefined });
+                                }
                               }
                             }}
                           />
-                          {exampleVal && segments.length >= 2 && (
+                          {exampleVal && !isFixedWidth && segments.length >= 2 && (
                             <span className="text-xs text-muted-foreground">{segments.length} segment{segments.length !== 1 ? "s" : ""} detected</span>
                           )}
+                          {isFixedWidth && exampleVal.length > 0 && (
+                            <span className="text-xs text-muted-foreground">Fixed-width · {DEFAULT_NUM_SEGMENTS} segments</span>
+                          )}
                         </div>
+                        {/* Fixed-width boundary editor */}
+                        {isFixedWidth && exampleVal.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-[11px] text-muted-foreground">Use ← → arrows on each boundary to adjust where segments split</p>
+                            <div className="flex items-center gap-0 font-mono text-sm select-none">
+                              {segments.map((seg, idx) => (
+                                <div key={idx} className="flex items-center">
+                                  <span className={`px-1.5 py-1 rounded text-xs font-mono font-semibold ${SEGMENT_ROLE_COLORS[roles[idx] ?? "ignore"]}`}>{seg}</span>
+                                  {idx < segments.length - 1 && (
+                                    <div className="flex flex-col items-center mx-0.5 gap-0.5">
+                                      <button type="button" className="text-[10px] px-1 py-0.5 rounded bg-muted/40 hover:bg-muted/70 text-muted-foreground font-mono leading-none" onClick={() => moveBoundary(idx + 1, -1)} title="Move boundary left">◀</button>
+                                      <button type="button" className="text-[10px] px-1 py-0.5 rounded bg-muted/40 hover:bg-muted/70 text-muted-foreground font-mono leading-none" onClick={() => moveBoundary(idx + 1, 1)} title="Move boundary right">▶</button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Step 2: Label each segment */}

@@ -2668,7 +2668,8 @@ export async function upsertWhLocationConfig(
   updatedBy: string,
   locationFormat?: string,
   exampleLocation?: string | null,
-  segmentRoles?: string[] | null
+  segmentRoles?: string[] | null,
+  segmentWidths?: number[] | null
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -2676,12 +2677,13 @@ export async function upsertWhLocationConfig(
   const rulesJson = JSON.stringify(aisleRules);
   const fmt = locationFormat ?? "AISLE-BAY-LEVEL";
   const segRolesJson = segmentRoles ? JSON.stringify(segmentRoles) : null;
+  const segWidthsJson = segmentWidths ? JSON.stringify(segmentWidths) : null;
   // Try update first, then insert
   const existing = await getWhLocationConfig(configId, facilityId);
   if (existing) {
     await db
       .update(whLocationConfigs)
-      .set({ facilityName, aisleRules: rulesJson, locationFormat: fmt, notes, updatedAt: now, updatedBy, exampleLocation: exampleLocation ?? null, segmentRoles: segRolesJson })
+      .set({ facilityName, aisleRules: rulesJson, locationFormat: fmt, notes, updatedAt: now, updatedBy, exampleLocation: exampleLocation ?? null, segmentRoles: segRolesJson, segmentWidths: segWidthsJson })
       .where(
         and(
           eq(whLocationConfigs.configId, configId),
@@ -2698,6 +2700,7 @@ export async function upsertWhLocationConfig(
       notes,
       exampleLocation: exampleLocation ?? null,
       segmentRoles: segRolesJson,
+      segmentWidths: segWidthsJson,
       updatedAt: now,
       updatedBy,
     });

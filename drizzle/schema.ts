@@ -844,6 +844,8 @@ export const whLocationConfigs = mysqlTable("wh_location_configs", {
   exampleLocation: varchar("example_location", { length: 255 }),
   /** JSON array of segment roles matching the example location segments (e.g. ["aisle","bay","bay","level"]) */
   segmentRoles: text("segment_roles"),
+  /** JSON array of character widths for fixed-width (no-separator) formats (e.g. [2,2,2,2] for "13290801") */
+  segmentWidths: text("segment_widths"),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   updatedBy: varchar("updated_by", { length: 255 }),
 });

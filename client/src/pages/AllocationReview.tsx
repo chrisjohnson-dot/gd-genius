@@ -83,6 +83,13 @@ export default function AllocationReview() {
 
   const { data, isLoading, error } = trpc.allocation.runDetail.useQuery({ runId });
 
+  // Check if pick face locations are configured for this run's customer
+  const { data: locationConfigData } = trpc.locations.listByCustomer.useQuery(
+    { configId: data?.run.configId ?? 0, customerId: data?.run.customerId ?? 0 },
+    { enabled: !!data?.run.configId && !!data?.run.customerId }
+  );
+  const hasPickFaceConfigured = (locationConfigData ?? []).some((l) => l.locationType === "pick_face");
+
   const confirmMutation = trpc.allocation.confirm.useMutation({
     onSuccess: (result) => {
       if (result.success) {
@@ -339,7 +346,7 @@ export default function AllocationReview() {
         )}
 
         {/* Missing pick face config warning */}
-        {isProposed && toPickFaceCount === 0 && allocatedOrders.length > 0 && (
+        {isProposed && toPickFaceCount === 0 && !hasPickFaceConfigured && allocatedOrders.length > 0 && (
           <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-900">
             <CardContent className="py-3 flex items-start gap-3">
               <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />

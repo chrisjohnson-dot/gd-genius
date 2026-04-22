@@ -331,6 +331,10 @@ export default function LocationConfig() {
     },
     onError: (e) => toast.error(e.message),
   });
+  const toggleActiveMutation = trpc.locations.toggleActive.useMutation({
+    onSuccess: () => utils.locations.list.invalidate(),
+    onError: (e) => toast.error(`Toggle failed: ${e.message}`),
+  });
   const saveRuleMutation = trpc.customerRules.save.useMutation({
     onSuccess: () => { utils.customerRules.list.invalidate(); toast.success("Rule saved"); },
     onError: (e) => toast.error(e.message),
@@ -607,7 +611,14 @@ export default function LocationConfig() {
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={loc.isActive !== false}
+                              onCheckedChange={(checked) =>
+                                toggleActiveMutation.mutate({ id: loc.id, isActive: checked })
+                              }
+                              title={loc.isActive !== false ? "Active — click to deactivate" : "Inactive — click to activate"}
+                            />
                             <Button variant="ghost" size="sm" onClick={() => openEdit(loc)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>

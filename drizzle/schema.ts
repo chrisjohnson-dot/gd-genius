@@ -73,6 +73,7 @@ export const locationConfigs = mysqlTable("location_configs", {
   locationId: int("locationId").notNull(),
   locationName: varchar("locationName", { length: 256 }).notNull(),
   locationType: mysqlEnum("locationType", ["staging", "pick_face", "warehouse"]).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

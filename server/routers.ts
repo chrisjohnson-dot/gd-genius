@@ -19,6 +19,7 @@ import {
   getLocationConfigs,
   getLocationConfigsByCustomer,
   upsertLocationConfig,
+  toggleLocationConfigActive,
   deleteLocationConfig,
   deleteLocationConfigsByIds,
   deleteLocationConfigsByConfigAndCustomer,
@@ -397,10 +398,17 @@ const _appRouter = router({
           locationId: z.number(),
           locationName: z.string(),
           locationType: z.enum(["staging", "pick_face", "warehouse"]),
+          isActive: z.boolean().optional(),
         })
       )
       .mutation(async ({ input }) => {
         await upsertLocationConfig(input);
+        return { success: true };
+      }),
+    toggleActive: protectedProcedure
+      .input(z.object({ id: z.number(), isActive: z.boolean() }))
+      .mutation(async ({ input }) => {
+        await toggleLocationConfigActive(input.id, input.isActive);
         return { success: true };
       }),
 
@@ -1360,7 +1368,7 @@ const _appRouter = router({
 
         // Step 1: Execute the global pull list moves (SKU-level, not per-order).
         // The pull list is stored at the run level; per-order pullListItems is always empty.
-        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationType?: string; movement?: string };
+        type PullListEntry = { receiveItemId: number; qty: number; toLocationId: number; toLocationName?: string; fromLocationId?: number; fromLocationName?: string; fromLocationType?: string; movement?: string };
         const globalPullList = (run.pullList ?? []) as PullListEntry[];
         // Only send warehouse→staging moves to Extensiv here.
         // Exclude items already in staging (fromLocationType === "staging") AND
@@ -1369,14 +1377,16 @@ const _appRouter = router({
         const stagingMoves = globalPullList.filter(
           (p) => p.fromLocationType !== "staging" && p.movement !== "to_pick_face"
         );
+        // Track which destination groups succeeded so we can roll back on partial failure
+        const completedStagingMoves: Array<{ destId: number; destName: string; items: Array<{ receiveItemId: number; quantity: number }>; sourceId: number; sourceName: string }> = [];
         if (stagingMoves.length > 0) {
           // Group by toLocationId (there may be multiple staging locations in multi-customer runs)
-          const movesByDest = new Map<number, { name: string; items: Array<{ receiveItemId: number; quantity: number }> }>();
+          const movesByDest = new Map<number, { name: string; sourceId: number; sourceName: string; items: Array<{ receiveItemId: number; quantity: number }> }>();
           for (const p of stagingMoves) {
-            if (!movesByDest.has(p.toLocationId)) movesByDest.set(p.toLocationId, { name: p.toLocationName ?? "", items: [] });
+            if (!movesByDest.has(p.toLocationId)) movesByDest.set(p.toLocationId, { name: p.toLocationName ?? "", sourceId: p.fromLocationId ?? 0, sourceName: p.fromLocationName ?? "", items: [] });
             movesByDest.get(p.toLocationId)!.items.push({ receiveItemId: p.receiveItemId, quantity: p.qty });
           }
-           for (const [destId, { name: destName, items }] of Array.from(movesByDest.entries())) {
+          for (const [destId, { name: destName, sourceId, sourceName, items }] of Array.from(movesByDest.entries())) {
             console.log(`[confirm] Moving ${items.length} items to staging location ${destId} (${destName})`);
             const moveResult = await moveInventory(config, destId, destName, items, run.facilityId);
             if (!moveResult.success) {
@@ -1384,6 +1394,7 @@ const _appRouter = router({
               errors.push(`Move to staging failed: ${moveResult.error}`);
             } else {
               console.log(`[confirm] Move to staging ${destId} succeeded`);
+              completedStagingMoves.push({ destId, destName, items, sourceId, sourceName });
             }
           }
         } else {
@@ -1392,20 +1403,35 @@ const _appRouter = router({
         // ABORT if any staging move failed — do NOT call the allocator.
         // Calling the allocator without inventory in staging would allocate orders
         // against inventory still in the warehouse, leaving an inconsistent state.
+        // Attempt to roll back any moves that already succeeded to restore inventory to source locations.
         if (errors.length > 0) {
+          const rollbackErrors: string[] = [];
+          for (const completed of completedStagingMoves) {
+            if (completed.sourceId > 0) {
+              console.log(`[confirm] Rolling back ${completed.items.length} items from staging ${completed.destId} back to source ${completed.sourceId} (${completed.sourceName})`);
+              const rollbackResult = await moveInventory(config, completed.sourceId, completed.sourceName, completed.items, run.facilityId);
+              if (!rollbackResult.success) {
+                rollbackErrors.push(`Rollback from staging ${completed.destId} to ${completed.sourceName} failed: ${rollbackResult.error}`);
+                console.error(`[confirm] Rollback failed: ${rollbackResult.error}`);
+              } else {
+                console.log(`[confirm] Rollback succeeded for staging ${completed.destId}`);
+              }
+            }
+          }
+          const allErrors = [...errors, ...(rollbackErrors.length > 0 ? [`ROLLBACK ERRORS: ${rollbackErrors.join("; ")}`] : [])];
           await updateAllocationRun(input.runId, {
             status: "failed",
             confirmedAt: new Date(),
-            notes: errors.join("; "),
+            notes: allErrors.join("; "),
           });
           await createAuditLog({
             userId: ctx.user.id,
             action: "allocation.confirm",
             entityType: "allocation_run",
             entityId: String(input.runId),
-            details: { successCount: 0, errors, abortedReason: "staging_move_failed" },
+            details: { successCount: 0, errors: allErrors, abortedReason: "staging_move_failed", rolledBack: completedStagingMoves.length, rollbackErrors },
           });
-          return { success: false, successCount: 0, errors };
+          return { success: false, successCount: 0, errors: allErrors };
         }
         for (const runOrder of allocatedOrders) {
           const detail = runOrder.allocationDetail as {

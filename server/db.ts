@@ -259,6 +259,12 @@ export async function upsertLocationConfig(config: InsertLocationConfig & { id?:
   }
 }
 
+export async function toggleLocationConfigActive(id: number, isActive: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(locationConfigs).set({ isActive }).where(eq(locationConfigs.id, id));
+}
+
 export async function deleteLocationConfig(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;

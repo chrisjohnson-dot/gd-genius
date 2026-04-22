@@ -829,6 +829,9 @@ function WarehouseCard({
         <th onClick={() => toggleSort("shipToCity")} className="cursor-pointer select-none">
           City <SortIcon col="shipToCity" sortKey={sortKey} sortDir={sortDir} />
         </th>
+        <th onClick={() => toggleSort("ageDays")} className="cursor-pointer select-none whitespace-nowrap">
+          Create Date <SortIcon col="ageDays" sortKey={sortKey} sortDir={sortDir} />
+        </th>
         <th onClick={() => toggleSort("requiredShipDate")} className="cursor-pointer select-none">
           Req. Ship Date <SortIcon col="requiredShipDate" sortKey={sortKey} sortDir={sortDir} />
         </th>
@@ -877,6 +880,13 @@ function WarehouseCard({
         </td>
         <td className="text-muted-foreground text-xs">
           {o.shipToCity ?? "—"}
+        </td>
+        <td className="text-muted-foreground text-xs whitespace-nowrap">
+          {o.creationDate
+            ? new Date(o.creationDate).toLocaleDateString()
+            : o.firstSeenAt
+              ? new Date(o.firstSeenAt).toLocaleDateString()
+              : "—"}
         </td>
         <td className="text-xs whitespace-nowrap">
           {o.requiredShipDate ? (

@@ -111,6 +111,19 @@ export const customerRules = mysqlTable("customer_rules", {
    * null = no minimum (accept any expiry date).
    */
   minShelfLifeDays: int("minShelfLifeDays"),
+  /**
+   * Minimum numeric aisle prefix required to be considered "preferred building".
+   * Locations whose leading numeric digits are >= this value are preferred over
+   * those below it (after staging is drained first).
+   * null = no building preference.
+   * Example: 12 means aisle 12, 13, 14, CV, etc. are preferred over 04, 05, etc.
+   */
+  preferredBuildingMinPrefix: int("preferredBuildingMinPrefix"),
+  /**
+   * Comma-separated non-numeric location prefixes that also count as "preferred building".
+   * Example: "CV" means locations starting with CV are treated as preferred building.
+   */
+  preferredBuildingPrefixes: varchar("preferredBuildingPrefixes", { length: 256 }),
   notes: text("notes"),                                         // Free-form allocation notes / instructions
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

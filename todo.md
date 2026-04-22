@@ -1518,3 +1518,17 @@
 - [ ] Engine: staging-first allocation — consume available, not-on-hold staging inventory before pick face or warehouse for each SKU
 - [ ] Fix: ACR-Staging stored as pick_face in location_configs DB — add engine safety override to treat any location with "staging" in name as staging regardless of DB type
 - [ ] Fix: sourceQty on pull list shows only first record's qty instead of total available across all records for that SKU at that location (e.g. ACR950 shows 12 instead of 14)
+
+## Location Format Config — Per-Warehouse Fix
+- [ ] Audit DB schema: check if location_format_configs table has facilityId column; add it if missing
+- [ ] Update getLocationFormatConfig / saveLocationFormatConfig DB helpers to scope by facilityId
+- [ ] Update tRPC procedures for location format config to accept and return facilityId
+- [ ] Update Location Config UI: show one format config card per warehouse (Columbus, Reno, Calgary, Toronto)
+- [ ] Wire engine to load format config for the specific facilityId being allocated
+- [ ] Allocation Rules page: verify per-customer rules are also scoped by facilityId (not just customerId)
+
+## Building Preference Rule
+- [x] DB schema: add preferredBuildingMinPrefix (int) and preferredBuildingPrefixes (varchar) columns to customer_rules table
+- [x] Engine: sort warehouse records so preferred-building locations (numeric prefix >= min, or matching extra prefixes like CV) come before other buildings; staging still drains first; other buildings used as fallback
+- [x] routers.ts: pass preferredBuildingMinPrefix and preferredBuildingPrefixes from customerRule to both runAllocationEngine call sites
+- [x] AllocationRules UI: add Building Preference section with Min aisle prefix input and Additional prefixes input; save/load via customerRules.save/list

@@ -442,6 +442,19 @@ export function runAllocationEngine(
    *   3. First empty client pick face (zero on-hand in inventory pool) → assign there.
    */
   allPickFaceLocations: Array<{ locationId: number; locationName: string }> = [],
+  /**
+   * Minimum numeric aisle prefix for the "preferred building".
+   * Warehouse records whose leading numeric digits are >= this value are sorted
+   * BEFORE those below it (after staging is drained first).
+   * null / undefined = no building preference.
+   * Example: 12 means locations 12xxx, 13xxx, CV, etc. are preferred over 04xxx.
+   */
+  preferredBuildingMinPrefix?: number | null,
+  /**
+   * Comma-separated non-numeric location prefixes that also count as preferred building.
+   * Example: "CV" means locations starting with "CV" are treated as preferred building.
+   */
+  preferredBuildingPrefixes?: string | null,
 ): AllocationRunResult {
   // ── Build mutable inventory pool ─────────────────────────────────────────
   const inventoryPool = new Map<number, InventoryPoolRecord>();
@@ -559,7 +572,40 @@ export function runAllocationEngine(
     const pickFaceRecords = shelfLifeFiltered.filter((r) => resolveLocType(r) === "pick_face");
     const warehouseRecords = shelfLifeFiltered.filter((r) => resolveLocType(r) === "warehouse");
 
-    const allWarehouse = [...warehouseRecords];
+    // ── Apply building preference to warehouse records ──────────────────────
+    // If a preferredBuildingMinPrefix is set, sort warehouse records so that
+    // locations in the preferred building (numeric prefix >= min, or matching
+    // a non-numeric prefix like "CV") come BEFORE Building 1 locations.
+    // Staging is already drained first (Step 0 in planSkuMovements).
+    // Building 1 records are kept as fallback at the end.
+    let allWarehouse: InventoryPoolRecord[];
+    if (preferredBuildingMinPrefix != null && preferredBuildingMinPrefix > 0) {
+      const extraPrefixes = (preferredBuildingPrefixes ?? "")
+        .split(",")
+        .map((p) => p.trim().toUpperCase())
+        .filter(Boolean);
+
+      const isPreferredBuilding = (locName: string): boolean => {
+        // Check non-numeric prefixes first (e.g. "CV")
+        const upper = locName.toUpperCase();
+        if (extraPrefixes.some((p) => upper.startsWith(p))) return true;
+        // Extract leading numeric digits
+        const numMatch = locName.match(/^(\d+)/);
+        if (!numMatch) return false;
+        return parseInt(numMatch[1], 10) >= preferredBuildingMinPrefix;
+      };
+
+      const preferred = warehouseRecords.filter((r) =>
+        isPreferredBuilding(r.locationIdentifier?.nameKey?.name ?? "")
+      );
+      const fallback = warehouseRecords.filter((r) =>
+        !isPreferredBuilding(r.locationIdentifier?.nameKey?.name ?? "")
+      );
+      // Within each group, keep FEFO / location-priority order (applied inside planSkuMovements)
+      allWarehouse = [...preferred, ...fallback];
+    } else {
+      allWarehouse = [...warehouseRecords];
+    }
 
     // ── Smart per-SKU pick face routing ─────────────────────────────────────
     // Priority:

@@ -63,6 +63,10 @@ interface ClientRuleState {
   locationPriorityPatterns: PriorityPattern[];
   minShelfLifeDays: number | null;
   notes: string;
+  /** Minimum numeric aisle prefix for preferred building (e.g. 12 → prefer 12xxx, CV over 04xxx) */
+  preferredBuildingMinPrefix: number | null;
+  /** Comma-separated non-numeric location prefixes that also count as preferred building (e.g. "CV") */
+  preferredBuildingPrefixes: string;
   dirty: boolean;
   saving: boolean;
   open: boolean;
@@ -78,6 +82,8 @@ function buildInitialState(
     locationPriorityPatterns?: PriorityPattern[] | null;
     minShelfLifeDays?: number | null;
     notes?: string | null;
+    preferredBuildingMinPrefix?: number | null;
+    preferredBuildingPrefixes?: string | null;
   }>
 ): ClientRuleState[] {
   const ruleMap = new Map(rules.map((r) => [r.customerId, r]));
@@ -93,6 +99,8 @@ function buildInitialState(
       locationPriorityPatterns: (r?.locationPriorityPatterns as PriorityPattern[] | null | undefined) ?? [],
       minShelfLifeDays: r?.minShelfLifeDays ?? null,
       notes: r?.notes ?? "",
+      preferredBuildingMinPrefix: r?.preferredBuildingMinPrefix ?? null,
+      preferredBuildingPrefixes: r?.preferredBuildingPrefixes ?? "",
       dirty: false,
       saving: false,
       open: false,
@@ -285,6 +293,8 @@ export default function AllocationRules() {
         ),
         minShelfLifeDays: c.minShelfLifeDays ?? null,
         notes: c.notes.trim() || null,
+        preferredBuildingMinPrefix: c.preferredBuildingMinPrefix ?? null,
+        preferredBuildingPrefixes: c.preferredBuildingPrefixes.trim() || null,
       });
       setClients((prev) =>
         prev.map((x) =>
@@ -637,6 +647,48 @@ export default function AllocationRules() {
                           updateClient(c.customerId, { minShelfLifeDays: isNaN(val as number) ? null : val });
                         }}
                       />
+                    </div>
+                  </div>
+
+                  {/* ── Building Preference ──────────────────────────── */}
+                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
+                    <div>
+                      <Label className="font-medium">Building Preference</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        When set, warehouse inventory in the preferred building is always used before
+                        other buildings. Staging inventory is still drained first. The other building
+                        is used as fallback if the preferred building has insufficient stock.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Min aisle prefix (numeric)</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          className="h-8 text-sm font-mono"
+                          placeholder="e.g. 12"
+                          value={c.preferredBuildingMinPrefix ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                            updateClient(c.customerId, { preferredBuildingMinPrefix: isNaN(val as number) ? null : val });
+                          }}
+                        />
+                        <p className="text-xs text-muted-foreground">Locations whose leading digits are ≥ this value are preferred (e.g. 12 prefers 12xxx, 13xxx over 04xxx).</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Additional prefixes (comma-separated)</Label>
+                        <Input
+                          className="h-8 text-sm font-mono"
+                          placeholder="e.g. CV, RCV12"
+                          value={c.preferredBuildingPrefixes}
+                          onChange={(e) =>
+                            updateClient(c.customerId, { preferredBuildingPrefixes: e.target.value })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">Non-numeric location prefixes that also count as preferred building (e.g. CV for cross-dock vault).</p>
+                      </div>
                     </div>
                   </div>
 

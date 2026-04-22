@@ -523,6 +523,8 @@ export async function upsertCustomerRule(
         locationExclusionPatterns: rule.locationExclusionPatterns ?? [],
         minShelfLifeDays: rule.minShelfLifeDays ?? null,
         notes: rule.notes ?? null,
+        preferredBuildingMinPrefix: rule.preferredBuildingMinPrefix ?? null,
+        preferredBuildingPrefixes: rule.preferredBuildingPrefixes ?? null,
         updatedAt: new Date(),
       },
     });

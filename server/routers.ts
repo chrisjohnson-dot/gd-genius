@@ -1051,6 +1051,8 @@ const _appRouter = router({
           const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const locationExclusionPatterns = (customerRule?.locationExclusionPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const customerMinShelfLifeDays = customerRule?.minShelfLifeDays ?? null;
+          const preferredBuildingMinPrefix = customerRule?.preferredBuildingMinPrefix ?? null;
+          const preferredBuildingPrefixes = customerRule?.preferredBuildingPrefixes ?? null;
           // Run allocation engine for this customer
           const result = runAllocationEngine(
             orders,
@@ -1065,7 +1067,9 @@ const _appRouter = router({
             locationPriorityPatterns,
             locationExclusionPatterns,
             customerMinShelfLifeDays,
-            allPickFaceLocations
+            allPickFaceLocations,
+            preferredBuildingMinPrefix,
+            preferredBuildingPrefixes,
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -1254,6 +1258,8 @@ const _appRouter = router({
           const locationPriorityPatterns = (customerRule?.locationPriorityPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const locationExclusionPatterns = (customerRule?.locationExclusionPatterns as Array<{ pattern: string; label: string }> | null) ?? [];
           const customerMinShelfLifeDaysQ = customerRule?.minShelfLifeDays ?? null;
+          const preferredBuildingMinPrefixQ = customerRule?.preferredBuildingMinPrefix ?? null;
+          const preferredBuildingPrefixesQ = customerRule?.preferredBuildingPrefixes ?? null;
           const result = runAllocationEngine(
             orders,
             inventory,
@@ -1267,7 +1273,9 @@ const _appRouter = router({
             locationPriorityPatterns,
             locationExclusionPatterns,
             customerMinShelfLifeDaysQ,
-            allPickFaceLocationsQ
+            allPickFaceLocationsQ,
+            preferredBuildingMinPrefixQ,
+            preferredBuildingPrefixesQ,
           );
 
           allAllocated.push(...result.allocatedOrders);
@@ -2220,6 +2228,10 @@ const _appRouter = router({
             .default([]),
           minShelfLifeDays: z.number().int().positive().optional().nullable(),
           notes: z.string().optional().nullable(),
+          /** Minimum numeric aisle prefix for the preferred building (e.g. 12 means prefer 12xxx, 13xxx over 04xxx) */
+          preferredBuildingMinPrefix: z.number().int().min(1).optional().nullable(),
+          /** Comma-separated non-numeric location prefixes that also count as preferred building (e.g. "CV") */
+          preferredBuildingPrefixes: z.string().optional().nullable(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -2236,6 +2248,8 @@ const _appRouter = router({
             locationExclusionPatterns: input.locationExclusionPatterns,
             minShelfLifeDays: input.minShelfLifeDays,
             notes: input.notes,
+            preferredBuildingMinPrefix: input.preferredBuildingMinPrefix,
+            preferredBuildingPrefixes: input.preferredBuildingPrefixes,
           },
         });
         return { success: true };

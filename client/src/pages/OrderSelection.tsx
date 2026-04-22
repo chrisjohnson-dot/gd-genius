@@ -339,16 +339,13 @@ function QuickAllocateFacilityCard({
   const allSelected = customers ? customers.length > 0 && effectiveSelected.size === customers.length : false;
   const someSelected = effectiveSelected.size > 0 && !allSelected;
 
-  // Sort: checked first (A–Z), then unchecked (A–Z)
+  // Sort: stable A–Z (selection does not reorder the list)
   const sortedCustomers = useMemo(
     () =>
-      (customers ?? []).slice().sort((a, b) => {
-        const aChecked = effectiveSelected.has(a.id) ? 0 : 1;
-        const bChecked = effectiveSelected.has(b.id) ? 0 : 1;
-        if (aChecked !== bChecked) return aChecked - bChecked;
-        return (a.name ?? "").localeCompare(b.name ?? "");
-      }),
-    [customers, effectiveSelected]
+      (customers ?? []).slice().sort((a, b) =>
+        (a.name ?? "").localeCompare(b.name ?? "")
+      ),
+    [customers]
   );
 
   const toggleCustomer = (id: number) => {
@@ -500,17 +497,13 @@ export default function OrderSelection() {
     { enabled: !!configId && !!selectedFacility }
   );
 
-  // Sort customers: checked first (A–Z), then unchecked (A–Z)
+  // Sort customers: stable A–Z (selection does not reorder the list)
   const customers = useMemo(
     () =>
-      (customersRaw ?? []).slice().sort((a, b) => {
-        const aChecked = selectedClientIds.has(a.id) ? 0 : 1;
-        const bChecked = selectedClientIds.has(b.id) ? 0 : 1;
-        if (aChecked !== bChecked) return aChecked - bChecked;
-        return (a.name ?? "").localeCompare(b.name ?? "");
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customersRaw, selectedClientIds]
+      (customersRaw ?? []).slice().sort((a, b) =>
+        (a.name ?? "").localeCompare(b.name ?? "")
+      ),
+    [customersRaw]
   );
 
   // Only the selected customers (for orders step)

@@ -835,10 +835,9 @@ function WarehouseCard({
         <th onClick={() => toggleSort("requiredShipDate")} className="cursor-pointer select-none">
           Req. Ship Date <SortIcon col="requiredShipDate" sortKey={sortKey} sortDir={sortDir} />
         </th>
-        <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right">
-          Pcs <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
+        <th onClick={() => toggleSort("totalPieces")} className="cursor-pointer select-none text-right whitespace-nowrap">
+          Ln/Pc <SortIcon col="totalPieces" sortKey={sortKey} sortDir={sortDir} />
         </th>
-        <th className="text-right">SKUs</th>
         <th className="w-8"></th>
         <th className="w-[140px]">Associate</th>
         <th className="w-[130px]"></th>
@@ -907,11 +906,10 @@ function WarehouseCard({
             <span className="text-muted-foreground">—</span>
           )}
         </td>
-        <td className="text-muted-foreground text-xs text-right">
-          {(o.totalPieces ?? 0) > 0 ? (o.totalPieces ?? 0).toLocaleString() : "—"}
-        </td>
-        <td className="text-muted-foreground text-xs text-right">
-          {(o.skuCount ?? 0) > 0 ? o.skuCount : "—"}
+        <td className="text-xs text-right font-mono whitespace-nowrap">
+          {((o.skuCount ?? 0) > 0 || (o.totalPieces ?? 0) > 0)
+            ? <span className="text-foreground font-semibold">{o.skuCount ?? 0}/{(o.totalPieces ?? 0).toLocaleString()}</span>
+            : <span className="text-muted-foreground">—</span>}
         </td>
         <td className="text-center">
           {o.notes ? (
@@ -1066,12 +1064,11 @@ function WarehouseCard({
                   o.shipToCity ?? "",
                   o.creationDate ? new Date(o.creationDate as string).toLocaleDateString() : "",
                   String(getAgeDays(o)) + "d",
-                  String(o.totalPieces ?? 0),
-                  String(o.skuCount ?? 0),
+                  `${o.skuCount ?? 0}/${o.totalPieces ?? 0}`,
                   o.assignedAssociate ?? "",
                   o.notes ?? "",
                 ]);
-                const header = ["Status","Transaction ID","PO #","Client","Ship To","City","Create Date","Age","Pieces","SKUs","Associate","Notes"];
+                const header = ["Status","Transaction ID","PO #","Client","Ship To","City","Create Date","Age","Ln/Pc","Associate","Notes"];
                 const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
                 const blob = new Blob([csv], { type: "text/csv" });
                 const a = document.createElement("a");
@@ -1097,7 +1094,7 @@ function WarehouseCard({
                 doc.text(`Exported ${new Date().toLocaleString()} · ${filteredOrders.length} orders`, 40, 52);
                 autoTable(doc, {
                   startY: 64,
-                  head: [["Status","Transaction ID","PO #","Client","Ship To","City","Date","Age","Pcs","SKUs","Associate"]],
+                  head: [["Status","Transaction ID","PO #","Client","Ship To","City","Date","Age","Ln/Pc","Associate"]],
                   body: filteredOrders.map((o) => [
                     LIFECYCLE_CONFIG[o.lifecycleStatus]?.label ?? o.lifecycleStatus,
                     o.referenceNum ?? "",
@@ -1107,8 +1104,7 @@ function WarehouseCard({
                     o.shipToCity ?? "",
                     o.creationDate ? new Date(o.creationDate as string).toLocaleDateString() : "",
                     String(getAgeDays(o)) + "d",
-                    String(o.totalPieces ?? 0),
-                    String(o.skuCount ?? 0),
+                    `${o.skuCount ?? 0}/${o.totalPieces ?? 0}`,
                     o.assignedAssociate ?? "",
                   ]),
                   styles: { fontSize: 7, cellPadding: 3 },

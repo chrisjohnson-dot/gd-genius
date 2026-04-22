@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import {
   AlertCircle,
   CheckCircle2,
+  CheckCheck,
   FileDown,
   Loader2,
   Package,
@@ -71,10 +72,26 @@ interface AllocationDetail {
 }
 
 const locTypeBadge: Record<string, string> = {
-  staging: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+  staging: "bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700",
   pick_face: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   warehouse: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
 };
+
+function LocTypeBadge({ locType }: { locType: string }) {
+  if (locType === "staging") {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700">
+        <CheckCheck className="w-3 h-3" />
+        pre-staged
+      </span>
+    );
+  }
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${locTypeBadge[locType] ?? ""}`}>
+      {locType === "pick_face" ? "pick face" : locType === "warehouse" ? "warehouse" : locType}
+    </span>
+  );
+}
 
 export default function AllocationReview() {
   const params = useParams<{ runId: string }>();
@@ -446,9 +463,7 @@ export default function AllocationReview() {
                             </td>
                             <td className="px-4 py-2">
                               <div className="flex items-center gap-1.5">
-                                <Badge className={`text-xs ${locTypeBadge[row.fromLocationType] ?? ""}`}>
-                                  {row.fromLocationType?.replace("_", " ")}
-                                </Badge>
+                                <LocTypeBadge locType={row.fromLocationType} />
                                 <span className="text-xs font-mono">{row.fromLocationName}</span>
                               </div>
                             </td>
@@ -676,15 +691,7 @@ export default function AllocationReview() {
                                   : "—"}
                               </td>
                               <td className="px-4 py-2.5">
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                                  item.fromLocationType === "pick_face"
-                                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-                                    : item.fromLocationType === "staging"
-                                    ? "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300"
-                                    : "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-                                }`}>
-                                  {item.fromLocationType === "pick_face" ? "pick face" : item.fromLocationType === "staging" ? "staging" : "wh"}
-                                </span>
+                                <LocTypeBadge locType={item.fromLocationType} />
                                 <span className="ml-1.5 font-mono text-xs">{item.fromLocationName}</span>
                               </td>
                               <td className="px-4 py-2.5 font-mono text-xs">{item.toLocationName}</td>

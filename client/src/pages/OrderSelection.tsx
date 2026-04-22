@@ -199,7 +199,7 @@ function CustomerOrdersPanel({
                     <p className="text-sm">No orders match "{searchQuery}"</p>
                   </div>
                 ) : (
-                  <div className="max-h-[400px] overflow-y-auto">
+                  <div className="max-h-[calc(100vh-380px)] overflow-y-auto">
                     <table className="w-full text-sm border-collapse table-fixed">
                       <colgroup>
                         {/* checkbox */}
@@ -723,11 +723,11 @@ export default function OrderSelection() {
 
   return (
 
-      <div className="p-6 space-y-6 max-w-4xl">
+      <div className="p-6 space-y-6 w-full">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Run Allocation Tool</h1>
+            <h1 className="text-2xl font-bold">Run Allocation Wizard</h1>
             <p className="text-muted-foreground text-sm mt-1">
               Select a warehouse and clients, then pick orders to allocate
             </p>

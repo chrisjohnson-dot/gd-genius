@@ -37,6 +37,10 @@ export interface RateCardInput {
   isResidential?: boolean;
   declaredValue?: number;
   requireSignature?: boolean;
+  // Amazon-specific fields — enables is_amazon_order in Veeqo Rate Shopping API
+  amazonOrderId?: string;   // e.g. "114-1234567-1234567"
+  channelName?: string;     // e.g. "amazon"
+  orderItems?: Array<{ sku: string; qty: number; asin?: string; unitValue?: number; currency?: string }>;
 }
 
 export interface RateRow {

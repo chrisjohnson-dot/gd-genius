@@ -8822,6 +8822,16 @@ const rateWizardRouter = router({
         isResidential: z.boolean().default(false),
         declaredValue: z.number().optional(),
         requireSignature: z.boolean().default(false),
+        // Amazon-specific fields (for is_amazon_order Veeqo rate shopping)
+        amazonOrderId: z.string().optional(),   // e.g. "114-1234567-1234567"
+        channelName: z.string().optional(),      // e.g. "amazon"
+        orderItems: z.array(z.object({
+          sku: z.string(),
+          qty: z.number(),
+          asin: z.string().optional(),
+          unitValue: z.number().optional(),
+          currency: z.string().optional(),
+        })).optional(),
       })
     )
      .query(async ({ input }) => {
@@ -8904,6 +8914,26 @@ const rateWizardRouter = router({
             country_code: input.destCountry,
           };
 
+          // Detect Amazon orders: referenceNum matches Amazon order ID pattern (###-#######-#######)
+          // or caller explicitly passes amazonOrderId / channelName
+          const AMAZON_ORDER_PATTERN = /^\d{3}-\d{7}-\d{7}$/;
+          const isAmazonOrder = !!(input.amazonOrderId ||
+            (input.orderNumber && AMAZON_ORDER_PATTERN.test(input.orderNumber)) ||
+            input.channelName?.toLowerCase().includes("amazon"));
+          const amazonOrderId = input.amazonOrderId ??
+            (input.orderNumber && AMAZON_ORDER_PATTERN.test(input.orderNumber) ? input.orderNumber : undefined);
+
+          // Build channel_items for Amazon orders — one entry per order item
+          const channelItems = isAmazonOrder && input.orderItems?.length
+            ? input.orderItems.map((item) => ({
+                remote_id: amazonOrderId ?? input.orderNumber ?? "unknown",
+                quantity: item.qty,
+                asin: item.asin,
+                value: item.unitValue != null ? String(item.unitValue) : undefined,
+                currency_code: item.currency ?? "USD",
+              }))
+            : undefined;
+
           const ratesResp = await veeqo.getRates({
             from_address: shipFrom,
             to_address: shipTo,
@@ -8916,7 +8946,13 @@ const rateWizardRouter = router({
               dimension_unit: "in",
             }],
             shipping_configuration_ids: veeqoConfigIds.map(String),
+            ...(isAmazonOrder ? { is_amazon_order: true } : {}),
+            ...(channelItems ? { channel_items: channelItems } : {}),
           });
+
+          if (isAmazonOrder) {
+            console.log(`[RateWizard] Amazon order detected (${amazonOrderId ?? input.orderNumber}) — is_amazon_order=true, channel_items=${channelItems?.length ?? 0}`);
+          }
 
           // In the new API, remote_shipment_id and request_token are top-level (not per-quote)
           const remoteShipmentId = ratesResp.remote_shipment_id;

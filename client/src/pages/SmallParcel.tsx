@@ -1226,6 +1226,12 @@ function Step4PackShip({
     destState: order.shipTo?.state,
     destName: order.shipTo?.companyName ?? order.shipTo?.name,
     isResidential: false,
+    // Amazon order detection: pass referenceNum as amazonOrderId if it matches the Amazon pattern
+    ...((/^\d{3}-\d{7}-\d{7}$/).test(order.referenceNum ?? '') ? {
+      amazonOrderId: order.referenceNum,
+      channelName: 'amazon',
+      orderItems: order.orderItems.map((item) => ({ sku: item.sku, qty: item.qty })),
+    } : {}),
   // Recompute when dimensions or destination change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [configId, sessionId, order.extensivOrderId, order.referenceNum, locationId, order.clientId, order.clientName,

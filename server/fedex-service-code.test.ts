@@ -109,6 +109,26 @@ describe("normalizeToFedExServiceCode", () => {
     expect(normalizeToFedExServiceCode("ups-ups_ground")).toBe("ups-ups_ground");
   });
 
+  // ── One Rate → base service type stripping (for buyFedExLabel) ─────────────
+  // These tests verify that FEDEX_2_DAY_ONE_RATE → FEDEX_2_DAY (FedEx REST Ship API
+  // does not accept _ONE_RATE codes; One Rate is set via packagingType instead)
+  it("ONE_RATE_TO_STANDARD: FEDEX_2_DAY_ONE_RATE → FEDEX_2_DAY", () => {
+    const ONE_RATE_TO_STANDARD: Record<string, string> = {
+      FEDEX_GROUND_HOME_DELIVERY_ONE_RATE: "GROUND_HOME_DELIVERY",
+      FEDEX_EXPRESS_SAVER_ONE_RATE:        "FEDEX_EXPRESS_SAVER",
+      FEDEX_2_DAY_ONE_RATE:                "FEDEX_2_DAY",
+      FEDEX_2_DAY_AM_ONE_RATE:             "FEDEX_2_DAY_AM",
+      STANDARD_OVERNIGHT_ONE_RATE:         "STANDARD_OVERNIGHT",
+      PRIORITY_OVERNIGHT_ONE_RATE:         "PRIORITY_OVERNIGHT",
+      FIRST_OVERNIGHT_ONE_RATE:            "FIRST_OVERNIGHT",
+    };
+    expect(ONE_RATE_TO_STANDARD["FEDEX_2_DAY_ONE_RATE"]).toBe("FEDEX_2_DAY");
+    expect(ONE_RATE_TO_STANDARD["PRIORITY_OVERNIGHT_ONE_RATE"]).toBe("PRIORITY_OVERNIGHT");
+    expect(ONE_RATE_TO_STANDARD["STANDARD_OVERNIGHT_ONE_RATE"]).toBe("STANDARD_OVERNIGHT");
+    expect(ONE_RATE_TO_STANDARD["FEDEX_EXPRESS_SAVER_ONE_RATE"]).toBe("FEDEX_EXPRESS_SAVER");
+    expect(ONE_RATE_TO_STANDARD["FEDEX_GROUND_HOME_DELIVERY_ONE_RATE"]).toBe("GROUND_HOME_DELIVERY");
+  });
+
   // ── Underscore-prefix format (actual production format observed in DB) ────
   it("translates underscore-prefix 'fedex_fedex_2_day_one_rate' → 'FEDEX_2_DAY_ONE_RATE'", () => {
     expect(normalizeToFedExServiceCode("fedex_fedex_2_day_one_rate")).toBe("FEDEX_2_DAY_ONE_RATE");

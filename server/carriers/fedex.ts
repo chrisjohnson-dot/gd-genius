@@ -364,13 +364,30 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
  * Automatically uses the correct packagingType for One Rate services.
  */
 export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLabelResult> {
-  // Normalize Veeqo rate codes (e.g. "fedex-fedex_ground") to FedEx REST service codes (e.g. "FEDEX_GROUND")
+  // Normalize Veeqo/Rate Wizard rate codes to FedEx REST service codes
   const rawServiceCode = input.serviceCode ?? "FEDEX_GROUND";
-  const serviceCode = normalizeToFedExServiceCode(rawServiceCode);
-  if (serviceCode !== rawServiceCode) {
-    console.log(`[FedEx] Normalized service code: ${rawServiceCode} → ${serviceCode}`);
+  const normalizedCode = normalizeToFedExServiceCode(rawServiceCode);
+  if (normalizedCode !== rawServiceCode) {
+    console.log(`[FedEx] Normalized service code: ${rawServiceCode} → ${normalizedCode}`);
   }
-  const isOneRate = FEDEX_ONE_RATE_SERVICE_CODES.has(serviceCode);
+
+  // CRITICAL: FedEx REST Ship API does NOT accept One Rate service codes like FEDEX_2_DAY_ONE_RATE.
+  // One Rate is determined by packagingType (FEDEX_SMALL_BOX etc.), not the serviceType field.
+  // Strip the _ONE_RATE suffix to get the real FedEx REST service type.
+  const isOneRate = FEDEX_ONE_RATE_SERVICE_CODES.has(normalizedCode);
+  const ONE_RATE_TO_STANDARD: Record<string, string> = {
+    FEDEX_GROUND_HOME_DELIVERY_ONE_RATE: "GROUND_HOME_DELIVERY",
+    FEDEX_EXPRESS_SAVER_ONE_RATE:        "FEDEX_EXPRESS_SAVER",
+    FEDEX_2_DAY_ONE_RATE:                "FEDEX_2_DAY",
+    FEDEX_2_DAY_AM_ONE_RATE:             "FEDEX_2_DAY_AM",
+    STANDARD_OVERNIGHT_ONE_RATE:         "STANDARD_OVERNIGHT",
+    PRIORITY_OVERNIGHT_ONE_RATE:         "PRIORITY_OVERNIGHT",
+    FIRST_OVERNIGHT_ONE_RATE:            "FIRST_OVERNIGHT",
+  };
+  const serviceCode = isOneRate ? (ONE_RATE_TO_STANDARD[normalizedCode] ?? normalizedCode) : normalizedCode;
+  if (isOneRate) {
+    console.log(`[FedEx] One Rate service: ${normalizedCode} → serviceType=${serviceCode} + packagingType=FEDEX_SMALL_BOX`);
+  }
 
   // Use dedicated One Rate credentials when available and the service is One Rate
   const stdClientId = process.env.FEDEX_USER_KEY;
@@ -378,7 +395,6 @@ export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLa
   const stdAccountNumber = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
 
   // All FedEx label purchases use account 942412380 (One Rate credentials) exclusively.
-  // The standard 620 account is only for non-FedEx carriers.
   const clientId = process.env.FEDEX_ONE_RATE_USER_KEY || stdClientId;
   const clientSecret = process.env.FEDEX_ONE_RATE_PASSWORD || stdClientSecret;
   const accountNumber = process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER || stdAccountNumber;

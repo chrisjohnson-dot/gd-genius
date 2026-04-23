@@ -444,7 +444,9 @@ export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLa
           paymentType: "SENDER",
           payor: { responsibleParty: { accountNumber: { value: accountNumber } } },
         },
-        labelSpecification: { labelFormatType: "COMMON2D", imageType: "ZPLII", labelStockType: "PAPER_4X6" },
+        // STOCK_4X6 is the correct labelStockType for ZPL thermal labels (4"x6" stock).
+        // PAPER_4X6 is only valid for PDF/PNG image types, not ZPLII.
+        labelSpecification: { labelFormatType: "COMMON2D", imageType: "ZPLII", labelStockType: "STOCK_4X6" },
         requestedPackageLineItems: [{
           weight: { units: "LB", value: Math.max(input.weightLbs, 0.1) },
           // One Rate does not require dimensions, but we include them for accuracy

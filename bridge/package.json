@@ -1,0 +1,16 @@
+{
+  "name": "gd-zpl-bridge",
+  "version": "1.0.0",
+  "description": "Local WebSocket-to-TCP bridge for GD Genius ZPL label printing",
+  "main": "zpl-bridge.js",
+  "scripts": {
+    "start": "node zpl-bridge.js",
+    "start:custom": "node zpl-bridge.js --printer-ip 10.90.1.218 --printer-port 9100 --ws-port 9101"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

@@ -386,10 +386,12 @@ export default function SmallParcelHistory() {
                 return (
                   <div
                     key={session.id}
-                    className={`flex flex-col sm:flex-row sm:items-center gap-3 px-6 py-4 ${
+                    className={`flex flex-col gap-2 px-6 py-4 ${
                       isVoided ? "opacity-60 bg-red-50/40 dark:bg-red-950/10" : ""
                     }`}
                   >
+                    {/* Top row: order info + action buttons */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                     {/* Left: order info */}
                     <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {/* Reference + status */}
@@ -466,8 +468,9 @@ export default function SmallParcelHistory() {
                         </span>
                       )}
                     </div>
-                    {/* Notes panel */}
-                    <div className="w-full mt-2">
+                    </div>{/* end top row */}
+                    {/* Notes panel — full width below the row */}
+                    <div className="w-full">
                       <NotesPanel
                         entityType="small_parcel_session"
                         entityId={String(session.id)}

@@ -8522,29 +8522,52 @@ const smallParcelRouter = router({
       return { inserted, skipped, total: STANDARD_TYPES.length };
     }),
 
-  // ── Direct TCP/IP Printer Config ─────────────────────────────────────────
-  /** Get the configured direct printer IP and port from small_parcel_settings */
+  // ── Printer Config (multi-printer + WebSocket bridge) ────────────────────
+  /** Get all printer configs and bridge port from small_parcel_settings */
   getPrinterConfig: protectedProcedure.query(async () => {
-    const [ip, port] = await Promise.all([
+    const [ip, port, name1, ip2, port2, name2, bridgePort] = await Promise.all([
       getSmallParcelSetting("printer_ip"),
       getSmallParcelSetting("printer_port"),
+      getSmallParcelSetting("printer1_name"),
+      getSmallParcelSetting("printer2_ip"),
+      getSmallParcelSetting("printer2_port"),
+      getSmallParcelSetting("printer2_name"),
+      getSmallParcelSetting("bridge_port"),
     ]);
     return {
-      printerIp: ip ?? "",
+      // Printer 1 (primary — Zebra ZT610)
+      printerIp:   ip ?? "",
       printerPort: port ? parseInt(port, 10) : 9100,
+      printerName: name1 ?? "Zebra ZT610",
+      // Printer 2 (secondary — Zebra ZT411)
+      printer2Ip:   ip2 ?? "",
+      printer2Port: port2 ? parseInt(port2, 10) : 9100,
+      printer2Name: name2 ?? "Zebra ZT411",
+      /** Local WebSocket bridge port (zpl-bridge.js running on warehouse Mac) */
+      bridgePort: bridgePort ? parseInt(bridgePort, 10) : 9101,
     };
   }),
-
-  /** Save direct printer IP and port to small_parcel_settings */
+  /** Save all printer configs and bridge port to small_parcel_settings */
   setPrinterConfig: protectedProcedure
     .input(z.object({
-      printerIp: z.string(),
-      printerPort: z.number().int().min(1).max(65535).default(9100),
+      printerIp:    z.string(),
+      printerPort:  z.number().int().min(1).max(65535).default(9100),
+      printerName:  z.string().default("Zebra ZT610"),
+      printer2Ip:   z.string().default(""),
+      printer2Port: z.number().int().min(1).max(65535).default(9100),
+      printer2Name: z.string().default("Zebra ZT411"),
+      /** Local WebSocket bridge port (default 9101) */
+      bridgePort: z.number().int().min(1).max(65535).default(9101),
     }))
     .mutation(async ({ input }) => {
       await Promise.all([
-        setSmallParcelSetting("printer_ip", input.printerIp),
-        setSmallParcelSetting("printer_port", String(input.printerPort)),
+        setSmallParcelSetting("printer_ip",    input.printerIp),
+        setSmallParcelSetting("printer_port",  String(input.printerPort)),
+        setSmallParcelSetting("printer1_name", input.printerName),
+        setSmallParcelSetting("printer2_ip",   input.printer2Ip),
+        setSmallParcelSetting("printer2_port", String(input.printer2Port)),
+        setSmallParcelSetting("printer2_name", input.printer2Name),
+        setSmallParcelSetting("bridge_port",   String(input.bridgePort)),
       ]);
       return { success: true };
     }),

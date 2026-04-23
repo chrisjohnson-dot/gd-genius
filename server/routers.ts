@@ -250,7 +250,7 @@ import { getCarrierMarkups, getMarkupPct, applyMarkup, testOpFiConnection } from
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
   completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -3893,15 +3893,19 @@ const qcScannerRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: `Order found in Extensiv but it has no line items. The order may not have items loaded yet.` });
       }
 
-      // Fetch item descriptions for the customer (to fill in description field)
+      // Fetch item descriptions and UPCs for the customer
       let descMap = new Map<string, string>();
+      let upcMap = new Map<string, string>();
       try {
         const customerId = order.readOnly?.customerIdentifier?.id;
         if (customerId) {
-          descMap = await fetchItemDescriptions(config, customerId);
+          [descMap, upcMap] = await Promise.all([
+            fetchItemDescriptions(config, customerId),
+            fetchItemUpcMap(config, customerId),
+          ]);
         }
       } catch (err) {
-        console.warn(`[qcScanner.fetchFromExtensiv] Could not fetch item descriptions:`, err);
+        console.warn(`[qcScanner.fetchFromExtensiv] Could not fetch item descriptions/UPCs:`, err);
       }
 
       // Seed each order item into the session
@@ -3910,7 +3914,8 @@ const qcScannerRouter = router({
         const sku = item.itemIdentifier?.sku;
         if (!sku) continue;
         const description = descMap.get(sku) ?? undefined;
-        await upsertQcScanItem(input.sessionId, sku, null, {
+        const upc = upcMap.get(sku) ?? null;
+        await upsertQcScanItem(input.sessionId, sku, upc, {
           description,
           lotNumber: item.lotNumber ?? null,
           expectedQty: item.qty ?? 0,

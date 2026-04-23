@@ -251,7 +251,21 @@ export default function AllocationReview() {
   const skippedOrders = orders.filter((o) => o.status === "skipped");
   const unallocatedOrders = orders.filter((o) => o.status === "unallocated");
   const pullList = pullListEarly;
-  const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
+  // Consolidate pack list items: merge same SKU+lot rows per order (handles old runs stored before engine fix)
+  function consolidatePackItems(items: PackListItem[]): PackListItem[] {
+    const map = new Map<string, PackListItem>();
+    for (const item of items) {
+      const key = `${item.sku}|${item.lotNumber ?? ""}|${item.expirationDate ?? ""}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.qty += item.qty;
+      } else {
+        map.set(key, { ...item });
+      }
+    }
+    return Array.from(map.values());
+  }
+  const packList: PackListItem[] = allocatedOrders.flatMap((o) => consolidatePackItems(o.detail?.packListItems ?? []));
 
   return (
 
@@ -547,7 +561,7 @@ export default function AllocationReview() {
                         <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No items to pack.</td></tr>
                       )}
                       {allocatedOrders.map((order) => {
-                        const items = order.detail?.packListItems ?? [];
+                        const items = consolidatePackItems(order.detail?.packListItems ?? []);
                         if (items.length === 0) return null;
                         return items.map((item, i) => (
                           <tr

@@ -235,7 +235,21 @@ export default function RunDetail() {
   const pullList: PullListItem[] = Array.isArray(runPullList) && runPullList.length > 0
     ? runPullList
     : allocatedOrders.flatMap((o) => o.detail?.pullListItems ?? []);
-  const packList: PackListItem[] = allocatedOrders.flatMap((o) => o.detail?.packListItems ?? []);
+  // Consolidate pack list items: merge same SKU+lot rows per order (handles old runs stored before engine fix)
+  function consolidatePackItems(items: PackListItem[]): PackListItem[] {
+    const map = new Map<string, PackListItem>();
+    for (const item of items) {
+      const key = `${item.sku}|${item.lotNumber ?? ""}|${item.expirationDate ?? ""}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.qty += item.qty;
+      } else {
+        map.set(key, { ...item });
+      }
+    }
+    return Array.from(map.values());
+  }
+  const packList: PackListItem[] = allocatedOrders.flatMap((o) => consolidatePackItems(o.detail?.packListItems ?? []));
 
   const toStagingMoves  = pullList.filter((p) => p.movement === "to_staging" || !p.movement);
   const toPickFaceMoves = pullList.filter((p) => p.movement === "to_pick_face");

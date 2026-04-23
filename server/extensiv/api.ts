@@ -109,6 +109,10 @@ export interface ExtensivItemDescription {
   id: number;
   sku: string;
   description?: string;
+  /** Primary UPC from Units of Measure → Inventory Units of Measure → Primary UPC */
+  upc?: string;
+  /** Packaging Unit UPC (carton/case UPC) */
+  packageUpc?: string;
 }
 
 export interface ExtensivItemDims {
@@ -723,6 +727,50 @@ export async function fetchItemDescriptions(
   }
 
   return descMap;
+}
+
+/**
+ * Fetch Primary UPC for each SKU from the Extensiv item master.
+ * The Primary UPC lives at options.packageUnit.upc in the HAL response
+ * (Units of Measure tab → Inventory Units of Measure → Primary UPC).
+ * Returns Map<sku, upc>.
+ */
+export async function fetchItemUpcMap(
+  config: ExtensivClientConfig,
+  customerId: number
+): Promise<Map<string, string>> {
+  const client = createExtensivClient(config);
+  const upcMap = new Map<string, string>();
+  let pgnum = 1;
+  const pgsiz = 100;
+
+  interface RawItemWithUpc {
+    sku?: string;
+    options?: {
+      packageUnit?: { upc?: string };
+    };
+  }
+
+  while (true) {
+    const data = (await client.get(`/customers/${customerId}/items`, {
+      pgsiz,
+      pgnum,
+    })) as {
+      _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawItemWithUpc[] };
+    };
+
+    const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
+    for (const item of items) {
+      if (!item.sku) continue;
+      const upc = item.options?.packageUnit?.upc;
+      if (upc) upcMap.set(item.sku, upc);
+    }
+
+    if (items.length < pgsiz) break;
+    pgnum++;
+  }
+
+  return upcMap;
 }
 
 // In-memory cache: configKey → Map<sku, dims> with expiry

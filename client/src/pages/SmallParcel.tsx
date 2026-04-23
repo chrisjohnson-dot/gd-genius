@@ -473,7 +473,8 @@ function Step3ScanItems({
           resolvedSku = result.sku.toUpperCase();
           idx = tryMatch(resolvedSku);
         }
-      } catch {
+      } catch (err) {
+        console.warn(`[SmallParcel] UPC lookup failed for barcode ${rawInput}:`, err);
         // UPC lookup failed - fall through to error handling
       }
     }
@@ -486,7 +487,7 @@ function Step3ScanItems({
         // Show a more helpful message if we tried UPC lookup and still failed
         const msg = resolvedSku !== rawInput
           ? `Barcode resolved to SKU "${resolvedSku}" but it's not on this order`
-          : `SKU "${rawInput}" not found on this order - try scanning the SKU label directly`;
+          : `Barcode "${rawInput}" not found — UPC lookup returned no match. Check that this item's Primary UPC is set in Extensiv.`;
         toast.error(msg);
         logAuditMutation.mutate({
           sessionId,

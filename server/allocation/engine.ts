@@ -729,16 +729,10 @@ export function runAllocationEngine(
     // Always build the staging pool with whatever we could move, even if not fully satisfied.
     // The per-order assignment step will skip individual orders that can't be fully covered.
 
-    // Pre-compute total available qty per source location for accurate On Hand display.
-    // sourceQty = total on-hand at that location across ALL inventory records for this SKU
-    // (not just the records being moved). This prevents under-reporting when only some
-    // pallets from a location are pulled, and prevents double-counting when the same
-    // pallet appears in both stagingMoves and pickFaceMoves (split-pallet scenario).
-    const allLocTotals = new Map<number, number>();
-    for (const r of allSkuRecords) {
-      const locId = r.locationIdentifier?.id ?? 0;
-      allLocTotals.set(locId, (allLocTotals.get(locId) ?? 0) + r.available);
-    }
+    // sourceQty = per-lot available qty for this specific receive record.
+    // Each row on the pull list corresponds to one lot, so we show the individual
+    // lot's available quantity (record.available) rather than the location total.
+    // This ensures the On Hand column matches the lot being moved.
 
     // Record staging pool for this SKU
     const pool: SkuStagingPool = { records: [], totalQty: 0 };
@@ -752,8 +746,7 @@ export function runAllocationEngine(
         description: descriptionMap.get(sku),
         receiveItemId: record.receiveItemId,
         qty,
-        // Use total available across all records at this location (not just this record)
-        sourceQty: allLocTotals.get(stagingLocId) ?? record.available,
+        sourceQty: record.available,
         fromLocationId: stagingLocId,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
         fromLocationType: locationTypeMap[stagingLocId] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
@@ -774,8 +767,7 @@ export function runAllocationEngine(
         description: descriptionMap.get(sku),
         receiveItemId: record.receiveItemId,
         qty,
-        // Use total available across all records at this location (not just this record)
-        sourceQty: allLocTotals.get(pfLocId) ?? record.available,
+        sourceQty: record.available,
         fromLocationId: pfLocId,
         fromLocationName: record.locationIdentifier?.nameKey?.name ?? "Unknown",
         fromLocationType: locationTypeMap[pfLocId] ?? inferLocationTypeFromName(record.locationIdentifier?.nameKey?.name),
@@ -910,22 +902,31 @@ export function runAllocationEngine(
       continue;
     }
 
-    // Build pack list for this order (everything comes from staging)
-    const packListItems: PackListItem[] = [];
+    // Build pack list for this order — consolidate same SKU + lot into one row.
+    // Multiple allocations for the same SKU+lot (e.g. from different line items or
+    // split pallets) are merged so the pack sheet shows one line per SKU/lot.
+    const packMap = new Map<string, PackListItem>();
     for (const lineItem of lineItems) {
       for (const alloc of lineItem.allocations) {
-        packListItems.push({
-          orderId,
-          referenceNum,
-          sku: lineItem.sku,
-          description: lineItem.description,
-          qty: alloc.qty,
-          lotNumber: alloc.lotNumber,
-          expirationDate: alloc.expirationDate,
-          locationName: stagingLocationName,
-        });
+        const key = `${lineItem.sku}|${alloc.lotNumber ?? ""}|${alloc.expirationDate ?? ""}`;
+        const existing = packMap.get(key);
+        if (existing) {
+          existing.qty += alloc.qty;
+        } else {
+          packMap.set(key, {
+            orderId,
+            referenceNum,
+            sku: lineItem.sku,
+            description: lineItem.description,
+            qty: alloc.qty,
+            lotNumber: alloc.lotNumber,
+            expirationDate: alloc.expirationDate,
+            locationName: stagingLocationName,
+          });
+        }
       }
     }
+    const packListItems: PackListItem[] = Array.from(packMap.values());
 
     allocatedOrders.push({
       orderId,

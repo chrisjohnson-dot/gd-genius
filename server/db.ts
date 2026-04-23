@@ -4052,10 +4052,14 @@ export async function listPackagingInventory(configId: number): Promise<Packagin
 
 export async function listPackagingInventoryByFacility(configId: number, facilityId: number): Promise<PackagingInventoryItem[]> {
   const db = await getDb();
+  // Return rows for the specific facility AND rows with facilityId=0 (global/all-facility standard types)
   return db!
     .select()
     .from(packagingInventory)
-    .where(and(eq(packagingInventory.configId, configId), eq(packagingInventory.facilityId, facilityId)))
+    .where(and(
+      eq(packagingInventory.configId, configId),
+      or(eq(packagingInventory.facilityId, facilityId), eq(packagingInventory.facilityId, 0))
+    ))
     .orderBy(packagingInventory.category, packagingInventory.name);
 }
 

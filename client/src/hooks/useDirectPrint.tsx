@@ -13,7 +13,7 @@
  *
  * Bridge agent: /bridge/zpl-bridge.js  (run on warehouse Mac with `node zpl-bridge.js`)
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 
 export type PrintStatus = "idle" | "printing" | "success" | "error";
@@ -90,10 +90,18 @@ function sendViaBridge(
   });
 }
 
+const STORAGE_KEY = "genius_active_printer";
+
 export function useDirectPrint() {
   const [printStatus, setPrintStatus]   = useState<PrintStatus>("idle");
   const [printError, setPrintError]     = useState<string | null>(null);
-  const [activePrinter, setActivePrinter] = useState<PrinterKey>("printer1");
+  const [activePrinter, setActivePrinterState] = useState<PrinterKey>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === "printer1" || saved === "printer2") return saved;
+    } catch { /* ignore SSR / private-mode errors */ }
+    return "printer1";
+  });
 
   const { data: printerConfig } = trpc.smallParcel.getPrinterConfig.useQuery(undefined, {
     staleTime: 60_000,
@@ -138,6 +146,11 @@ export function useDirectPrint() {
     },
     [activePrinter, printerConfig],
   );
+
+  const setActivePrinter = useCallback((key: PrinterKey) => {
+    setActivePrinterState(key);
+    try { localStorage.setItem(STORAGE_KEY, key); } catch { /* ignore */ }
+  }, []);
 
   const resetPrintStatus = useCallback(() => {
     setPrintStatus("idle");

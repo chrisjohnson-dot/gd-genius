@@ -1154,7 +1154,7 @@ function Step4PackShip({
     onError: (err) => toast.error(`Failed: ${err.message}`),
   });
 
-  const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus } = useDirectPrint();
+  const { selectedPrinter, printZpl, printStatus, printError, resetPrintStatus, printerConfig, activePrinter, setActivePrinter } = useDirectPrint();
 
   // ── Rate Wizard state ──────────────────────────────────────────────────────
   const [rateConfirmed, setRateConfirmed] = useState(false);
@@ -1364,13 +1364,41 @@ function Step4PackShip({
 
       </div>
 
-      {/* Printer status banner */}
-      {selectedPrinter ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+      {/* Printer selector */}
+      {printerConfig?.printerIp ? (
+        <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-2 flex-wrap">
           <Printer className="w-4 h-4 text-green-600 shrink-0" />
-          <span>Label will print to <strong>{selectedPrinter.name}</strong></span>
+          <span className="text-sm font-medium text-muted-foreground">Printer:</span>
+          <button
+            type="button"
+            onClick={() => setActivePrinter("printer1")}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+              activePrinter === "printer1"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "bg-background border border-border text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <Printer className="w-3.5 h-3.5" />
+            {printerConfig.printerName || "ZT610"}
+            <span className="text-xs opacity-70 font-mono ml-0.5">{printerConfig.printerIp}</span>
+          </button>
+          {printerConfig.printer2Ip && (
+            <button
+              type="button"
+              onClick={() => setActivePrinter("printer2")}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                activePrinter === "printer2"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "bg-background border border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Printer className="w-3.5 h-3.5" />
+              {printerConfig.printer2Name || "ZT411"}
+              <span className="text-xs opacity-70 font-mono ml-0.5">{printerConfig.printer2Ip}</span>
+            </button>
+          )}
           <Link href="/small-parcel/printer-settings" className="ml-auto text-xs underline text-muted-foreground hover:text-foreground">
-            Change
+            Settings
           </Link>
         </div>
       ) : (

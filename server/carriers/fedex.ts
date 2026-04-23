@@ -71,6 +71,45 @@ const STANDARD_TO_ONE_RATE: Record<string, string> = {
   FIRST_OVERNIGHT:        "FIRST_OVERNIGHT_ONE_RATE",
 };
 
+/**
+ * Veeqo Rate Shopping API returns opaque rate codes like "fedex-fedex_ground"
+ * or "fedex-fedex_2_day_one_rate". When the Rate Wizard path purchases a FedEx
+ * label directly via the FedEx REST API, we must translate these Veeqo codes
+ * back to FedEx REST service type codes (e.g. FEDEX_GROUND, FEDEX_2_DAY).
+ *
+ * Format: "fedex-<suffix>" where suffix is the FedEx service code in lowercase
+ * with underscores. We uppercase + strip the "fedex-" prefix.
+ *
+ * Known Veeqo FedEx rate code prefixes observed in production:
+ *   fedex-fedex_ground                     → FEDEX_GROUND
+ *   fedex-ground_home_delivery             → GROUND_HOME_DELIVERY
+ *   fedex-fedex_express_saver              → FEDEX_EXPRESS_SAVER
+ *   fedex-fedex_2_day                      → FEDEX_2_DAY
+ *   fedex-fedex_2_day_am                   → FEDEX_2_DAY_AM
+ *   fedex-standard_overnight               → STANDARD_OVERNIGHT
+ *   fedex-priority_overnight               → PRIORITY_OVERNIGHT
+ *   fedex-first_overnight                  → FIRST_OVERNIGHT
+ *   fedex-fedex_2_day_one_rate             → FEDEX_2_DAY_ONE_RATE
+ *   fedex-priority_overnight_one_rate      → PRIORITY_OVERNIGHT_ONE_RATE
+ *   (etc.)
+ */
+function normalizeToFedExServiceCode(raw: string): string {
+  // Already a valid FedEx REST service code — pass through
+  if (FEDEX_SERVICES[raw]) return raw;
+  // Veeqo format: starts with "fedex-" followed by the service code in lowercase
+  if (raw.startsWith("fedex-")) {
+    const candidate = raw.slice("fedex-".length).toUpperCase();
+    if (FEDEX_SERVICES[candidate]) return candidate;
+    // Some Veeqo codes include the carrier prefix again, e.g. "fedex-fedex_ground"
+    // already handled by the toUpperCase() above. Nothing more to do.
+    console.warn(`[FedEx] Unknown Veeqo service code suffix: ${raw} → ${candidate} (not in FEDEX_SERVICES, using as-is)`);
+    return candidate;
+  }
+  // Unknown format — return as-is and let FedEx API surface the error
+  console.warn(`[FedEx] Unrecognized service code format: ${raw} — passing to FedEx API unchanged`);
+  return raw;
+}
+
 // Simple in-memory token cache keyed by clientId (valid for ~55 min)
 const _tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
@@ -317,7 +356,12 @@ export async function fetchFedExRates(input: CarrierRateInput): Promise<CarrierR
  * Automatically uses the correct packagingType for One Rate services.
  */
 export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLabelResult> {
-  const serviceCode = input.serviceCode ?? "FEDEX_GROUND";
+  // Normalize Veeqo rate codes (e.g. "fedex-fedex_ground") to FedEx REST service codes (e.g. "FEDEX_GROUND")
+  const rawServiceCode = input.serviceCode ?? "FEDEX_GROUND";
+  const serviceCode = normalizeToFedExServiceCode(rawServiceCode);
+  if (serviceCode !== rawServiceCode) {
+    console.log(`[FedEx] Normalized service code: ${rawServiceCode} → ${serviceCode}`);
+  }
   const isOneRate = FEDEX_ONE_RATE_SERVICE_CODES.has(serviceCode);
 
   // Use dedicated One Rate credentials when available and the service is One Rate

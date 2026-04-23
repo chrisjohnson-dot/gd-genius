@@ -525,9 +525,12 @@ export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLa
 export async function voidFedExLabel(
   trackingNumber: string,
 ): Promise<{ success: boolean; message: string }> {
-  const clientId = process.env.FEDEX_USER_KEY;
-  const clientSecret = process.env.FEDEX_PASSWORD;
-  const accountNumber = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
+  // Must use the same credentials that purchased the label.
+  // All label purchases use One Rate credentials exclusively (FEDEX_ONE_RATE_*).
+  // Fall back to standard credentials if One Rate keys are not set.
+  const clientId = process.env.FEDEX_ONE_RATE_USER_KEY || process.env.FEDEX_USER_KEY;
+  const clientSecret = process.env.FEDEX_ONE_RATE_PASSWORD || process.env.FEDEX_PASSWORD;
+  const accountNumber = process.env.FEDEX_ONE_RATE_ACCOUNT_NUMBER || process.env.FEDEX_ACCOUNT_NUMBER || "";
 
   if (!clientId || !clientSecret || !accountNumber) {
     return { success: false, message: "FedEx REST credentials not configured (FEDEX_USER_KEY, FEDEX_PASSWORD, FEDEX_ACCOUNT_NUMBER required)" };

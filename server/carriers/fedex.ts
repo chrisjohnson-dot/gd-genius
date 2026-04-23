@@ -96,14 +96,22 @@ const STANDARD_TO_ONE_RATE: Record<string, string> = {
 function normalizeToFedExServiceCode(raw: string): string {
   // Already a valid FedEx REST service code — pass through
   if (FEDEX_SERVICES[raw]) return raw;
-  // Veeqo format: starts with "fedex-" followed by the service code in lowercase
-  if (raw.startsWith("fedex-")) {
-    const candidate = raw.slice("fedex-".length).toUpperCase();
-    if (FEDEX_SERVICES[candidate]) return candidate;
-    // Some Veeqo codes include the carrier prefix again, e.g. "fedex-fedex_ground"
-    // already handled by the toUpperCase() above. Nothing more to do.
-    console.warn(`[FedEx] Unknown Veeqo service code suffix: ${raw} → ${candidate} (not in FEDEX_SERVICES, using as-is)`);
-    return candidate;
+
+  // Veeqo Rate Shopping API stores codes in two observed formats:
+  //   dash-separated:       "fedex-fedex_2_day_one_rate"  (from confirmRate rateId)
+  //   underscore-separated: "fedex_fedex_2_day_one_rate"  (also seen in DB)
+  // In both cases the carrier prefix is "fedex" and the suffix is the FedEx service code in lowercase.
+  // We strip the prefix ("fedex-" or "fedex_") and uppercase the remainder.
+  const PREFIXES = ["fedex-", "fedex_"];
+  for (const prefix of PREFIXES) {
+    if (raw.startsWith(prefix)) {
+      const candidate = raw.slice(prefix.length).toUpperCase();
+      if (FEDEX_SERVICES[candidate]) return candidate;
+      // Some codes double the carrier prefix, e.g. "fedex_fedex_2_day" → "FEDEX_2_DAY"
+      // already handled by the toUpperCase() above since FEDEX_2_DAY is in FEDEX_SERVICES.
+      console.warn(`[FedEx] Unknown Veeqo service code suffix: ${raw} → ${candidate} (not in FEDEX_SERVICES, using as-is)`);
+      return candidate;
+    }
   }
   // Unknown format — return as-is and let FedEx API surface the error
   console.warn(`[FedEx] Unrecognized service code format: ${raw} — passing to FedEx API unchanged`);

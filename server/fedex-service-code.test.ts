@@ -42,10 +42,13 @@ const FEDEX_SERVICES_KEYS = new Set([
 
 function normalizeToFedExServiceCode(raw: string): string {
   if (FEDEX_SERVICES_KEYS.has(raw)) return raw;
-  if (raw.startsWith("fedex-")) {
-    const candidate = raw.slice("fedex-".length).toUpperCase();
-    if (FEDEX_SERVICES_KEYS.has(candidate)) return candidate;
-    return candidate;
+  const PREFIXES = ["fedex-", "fedex_"];
+  for (const prefix of PREFIXES) {
+    if (raw.startsWith(prefix)) {
+      const candidate = raw.slice(prefix.length).toUpperCase();
+      if (FEDEX_SERVICES_KEYS.has(candidate)) return candidate;
+      return candidate;
+    }
   }
   return raw;
 }
@@ -104,5 +107,22 @@ describe("normalizeToFedExServiceCode", () => {
   it("returns unknown non-Veeqo codes unchanged", () => {
     expect(normalizeToFedExServiceCode("UNKNOWN_SERVICE")).toBe("UNKNOWN_SERVICE");
     expect(normalizeToFedExServiceCode("ups-ups_ground")).toBe("ups-ups_ground");
+  });
+
+  // ── Underscore-prefix format (actual production format observed in DB) ────
+  it("translates underscore-prefix 'fedex_fedex_2_day_one_rate' → 'FEDEX_2_DAY_ONE_RATE'", () => {
+    expect(normalizeToFedExServiceCode("fedex_fedex_2_day_one_rate")).toBe("FEDEX_2_DAY_ONE_RATE");
+  });
+
+  it("translates underscore-prefix 'fedex_fedex_ground' → 'FEDEX_GROUND'", () => {
+    expect(normalizeToFedExServiceCode("fedex_fedex_ground")).toBe("FEDEX_GROUND");
+  });
+
+  it("translates underscore-prefix 'fedex_fedex_2_day' → 'FEDEX_2_DAY'", () => {
+    expect(normalizeToFedExServiceCode("fedex_fedex_2_day")).toBe("FEDEX_2_DAY");
+  });
+
+  it("translates underscore-prefix 'fedex_priority_overnight_one_rate' → 'PRIORITY_OVERNIGHT_ONE_RATE'", () => {
+    expect(normalizeToFedExServiceCode("fedex_priority_overnight_one_rate")).toBe("PRIORITY_OVERNIGHT_ONE_RATE");
   });
 });

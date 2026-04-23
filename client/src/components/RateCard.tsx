@@ -208,6 +208,7 @@ export function RateCard({ input, onConfirm, onSkip, compact = false, forceOneRa
       customerId: input.customerId,
       customerName: input.customerName,
       rateId: rate.rateId,
+      serviceCode: rate.serviceCode,
       carrierCode: rate.carrierCode,
       carrierName: rate.carrierName,
       service: rate.service,

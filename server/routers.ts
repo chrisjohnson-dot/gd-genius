@@ -9286,6 +9286,8 @@ const rateWizardRouter = router({
         customerId: z.number().optional(),
         customerName: z.string().optional(),
         rateId: z.string(),
+        /** The carrier-native service code (e.g. FEDEX_2_DAY_ONE_RATE). Preferred over rateId for label purchase. */
+        serviceCode: z.string().optional(),
         carrierCode: z.string(),
         carrierName: z.string(),
         service: z.string(),
@@ -9310,7 +9312,8 @@ const rateWizardRouter = router({
         customerId: input.customerId,
         customerName: input.customerName,
         carrierCode: input.carrierCode,
-        serviceCode: input.rateId,
+        // Prefer the explicit serviceCode (carrier-native) over rateId (may have carrier prefix)
+        serviceCode: input.serviceCode ?? input.rateId,
         serviceName: `${input.carrierName} ${input.service}`,
         transitDays: input.transitDays,
         rateAmountCents: Math.round(input.totalCost * 100),

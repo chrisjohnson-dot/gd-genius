@@ -496,12 +496,16 @@ export async function buyFedExLabel(input: CarrierLabelInput): Promise<CarrierLa
       return { success: false, trackingNumber: "", carrierCode: "fedex", carrierName: "FedEx", service: serviceCode, error: "No label returned from FedEx REST API" };
     }
 
+    // FedEx returns the ZPL label as base64-encoded content.
+    // Decode it to a raw ZPL string so it can be sent directly to the Zebra printer.
+    const labelZpl = Buffer.from(encodedLabel, "base64").toString("utf-8");
     return {
       success: true,
       trackingNumber,
       carrierCode: "fedex",
       carrierName: "FedEx",
       service: serviceCode,
+      labelZpl,
       labelBase64: encodedLabel,
       labelFormat: "ZPL",
     };

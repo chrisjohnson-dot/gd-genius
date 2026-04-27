@@ -176,12 +176,14 @@ function ItemsTable({
   sessionId,
   adjustQty,
   isLoading,
+  onAdjust,
 }: {
   items: ScanItem[];
   phase: Phase;
   sessionId: number;
   adjustQty: ReturnType<typeof trpc.qcScanner.adjustQty.useMutation>;
   isLoading?: boolean;
+  onAdjust?: (sku: string, delta: number) => void;
 }) {
   if (isLoading) {
     return <ItemsTableSkeleton />;
@@ -287,7 +289,7 @@ function ItemsTable({
                   size="icon"
                   className="h-6 w-6 shrink-0"
                   disabled={item.scannedQty <= 0}
-                  onClick={() => adjustQty.mutate({ sessionId, sku: item.sku, delta: -1 })}
+                  onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: -1 }); onAdjust?.(item.sku, -1); }}
                 >
                   <Minus className="w-3 h-3" />
                 </Button>
@@ -304,7 +306,7 @@ function ItemsTable({
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 shrink-0"
-                  onClick={() => adjustQty.mutate({ sessionId, sku: item.sku, delta: 1 })}
+                  onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: 1 }); onAdjust?.(item.sku, 1); }}
                 >
                   <Plus className="w-3 h-3" />
                 </Button>
@@ -371,7 +373,16 @@ export default function QcScanner() {
   const [flagDesc, setFlagDesc] = useState("");
   const [completeDialog, setCompleteDialog] = useState(false);
   const [confirmText, setConfirmText] = useState("");
-  const [activePalletTab, setActivePalletTab] = useState("0");
+  // Multi-expand: track a Set of expanded pallet IDs — all pallets start expanded
+  const [expandedPallets, setExpandedPallets] = useState<Set<number>>(new Set());
+  const togglePalletExpand = (palletId: number) =>
+    setExpandedPallets((prev) => {
+      const next = new Set(prev);
+      if (next.has(palletId)) next.delete(palletId); else next.add(palletId);
+      return next;
+    });
+  // Legacy alias kept for the auto-focus useEffect
+  const activePalletTab = expandedPallets.size > 0 ? String([...expandedPallets][expandedPallets.size - 1]) : "";
   const [extensivLoadError, setExtensivLoadError] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
 
@@ -402,7 +413,7 @@ export default function QcScanner() {
       const demoPallets = (data.pallets as unknown as Pallet[]) ?? [];
       setPallets(demoPallets);
       // Auto-expand the last (active) pallet
-      if (demoPallets.length > 0) setActivePalletTab(String(demoPallets[demoPallets.length - 1].id));
+      if (demoPallets.length > 0) setExpandedPallets(new Set(demoPallets.map((p: Pallet) => p.id)));
       setDemoUpcMap(data.demoUpcMap ?? []);
       setIsDemoSession(true);
       setPhase("scanning");
@@ -477,7 +488,7 @@ export default function QcScanner() {
       const loadedPallets = (data.pallets as unknown as Pallet[]) ?? [];
       setPallets(loadedPallets);
       // Auto-expand the last (active) pallet
-      if (loadedPallets.length > 0) setActivePalletTab(String(loadedPallets[loadedPallets.length - 1].id));
+      if (loadedPallets.length > 0) setExpandedPallets(new Set(loadedPallets.map((p: Pallet) => p.id)));
       setPhase("scanning");
       if (data.resumed) {
         toast.info(`Resumed session for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
@@ -633,7 +644,7 @@ export default function QcScanner() {
       const newPallet: Pallet = { id: data.id, palletNumber: data.palletNumber, palletUpc: null, palletType: data.palletType ?? null, items: [], palletTareWeightLb: "30" };
       setPallets((prev) => [...prev, newPallet]);
       // Auto-expand the new pallet (keyed by pallet.id) so the scan input is immediately visible
-      setActivePalletTab(String(data.id));
+      setExpandedPallets((prev) => new Set([...prev, data.id]));
       toast.success(`Pallet ${data.palletNumber} added`);
     },
   });
@@ -1232,7 +1243,7 @@ export default function QcScanner() {
                     const openedPallets = (data.pallets as unknown as Pallet[]) ?? [];
                     setPallets(openedPallets);
                     // Auto-expand the last (active) pallet
-                    if (openedPallets.length > 0) setActivePalletTab(String(openedPallets[openedPallets.length - 1].id));
+                    if (openedPallets.length > 0) setExpandedPallets(new Set(openedPallets.map((p: Pallet) => p.id)));
                     setPhase(sess.status === "complete" ? "complete" : "scanning");
                     toast.info(`Opened session: ${sess.referenceNumber}`);
                     setTimeout(() => barcodeRef.current?.focus(), 100);
@@ -1481,6 +1492,28 @@ export default function QcScanner() {
             sessionId={session!.id}
             adjustQty={adjustQty}
             isLoading={fetchFromExtensiv.isPending}
+            onAdjust={(sku, delta) => {
+              // Mirror + / - adjustments into the active pallet's item list
+              const activePallet = palletsRef.current[palletsRef.current.length - 1];
+              if (!activePallet) return;
+              setPallets((prev) => prev.map((p) => {
+                if (p.id !== activePallet.id) return p;
+                const existingItems = (p.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+                const existing = existingItems.find((i) => i.sku === sku);
+                let newItems: Array<{ sku: string; upc?: string; qty: number }>;
+                if (existing) {
+                  const newQty = existing.qty + delta;
+                  newItems = newQty <= 0
+                    ? existingItems.filter((i) => i.sku !== sku)
+                    : existingItems.map((i) => i.sku === sku ? { ...i, qty: newQty } : i);
+                } else if (delta > 0) {
+                  newItems = [...existingItems, { sku, qty: delta }];
+                } else {
+                  return p;
+                }
+                return { ...p, items: newItems };
+              }));
+            }}
           />
         </div>
 
@@ -1542,7 +1575,7 @@ export default function QcScanner() {
             /* ── Vertical stack of collapsible pallet cards ── */
             <div className="space-y-2">
               {pallets.map((pallet, palletIdx) => {
-                const isExpanded = activePalletTab === String(pallet.id);
+                const isExpanded = expandedPallets.has(pallet.id);
                 const itemCount = pallet.items?.length ?? 0;
                 const hasUpc = !!pallet.palletUpc?.trim();
                 const hasWeight = !!(pallet.weightOverrideLb ?? pallet.calculatedWeightLb);
@@ -1581,7 +1614,7 @@ export default function QcScanner() {
                     <button
                       type="button"
                       className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left"
-                      onClick={() => setActivePalletTab(isExpanded ? "" : String(pallet.id))}
+                      onClick={() => togglePalletExpand(pallet.id)}
                     >
                       {/* Expand/collapse chevron */}
                       <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />

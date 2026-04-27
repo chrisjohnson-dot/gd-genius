@@ -133,9 +133,9 @@ export function generateGdPalletLabel(
 
 function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   // ── Zone heights (pt) ──────────────────────────────────────────────────────
-  const ADDR_H  = 76;   // Ship From / Ship To
-  const INFO_H  = 54;   // Trans ID + dims (compact — more space for packing slip)
-  const FOOT_H  = 36;   // Total QTY + Pallet row (taller for larger font)
+  const ADDR_H  = 62;   // Ship From / Ship To (compact — extra lines for packing slip)
+  const INFO_H  = 54;   // Trans ID + dims
+  const FOOT_H  = 44;   // Total QTY + Pallet row — extra height so text is visually centered
   const BC_H    = PH * 0.25;  // bottom quarter
   const SLIP_H  = PH - ADDR_H - INFO_H - FOOT_H - BC_H;
 
@@ -172,12 +172,21 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);
 
   // ── SECTION 2: Transaction ID | Weight & Dims ──────────────────────────────
+  // Vertically center content within INFO_H band.
+  // Left column: label (6pt) + 26pt TX ID — total content ~34pt, center in 54pt band
+  // Right column: label (6pt) + 11pt weight + 4pt gap + 11pt dims — total ~38pt
+  const INFO_LABEL_Y = y + 5;                       // tiny "Transaction ID" / "Weight & Dims" label
+  const INFO_TX_Y    = y + Math.round((INFO_H - 26) / 2) + 2; // 26pt TX ID vertically centered
+  // Right column: weight + dims block height = 6(label)+4+11(weight)+4+11(dims)=36pt; center in 54pt
+  const INFO_WT_Y    = y + Math.round((INFO_H - 30) / 2) + 4; // weight line
+  const INFO_DIM_Y   = INFO_WT_Y + 15;              // dims line, 15pt below weight
+
   doc.fillColor(MID_GRAY).fontSize(6).font("Helvetica");
-  doc.text("Transaction ID", MARGIN, y + 5, { lineBreak: false });
-  doc.text("Weight & Dims",  MID + MARGIN, y + 5, { lineBreak: false });
+  doc.text("Transaction ID", MARGIN, INFO_LABEL_Y, { lineBreak: false });
+  doc.text("Weight & Dims",  MID + MARGIN, INFO_LABEL_Y, { lineBreak: false });
 
   doc.fillColor(BLACK).fontSize(26).font("Helvetica-Bold");
-  doc.text(String(p.transactionId), MARGIN, y + 12, { lineBreak: false });
+  doc.text(String(p.transactionId), MARGIN, INFO_TX_Y, { lineBreak: false });
 
   const weightStr = p.weightLbs != null ? `${p.weightLbs} LBS` : "—";
   const dimStr    = (p.dimL != null && p.dimW != null && p.dimH != null)
@@ -185,10 +194,10 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
     : "";
 
   doc.fillColor(BLACK).fontSize(11).font("Helvetica-Bold");
-  doc.text(weightStr, MID + MARGIN, y + 16, { lineBreak: false });
+  doc.text(weightStr, MID + MARGIN, INFO_WT_Y, { lineBreak: false });
   if (dimStr) {
     doc.fillColor(BLACK).fontSize(11).font("Helvetica-Bold");
-    doc.text(dimStr, MID + MARGIN, y + 30, { lineBreak: false });
+    doc.text(dimStr, MID + MARGIN, INFO_DIM_Y, { lineBreak: false });
   }
 
   doc.save()
@@ -237,9 +246,16 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   const totalQty = p.items.reduce((s, i) => s + i.qty, 0);
   // Font size chosen so text fills ~80% of FOOT_H (36pt band → 18pt font)
   const FOOT_FONT = 18;
-  // Vertically center: PDFKit text baseline is at the top of the em-square;
-  // subtract ~2pt to optically center within the band.
-  const footY = y + Math.round((FOOT_H - FOOT_FONT) / 2) - 1;
+  // PDFKit text Y is the top of the ascender line. For Helvetica Bold 18pt,
+  // the rendered cap-height is ~12.6pt and the ascender adds ~4pt above caps.
+  // To visually center the capital letters in the 36pt band:
+  //   visual center = FOOT_H/2 = 18pt from top of band
+  //   cap top = footY + ~4pt (ascender above caps)
+  //   cap bottom = footY + ~4 + 12.6 ≈ footY + 16.6pt
+  //   so footY = 18 - (16.6/2) - 4 ≈ 5.7 → round to 6
+  // FOOT_H = 44pt. 18pt Helvetica Bold rendered cap-height ≈ 13pt.
+  // Visual center offset = (44 - 13) / 2 ≈ 15pt from top of band.
+  const footY = y + 15;
   const palletStr = `Pallet: ${p.palletNumber} of ${p.totalPallets}`;
   doc.fillColor(BLACK).fontSize(FOOT_FONT).font("Helvetica-Bold");
   // Left-justify Total QTY

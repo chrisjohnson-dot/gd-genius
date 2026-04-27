@@ -67,72 +67,40 @@ type Session = {
 
 type Phase = "start" | "scanning" | "complete";
 
-// Preload the scan success sound so it plays with zero latency
-const _scanSuccessAudio = typeof window !== "undefined"
-  ? (() => { const a = new Audio("/manus-storage/scan_success_4fcbcd00.wav"); a.preload = "auto"; return a; })()
-  : null;
+// WAV URLs for each sound type
+const SOUND_URLS: Record<"success" | "error" | "complete", string> = {
+  success: "/manus-storage/cryo_pistol_gunshot_9f6c9d5d.wav",
+  error: "/manus-storage/wrong_item_angry_c1fd9aee.wav",
+  complete: "/manus-storage/order_complete_jingle_d15136e3.wav",
+};
 
-// Preload the order complete jingle
-const _orderCompleteAudio = typeof window !== "undefined"
-  ? (() => { const a = new Audio("/manus-storage/order_complete_jingle_d15136e3.wav"); a.preload = "auto"; return a; })()
-  : null;
+// Decoded AudioBuffer cache — populated on first play of each type
+const _audioBuffers: Partial<Record<"success" | "error" | "complete", AudioBuffer>> = {};
 
-// Preload the error sound (wrong item / over-scan / any scan error)
-const _errorAudio = typeof window !== "undefined"
-  ? (() => { const a = new Audio("/manus-storage/wrong_item_angry_c1fd9aee.wav"); a.preload = "auto"; return a; })()
-  : null;
-
-function playBeep(type: "success" | "error" | "complete") {
+async function playBeepAsync(type: "success" | "error" | "complete") {
   try {
-    if (type === "success") {
-      // Play the uploaded WAV sound
-      if (_scanSuccessAudio) {
-        _scanSuccessAudio.currentTime = 0;
-        _scanSuccessAudio.play().catch(() => { /* autoplay blocked — silently ignore */ });
-      }
-      return;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!_audioBuffers[type]) {
+      const ctx: AudioContext = new AudioCtx();
+      const resp = await fetch(SOUND_URLS[type]);
+      const arrayBuf = await resp.arrayBuffer();
+      _audioBuffers[type] = await ctx.decodeAudioData(arrayBuf);
+      await ctx.close();
     }
-
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-
-    /** Helper: schedule a single oscillator tone */
-    const tone = (
-      oscType: OscillatorType,
-      freq: number,
-      startOffset: number,
-      duration: number,
-      gainPeak: number
-    ) => {
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = oscType;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + startOffset);
-      g.gain.setValueAtTime(gainPeak, ctx.currentTime + startOffset);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startOffset + duration);
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.start(ctx.currentTime + startOffset);
-      osc.stop(ctx.currentTime + startOffset + duration);
-    };
-
-    if (type === "error") {
-      // Play the uploaded error WAV
-      ctx.close();
-      if (_errorAudio) {
-        _errorAudio.currentTime = 0;
-        _errorAudio.play().catch(() => { /* autoplay blocked — silently ignore */ });
-      }
-    } else {
-      // complete — play the uploaded jingle WAV
-      ctx.close();
-      if (_orderCompleteAudio) {
-        _orderCompleteAudio.currentTime = 0;
-        _orderCompleteAudio.play().catch(() => { /* autoplay blocked — silently ignore */ });
-      }
-    }
+    const ctx: AudioContext = new AudioCtx();
+    const source = ctx.createBufferSource();
+    source.buffer = _audioBuffers[type]!;
+    source.connect(ctx.destination);
+    source.start(0);
+    source.onended = () => { ctx.close(); };
   } catch {
     // Audio not available — silently ignore
   }
+}
+
+function playBeep(type: "success" | "error" | "complete") {
+  void playBeepAsync(type);
 }
 
 // ─── Pack-sheet-style item table ──────────────────────────────────────────────
@@ -1336,7 +1304,6 @@ export default function QcScanner() {
 
   return (
     <>
-    <div className="flex flex-col h-full min-h-0">
     {/* ── Sticky top section: header + progress + items table + pallets toolbar ── */}
     <div className="sticky top-0 z-20 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4 max-w-6xl w-full mx-auto">
       {/* Header */}
@@ -1344,7 +1311,7 @@ export default function QcScanner() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ScanBarcode className="w-6 h-6 text-primary" />
-{session?.transactionId ? `TX ${session.transactionId}` : session?.referenceNumber}
+            {session?.transactionId ? `TX ${session.transactionId}` : session?.referenceNumber}
             {phase === "complete" && (
               <Badge className="bg-green-500 text-white ml-2">Complete</Badge>
             )}
@@ -2407,7 +2374,6 @@ export default function QcScanner() {
         </DialogContent>
       </Dialog>
     </div>{/* end outer flex column */}
-    </div>{/* end root return div */}
     </>
   );
 }

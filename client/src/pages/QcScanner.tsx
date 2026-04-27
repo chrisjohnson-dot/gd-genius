@@ -1374,130 +1374,113 @@ export default function QcScanner() {
 
         {/* Pallets tab */}
         <TabsContent value="pallets" className="mt-3">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Pallets</h3>
-            {phase === "scanning" && (
-              <div className="flex items-center gap-2">
-                {pallets.length > 0 && (
-                  <Button
-                    size="sm"
-                    variant={unassignedCount > 0 ? "default" : "outline"}
-                    onClick={() => bulkGeneratePalletUpcs.mutate({ sessionId: session!.id })}
-                    disabled={bulkGeneratePalletUpcs.isPending || unassignedCount === 0}
-                    title={unassignedCount === 0 ? "All pallets already have UPCs" : `Auto-assign UPCs to ${unassignedCount} unassigned pallet${unassignedCount !== 1 ? "s" : ""}`}
-                  >
-                    <Wand2 className="w-4 h-4 mr-1" />
-                    {bulkGeneratePalletUpcs.isPending
-                      ? "Assigning…"
-                      : unassignedCount > 0
-                        ? `Auto-Assign All (${unassignedCount})`
-                        : "All UPCs Assigned"}
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (!session) return;
-                    // Reuse the pallet type from any existing pallet in this session.
-                    // Search all pallets (not just the last) in case some are untyped.
-                    const reuseType =
-                      pallets.find((p) => p.palletType)?.palletType ??
-                      pallets[pallets.length - 1]?.palletType ??
-                      "gd_owned"; // safe default — never show the type dialog for subsequent pallets
-                    addPallet.mutate({ sessionId: session.id, palletType: reuseType });
-                  }}
-                  disabled={addPallet.isPending}
-                >
-                  {addPallet.isPending ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
-                  Add Pallet
-                  {(() => {
-                    const inheritedType =
-                      pallets.find((p) => p.palletType)?.palletType ??
-                      pallets[pallets.length - 1]?.palletType ??
-                      "gd_owned";
-                    const shortLabel =
-                      inheritedType === "customer_owned" ? "CUST"
-                      : inheritedType === "gd_owned" ? "GD"
-                      : inheritedType === "chep" ? "CHEP"
-                      : inheritedType.toUpperCase().slice(0, 4);
-                    const badgeClass = palletTypeBadgeClass(inheritedType);
-                    return (
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none ${badgeClass}`}>
-                        {shortLabel}
-                      </span>
-                    );
-                  })()}
-                </Button>
-              </div>
-            )}
-          </div>
+          {/* Top toolbar: auto-assign UPCs */}
+          {phase === "scanning" && pallets.length > 0 && (
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm text-muted-foreground">{pallets.length} pallet{pallets.length !== 1 ? "s" : ""}</h3>
+              <Button
+                size="sm"
+                variant={unassignedCount > 0 ? "default" : "outline"}
+                onClick={() => bulkGeneratePalletUpcs.mutate({ sessionId: session!.id })}
+                disabled={bulkGeneratePalletUpcs.isPending || unassignedCount === 0}
+                title={unassignedCount === 0 ? "All pallets already have UPCs" : `Auto-assign UPCs to ${unassignedCount} unassigned pallet${unassignedCount !== 1 ? "s" : ""}`}
+              >
+                <Wand2 className="w-4 h-4 mr-1" />
+                {bulkGeneratePalletUpcs.isPending
+                  ? "Assigning…"
+                  : unassignedCount > 0
+                    ? `Auto-Assign UPCs (${unassignedCount})`
+                    : "All UPCs Assigned"}
+              </Button>
+            </div>
+          )}
+
           {pallets.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No pallets yet.</div>
+            <div className="text-center py-8 text-muted-foreground">No pallets yet. Use the button below to add one.</div>
           ) : (
-            <Tabs value={activePalletTab} onValueChange={setActivePalletTab}>
-              <TabsList className="flex-wrap h-auto gap-1">
-                {pallets.map((p, idx) => (
-                  <TabsTrigger key={p.id} value={String(idx)} className="gap-0">
-                    Pallet {p.palletNumber}
-                    {/* Clickable type badge — opens popover to change type mid-session */}
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-                          title="Tap to change pallet type"
-                          className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none cursor-pointer hover:opacity-75 transition-opacity ${
-                            p.palletType ? palletTypeBadgeClass(p.palletType) : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                          }`}
-                        >
-                          {p.palletType
-                            ? (p.palletType === "customer_owned" ? "CUST" : p.palletType === "gd_owned" ? "GD" : "CHEP")
-                            : "?"}
+            /* ── Vertical stack of collapsible pallet cards ── */
+            <div className="space-y-2">
+              {pallets.map((pallet) => {
+                const isExpanded = activePalletTab === String(pallet.id);
+                const itemCount = pallet.items?.length ?? 0;
+                const hasUpc = !!pallet.palletUpc?.trim();
+                const hasWeight = !!(pallet.weightOverrideLb ?? pallet.calculatedWeightLb);
+                return (
+                  <div key={pallet.id} className="rounded-lg border border-border overflow-hidden">
+                    {/* ── Collapsed header row ── */}
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left"
+                      onClick={() => setActivePalletTab(isExpanded ? "" : String(pallet.id))}
+                    >
+                      {/* Expand/collapse chevron */}
+                      <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                      {/* Pallet number */}
+                      <span className="font-semibold text-sm w-20 shrink-0">Pallet {pallet.palletNumber}</span>
+                      {/* Type badge */}
+                      {pallet.palletType && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold leading-none shrink-0 ${
+                          palletTypeBadgeClass(pallet.palletType)
+                        }`}>
+                          {pallet.palletType === "customer_owned" ? "CUST" : pallet.palletType === "gd_owned" ? "GD" : "CHEP"}
                         </span>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-52 p-2" align="start" onClick={(e) => e.stopPropagation()}>
-                        <p className="text-xs text-muted-foreground mb-2 font-medium">Change pallet type</p>
-                        <div className="flex flex-col gap-1">
-                          {PALLET_TYPES.map((pt) => (
-                            <button
-                              key={pt.value}
-                              className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs font-medium w-full text-left transition-opacity ${
-                                p.palletType === pt.value ? pt.color + " ring-1 ring-current" : "hover:bg-muted"
-                              }`}
-                              onClick={() => {
-                                if (p.palletType !== pt.value) {
-                                  updatePalletType.mutate({ palletId: p.id, palletType: pt.value });
-                                  toast.success(`Pallet ${p.palletNumber} → ${pt.label}`);
-                                }
-                              }}
-                              disabled={updatePalletType.isPending}
-                            >
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.color}`}>
-                                {pt.value === "customer_owned" ? "CUST" : pt.value === "gd_owned" ? "GD" : "CHEP"}
-                              </span>
-                              {pt.label}
-                            </button>
-                          ))}
+                      )}
+                      {/* SKU count pill */}
+                      {itemCount > 0 && (
+                        <span className="text-xs text-muted-foreground">{itemCount} SKU{itemCount !== 1 ? "s" : ""}</span>
+                      )}
+                      {/* UPC indicator */}
+                      {hasUpc && (
+                        <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                          <Barcode className="w-3 h-3" /> UPC
+                        </span>
+                      )}
+                      {/* Weight indicator */}
+                      {hasWeight && (
+                        <span className="text-xs text-muted-foreground">
+                          {pallet.weightOverrideLb
+                            ? <span className="text-orange-600 font-medium">{pallet.weightOverrideLb} lbs ✎</span>
+                            : <span>{pallet.calculatedWeightLb} lbs</span>}
+                        </span>
+                      )}
+                      {/* Print buttons — always visible in header */}
+                      {phase === "scanning" && (
+                        <div className="ml-auto flex gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={async () => {
+                              await ensurePalletUpcs();
+                              window.open(`/api/pdf/gd-label?sessionId=${session!.id}&palletId=${pallet.id}`, "_blank");
+                            }}
+                          >
+                            <Printer className="w-3 h-3 mr-1" /> GD
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={async () => {
+                              await ensurePalletUpcs();
+                              window.open(`/api/pdf/sscc-label?sessionId=${session!.id}&palletId=${pallet.id}`, "_blank");
+                            }}
+                          >
+                            <Printer className="w-3 h-3 mr-1" /> SSCC
+                          </Button>
                         </div>
-                      </PopoverContent>
-                    </Popover>
-                    {p.items && p.items.length > 0 && (
-                      <Badge variant="secondary" className="ml-1 text-xs">{p.items.length}</Badge>
-                    )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {pallets.map((pallet, idx) => (
-                <TabsContent key={pallet.id} value={String(idx)} className="mt-3">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
-                          <Popover>
+                      )}
+                    </button>
+
+                    {/* ── Expanded body ── */}
+                    {isExpanded && (
+                      <div className="border-t border-border">
+                        <Card className="rounded-none border-0 shadow-none">
+                          <CardHeader className="pb-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
+                                <Popover>
                             <PopoverTrigger asChild>
                               {pallet.palletType ? (
                                 <button
@@ -1746,10 +1729,53 @@ export default function QcScanner() {
                         </div>
                       )}
                     </CardContent>
-                  </Card>
-                </TabsContent>
-              ))}
-            </Tabs>
+                        </Card>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Persistent Add Pallet button ── */}
+          {phase === "scanning" && (
+            <div className="mt-4">
+              <Button
+                className="w-full h-12 text-base font-semibold gap-2"
+                onClick={() => {
+                  if (!session) return;
+                  const reuseType =
+                    pallets.find((p) => p.palletType)?.palletType ??
+                    pallets[pallets.length - 1]?.palletType ??
+                    "gd_owned";
+                  addPallet.mutate({ sessionId: session.id, palletType: reuseType });
+                }}
+                disabled={addPallet.isPending}
+              >
+                {addPallet.isPending
+                  ? <RefreshCw className="w-5 h-5 animate-spin" />
+                  : <Plus className="w-5 h-5" />}
+                Add Pallet
+                {(() => {
+                  const inheritedType =
+                    pallets.find((p) => p.palletType)?.palletType ??
+                    pallets[pallets.length - 1]?.palletType ??
+                    "gd_owned";
+                  const shortLabel =
+                    inheritedType === "customer_owned" ? "Customer-Owned"
+                    : inheritedType === "gd_owned" ? "GD-Owned"
+                    : inheritedType === "chep" ? "CHEP"
+                    : inheritedType;
+                  return <span className="text-sm font-normal opacity-80">({shortLabel})</span>;
+                })()}
+              </Button>
+              {pallets.length > 0 && (
+                <p className="text-center text-xs text-muted-foreground mt-1.5">
+                  Pallet type auto-inherited from previous pallet · tap type badge on any pallet to change
+                </p>
+              )}
+            </div>
           )}
         </TabsContent>
       </Tabs>

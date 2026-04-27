@@ -69,34 +69,45 @@ type Phase = "start" | "scanning" | "complete";
 function playBeep(type: "success" | "error" | "complete") {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+
+    /** Helper: schedule a single oscillator tone */
+    const tone = (
+      oscType: OscillatorType,
+      freq: number,
+      startOffset: number,
+      duration: number,
+      gainPeak: number
+    ) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = oscType;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + startOffset);
+      g.gain.setValueAtTime(gainPeak, ctx.currentTime + startOffset);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startOffset + duration);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(ctx.currentTime + startOffset);
+      osc.stop(ctx.currentTime + startOffset + duration);
+    };
+
     if (type === "success") {
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.15);
+      // Two quick ascending sine tones — clean, pleasant
+      tone("sine", 880,  0,    0.08, 0.30);
+      tone("sine", 1320, 0.10, 0.12, 0.25);
+      setTimeout(() => ctx.close(), 500);
     } else if (type === "error") {
-      osc.frequency.value = 220;
-      gain.gain.setValueAtTime(0.4, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
+      // Three descending square-wave pulses — harsh, attention-grabbing
+      // Used for ALL error conditions: not-on-list, over-scan, over-weight
+      tone("square", 440, 0,    0.15, 0.40);
+      tone("square", 330, 0.20, 0.15, 0.35);
+      tone("square", 220, 0.40, 0.22, 0.30);
+      setTimeout(() => ctx.close(), 1000);
     } else {
-      // complete — two ascending tones
-      const osc2 = ctx.createOscillator();
-      osc2.connect(gain);
-      osc.frequency.value = 660;
-      osc2.frequency.value = 880;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.25);
-      osc2.start(ctx.currentTime + 0.25);
-      osc2.stop(ctx.currentTime + 0.5);
+      // complete — three ascending tones, celebratory
+      tone("sine", 660,  0,    0.12, 0.30);
+      tone("sine", 880,  0.15, 0.12, 0.28);
+      tone("sine", 1100, 0.30, 0.20, 0.25);
+      setTimeout(() => ctx.close(), 800);
     }
   } catch {
     // Audio not available — silently ignore
@@ -560,6 +571,7 @@ export default function QcScanner() {
             const newTotalLb = Math.round((totalLb + tareLb) * 10) / 10;
             if (newTotalLb > weightLimitLbRef.current && !overLimitToastedRef.current.has(activePallet.id)) {
               overLimitToastedRef.current.add(activePallet.id);
+              playBeep("error");
               toast.warning(`⚠️ Pallet ${activePallet.palletNumber} exceeds weight limit`, {
                 description: `${newTotalLb} lbs — over the ${weightLimitLbRef.current} lb threshold. Consider starting a new pallet.`,
                 duration: 8000,
@@ -569,6 +581,7 @@ export default function QcScanner() {
             const w = parseFloat(activePallet.calculatedWeightLb);
             if (w > weightLimitLbRef.current && !overLimitToastedRef.current.has(activePallet.id)) {
               overLimitToastedRef.current.add(activePallet.id);
+              playBeep("error");
               toast.warning(`⚠️ Pallet ${activePallet.palletNumber} exceeds weight limit`, {
                 description: `${w} lbs — over the ${weightLimitLbRef.current} lb threshold. Consider starting a new pallet.`,
                 duration: 8000,
@@ -590,6 +603,7 @@ export default function QcScanner() {
       barcodeRef.current?.focus();
     },
     onError: (e) => {
+      playBeep("error");
       toast.error(e.message);
       setBarcodeInput("");
       barcodeRef.current?.focus();

@@ -4228,6 +4228,18 @@ const qcScannerRouter = router({
       await updateQcPallet(input.palletId, { calculatedWeightLb: String(weightLb) });
       return { weightLb };
     }),
+  // Set or clear operator weight override (takes precedence over calculated weight on labels)
+  updatePalletWeightOverride: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      weightLb: z.number().min(0).max(9999).nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      await updateQcPallet(input.palletId, {
+        weightOverrideLb: input.weightLb !== null ? String(input.weightLb) : null,
+      });
+      return { success: true };
+    }),
 });
 // Pallet Scanner router (Shipping section))
 const palletScannerRouter = router({

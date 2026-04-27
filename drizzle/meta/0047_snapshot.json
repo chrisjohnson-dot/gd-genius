@@ -3046,6 +3046,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "weightOverrideLb": {
+          "name": "weightOverrideLb",
+          "type": "decimal(8,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},

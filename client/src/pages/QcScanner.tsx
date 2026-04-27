@@ -36,6 +36,7 @@ type Pallet = {
   items: Array<{ sku: string; upc?: string; qty: number }> | null;
   palletHeightIn?: string | null;
   calculatedWeightLb?: string | null;
+  weightOverrideLb?: string | null;
 };
 
 const PALLET_TYPES = [
@@ -564,6 +565,8 @@ export default function QcScanner() {
 
   // Height input state per pallet (palletId -> string)
   const [heightInputs, setHeightInputs] = useState<Record<number, string>>({});
+  // Weight override input state per pallet (palletId -> string)
+  const [weightOverrideInputs, setWeightOverrideInputs] = useState<Record<number, string>>({});
 
   const updatePalletHeight = trpc.qcScanner.updatePalletHeight.useMutation({
     onSuccess: (_, vars) => {
@@ -571,6 +574,20 @@ export default function QcScanner() {
         prev.map((p) => p.id === vars.palletId ? { ...p, palletHeightIn: String(vars.heightIn) } : p)
       );
       toast.success(`Pallet height saved: ${vars.heightIn}"`); 
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
+    onSuccess: (_, vars) => {
+      setPallets((prev) =>
+        prev.map((p) => p.id === vars.palletId ? { ...p, weightOverrideLb: vars.weightLb !== null ? String(vars.weightLb) : null } : p)
+      );
+      if (vars.weightLb !== null) {
+        toast.success(`Weight override saved: ${vars.weightLb} lbs`);
+      } else {
+        toast.success('Weight override cleared');
+      }
     },
     onError: (e) => toast.error(e.message),
   });
@@ -1433,7 +1450,7 @@ export default function QcScanner() {
                             />
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Weight:</span>
+                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Calc. Weight:</span>
                             {pallet.calculatedWeightLb ? (
                               <span className="text-xs font-semibold text-green-700">{pallet.calculatedWeightLb} lbs</span>
                             ) : (
@@ -1449,13 +1466,54 @@ export default function QcScanner() {
                               <RefreshCw className="w-3 h-3 mr-1" /> Calculate
                             </Button>
                           </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">Weight Override (lbs):</label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="9999"
+                              step="0.1"
+                              className="h-7 w-24 text-xs"
+                              placeholder={pallet.weightOverrideLb ?? "optional"}
+                              value={weightOverrideInputs[pallet.id] ?? (pallet.weightOverrideLb ?? "")}
+                              onChange={(e) => setWeightOverrideInputs((prev) => ({ ...prev, [pallet.id]: e.target.value }))}
+                              onBlur={() => {
+                                const raw = weightOverrideInputs[pallet.id] ?? "";
+                                if (raw === "") {
+                                  // Clear override if field is emptied
+                                  if (pallet.weightOverrideLb) updatePalletWeightOverride.mutate({ palletId: pallet.id, weightLb: null });
+                                  return;
+                                }
+                                const val = parseFloat(raw);
+                                if (!isNaN(val) && val >= 0) {
+                                  updatePalletWeightOverride.mutate({ palletId: pallet.id, weightLb: val });
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const raw = weightOverrideInputs[pallet.id] ?? "";
+                                  const val = parseFloat(raw);
+                                  if (!isNaN(val) && val >= 0) {
+                                    updatePalletWeightOverride.mutate({ palletId: pallet.id, weightLb: val });
+                                  }
+                                }
+                              }}
+                            />
+                            {pallet.weightOverrideLb && (
+                              <span className="text-xs font-semibold text-orange-600">Override active</span>
+                            )}
+                          </div>
                         </div>
                       )}
                       {/* Show saved height/weight in read-only mode outside scanning phase */}
-                      {phase !== "scanning" && (pallet.palletHeightIn || pallet.calculatedWeightLb) && (
+                      {phase !== "scanning" && (pallet.palletHeightIn || pallet.calculatedWeightLb || pallet.weightOverrideLb) && (
                         <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                           {pallet.palletHeightIn && <span>Height: <strong>{pallet.palletHeightIn}"</strong></span>}
-                          {pallet.calculatedWeightLb && <span>Weight: <strong>{pallet.calculatedWeightLb} lbs</strong></span>}
+                          {pallet.weightOverrideLb ? (
+                            <span>Weight: <strong className="text-orange-600">{pallet.weightOverrideLb} lbs</strong> <span className="text-orange-500">(override)</span></span>
+                          ) : pallet.calculatedWeightLb ? (
+                            <span>Weight: <strong>{pallet.calculatedWeightLb} lbs</strong></span>
+                          ) : null}
                         </div>
                       )}
                     </CardContent>

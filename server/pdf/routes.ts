@@ -644,7 +644,11 @@ export function registerPdfRoutes(app: Express) {
         shipToAddress: shipToAddr,
         shipToCityStateZip: shipToCSZ,
         transactionId: txId,
-        weightLbs: p.calculatedWeightLb != null ? parseFloat(String(p.calculatedWeightLb)) : undefined,
+        weightLbs: p.weightOverrideLb != null
+          ? parseFloat(String(p.weightOverrideLb))
+          : p.calculatedWeightLb != null
+            ? parseFloat(String(p.calculatedWeightLb))
+            : undefined,
         dimL: 48,
         dimW: 40,
         dimH: p.palletHeightIn != null ? parseFloat(String(p.palletHeightIn)) : undefined,

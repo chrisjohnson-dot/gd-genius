@@ -1455,6 +1455,11 @@ export default function QcScanner() {
                 const totalExpected = items.reduce((s, i) => s + (i.expectedQty ?? 0), 0);
                 const totalScanned = items.reduce((s, i) => s + (i.scannedQty ?? 0), 0);
                 const remainingUnits = Math.max(0, totalExpected - totalScanned);
+                // Pallet summary stats for collapsed header
+                const palletItems = (pallet.items as Array<{ sku: string; qty: number }> | null) ?? [];
+                const palletSkuCount = palletItems.length;
+                const palletUnitCount = palletItems.reduce((s, i) => s + (i.qty ?? 0), 0);
+                const palletWeight = pallet.weightOverrideLb ?? pallet.calculatedWeightLb;
                 return (
                   <div key={pallet.id} className="rounded-lg border border-border overflow-hidden">
                     {/* ── Collapsed header row ── */}
@@ -1475,22 +1480,28 @@ export default function QcScanner() {
                           {pallet.palletType === "customer_owned" ? "CUST" : pallet.palletType === "gd_owned" ? "GD" : "CHEP"}
                         </span>
                       )}
-                      {/* SKU count pill */}
-                      {itemCount > 0 && (
-                        <span className="text-xs text-muted-foreground">{itemCount} SKU{itemCount !== 1 ? "s" : ""}</span>
+                      {/* Summary: SKUs · units · weight */}
+                      {palletSkuCount > 0 ? (
+                        <span className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{palletSkuCount}</span> SKU{palletSkuCount !== 1 ? "s" : ""}
+                          {" · "}
+                          <span className="font-medium text-foreground">{palletUnitCount}</span> unit{palletUnitCount !== 1 ? "s" : ""}
+                          {palletWeight && (
+                            <>
+                              {" · "}
+                              {pallet.weightOverrideLb
+                                ? <span className="text-orange-600 font-semibold">{pallet.weightOverrideLb} lbs ✎</span>
+                                : <span className="font-medium text-foreground">{pallet.calculatedWeightLb} lbs</span>}
+                            </>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Empty</span>
                       )}
                       {/* UPC indicator */}
                       {hasUpc && (
                         <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
                           <Barcode className="w-3 h-3" /> UPC
-                        </span>
-                      )}
-                      {/* Weight indicator */}
-                      {hasWeight && (
-                        <span className="text-xs text-muted-foreground">
-                          {pallet.weightOverrideLb
-                            ? <span className="text-orange-600 font-medium">{pallet.weightOverrideLb} lbs ✎</span>
-                            : <span>{pallet.calculatedWeightLb} lbs</span>}
                         </span>
                       )}
                       {/* Remaining units badge — only on the active (last) pallet */}

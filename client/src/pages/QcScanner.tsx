@@ -1188,15 +1188,6 @@ export default function QcScanner() {
               ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
               : <Plus className="w-4 h-4 mr-1" />}
             Add Pallet
-            {pallets.length > 0 && (() => {
-              const t = pallets.find((p) => p.palletType)?.palletType ?? "gd_owned";
-              const label = t === "customer_owned" ? "CUST" : t === "gd_owned" ? "GD" : "CHEP";
-              return (
-                <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none ${palletTypeBadgeClass(t)}`}>
-                  {label}
-                </span>
-              );
-            })()}
           </Button>
           {(phase === "complete" || allComplete) ? (
             <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setCompleteDialog(true)}>
@@ -1889,24 +1880,8 @@ export default function QcScanner() {
                   ? <RefreshCw className="w-5 h-5 animate-spin" />
                   : <Plus className="w-5 h-5" />}
                 Add Pallet
-                {(() => {
-                  const inheritedType =
-                    pallets.find((p) => p.palletType)?.palletType ??
-                    pallets[pallets.length - 1]?.palletType ??
-                    "gd_owned";
-                  const shortLabel =
-                    inheritedType === "customer_owned" ? "Customer-Owned"
-                    : inheritedType === "gd_owned" ? "GD-Owned"
-                    : inheritedType === "chep" ? "CHEP"
-                    : inheritedType;
-                  return <span className="text-sm font-normal opacity-80">({shortLabel})</span>;
-                })()}
               </Button>
-              {pallets.length > 0 && (
-                <p className="text-center text-xs text-muted-foreground mt-1.5">
-                  Pallet type auto-inherited from previous pallet · tap type badge on any pallet to change
-                </p>
-              )}
+
             </div>
           )}
         </div>

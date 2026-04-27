@@ -375,7 +375,10 @@ export default function QcScanner() {
       const sess = data.session as Session;
       setSession(sess);
       setItems((data.items as ScanItem[]) ?? []);
-      setPallets((data.pallets as unknown as Pallet[]) ?? []);
+      const demoPallets = (data.pallets as unknown as Pallet[]) ?? [];
+      setPallets(demoPallets);
+      // Auto-expand the last (active) pallet
+      if (demoPallets.length > 0) setActivePalletTab(String(demoPallets[demoPallets.length - 1].id));
       setDemoUpcMap(data.demoUpcMap ?? []);
       setIsDemoSession(true);
       setPhase("scanning");
@@ -444,7 +447,10 @@ export default function QcScanner() {
       const sess = data.session as Session;
       setSession(sess);
       setItems((data.items as ScanItem[]) ?? []);
-      setPallets((data.pallets as unknown as Pallet[]) ?? []);
+      const loadedPallets = (data.pallets as unknown as Pallet[]) ?? [];
+      setPallets(loadedPallets);
+      // Auto-expand the last (active) pallet
+      if (loadedPallets.length > 0) setActivePalletTab(String(loadedPallets[loadedPallets.length - 1].id));
       setPhase("scanning");
       if (data.resumed) {
         toast.info(`Resumed session for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
@@ -515,11 +521,9 @@ export default function QcScanner() {
   const addPallet = trpc.qcScanner.addPallet.useMutation({
     onSuccess: (data) => {
       const newPallet: Pallet = { id: data.id, palletNumber: data.palletNumber, palletUpc: null, palletType: data.palletType ?? null, items: [] };
-      setPallets((prev) => {
-        const updated = [...prev, newPallet];
-        setActivePalletTab(String(updated.length - 1));
-        return updated;
-      });
+      setPallets((prev) => [...prev, newPallet]);
+      // Auto-expand the new pallet (keyed by pallet.id) so the scan input is immediately visible
+      setActivePalletTab(String(data.id));
       toast.success(`Pallet ${data.palletNumber} added`);
     },
   });
@@ -1095,7 +1099,10 @@ export default function QcScanner() {
                   trpcUtils.qcScanner.getSession.fetch({ sessionId: sess.id }).then((data) => {
                     setSession(data.session as Session);
                     setItems((data.items as ScanItem[]) ?? []);
-                    setPallets((data.pallets as unknown as Pallet[]) ?? []);
+                    const openedPallets = (data.pallets as unknown as Pallet[]) ?? [];
+                    setPallets(openedPallets);
+                    // Auto-expand the last (active) pallet
+                    if (openedPallets.length > 0) setActivePalletTab(String(openedPallets[openedPallets.length - 1].id));
                     setPhase(sess.status === "complete" ? "complete" : "scanning");
                     toast.info(`Opened session: ${sess.referenceNumber}`);
                     setTimeout(() => barcodeRef.current?.focus(), 100);
@@ -1215,34 +1222,10 @@ export default function QcScanner() {
         />
       </div>
 
-      {/* Barcode input */}
-      {phase === "scanning" && (
-        <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
-          <Input
-            ref={barcodeRef}
-            value={barcodeInput}
-            onChange={(e) => setBarcodeInput(e.target.value)}
-            placeholder="Scan or type barcode / SKU…"
-            className="text-lg h-12 font-mono"
-          />
-          <Button
-            type="button"
-            variant={scanAsCase ? "default" : "outline"}
-            className="h-12 px-4 shrink-0"
-            onClick={() => setScanAsCase((v) => !v)}
-            title="Toggle case scan (scan one barcode = full case quantity)"
-          >
-            <Layers className="w-4 h-4 mr-1" />
-            Case
-          </Button>
-          <Button type="submit" className="h-12 px-6 shrink-0" disabled={scanBarcode.isPending}>
-            Scan
-          </Button>
-        </form>
-      )}
+      {/* Barcode input and Demo Cheat Sheet are now inside the active pallet card */}
 
-      {/* Demo Cheat Sheet — collapsible panel shown only in demo sessions */}
-      {isDemoSession && demoUpcMap.length > 0 && (
+      {/* Demo Cheat Sheet placeholder — collapsible panel shown only in demo sessions — MOVED INSIDE PALLET CARD */}
+      {isDemoSession && demoUpcMap.length > 0 && false && (
         <div className="rounded-lg border border-dashed border-amber-400 overflow-hidden">
           <button
             type="button"
@@ -1334,20 +1317,6 @@ export default function QcScanner() {
               <p className="text-[10px] text-muted-foreground mt-2 px-1">+1 scans one unit &nbsp;·&nbsp; +{demoUpcMap[0]?.caseAmount ?? "N"} scans a full case &nbsp;·&nbsp; Green = complete &nbsp;·&nbsp; Amber = over-scanned</p>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Last scan feedback */}
-      {lastScan && (
-        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-          lastScan.found
-            ? "bg-green-500/10 text-green-700 dark:text-green-400"
-            : "bg-red-500/10 text-red-700 dark:text-red-400"
-        }`}>
-          {lastScan.found
-            ? <CheckCircle2 className="w-4 h-4" />
-            : <AlertTriangle className="w-4 h-4" />}
-          {lastScan.found ? `✓ ${lastScan.sku} scanned` : `✗ Not found: ${lastScan.sku}`}
         </div>
       )}
 
@@ -1514,6 +1483,131 @@ export default function QcScanner() {
                     {isExpanded && (
                       <div className="border-t border-border">
                         <Card className="rounded-none border-0 shadow-none">
+                          {/* Barcode input — shown inside the active pallet card only */}
+                          {isActivePallet && phase === "scanning" && (
+                            <div className="px-4 pt-4 space-y-2">
+                              <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
+                                <Input
+                                  ref={barcodeRef}
+                                  value={barcodeInput}
+                                  onChange={(e) => setBarcodeInput(e.target.value)}
+                                  placeholder="Scan or type barcode / SKU…"
+                                  className="text-lg h-12 font-mono"
+                                />
+                                <Button
+                                  type="button"
+                                  variant={scanAsCase ? "default" : "outline"}
+                                  className="h-12 px-4 shrink-0"
+                                  onClick={() => setScanAsCase((v) => !v)}
+                                  title="Toggle case scan (scan one barcode = full case quantity)"
+                                >
+                                  <Layers className="w-4 h-4 mr-1" />
+                                  Case
+                                </Button>
+                                <Button type="submit" className="h-12 px-6 shrink-0" disabled={scanBarcode.isPending}>
+                                  Scan
+                                </Button>
+                              </form>
+                              {/* Demo Cheat Sheet — inside active pallet card */}
+                              {isDemoSession && demoUpcMap.length > 0 && (
+                                <div className="rounded-lg border border-dashed border-amber-400 overflow-hidden">
+                                  <button
+                                    type="button"
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                                    onClick={() => setCheatSheetOpen((v) => !v)}
+                                  >
+                                    <FlaskConical className="w-4 h-4 shrink-0" />
+                                    <span>Demo Cheat Sheet — click any row to scan that UPC</span>
+                                    <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${cheatSheetOpen ? "rotate-180" : ""}`} />
+                                  </button>
+                                  {cheatSheetOpen && (
+                                    <div className="bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2">
+                                      <div
+                                        className="grid text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300 mb-1"
+                                        style={{ gridTemplateColumns: "140px 1fr 130px 80px 90px 90px 110px" }}
+                                      >
+                                        <span>SKU</span><span>Description</span><span>UPC</span>
+                                        <span className="text-right">Case Qty</span>
+                                        <span className="text-right">Expected</span>
+                                        <span className="text-right">Scanned</span>
+                                        <span className="text-center">Scan</span>
+                                      </div>
+                                      <div className="space-y-0.5">
+                                        {demoUpcMap.map((entry) => {
+                                          const liveItem = items.find((i) => i.sku === entry.sku);
+                                          const scanned = liveItem?.scannedQty ?? 0;
+                                          const expected = liveItem?.expectedQty ?? 0;
+                                          const done = expected > 0 && scanned >= expected;
+                                          const over = scanned > expected;
+                                          return (
+                                            <div
+                                              key={entry.sku}
+                                              className="grid items-center rounded text-xs"
+                                              style={{
+                                                gridTemplateColumns: "140px 1fr 130px 80px 90px 90px 110px",
+                                                background: over ? "#FFF3CD" : done ? "#DCFCE7" : "transparent",
+                                                padding: "4px 6px",
+                                              }}
+                                            >
+                                              <span className="font-mono text-[#15527f] truncate">{entry.sku}</span>
+                                              <span className="text-muted-foreground truncate pr-2">{entry.description}</span>
+                                              <span className="font-mono text-[#333] dark:text-gray-300">{entry.upc}</span>
+                                              <span className="text-right font-mono text-muted-foreground">{entry.caseAmount}</span>
+                                              <span className="text-right font-mono text-muted-foreground">{expected}</span>
+                                              <span className={`text-right font-semibold font-mono ${
+                                                over ? "text-amber-600" : done ? "text-green-600" : "text-[#333] dark:text-gray-300"
+                                              }`}>{scanned}</span>
+                                              <div className="flex gap-1 justify-center">
+                                                <button
+                                                  type="button"
+                                                  disabled={done || phase !== "scanning" || scanBarcode.isPending}
+                                                  onClick={() => fireDemoScan(entry.upc)}
+                                                  className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                >+1</button>
+                                                <button
+                                                  type="button"
+                                                  disabled={done || phase !== "scanning" || scanBarcode.isPending}
+                                                  onClick={() => {
+                                                    if (!session) return;
+                                                    const count = entry.caseAmount;
+                                                    let i = 0;
+                                                    const fireNext = () => {
+                                                      if (i >= count) return;
+                                                      i++;
+                                                      scanBarcode.mutate(
+                                                        { sessionId: session.id, barcode: entry.upc, scanAsCase: false },
+                                                        { onSettled: fireNext }
+                                                      );
+                                                    };
+                                                    fireNext();
+                                                  }}
+                                                  className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-700 hover:bg-amber-800 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                >+{entry.caseAmount}</button>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                      <p className="text-[10px] text-muted-foreground mt-2 px-1">+1 scans one unit &nbsp;·&nbsp; +{demoUpcMap[0]?.caseAmount ?? "N"} scans a full case &nbsp;·&nbsp; Green = complete &nbsp;·&nbsp; Amber = over-scanned</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {/* Last scan feedback */}
+                              {lastScan && (
+                                <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                                  lastScan.found
+                                    ? "bg-green-500/10 text-green-700 dark:text-green-400"
+                                    : "bg-red-500/10 text-red-700 dark:text-red-400"
+                                }`}>
+                                  {lastScan.found
+                                    ? <CheckCircle2 className="w-4 h-4" />
+                                    : <AlertTriangle className="w-4 h-4" />}
+                                  {lastScan.found ? `✓ ${lastScan.sku} scanned` : `✗ Not found: ${lastScan.sku}`}
+                                </div>
+                              )}
+                            </div>
+                          )}
                           <CardHeader className="pb-2">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2">

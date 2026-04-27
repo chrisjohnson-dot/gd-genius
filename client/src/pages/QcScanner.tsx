@@ -37,6 +37,7 @@ type Pallet = {
   palletHeightIn?: string | null;
   calculatedWeightLb?: string | null;
   weightOverrideLb?: string | null;
+  palletTareWeightLb?: string | null;
 };
 
 const PALLET_TYPES = [
@@ -523,7 +524,9 @@ export default function QcScanner() {
                   totalLb += (demo.weightLbPerCase / demo.caseAmount) * pi.qty;
                 }
               }
-              newWeight = totalLb > 0 ? String(Math.round(totalLb * 100) / 100) : p.calculatedWeightLb;
+              // Add tare weight (use pallet's stored tare or default 30 lbs)
+              const tareLb = p.palletTareWeightLb ? parseFloat(p.palletTareWeightLb) : 30;
+              newWeight = totalLb > 0 ? String(Math.round((totalLb + tareLb) * 100) / 100) : p.calculatedWeightLb;
             }
             return { ...p, items: newItems, calculatedWeightLb: newWeight ?? p.calculatedWeightLb };
           }));
@@ -562,7 +565,12 @@ export default function QcScanner() {
 
   const addPallet = trpc.qcScanner.addPallet.useMutation({
     onSuccess: (data) => {
-      const newPallet: Pallet = { id: data.id, palletNumber: data.palletNumber, palletUpc: null, palletType: data.palletType ?? null, items: [] };
+      // Auto-calculate weight for the pallet that was just closed (the previous last pallet)
+      const closingPallet = pallets[pallets.length - 1];
+      if (closingPallet && session) {
+        calculatePalletWeight.mutate({ sessionId: session.id, palletId: closingPallet.id });
+      }
+      const newPallet: Pallet = { id: data.id, palletNumber: data.palletNumber, palletUpc: null, palletType: data.palletType ?? null, items: [], palletTareWeightLb: "30" };
       setPallets((prev) => [...prev, newPallet]);
       // Auto-expand the new pallet (keyed by pallet.id) so the scan input is immediately visible
       setActivePalletTab(String(data.id));
@@ -645,6 +653,8 @@ export default function QcScanner() {
 
   // Height input state per pallet (palletId -> string)
   const [heightInputs, setHeightInputs] = useState<Record<number, string>>({});
+  // Tare weight input state per pallet (palletId -> string), defaults to '30'
+  const [tareWeightInputs, setTareWeightInputs] = useState<Record<number, string>>({});
   // Weight override input state per pallet (palletId -> string)
   const [weightOverrideInputs, setWeightOverrideInputs] = useState<Record<number, string>>({});
 
@@ -659,6 +669,15 @@ export default function QcScanner() {
   });
 
   const updatePalletItems = trpc.qcScanner.updatePalletItems.useMutation();
+
+  const updatePalletTareWeight = trpc.qcScanner.updatePalletTareWeight.useMutation({
+    onSuccess: (_, vars) => {
+      setPallets((prev) =>
+        prev.map((p) => p.id === vars.palletId ? { ...p, palletTareWeightLb: String(vars.tareLb) } : p)
+      );
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
     onSuccess: (_, vars) => {
@@ -1823,6 +1842,33 @@ export default function QcScanner() {
                                   const val = parseFloat(heightInputs[pallet.id] ?? "");
                                   if (!isNaN(val) && val > 0) {
                                     updatePalletHeight.mutate({ palletId: pallet.id, heightIn: val });
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">Pallet Tare (lbs):</label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="500"
+                              step="1"
+                              className="h-7 w-20 text-xs"
+                              placeholder="30"
+                              value={tareWeightInputs[pallet.id] ?? (pallet.palletTareWeightLb ?? "30")}
+                              onChange={(e) => setTareWeightInputs((prev) => ({ ...prev, [pallet.id]: e.target.value }))}
+                              onBlur={() => {
+                                const val = parseFloat(tareWeightInputs[pallet.id] ?? "30");
+                                if (!isNaN(val) && val >= 0) {
+                                  updatePalletTareWeight.mutate({ palletId: pallet.id, tareLb: val });
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const val = parseFloat(tareWeightInputs[pallet.id] ?? "30");
+                                  if (!isNaN(val) && val >= 0) {
+                                    updatePalletTareWeight.mutate({ palletId: pallet.id, tareLb: val });
                                   }
                                 }
                               }}

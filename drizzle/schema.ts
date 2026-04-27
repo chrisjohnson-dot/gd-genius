@@ -663,6 +663,8 @@ export const qcPallets = mysqlTable("qc_pallets", {
   calculatedWeightLb: decimal("calculatedWeightLb", { precision: 8, scale: 2 }),
   // Operator-entered weight override (lbs) — takes precedence over calculatedWeightLb on labels
   weightOverrideLb: decimal("weightOverrideLb", { precision: 8, scale: 2 }),
+  // Tare weight of the pallet itself (lbs) — defaults to 30 lbs, editable by operator
+  palletTareWeightLb: decimal("palletTareWeightLb", { precision: 6, scale: 2 }).default("30"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type QcPallet = typeof qcPallets.$inferSelect;

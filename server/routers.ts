@@ -4197,6 +4197,16 @@ const qcScannerRouter = router({
       await updateQcPallet(input.palletId, { palletHeightIn: String(input.heightIn) });
       return { success: true };
     }),
+  // Update the tare weight of the pallet (default 30 lbs, editable by operator)
+  updatePalletTareWeight: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      tareLb: z.number().min(0).max(500),
+    }))
+    .mutation(async ({ input }) => {
+      await updateQcPallet(input.palletId, { palletTareWeightLb: String(input.tareLb) });
+      return { success: true };
+    }),
   // Calculate pallet weight from scanned items and Extensiv item dims
   calculatePalletWeight: protectedProcedure
     .input(z.object({
@@ -4230,7 +4240,9 @@ const qcScannerRouter = router({
         }
       }
 
-      const weightLb = Math.round(totalLb * 100) / 100;
+      // Add pallet tare weight (default 30 lbs if not set)
+      const tareLb = pallet.palletTareWeightLb ? parseFloat(String(pallet.palletTareWeightLb)) : 30;
+      const weightLb = Math.round((totalLb + tareLb) * 100) / 100;
       await updateQcPallet(input.palletId, { calculatedWeightLb: String(weightLb) });
       return { weightLb };
     }),

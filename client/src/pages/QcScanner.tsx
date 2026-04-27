@@ -13,7 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
-  Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale, PackagePlus
+  Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale, PackagePlus,
+  Lock, LockOpen
 } from "lucide-react";
 
 type ScanItem = {
@@ -442,6 +443,10 @@ export default function QcScanner() {
   const [activeScanPalletId, setActiveScanPalletId] = useState<number | null>(null);
   const activeScanPalletIdRef = useRef<number | null>(null);
   useEffect(() => { activeScanPalletIdRef.current = activeScanPalletId; }, [activeScanPalletId]);
+
+  // Locked pallets: set of pallet IDs that are locked (scan input hidden)
+  // When a new pallet is added, all previous pallets are auto-locked
+  const [lockedPallets, setLockedPallets] = useState<Set<number>>(new Set());
   // Per-pallet input refs — keyed by pallet ID so we can focus the right input after a scan
   const palletInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
@@ -672,6 +677,12 @@ export default function QcScanner() {
       setPallets((prev) => [...prev, newPallet]);
       // Auto-expand the new pallet (keyed by pallet.id) so the scan input is immediately visible
       setExpandedPallets((prev) => new Set([...prev, data.id]));
+      // Auto-lock all existing pallets when a new one is added
+      setLockedPallets((prev) => {
+        const next = new Set(prev);
+        palletsRef.current.forEach((p) => next.add(p.id));
+        return next;
+      });
       // Auto-select the new pallet as the active scan target
       setActiveScanPalletId(data.id);
       activeScanPalletIdRef.current = data.id;
@@ -1605,6 +1616,8 @@ export default function QcScanner() {
                 // isActivePallet = this pallet is the current scan target (or the last pallet if none selected)
                 const isLastPallet = palletIdx === pallets.length - 1;
                 const isActivePallet = activeScanPalletId !== null ? pallet.id === activeScanPalletId : isLastPallet;
+                // isLocked = scan input is hidden; operators must click Unlock to add items
+                const isLocked = lockedPallets.has(pallet.id);
                 // Remaining = total expected minus total scanned across all items
                 const totalExpected = items.reduce((s, i) => s + (i.expectedQty ?? 0), 0);
                 const totalScanned = items.reduce((s, i) => s + (i.scannedQty ?? 0), 0);
@@ -1689,6 +1702,42 @@ export default function QcScanner() {
                           <Barcode className="w-3 h-3" /> UPC
                         </span>
                       )}
+                      {/* Lock/Unlock button — shown during scanning phase, not on last pallet (which is always unlocked) */}
+                      {phase === "scanning" && !isLastPallet && (
+                        <button
+                          type="button"
+                          className={`ml-auto flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full border transition-colors shrink-0 ${
+                            isLocked
+                              ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-600"
+                              : "border-green-400 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-300 dark:border-green-600"
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isLocked) {
+                              // Unlock: remove from locked set, set as active scan target, expand, focus
+                              setLockedPallets((prev) => { const next = new Set(prev); next.delete(pallet.id); return next; });
+                              setActiveScanPalletId(pallet.id);
+                              activeScanPalletIdRef.current = pallet.id;
+                              setExpandedPallets((prev) => new Set([...prev, pallet.id]));
+                              setTimeout(() => palletInputRefs.current.get(pallet.id)?.focus(), 100);
+                            } else {
+                              // Lock: add to locked set
+                              setLockedPallets((prev) => new Set([...prev, pallet.id]));
+                              if (activeScanPalletId === pallet.id) {
+                                // Switch active target to last pallet
+                                const lastId = palletsRef.current[palletsRef.current.length - 1]?.id ?? null;
+                                setActiveScanPalletId(lastId);
+                                activeScanPalletIdRef.current = lastId;
+                                if (lastId) setTimeout(() => palletInputRefs.current.get(lastId)?.focus(), 100);
+                              }
+                            }
+                          }}
+                          title={isLocked ? `Unlock Pallet ${pallet.palletNumber} to add more items` : `Lock Pallet ${pallet.palletNumber}`}
+                        >
+                          {isLocked ? <LockOpen className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                          {isLocked ? "Unlock" : "Lock"}
+                        </button>
+                      )}
                       {/* Remaining units badge — shown on all pallets during scanning */}
                       {remainingUnits > 0 && phase === "scanning" && (
                         <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">
@@ -1735,8 +1784,8 @@ export default function QcScanner() {
                     {isExpanded && (
                       <div className="border-t border-border">
                         <Card className="rounded-none border-0 shadow-none">
-                          {/* Barcode input — shown in every expanded pallet during scanning */}
-                          {phase === "scanning" && (
+                          {/* Barcode input — shown only when pallet is unlocked during scanning */}
+                          {phase === "scanning" && !isLocked && (
                             <div className="px-4 pt-4 space-y-2">
                               <form onSubmit={(e) => {
                                 e.preventDefault();

@@ -367,6 +367,14 @@ export default function QcScanner() {
   // Weight limit threshold (lbs) — configurable per session, default 2000
   const [weightLimitLb, setWeightLimitLb] = useState<number>(2000);
   const [weightLimitInput, setWeightLimitInput] = useState<string>("2000");
+  // Track which pallet IDs have already fired the over-limit toast (reset when limit changes)
+  const overLimitToastedRef = useRef<Set<number>>(new Set());
+  // Keep a ref of the current weight limit so the mutation closure always reads the latest value
+  const weightLimitLbRef = useRef<number>(weightLimitLb);
+  useEffect(() => {
+    weightLimitLbRef.current = weightLimitLb;
+    overLimitToastedRef.current = new Set(); // reset toasted set when threshold changes
+  }, [weightLimitLb]);
 
   // Demo mode state
   const [demoOpen, setDemoOpen] = useState(false);
@@ -537,6 +545,36 @@ export default function QcScanner() {
             }
             return { ...p, items: newItems, calculatedWeightLb: newWeight ?? p.calculatedWeightLb };
           }));
+          // Check if this scan pushed the pallet over the weight limit — fire a one-time toast
+          if (isDemoSession && demoUpcMap.length > 0) {
+            const updatedPallet = palletsRef.current.find((p) => p.id === activePallet.id);
+            const updatedItems = (updatedPallet?.items as Array<{ sku: string; qty: number }> | null) ?? [];
+            let totalLb = 0;
+            for (const pi of updatedItems) {
+              const demo = demoUpcMap.find((d) => d.sku === pi.sku);
+              if (demo?.weightLbPerCase && demo?.caseAmount) {
+                totalLb += (demo.weightLbPerCase / demo.caseAmount) * pi.qty;
+              }
+            }
+            const tareLb = activePallet.palletTareWeightLb ? parseFloat(activePallet.palletTareWeightLb) : 30;
+            const newTotalLb = Math.round((totalLb + tareLb) * 10) / 10;
+            if (newTotalLb > weightLimitLbRef.current && !overLimitToastedRef.current.has(activePallet.id)) {
+              overLimitToastedRef.current.add(activePallet.id);
+              toast.warning(`⚠️ Pallet ${activePallet.palletNumber} exceeds weight limit`, {
+                description: `${newTotalLb} lbs — over the ${weightLimitLbRef.current} lb threshold. Consider starting a new pallet.`,
+                duration: 8000,
+              });
+            }
+          } else if (activePallet.calculatedWeightLb) {
+            const w = parseFloat(activePallet.calculatedWeightLb);
+            if (w > weightLimitLbRef.current && !overLimitToastedRef.current.has(activePallet.id)) {
+              overLimitToastedRef.current.add(activePallet.id);
+              toast.warning(`⚠️ Pallet ${activePallet.palletNumber} exceeds weight limit`, {
+                description: `${w} lbs — over the ${weightLimitLbRef.current} lb threshold. Consider starting a new pallet.`,
+                duration: 8000,
+              });
+            }
+          }
           // Persist pallet item assignments to server so they survive page refresh
           // Use the functional updater result — read from palletsRef which is always current
           const latestPallet = palletsRef.current.find((p) => p.id === activePallet.id);

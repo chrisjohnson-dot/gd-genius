@@ -18,6 +18,11 @@ import type { ExtensivStyleTicket } from "./extensivPickTicketGenerator";
 import { fetchOrderWithDetail, fetchItemDescriptions } from "../extensiv/api";
 import type { ExtensivOrder, ExtensivOrderItem } from "../extensiv/api";
 import { sdk } from "../_core/sdk";
+import { generateGdPalletLabel } from "./gdPalletLabelGenerator";
+import type { GdPalletLabelData } from "./gdPalletLabelGenerator";
+import { generateSsccLabel } from "./ssccLabelGenerator";
+import type { SsccLabelData } from "./ssccLabelGenerator";
+import { getQcSessionById, getQcPallets, getQcScanItems } from "../db";
 
 /** Collect a generator's output into a Buffer by piping through a PassThrough */
 async function pdfToBuffer(
@@ -588,5 +593,122 @@ export function registerPdfRoutes(app: Express) {
     }
 
     await generateExtensivPickTicketsPDF(res, tickets);
+  });
+
+  // ── GD Pallet Labels ─────────────────────────────────────────────────────────
+  // GET /api/pdf/qc-gd-labels/:sessionId?type=gd|sscc|both
+  app.get("/api/pdf/qc-gd-labels/:sessionId", async (req: Request, res: Response) => {
+    if (!(await requireAuth(req, res))) return;
+    const sessionId = Number(req.params.sessionId);
+    if (isNaN(sessionId)) { res.status(400).json({ error: "Invalid sessionId" }); return; }
+    const labelType = (req.query.type as string) ?? "gd"; // gd | sscc | both
+
+    const session = await getQcSessionById(sessionId);
+    if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+
+    const pallets = await getQcPallets(sessionId);
+    const items   = await getQcScanItems(sessionId);
+
+    // Build a map of sku -> { description, scannedQty } from session items
+    const itemMap = new Map(items.map((i) => [i.sku, i]));
+
+    // GD address (hardcoded — always the same warehouse)
+    const GD_NAME    = "Go Direct Logistics";
+    const GD_ADDRESS = "4-149 High Plains Place";
+    const GD_CSZ     = "Rockyview County, AB  T4A0W7";
+
+    // Ship-to from session
+    let shipToName = session.customerName ?? "Customer";
+    let shipToAddr = "";
+    let shipToCSZ  = "";
+    if (session.destinationAddress) {
+      try {
+        const da = JSON.parse(session.destinationAddress) as Record<string, string>;
+        shipToName = da.companyName ?? da.name ?? shipToName;
+        shipToAddr = da.address1 ?? "";
+        shipToCSZ  = [da.city, da.state, da.zip].filter(Boolean).join(", ");
+      } catch { /* ignore */ }
+    }
+
+    const txId = session.transactionId ?? session.id;
+    const totalPallets = pallets.length;
+
+    // Build GD label data per pallet
+    const gdLabels: GdPalletLabelData[] = pallets.map((p) => {
+      const palletItems = (p.items as Array<{ sku: string; qty: number }> | null) ?? [];
+      return {
+        shipFromName: GD_NAME,
+        shipFromAddress: GD_ADDRESS,
+        shipFromCityStateZip: GD_CSZ,
+        shipToName,
+        shipToAddress: shipToAddr,
+        shipToCityStateZip: shipToCSZ,
+        transactionId: txId,
+        palletNumber: p.palletNumber,
+        totalPallets,
+        palletUpc: p.palletUpc ?? `GD-${sessionId}-P${p.palletNumber}`,
+        items: palletItems.map((pi) => ({
+          sku: pi.sku,
+          description: itemMap.get(pi.sku)?.description ?? undefined,
+          qty: pi.qty,
+        })),
+      };
+    });
+
+    // Build SSCC label data per pallet
+    const ssccLabels: SsccLabelData[] = pallets.map((p) => {
+      const palletItems = (p.items as Array<{ sku: string; qty: number }> | null) ?? [];
+      const caseCount = palletItems.reduce((s, i) => s + i.qty, 0);
+      // SSCC-18: pad transactionId to 18 digits (GS1 format: extension digit + company prefix + serial + check)
+      const rawSscc = String(txId).padStart(17, "0") + "0";
+      const sscc18  = p.palletUpc?.replace(/\D/g, "").padStart(18, "0") ?? rawSscc;
+      return {
+        shipFromName: GD_NAME,
+        shipFromAddress: GD_ADDRESS,
+        shipFromCityStateZip: GD_CSZ,
+        shipToName,
+        shipToAddress: shipToAddr,
+        shipToCityStateZip: shipToCSZ,
+        orderNumber: String(txId),
+        poNumber: session.poNumber ?? undefined,
+        palletDescription: session.customerName?.toUpperCase() ?? "MIXED PALLET",
+        caseCount,
+        palletNumber: p.palletNumber,
+        totalPallets,
+        sscc18,
+      };
+    });
+
+    // Generate PDFs
+    const gdBuf = labelType !== "sscc"
+      ? await pdfToBuffer((pt) => Promise.resolve(generateGdPalletLabel(gdLabels, pt)))
+      : null;
+    const ssccBuf = labelType !== "gd"
+      ? await pdfToBuffer((pt) => Promise.resolve(generateSsccLabel(ssccLabels, pt)))
+      : null;
+
+    let finalBuf: Buffer;
+    if (gdBuf && ssccBuf) {
+      // Merge: GD label + SSCC label for each pallet interleaved
+      const merged = await PDFDocument.create();
+      for (let i = 0; i < pallets.length; i++) {
+        // GD page i
+        const gdSrc = await PDFDocument.load(gdBuf);
+        const gdPages = await merged.copyPages(gdSrc, [i]);
+        for (const pg of gdPages) merged.addPage(pg);
+        // SSCC page i
+        const ssccSrc = await PDFDocument.load(ssccBuf);
+        const ssccPages = await merged.copyPages(ssccSrc, [i]);
+        for (const pg of ssccPages) merged.addPage(pg);
+      }
+      finalBuf = Buffer.from(await merged.save());
+    } else {
+      finalBuf = (gdBuf ?? ssccBuf)!;
+    }
+
+    const filename = labelType === "sscc" ? "sscc-labels" : labelType === "both" ? "gd-and-sscc-labels" : "gd-pallet-labels";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${filename}-session-${sessionId}.pdf"`);
+    res.end(finalBuf);
   });
 }

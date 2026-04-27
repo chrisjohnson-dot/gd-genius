@@ -3295,6 +3295,13 @@
           "autoincrement": false,
           "default": "(now())",
           "onUpdate": true
+        },
+        "transactionId": {
+          "name": "transactionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
-  Barcode, Wand2, Pencil, Copy
+  Barcode, Wand2, Pencil, Copy, Printer, FileText
 } from "lucide-react";
 
 type ScanItem = {
@@ -559,6 +559,21 @@ export default function QcScanner() {
 
   // Derived: how many pallets are still missing a UPC
   const unassignedCount = pallets.filter((p) => !p.palletUpc?.trim()).length;
+
+  // Helper: auto-assign UPCs to any pallets missing one, then update local state
+  const ensurePalletUpcs = async () => {
+    if (!session) return;
+    const missing = pallets.filter((p) => !p.palletUpc?.trim());
+    if (missing.length === 0) return;
+    try {
+      const result = await bulkGeneratePalletUpcs.mutateAsync({ sessionId: session.id });
+      if (result.assigned.length > 0) {
+        toast.success(`Auto-assigned UPCs to ${result.assigned.length} pallet${result.assigned.length !== 1 ? 's' : ''} before printing`);
+      }
+    } catch {
+      toast.error('Failed to auto-assign UPCs — printing with available data');
+    }
+  };
 
   const flagScan = trpc.qcScanner.flagScan.useMutation({
     onSuccess: () => {
@@ -1574,48 +1589,52 @@ export default function QcScanner() {
                     </div>
                   </div>
                   {pallets.length > 0 && (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-7 text-xs"
-                      disabled={bulkGeneratePalletUpcs.isPending}
-                      onClick={async () => {
-                        if (!session) return;
-                        // Auto-generate UPCs for any pallets that are missing one
-                        let latestPallets = pallets;
-                        const missing = pallets.filter((p) => !p.palletUpc?.trim());
-                        if (missing.length > 0) {
-                          try {
-                            const result = await bulkGeneratePalletUpcs.mutateAsync({ sessionId: session.id });
-                            // Merge the newly assigned UPCs into a local copy for label generation
-                            const assignedMap = new Map(result.assigned.map((a: { palletId: number; upc: string }) => [a.palletId, a.upc]));
-                            latestPallets = pallets.map((p) =>
-                              assignedMap.has(p.id) ? { ...p, palletUpc: assignedMap.get(p.id) as string } : p
-                            );
-                            if (result.assigned.length > 0) {
-                              toast.success(`Auto-assigned UPCs to ${result.assigned.length} pallet${result.assigned.length !== 1 ? 's' : ''} before printing`);
-                            }
-                          } catch {
-                            toast.error('Failed to auto-assign UPCs — printing with available data');
-                          }
-                        }
-                        const buildLabel = (p: Pallet) =>
-                          `<div class='label'><div class='header'><div class='title'>GD Pallet Label</div><div class='sub'>${session?.referenceNumber ?? ''} &bull; ${session?.customerName ?? ''}</div></div><div class='row'><span>Pallet</span><span><b>#${p.palletNumber}</b></span></div><div class='row'><span>Type</span><span><span class='badge' style='background:${p.palletType==='chep'?'#f59e0b':p.palletType==='gd_owned'?'#8b5cf6':'#3b82f6'}'>` +
-                          palletTypeLabel(p.palletType) +
-                          `</span></span></div>${p.palletUpc ? `<div class='upc'>${p.palletUpc}</div>` : ''}<div class='row' style='margin-top:8px'><span>Items</span><span>${p.items?.length ?? 0} SKU(s)</span></div>${(p.items ?? []).map((i: { sku: string; qty: number }) => `<div class='row'><span style='font-size:11px'>${i.sku}</span><span>&times;${i.qty}</span></div>`).join('')}</div>`;
-                        const isThermal = labelPaperSize === 'thermal';
-                        const pageCss = isThermal
-                          ? '@page{size:4in 6in;margin:0;} .label{padding:12px;width:4in;min-height:6in;page-break-after:always;box-sizing:border-box;}'
-                          : '@page{size:letter;margin:0.5in;} .label{padding:16px;page-break-after:always;}';
-                        const allHtml = `<!DOCTYPE html><html><head><title>Pallet Labels</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;} ${pageCss} .label:last-child{page-break-after:auto;} .header{background:#1e3a5f;color:white;padding:8px 12px;border-radius:4px;margin-bottom:8px;} .title{font-size:${isThermal?'20':'18'}px;font-weight:bold;} .sub{font-size:${isThermal?'13':'12'}px;opacity:0.8;} .row{display:flex;justify-content:space-between;padding:${isThermal?'5':'4'}px 0;border-bottom:1px solid #eee;font-size:${isThermal?'14':'13'}px;} .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;color:white;} .upc{font-family:monospace;font-size:${isThermal?'16':'14'}px;font-weight:bold;margin-top:8px;text-align:center;} @media print{button{display:none}}</style></head><body>${latestPallets.map(buildLabel).join('')}</body></html>`;
-                        const w = window.open('', '_blank', 'width=600,height=800');
-                        if (w) { w.document.write(allHtml); w.document.close(); w.print(); }
-                      }}
-                    >
-                      {bulkGeneratePalletUpcs.isPending
-                        ? <><span className="w-3 h-3 mr-1 animate-spin inline-block border-2 border-current border-t-transparent rounded-full" /> Generating…</>
-                        : <><Barcode className="w-3 h-3 mr-1" /> Print Pallet Labels</>}
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      {/* GD Pallet Labels */}
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs"
+                        disabled={bulkGeneratePalletUpcs.isPending}
+                        onClick={async () => {
+                          if (!session) return;
+                          await ensurePalletUpcs();
+                          window.open(`/api/pdf/qc-gd-labels/${session.id}?type=gd`, '_blank');
+                        }}
+                      >
+                        {bulkGeneratePalletUpcs.isPending
+                          ? <><span className="w-3 h-3 mr-1 animate-spin inline-block border-2 border-current border-t-transparent rounded-full" /> Generating…</>
+                          : <><Barcode className="w-3 h-3 mr-1" /> GD Labels</>}
+                      </Button>
+                      {/* SSCC Labels */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={bulkGeneratePalletUpcs.isPending}
+                        onClick={async () => {
+                          if (!session) return;
+                          await ensurePalletUpcs();
+                          window.open(`/api/pdf/qc-gd-labels/${session.id}?type=sscc`, '_blank');
+                        }}
+                      >
+                        <FileText className="w-3 h-3 mr-1" /> SSCC Labels
+                      </Button>
+                      {/* Print Both */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={bulkGeneratePalletUpcs.isPending}
+                        onClick={async () => {
+                          if (!session) return;
+                          await ensurePalletUpcs();
+                          window.open(`/api/pdf/qc-gd-labels/${session.id}?type=both`, '_blank');
+                        }}
+                      >
+                        <Printer className="w-3 h-3 mr-1" /> Print Both
+                      </Button>
+                    </div>
                   )}
                 </div>
                 {pallets.map((p) => (

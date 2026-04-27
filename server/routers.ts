@@ -252,7 +252,7 @@ import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdue
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
-  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw } from "./extensiv/api";
+  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -4180,6 +4180,53 @@ const qcScannerRouter = router({
         limit: input.limit ?? 100,
         offset: input.offset ?? 0,
       });
+    }),
+  // Update pallet height (operator-entered) and recalculate weight from item dims
+  updatePalletHeight: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      heightIn: z.number().min(0).max(120),
+    }))
+    .mutation(async ({ input }) => {
+      await updateQcPallet(input.palletId, { palletHeightIn: String(input.heightIn) });
+      return { success: true };
+    }),
+  // Calculate pallet weight from scanned items and Extensiv item dims
+  calculatePalletWeight: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      palletId: z.number(),
+    }))
+    .mutation(async ({ input }) => {
+      // Get the pallet's items JSON
+      const pallets = await getQcPallets(input.sessionId);
+      const pallet = pallets.find(p => p.id === input.palletId);
+      if (!pallet || !pallet.items) return { weightLb: null };
+      const items = pallet.items as Array<{ sku: string; qty: number }>;
+      if (!items.length) return { weightLb: null };
+
+      // Get the session to find the config
+      const session = await getQcSessionById(input.sessionId);
+      if (!session?.warehouseId) return { weightLb: null };
+      const config = await getExtensivConfigById(session.warehouseId);
+      if (!config) return { weightLb: null };
+
+      // Fetch item dims for all SKUs on this pallet
+      const skus = Array.from(new Set(items.map(i => i.sku)));
+      const dims = await fetchItemDimsBySkus(config, session.customerId ?? 0, skus);
+
+      // Calculate total weight: sum(cartonWeight * qty) per SKU
+      let totalLb = 0;
+      for (const item of items) {
+        const dim = dims.find(d => d.sku === item.sku);
+        if (dim?.weightLb) {
+          totalLb += dim.weightLb * item.qty;
+        }
+      }
+
+      const weightLb = Math.round(totalLb * 100) / 100;
+      await updateQcPallet(input.palletId, { calculatedWeightLb: String(weightLb) });
+      return { weightLb };
     }),
 });
 // Pallet Scanner router (Shipping section))

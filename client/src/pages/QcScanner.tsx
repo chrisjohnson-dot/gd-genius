@@ -34,6 +34,8 @@ type Pallet = {
   palletUpc?: string | null;
   palletType?: string | null;
   items: Array<{ sku: string; upc?: string; qty: number }> | null;
+  palletHeightIn?: string | null;
+  calculatedWeightLb?: string | null;
 };
 
 const PALLET_TYPES = [
@@ -559,6 +561,33 @@ export default function QcScanner() {
 
   // Derived: how many pallets are still missing a UPC
   const unassignedCount = pallets.filter((p) => !p.palletUpc?.trim()).length;
+
+  // Height input state per pallet (palletId -> string)
+  const [heightInputs, setHeightInputs] = useState<Record<number, string>>({});
+
+  const updatePalletHeight = trpc.qcScanner.updatePalletHeight.useMutation({
+    onSuccess: (_, vars) => {
+      setPallets((prev) =>
+        prev.map((p) => p.id === vars.palletId ? { ...p, palletHeightIn: String(vars.heightIn) } : p)
+      );
+      toast.success(`Pallet height saved: ${vars.heightIn}"`); 
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const calculatePalletWeight = trpc.qcScanner.calculatePalletWeight.useMutation({
+    onSuccess: (data, vars) => {
+      if (data.weightLb !== null) {
+        setPallets((prev) =>
+          prev.map((p) => p.id === vars.palletId ? { ...p, calculatedWeightLb: String(data.weightLb) } : p)
+        );
+        toast.success(`Calculated weight: ${data.weightLb} lbs`);
+      } else {
+        toast.info("Weight could not be calculated — item dims may be missing in Extensiv");
+      }
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   // Helper: auto-assign UPCs to any pallets missing one, then update local state
   const ensurePalletUpcs = async () => {
@@ -1371,6 +1400,62 @@ export default function QcScanner() {
                               <span className="text-right font-semibold text-sm">×{item.qty}</span>
                             </div>
                           ))}
+                        </div>
+                      )}
+                      {/* Height input and calculated weight row */}
+                      {phase === "scanning" && (
+                        <div className="mt-3 flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">Pallet Height (in):</label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="120"
+                              step="0.5"
+                              className="h-7 w-20 text-xs"
+                              placeholder={pallet.palletHeightIn ?? "e.g. 48"}
+                              value={heightInputs[pallet.id] ?? (pallet.palletHeightIn ?? "")}
+                              onChange={(e) => setHeightInputs((prev) => ({ ...prev, [pallet.id]: e.target.value }))}
+                              onBlur={() => {
+                                const val = parseFloat(heightInputs[pallet.id] ?? "");
+                                if (!isNaN(val) && val > 0) {
+                                  updatePalletHeight.mutate({ palletId: pallet.id, heightIn: val });
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const val = parseFloat(heightInputs[pallet.id] ?? "");
+                                  if (!isNaN(val) && val > 0) {
+                                    updatePalletHeight.mutate({ palletId: pallet.id, heightIn: val });
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Weight:</span>
+                            {pallet.calculatedWeightLb ? (
+                              <span className="text-xs font-semibold text-green-700">{pallet.calculatedWeightLb} lbs</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">—</span>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              disabled={calculatePalletWeight.isPending}
+                              onClick={() => calculatePalletWeight.mutate({ sessionId: session!.id, palletId: pallet.id })}
+                            >
+                              <RefreshCw className="w-3 h-3 mr-1" /> Calculate
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {/* Show saved height/weight in read-only mode outside scanning phase */}
+                      {phase !== "scanning" && (pallet.palletHeightIn || pallet.calculatedWeightLb) && (
+                        <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                          {pallet.palletHeightIn && <span>Height: <strong>{pallet.palletHeightIn}"</strong></span>}
+                          {pallet.calculatedWeightLb && <span>Weight: <strong>{pallet.calculatedWeightLb} lbs</strong></span>}
                         </div>
                       )}
                     </CardContent>

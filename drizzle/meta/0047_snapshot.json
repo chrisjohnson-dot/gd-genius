@@ -3032,6 +3032,20 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(now())"
+        },
+        "palletHeightIn": {
+          "name": "palletHeightIn",
+          "type": "decimal(6,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "calculatedWeightLb": {
+          "name": "calculatedWeightLb",
+          "type": "decimal(8,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},

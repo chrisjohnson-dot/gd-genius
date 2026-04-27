@@ -657,6 +657,10 @@ export const qcPallets = mysqlTable("qc_pallets", {
   deletedAt: timestamp("deletedAt"),
   // Optional dock photo captured during pallet shipping scan
   photoUrl: varchar("photoUrl", { length: 512 }),
+  // Operator-entered completed pallet height (inches)
+  palletHeightIn: decimal("palletHeightIn", { precision: 6, scale: 2 }),
+  // System-calculated pallet weight (lbs) = sum(carton weight × qty) per SKU
+  calculatedWeightLb: decimal("calculatedWeightLb", { precision: 8, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type QcPallet = typeof qcPallets.$inferSelect;

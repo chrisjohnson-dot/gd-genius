@@ -1498,7 +1498,8 @@ export default function QcScanner() {
             isLoading={fetchFromExtensiv.isPending}
             onAdjust={(sku, delta) => {
               // Mirror + / - adjustments into the active pallet's item list
-              const activePallet = palletsRef.current[palletsRef.current.length - 1];
+              const targetId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
+              const activePallet = palletsRef.current.find((p) => p.id === targetId) ?? palletsRef.current[palletsRef.current.length - 1];
               if (!activePallet) return;
               setPallets((prev) => prev.map((p) => {
                 if (p.id !== activePallet.id) return p;
@@ -1743,7 +1744,14 @@ export default function QcScanner() {
                           {/* Barcode input — shown in every expanded pallet during scanning */}
                           {phase === "scanning" && (
                             <div className="px-4 pt-4 space-y-2">
-                              <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
+                              <form onSubmit={(e) => {
+                                e.preventDefault();
+                                if (!barcodeInput.trim() || !session) return;
+                                // Always route to THIS pallet's form
+                                setActiveScanPalletId(pallet.id);
+                                activeScanPalletIdRef.current = pallet.id;
+                                scanBarcode.mutate({ sessionId: session.id, barcode: barcodeInput.trim(), scanAsCase });
+                              }} className="flex gap-2">
                                 <Input
                                   ref={(el) => {
                                     if (el) palletInputRefs.current.set(pallet.id, el);

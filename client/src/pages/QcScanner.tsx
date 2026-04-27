@@ -789,6 +789,13 @@ export default function QcScanner() {
     }
   }, [phase]);
 
+  // Auto-focus barcode input whenever a pallet card is expanded
+  useEffect(() => {
+    if (activePalletTab && phase === "scanning") {
+      setTimeout(() => barcodeRef.current?.focus(), 50);
+    }
+  }, [activePalletTab, phase]);
+
   // ─── Start Screen ──────────────────────────────────────────────────────────
   const [sessionLimit, setSessionLimit] = useState(5);
   const recentSessionsQuery = trpc.qcScanner.recentSessions.useQuery(

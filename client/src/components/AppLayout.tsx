@@ -96,6 +96,7 @@ const ltlItems = [
   { href: "/ltl/live-board",      label: "Live Board",              icon: Activity },
   { href: "/ltl/pull-manager",    label: "Pull Manager",            icon: BarChart2 },
   { href: "/qc/scanner",          label: "QC Scanner",              icon: ScanBarcode },
+  { href: "/qc/history",           label: "QC Session History",      icon: History },
   { href: "/qc/production-line",  label: "Production Line Scans",   icon: Activity },
   { href: "/qc/scan-label",       label: "QC Scan & Label",         icon: Tag },
   { href: "/qc/qr-scan-history",  label: "K18QR Scanning",          icon: QrCode },

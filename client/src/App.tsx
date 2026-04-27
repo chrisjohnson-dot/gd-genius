@@ -34,6 +34,7 @@ import ProcessReturns from "@/pages/ProcessReturns";
 import ReturnsScanStation from "@/pages/ReturnsScanStation";
 import CortexSettings from "@/pages/CortexSettings";
 import QcScanner from "@/pages/QcScanner";
+import QcHistory from "@/pages/QcHistory";
 import FlaggedScans from "@/pages/FlaggedScans";
 import PalletScanner from "@/pages/PalletScanner";
 import ReceivingDashboard from "@/pages/ReceivingDashboard";
@@ -122,6 +123,7 @@ function AppRoutes() {
         <Route path="/returns/scan-station" component={ReturnsScanStation} />
         <Route path="/cortex-settings" component={CortexSettings} />
         <Route path="/qc/scanner" component={QcScanner} />
+        <Route path="/qc/history" component={QcHistory} />
         <Route path="/qc/flagged" component={FlaggedScans} />
         <Route path="/shipping/pallet-scan" component={PalletScanner} />
         <Route path="/receiving" component={ReceivingDashboard} />

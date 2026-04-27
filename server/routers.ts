@@ -4240,6 +4240,77 @@ const qcScannerRouter = router({
       });
       return { success: true };
     }),
+
+  // Supervisor history: list all sessions (all statuses) with pallets + scan item summary
+  getSessionHistory: protectedProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(500).optional(),
+      offset: z.number().min(0).optional(),
+      status: z.enum(["scanning", "complete", "shipped"]).optional(),
+      customerName: z.string().optional(),
+      search: z.string().optional(), // searches referenceNumber, transactionId, customerName
+    }))
+    .query(async ({ input }) => {
+      const sessions = await listQcSessions(input.limit ?? 100);
+
+      // Filter by status if provided
+      let filtered = sessions;
+      if (input.status) {
+        filtered = filtered.filter((s) => s.status === input.status);
+      }
+      if (input.customerName) {
+        filtered = filtered.filter((s) => s.customerName === input.customerName);
+      }
+      if (input.search) {
+        const q = input.search.toLowerCase();
+        filtered = filtered.filter((s) =>
+          s.referenceNumber?.toLowerCase().includes(q) ||
+          String(s.transactionId ?? "").includes(q) ||
+          s.customerName?.toLowerCase().includes(q) ||
+          s.poNumber?.toLowerCase().includes(q)
+        );
+      }
+
+      // Apply offset
+      const offset = input.offset ?? 0;
+      const page = filtered.slice(offset, offset + (input.limit ?? 100));
+
+      // Enrich each session with pallets + scan item summary
+      const enriched = await Promise.all(
+        page.map(async (s) => {
+          const [pallets, scanItems] = await Promise.all([
+            getQcPallets(s.id),
+            getQcScanItems(s.id),
+          ]);
+          const totalExpected = scanItems.reduce((acc, i) => acc + (i.expectedQty ?? 0), 0);
+          const totalScanned = scanItems.reduce((acc, i) => acc + (i.scannedQty ?? 0), 0);
+          const skuCount = scanItems.length;
+          return {
+            ...s,
+            pallets: pallets.map((p) => ({
+              id: p.id,
+              palletNumber: p.palletNumber,
+              palletUpc: p.palletUpc,
+              palletType: p.palletType,
+              items: p.items,
+              palletHeightIn: p.palletHeightIn,
+              calculatedWeightLb: p.calculatedWeightLb,
+              weightOverrideLb: p.weightOverrideLb,
+              builtAt: p.builtAt,
+              photoUrl: p.photoUrl,
+            })),
+            skuCount,
+            totalExpected,
+            totalScanned,
+          };
+        })
+      );
+
+      return {
+        sessions: enriched,
+        total: filtered.length,
+      };
+    }),
 });
 // Pallet Scanner router (Shipping section))
 const palletScannerRouter = router({

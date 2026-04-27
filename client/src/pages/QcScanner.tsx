@@ -368,6 +368,7 @@ export default function QcScanner() {
   const [demoScenario, setDemoScenario] = useState<"apparel" | "electronics" | "mixed">("mixed");
   const [demoUpcMap, setDemoUpcMap] = useState<Array<{ sku: string; upc: string; description: string; weightLbPerCase: number; caseAmount: number }>>([]);
   const [isDemoSession, setIsDemoSession] = useState(false);
+  const [cheatSheetOpen, setCheatSheetOpen] = useState(true);
 
   const createDemoSession = trpc.qcScanner.createDemoSession.useMutation({
     onSuccess: (data) => {
@@ -1108,6 +1109,13 @@ export default function QcScanner() {
   }
 
   // ─── Scanning / Complete Screen ────────────────────────────────────────────
+
+  // Helper: programmatically fire a single scan for a UPC (used by cheat sheet)
+  const fireDemoScan = (upc: string) => {
+    if (!session || phase !== "scanning") return;
+    scanBarcode.mutate({ sessionId: session.id, barcode: upc, scanAsCase: false });
+  };
+
   return (
     <div className="flex flex-col gap-4 p-4 max-w-6xl mx-auto">
       {/* Header */}
@@ -1197,6 +1205,102 @@ export default function QcScanner() {
             Scan
           </Button>
         </form>
+      )}
+
+      {/* Demo Cheat Sheet — collapsible panel shown only in demo sessions */}
+      {isDemoSession && demoUpcMap.length > 0 && (
+        <div className="rounded-lg border border-dashed border-amber-400 overflow-hidden">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+            onClick={() => setCheatSheetOpen((v) => !v)}
+          >
+            <FlaskConical className="w-4 h-4 shrink-0" />
+            <span>Demo Cheat Sheet — click any row to scan that UPC</span>
+            <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${cheatSheetOpen ? "rotate-180" : ""}`} />
+          </button>
+          {cheatSheetOpen && (
+            <div className="bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2">
+              {/* Header */}
+              <div
+                className="grid text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300 mb-1"
+                style={{ gridTemplateColumns: "140px 1fr 130px 80px 90px 90px 110px" }}
+              >
+                <span>SKU</span>
+                <span>Description</span>
+                <span>UPC</span>
+                <span className="text-right">Case Qty</span>
+                <span className="text-right">Expected</span>
+                <span className="text-right">Scanned</span>
+                <span className="text-center">Scan</span>
+              </div>
+              <div className="space-y-0.5">
+                {demoUpcMap.map((entry) => {
+                  const liveItem = items.find((i) => i.sku === entry.sku);
+                  const scanned = liveItem?.scannedQty ?? 0;
+                  const expected = liveItem?.expectedQty ?? 0;
+                  const done = expected > 0 && scanned >= expected;
+                  const over = scanned > expected;
+                  return (
+                    <div
+                      key={entry.sku}
+                      className="grid items-center rounded text-xs"
+                      style={{
+                        gridTemplateColumns: "140px 1fr 130px 80px 90px 90px 110px",
+                        background: over ? "#FFF3CD" : done ? "#DCFCE7" : "transparent",
+                        padding: "4px 6px",
+                      }}
+                    >
+                      <span className="font-mono text-[#15527f] truncate">{entry.sku}</span>
+                      <span className="text-muted-foreground truncate pr-2">{entry.description}</span>
+                      <span className="font-mono text-[#333] dark:text-gray-300">{entry.upc}</span>
+                      <span className="text-right font-mono text-muted-foreground">{entry.caseAmount}</span>
+                      <span className="text-right font-mono text-muted-foreground">{expected}</span>
+                      <span className={`text-right font-semibold font-mono ${
+                        over ? "text-amber-600" : done ? "text-green-600" : "text-[#333] dark:text-gray-300"
+                      }`}>{scanned}</span>
+                      <div className="flex gap-1 justify-center">
+                        <button
+                          type="button"
+                          disabled={done || phase !== "scanning" || scanBarcode.isPending}
+                          onClick={() => fireDemoScan(entry.upc)}
+                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          title={`Scan 1× ${entry.sku}`}
+                        >
+                          +1
+                        </button>
+                        <button
+                          type="button"
+                          disabled={done || phase !== "scanning" || scanBarcode.isPending}
+                          onClick={() => {
+                            if (!session) return;
+                            // Scan caseAmount times in sequence
+                            const count = entry.caseAmount;
+                            let i = 0;
+                            const fireNext = () => {
+                              if (i >= count) return;
+                              i++;
+                              scanBarcode.mutate(
+                                { sessionId: session.id, barcode: entry.upc, scanAsCase: false },
+                                { onSettled: fireNext }
+                              );
+                            };
+                            fireNext();
+                          }}
+                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-700 hover:bg-amber-800 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          title={`Scan full case (${entry.caseAmount}×) for ${entry.sku}`}
+                        >
+                          +{entry.caseAmount}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2 px-1">+1 scans one unit &nbsp;·&nbsp; +{demoUpcMap[0]?.caseAmount ?? "N"} scans a full case &nbsp;·&nbsp; Green = complete &nbsp;·&nbsp; Amber = over-scanned</p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Last scan feedback */}

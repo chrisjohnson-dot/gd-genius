@@ -77,6 +77,11 @@ const _orderCompleteAudio = typeof window !== "undefined"
   ? (() => { const a = new Audio("/manus-storage/order_complete_jingle_d15136e3.wav"); a.preload = "auto"; return a; })()
   : null;
 
+// Preload the error sound (wrong item / over-scan / any scan error)
+const _errorAudio = typeof window !== "undefined"
+  ? (() => { const a = new Audio("/manus-storage/wrong_item_error_018716c0.wav"); a.preload = "auto"; return a; })()
+  : null;
+
 function playBeep(type: "success" | "error" | "complete") {
   try {
     if (type === "success") {
@@ -111,12 +116,12 @@ function playBeep(type: "success" | "error" | "complete") {
     };
 
     if (type === "error") {
-      // Three descending square-wave pulses — harsh, attention-grabbing
-      // Used for ALL error conditions: not-on-list, over-scan, over-weight
-      tone("square", 440, 0,    0.15, 0.40);
-      tone("square", 330, 0.20, 0.15, 0.35);
-      tone("square", 220, 0.40, 0.22, 0.30);
-      setTimeout(() => ctx.close(), 1000);
+      // Play the uploaded error WAV
+      ctx.close();
+      if (_errorAudio) {
+        _errorAudio.currentTime = 0;
+        _errorAudio.play().catch(() => { /* autoplay blocked — silently ignore */ });
+      }
     } else {
       // complete — play the uploaded jingle WAV
       ctx.close();

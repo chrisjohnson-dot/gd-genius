@@ -41,8 +41,8 @@ type Pallet = {
 };
 
 const PALLET_TYPES = [
-  { value: "customer_owned", label: "Customer-Owned Pallet", color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" },
   { value: "gd_owned", label: "GD-Owned Pallet", color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
+  { value: "customer_owned", label: "Customer-Owned Pallet", color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" },
   { value: "chep", label: "CHEP Pallet", color: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
 ];
 

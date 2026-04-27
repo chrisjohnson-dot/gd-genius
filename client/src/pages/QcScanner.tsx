@@ -364,6 +364,10 @@ export default function QcScanner() {
   const [extensivLoadError, setExtensivLoadError] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
 
+  // Weight limit threshold (lbs) — configurable per session, default 2000
+  const [weightLimitLb, setWeightLimitLb] = useState<number>(2000);
+  const [weightLimitInput, setWeightLimitInput] = useState<string>("2000");
+
   // Demo mode state
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoScenario, setDemoScenario] = useState<"apparel" | "electronics" | "mixed">("mixed");
@@ -1430,24 +1434,53 @@ export default function QcScanner() {
 
         {/* Pallets section — always visible below items */}
         <div className="mt-6">
-          {/* Top toolbar: auto-assign UPCs */}
+          {/* Top toolbar: auto-assign UPCs + weight limit */}
           {phase === "scanning" && pallets.length > 0 && (
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
               <h3 className="font-semibold text-sm text-muted-foreground">{pallets.length} pallet{pallets.length !== 1 ? "s" : ""}</h3>
-              <Button
-                size="sm"
-                variant={unassignedCount > 0 ? "default" : "outline"}
-                onClick={() => bulkGeneratePalletUpcs.mutate({ sessionId: session!.id })}
-                disabled={bulkGeneratePalletUpcs.isPending || unassignedCount === 0}
-                title={unassignedCount === 0 ? "All pallets already have UPCs" : `Auto-assign UPCs to ${unassignedCount} unassigned pallet${unassignedCount !== 1 ? "s" : ""}`}
-              >
-                <Wand2 className="w-4 h-4 mr-1" />
-                {bulkGeneratePalletUpcs.isPending
-                  ? "Assigning…"
-                  : unassignedCount > 0
-                    ? `Auto-Assign UPCs (${unassignedCount})`
-                    : "All UPCs Assigned"}
-              </Button>
+              <div className="flex items-center gap-2 ml-auto">
+                {/* Weight limit configurator */}
+                <div className="flex items-center gap-1.5">
+                  <Scale className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Limit (lbs):</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={100}
+                    className="h-7 w-24 text-xs px-2"
+                    value={weightLimitInput}
+                    onChange={(e) => setWeightLimitInput(e.target.value)}
+                    onBlur={() => {
+                      const val = parseFloat(weightLimitInput);
+                      if (!isNaN(val) && val > 0) setWeightLimitLb(val);
+                      else setWeightLimitInput(String(weightLimitLb));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const val = parseFloat(weightLimitInput);
+                        if (!isNaN(val) && val > 0) setWeightLimitLb(val);
+                        else setWeightLimitInput(String(weightLimitLb));
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    title="Max pallet weight before the weight badge turns red"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  variant={unassignedCount > 0 ? "default" : "outline"}
+                  onClick={() => bulkGeneratePalletUpcs.mutate({ sessionId: session!.id })}
+                  disabled={bulkGeneratePalletUpcs.isPending || unassignedCount === 0}
+                  title={unassignedCount === 0 ? "All pallets already have UPCs" : `Auto-assign UPCs to ${unassignedCount} unassigned pallet${unassignedCount !== 1 ? "s" : ""}`}
+                >
+                  <Wand2 className="w-4 h-4 mr-1" />
+                  {bulkGeneratePalletUpcs.isPending
+                    ? "Assigning…"
+                    : unassignedCount > 0
+                      ? `Auto-Assign UPCs (${unassignedCount})`
+                      : "All UPCs Assigned"}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -1520,17 +1553,24 @@ export default function QcScanner() {
                       ) : (
                         <span className="text-xs text-muted-foreground italic">Empty</span>
                       )}
-                      {/* Live running weight badge */}
-                      {liveWeightLb !== null && (
-                        <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
-                          pallet.weightOverrideLb
-                            ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
-                            : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                        }`}>
-                          <Scale className="w-3 h-3" />
-                          {liveWeightLb} lbs{pallet.weightOverrideLb ? " ✎" : isDemoSession ? " ~" : ""}
-                        </span>
-                      )}
+                      {/* Live running weight badge — flashes red when over limit */}
+                      {liveWeightLb !== null && (() => {
+                        const overLimit = liveWeightLb > weightLimitLb;
+                        return (
+                          <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                            overLimit
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 weight-over-limit"
+                              : pallet.weightOverrideLb
+                                ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+                                : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          }`}
+                            title={overLimit ? `Over ${weightLimitLb} lb limit!` : undefined}
+                          >
+                            <Scale className="w-3 h-3" />
+                            {liveWeightLb} lbs{overLimit ? " ⚠️" : pallet.weightOverrideLb ? " ✎" : isDemoSession ? " ~" : ""}
+                          </span>
+                        );
+                      })()}
                       {/* UPC indicator */}
                       {hasUpc && (
                         <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">

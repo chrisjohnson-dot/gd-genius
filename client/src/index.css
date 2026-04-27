@@ -277,4 +277,13 @@
   .page-enter {
     animation: page-fade-in 0.3s ease;
   }
+
+  /* ── Weight-over-limit flash animation ───────────────────────────────── */
+  @keyframes weight-flash {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.45; }
+  }
+  .weight-over-limit {
+    animation: weight-flash 0.9s ease-in-out infinite;
+  }
 }

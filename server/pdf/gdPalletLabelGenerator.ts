@@ -134,7 +134,7 @@ export function generateGdPalletLabel(
 function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   // ── Zone heights (pt) ──────────────────────────────────────────────────────
   const ADDR_H  = 76;   // Ship From / Ship To
-  const INFO_H  = 58;   // Trans ID + dims
+  const INFO_H  = 66;   // Trans ID + dims (taller for 26pt TX ID)
   const FOOT_H  = 36;   // Total QTY + Pallet row (taller for larger font)
   const BC_H    = PH * 0.25;  // bottom quarter
   const SLIP_H  = PH - ADDR_H - INFO_H - FOOT_H - BC_H;
@@ -176,8 +176,8 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   doc.text("Transaction ID", MARGIN, y + 5, { lineBreak: false });
   doc.text("Weight & Dims",  MID + MARGIN, y + 5, { lineBreak: false });
 
-  doc.fillColor(BLACK).fontSize(20).font("Helvetica-Bold");
-  doc.text(String(p.transactionId), MARGIN, y + 14, { lineBreak: false });
+  doc.fillColor(BLACK).fontSize(26).font("Helvetica-Bold");
+  doc.text(String(p.transactionId), MARGIN, y + 12, { lineBreak: false });
 
   const weightStr = p.weightLbs != null ? `${p.weightLbs} LBS` : "—";
   const dimStr    = (p.dimL != null && p.dimW != null && p.dimH != null)

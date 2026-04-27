@@ -3981,10 +3981,18 @@ const qcScannerRouter = router({
       delta: z.number(), // +1 or -1
     }))
     .mutation(async ({ input }) => {
+      // Block over-scanning when adding (+1): do not allow scannedQty to exceed expectedQty
+      if (input.delta > 0) {
+        const currentItems = await getQcScanItems(input.sessionId);
+        const match = currentItems.find((i) => i.sku === input.sku);
+        if (match && (match.scannedQty ?? 0) >= (match.expectedQty ?? 0)) {
+          return { item: match, sessionComplete: false, overScan: true };
+        }
+      }
       const updated = await incrementQcScanItem(input.sessionId, input.sku, input.delta);
       const allItems = await getQcScanItems(input.sessionId);
       const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);
-      return { item: updated, sessionComplete };
+      return { item: updated, sessionComplete, overScan: false };
     }),
 
   // Complete the order

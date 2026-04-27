@@ -306,6 +306,8 @@ function ItemsTable({
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 shrink-0"
+                  disabled={item.scannedQty >= item.expectedQty}
+                  title={item.scannedQty >= item.expectedQty ? "Expected quantity reached" : undefined}
                   onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: 1 }); onAdjust?.(item.sku, 1); }}
                 >
                   <Plus className="w-3 h-3" />
@@ -643,6 +645,11 @@ export default function QcScanner() {
 
   const adjustQty = trpc.qcScanner.adjustQty.useMutation({
     onSuccess: (data) => {
+      if ((data as any).overScan) {
+        playBeep("error");
+        toast.warning(`⚠️ ${data.item?.sku ?? "Item"} is already at the expected quantity — cannot add more.`, { duration: 4000 });
+        return;
+      }
       setItems((prev) =>
         prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
       );

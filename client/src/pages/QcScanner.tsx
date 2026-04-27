@@ -52,6 +52,7 @@ function palletTypeBadgeClass(type?: string | null) {
 type Session = {
   id: number;
   referenceNumber: string;
+  transactionId: number | null;
   status: string;
   customerName: string | null;
   warehouseName: string | null;
@@ -343,7 +344,7 @@ function ItemsTable({
 
 export default function QcScanner() {
   const [phase, setPhase] = useState<Phase>("start");
-  const [refInput, setRefInput] = useState("");
+  const [txInput, setTxInput] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [items, setItems] = useState<ScanItem[]>([]);
   const [pallets, setPallets] = useState<Pallet[]>([]);
@@ -360,7 +361,7 @@ export default function QcScanner() {
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
-  const refInputRef = useRef<HTMLInputElement>(null);
+  const txInputRef = useRef<HTMLInputElement>(null);
 
   const trpcUtils = trpc.useUtils();
 
@@ -413,17 +414,17 @@ export default function QcScanner() {
       setPallets((data.pallets as unknown as Pallet[]) ?? []);
       setPhase("scanning");
       if (data.resumed) {
-        toast.info(`Resumed session for ${sess?.referenceNumber}`);
+        toast.info(`Resumed session for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
         setTimeout(() => barcodeRef.current?.focus(), 100);
       } else {
-        toast.success(`Session started for ${sess?.referenceNumber}`);
+        toast.success(`Session started for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
         // Show pallet type selection for the first pallet
         setPalletTypeForFirst(true);
         setPendingPalletType(null);
         setPalletTypeDialog(true);
         // Auto-load items and lot numbers from Extensiv for new sessions
-        if (sess?.id && sess?.referenceNumber) {
-          fetchFromExtensiv.mutate({ sessionId: sess.id, referenceNumber: sess.referenceNumber });
+        if (sess?.id && sess?.transactionId) {
+          fetchFromExtensiv.mutate({ sessionId: sess.id, transactionId: sess.transactionId });
         } else {
           setTimeout(() => barcodeRef.current?.focus(), 100);
         }
@@ -582,17 +583,18 @@ export default function QcScanner() {
       setSession(null);
       setItems([]);
       setPallets([]);
-      setRefInput("");
+      setTxInput("");
       setCompleteDialog(false);
       setConfirmText("");
     },
     onError: (e) => toast.error(e.message),
   });
 
-  const handleRefSubmit = (e: React.FormEvent) => {
+  const handleTxSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!refInput.trim()) return;
-    startSession.mutate({ referenceNumber: refInput.trim() });
+    const txId = parseInt(txInput.trim(), 10);
+    if (!txInput.trim() || isNaN(txId) || txId <= 0) return;
+    startSession.mutate({ transactionId: txId });
   };
 
   const handleBarcodeSubmit = useCallback(
@@ -653,14 +655,15 @@ export default function QcScanner() {
             <ScanBarcode className="w-10 h-10 text-primary" />
           </div>
           <h1 className="text-3xl font-bold">QC Scanner</h1>
-          <p className="text-muted-foreground mt-2">Enter a reference number to start or resume a scan session</p>
+          <p className="text-muted-foreground mt-2">Enter a Transaction ID to start or resume a scan session</p>
         </div>
-        <form onSubmit={handleRefSubmit} className="flex gap-3 w-full max-w-md">
+        <form onSubmit={handleTxSubmit} className="flex gap-3 w-full max-w-md">
           <Input
-            ref={refInputRef}
-            value={refInput}
-            onChange={(e) => setRefInput(e.target.value)}
-            placeholder="Reference number or order ID"
+            ref={txInputRef}
+            value={txInput}
+            onChange={(e) => setTxInput(e.target.value)}
+            placeholder="Transaction ID (numeric)"
+            type="number"
             className="text-lg h-12"
             autoFocus
           />
@@ -725,7 +728,7 @@ export default function QcScanner() {
                   alignItems: "center",
                 }}
               >
-                <span>Reference</span>
+                <span>Ref / TX ID</span>
                 <span>Customer</span>
                 <span className="text-right">Items</span>
                 <span className="text-right">Expected</span>
@@ -749,7 +752,7 @@ export default function QcScanner() {
                     title="Click to view session summary"
                   >
                     <div className="flex flex-col min-w-0 pr-2">
-                      <span className="font-semibold text-[#15527f] truncate">{s.referenceNumber}</span>
+                      <span className="font-semibold text-[#15527f] truncate">{s.transactionId ? `TX ${s.transactionId}` : s.referenceNumber}</span>
                       <span className="text-[10px] text-muted-foreground">
                         {s.completedAt ? new Date(s.completedAt).toLocaleString() : "—"}
                         {s.poNumber ? ` · PO: ${s.poNumber}` : ""}
@@ -904,7 +907,7 @@ export default function QcScanner() {
               variant="default"
               onClick={() => {
                 if (sessionSummaryQuery.data?.session) {
-                  setRefInput(sessionSummaryQuery.data.session.referenceNumber);
+                  setTxInput(sessionSummaryQuery.data.session.transactionId ? String(sessionSummaryQuery.data.session.transactionId) : sessionSummaryQuery.data.session.referenceNumber);
                   setSelectedSessionId(null);
                 }
               }}
@@ -926,7 +929,7 @@ export default function QcScanner() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ScanBarcode className="w-6 h-6 text-primary" />
-            {session?.referenceNumber}
+{session?.transactionId ? `TX ${session.transactionId}` : session?.referenceNumber}
             {phase === "complete" && (
               <Badge className="bg-green-500 text-white ml-2">Complete</Badge>
             )}
@@ -943,7 +946,7 @@ export default function QcScanner() {
             size="sm"
             onClick={() => {
               if (!session) return;
-              fetchFromExtensiv.mutate({ sessionId: session.id, referenceNumber: session.referenceNumber });
+              fetchFromExtensiv.mutate({ sessionId: session.id, transactionId: session.transactionId ?? 0 });
             }}
             disabled={fetchFromExtensiv.isPending}
             title="Fetch expected items and lot numbers from Extensiv"
@@ -1054,7 +1057,7 @@ export default function QcScanner() {
                   className="h-7 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
                   onClick={() => {
                     if (session) {
-                      fetchFromExtensiv.mutate({ sessionId: session.id, referenceNumber: session.referenceNumber });
+                      fetchFromExtensiv.mutate({ sessionId: session.id, transactionId: session.transactionId ?? 0 });
                     }
                   }}
                 >
@@ -1518,8 +1521,8 @@ export default function QcScanner() {
             {/* Session summary */}
             <div className="bg-muted rounded-lg p-3 space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Reference</span>
-                <span className="font-mono font-semibold">{session?.referenceNumber}</span>
+                <span className="text-muted-foreground">TX ID</span>
+                <span className="font-mono font-semibold">{session?.transactionId ?? session?.referenceNumber}</span>
               </div>
               {session?.customerName && (
                 <div className="flex justify-between">

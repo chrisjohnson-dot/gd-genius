@@ -596,6 +596,8 @@ export type InsertCortexReturn = typeof cortexReturns.$inferInsert;
 export const qcScanSessions = mysqlTable("qc_scan_sessions", {
   id: int("id").autoincrement().primaryKey(),
   referenceNumber: varchar("referenceNumber", { length: 128 }).notNull(),
+  /** Extensiv Transaction ID (readOnly.orderId) — used for direct API lookup */
+  transactionId: int("transactionId"),
   // Whether this session was started as a batch order
   isBatch: boolean("isBatch").notNull().default(false),
   // Optional batch — comma-separated reference numbers

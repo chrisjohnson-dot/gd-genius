@@ -2048,6 +2048,18 @@ export async function getQcSessionByRef(referenceNumber: string): Promise<QcScan
   return rows[0] ?? null;
 }
 
+export async function getQcSessionByTransactionId(transactionId: number): Promise<QcScanSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(qcScanSessions)
+    .where(eq(qcScanSessions.transactionId, transactionId))
+    .orderBy(desc(qcScanSessions.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function updateQcSession(id: number, data: Partial<QcScanSession>): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -2191,6 +2203,7 @@ export async function updatePalletScanStatus(id: number, status: string): Promis
 export type RecentQcSession = {
   id: number;
   referenceNumber: string;
+  transactionId: number | null;
   customerName: string | null;
   poNumber: string | null;
   warehouseName: string | null;
@@ -2227,6 +2240,7 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
       return {
         id: s.id,
         referenceNumber: s.referenceNumber,
+        transactionId: s.transactionId ?? null,
         customerName: s.customerName ?? null,
         poNumber: s.poNumber ?? null,
         warehouseName: s.warehouseName ?? null,

@@ -105,6 +105,7 @@ import {
   createQcSession,
   getQcSessionById,
   getQcSessionByRef,
+  getQcSessionByTransactionId,
   updateQcSession,
   listQcSessions,
   getQcScanItems,
@@ -3782,28 +3783,28 @@ const cortexRouter = router({
 });
 // ─── QC Scanner Router ───────────────────────────────────────────────────────
 const qcScannerRouter = router({
-  // Look up an order by reference number from Extensiv and create/resume a session
+  // Look up an order by Transaction ID from Extensiv and create/resume a session
   startSession: protectedProcedure
     .input(z.object({
-      referenceNumber: z.string().min(1),
+      transactionId: z.number().int().positive(),
       warehouseId: z.number().optional(),
       warehouseName: z.string().optional(),
       batchMode: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      // Try to find an existing open session for this reference number
-      const existing = await getQcSessionByRef(input.referenceNumber);
+      // Try to find an existing open session for this transaction ID
+      const existing = await getQcSessionByTransactionId(input.transactionId);
       if (existing && existing.status === "scanning") {
         const items = await getQcScanItems(existing.id);
         const pallets = await getQcPallets(existing.id);
         return { session: existing, items, pallets, resumed: true };
       }
-      // Create a new session
+      // Create a new session — referenceNumber will be populated after Extensiv lookup
       const sessionId = await createQcSession({
-        referenceNumber: input.referenceNumber,
+        referenceNumber: String(input.transactionId),
+        transactionId: input.transactionId,
         warehouseId: input.warehouseId,
         warehouseName: input.warehouseName,
-        batchIdentifiers: input.batchMode ? input.referenceNumber : null,
         status: "scanning",
         createdBy: ctx.user.name,
       });
@@ -3866,12 +3867,12 @@ const qcScannerRouter = router({
       return { success: true };
     }),
 
-  // Fetch order items from Extensiv by reference number and seed the session
+  // Fetch order items from Extensiv by Transaction ID and seed the session
   // This auto-populates SKU, description, expected qty, and lot number from Extensiv
   fetchFromExtensiv: protectedProcedure
     .input(z.object({
       sessionId: z.number(),
-      referenceNumber: z.string().min(1),
+      transactionId: z.number().int().positive(),
     }))
     .mutation(async ({ input }) => {
       // Get the first active Extensiv config
@@ -3879,14 +3880,15 @@ const qcScannerRouter = router({
       const config = configs.find((c) => c.isActive) ?? configs[0];
       if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found. Please set up an Extensiv API config first." });
 
-      // Search Extensiv for orders matching this reference number
-      const orders = await fetchOrdersByReferenceNum(config, input.referenceNumber);
-      if (orders.length === 0) {
-        throw new TRPCError({ code: "NOT_FOUND", message: `No orders found in Extensiv for reference number "${input.referenceNumber}". Check the reference number and try again.` });
+      // Fetch order directly by Transaction ID (orderId)
+      let order;
+      try {
+        const result = await fetchOrderWithDetail(config, input.transactionId);
+        order = result.order;
+      } catch (err) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `No order found in Extensiv for Transaction ID ${input.transactionId}. Check the Transaction ID and try again.` });
       }
 
-      // Use the first matching order (most recent if multiple)
-      const order = orders[0]!;
       const orderItems = order.orderItems ?? [];
 
       if (orderItems.length === 0) {
@@ -3926,17 +3928,19 @@ const qcScannerRouter = router({
         seededCount++;
       }
 
-      // Update session metadata from the order
+      // Update session metadata from the order — including the referenceNum from Extensiv
       const customerName = order.readOnly?.customerIdentifier?.name ?? undefined;
       const poNumber = (order as unknown as Record<string, unknown>).poNum as string | undefined;
+      const referenceNum = (order as unknown as Record<string, unknown>).referenceNum as string | undefined;
       await updateQcSession(input.sessionId, {
+        referenceNumber: referenceNum ?? String(input.transactionId),
         customerName: customerName ?? undefined,
         poNumber: poNumber ?? undefined,
       } as any);
 
       // Return the freshly seeded items
       const items = await getQcScanItems(input.sessionId);
-      return { success: true, seededCount, items, customerName: customerName ?? null, poNumber: poNumber ?? null };
+      return { success: true, seededCount, items, customerName: customerName ?? null, poNumber: poNumber ?? null, referenceNumber: referenceNum ?? String(input.transactionId) };
     }),
 
   // Record a barcode scan — increments scannedQty for the matching SKU/UPC

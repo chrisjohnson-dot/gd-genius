@@ -79,7 +79,7 @@ const _orderCompleteAudio = typeof window !== "undefined"
 
 // Preload the error sound (wrong item / over-scan / any scan error)
 const _errorAudio = typeof window !== "undefined"
-  ? (() => { const a = new Audio("/manus-storage/wrong_item_error_018716c0.wav"); a.preload = "auto"; return a; })()
+  ? (() => { const a = new Audio("/manus-storage/wrong_item_angry_c1fd9aee.wav"); a.preload = "auto"; return a; })()
   : null;
 
 function playBeep(type: "success" | "error" | "complete") {

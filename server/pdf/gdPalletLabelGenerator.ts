@@ -135,7 +135,7 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   // ── Zone heights (pt) ──────────────────────────────────────────────────────
   const ADDR_H  = 76;   // Ship From / Ship To
   const INFO_H  = 58;   // Trans ID + dims
-  const FOOT_H  = 28;   // Total QTY + Pallet row
+  const FOOT_H  = 36;   // Total QTY + Pallet row (taller for larger font)
   const BC_H    = PH * 0.25;  // bottom quarter
   const SLIP_H  = PH - ADDR_H - INFO_H - FOOT_H - BC_H;
 
@@ -233,8 +233,10 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
 
   // ── SECTION 4: Total QTY + Pallet ─────────────────────────────────────────
   const totalQty = p.items.reduce((s, i) => s + i.qty, 0);
-  const footY = y + (FOOT_H - 12) / 2;
-  doc.fillColor(BLACK).fontSize(9).font("Helvetica-Bold");
+  // Font size chosen so text fills ~80% of FOOT_H (36pt band → 18pt font)
+  const FOOT_FONT = 18;
+  const footY = y + (FOOT_H - FOOT_FONT) / 2 - 1;
+  doc.fillColor(BLACK).fontSize(FOOT_FONT).font("Helvetica-Bold");
   doc.text(`Total QTY: ${totalQty}`, MARGIN, footY, { lineBreak: false });
   doc.text(`Pallet: ${p.palletNumber} of ${p.totalPallets}`, MID, footY, { lineBreak: false });
 

@@ -67,43 +67,74 @@ type Session = {
 
 type Phase = "start" | "scanning" | "complete";
 
-// WAV URLs for each sound type
+//// WAV URLs for each sound type
 const SOUND_URLS: Record<"success" | "error" | "complete", string> = {
   success: "/manus-storage/cryo_pistol_gunshot_9f6c9d5d.wav",
   error: "/manus-storage/wrong_item_angry_c1fd9aee.wav",
   complete: "/manus-storage/order_complete_jingle_d15136e3.wav",
 };
-
-// Decoded AudioBuffer cache — populated on first play of each type
+// Single shared AudioContext + decoded buffer cache
+let _sharedAudioCtx: AudioContext | null = null;
 const _audioBuffers: Partial<Record<"success" | "error" | "complete", AudioBuffer>> = {};
 
-async function playBeepAsync(type: "success" | "error" | "complete") {
+function getAudioCtx(): AudioContext | null {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    if (!_audioBuffers[type]) {
-      const ctx: AudioContext = new AudioCtx();
-      const resp = await fetch(SOUND_URLS[type]);
-      const arrayBuf = await resp.arrayBuffer();
-      _audioBuffers[type] = await ctx.decodeAudioData(arrayBuf);
-      await ctx.close();
+    if (!AudioCtx) return null;
+    if (!_sharedAudioCtx || _sharedAudioCtx.state === "closed") {
+      _sharedAudioCtx = new AudioCtx();
     }
-    const ctx: AudioContext = new AudioCtx();
-    const source = ctx.createBufferSource();
-    source.buffer = _audioBuffers[type]!;
-    source.connect(ctx.destination);
-    source.start(0);
-    source.onended = () => { ctx.close(); };
-  } catch {
-    // Audio not available — silently ignore
-  }
+    return _sharedAudioCtx;
+  } catch { return null; }
+}
+
+// Pre-load all sounds into the buffer cache (call once after first user gesture)
+async function preloadSounds() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === "suspended") { try { await ctx.resume(); } catch { return; } }
+  await Promise.all(
+    (Object.keys(SOUND_URLS) as Array<"success" | "error" | "complete">).map(async (type) => {
+      if (_audioBuffers[type]) return;
+      try {
+        const resp = await fetch(SOUND_URLS[type]);
+        const arrayBuf = await resp.arrayBuffer();
+        _audioBuffers[type] = await ctx.decodeAudioData(arrayBuf);
+      } catch { /* ignore */ }
+    })
+  );
 }
 
 function playBeep(type: "success" | "error" | "complete") {
-  void playBeepAsync(type);
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const buf = _audioBuffers[type];
+  if (!buf) {
+    // Buffer not ready yet — fetch+decode then play
+    void (async () => {
+      try {
+        if (ctx.state === "suspended") await ctx.resume();
+        const resp = await fetch(SOUND_URLS[type]);
+        const arrayBuf = await resp.arrayBuffer();
+        _audioBuffers[type] = await ctx.decodeAudioData(arrayBuf);
+        const src = ctx.createBufferSource();
+        src.buffer = _audioBuffers[type]!;
+        src.connect(ctx.destination);
+        src.start(0);
+      } catch { /* ignore */ }
+    })();
+    return;
+  }
+  try {
+    if (ctx.state === "suspended") { void ctx.resume().then(() => playBeep(type)); return; }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch { /* ignore */ }
 }
 
-// ─── Pack-sheet-style item table ──────────────────────────────────────────────
+// --- Pack-sheet-style item table ----------------------------------------------
 
 function ItemsTableSkeleton() {
   const cols = "150px 120px 1fr 110px 100px 110px 40px";
@@ -348,7 +379,7 @@ function ItemsTable({
   );
 }
 
-// ─── Main component ────────────────────────────────────────────────────────────
+// --- Main component ------------------------------------------------------------
 
 export default function QcScanner() {
   const [phase, setPhase] = useState<Phase>("start");
@@ -901,7 +932,7 @@ export default function QcScanner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePalletTab, phase]);
 
-  // ─── Start Screen ──────────────────────────────────────────────────────────
+  // --- Start Screen ----------------------------------------------------------
   const [sessionLimit, setSessionLimit] = useState(5);
   const recentSessionsQuery = trpc.qcScanner.recentSessions.useQuery(
     { limit: sessionLimit },
@@ -1294,7 +1325,7 @@ export default function QcScanner() {
     );
   }
 
-  // ─── Scanning / Complete Screen ────────────────────────────────────────────
+  // --- Scanning / Complete Screen --------------------------------------------
 
   // Helper: programmatically fire a single scan for a UPC (used by cheat sheet)
   const fireDemoScan = (upc: string) => {
@@ -1304,8 +1335,10 @@ export default function QcScanner() {
 
   return (
     <>
-    {/* ── Sticky top section: header + progress + items table + pallets toolbar ── */}
-    <div className="sticky top-0 z-20 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4 max-w-6xl w-full mx-auto">
+    {/* Outer flex column: fills main, sticky top + scrollable pallet cards */}
+    <div className="flex flex-col h-full min-h-0">
+    {/* -- Sticky top section: header + progress + items table + pallets toolbar -- */}
+    <div className="shrink-0 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4 max-w-6xl w-full mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
@@ -1612,12 +1645,12 @@ export default function QcScanner() {
         </div>{/* end pallets toolbar div */}
       </div>{/* end sticky section */}
 
-      {/* ── Scrollable pallet cards area ── */}
+      {/* -- Scrollable pallet cards area -- */}
       <div className="flex-1 overflow-y-auto px-4 pb-4 max-w-6xl w-full mx-auto">
         {pallets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">No pallets yet. Use the button above to add one.</div>
           ) : (
-            /* ── Vertical stack of collapsible pallet cards ── */
+            /* -- Vertical stack of collapsible pallet cards -- */
             <div className="space-y-2">
               {pallets.map((pallet, palletIdx) => {
                 const isExpanded = expandedPallets.has(pallet.id);
@@ -1659,7 +1692,7 @@ export default function QcScanner() {
                 })();
                 return (
                   <div key={pallet.id} className="rounded-lg border border-border overflow-hidden">
-                    {/* ── Collapsed header row ── */}
+                    {/* -- Collapsed header row -- */}
                     <div
                       role="button"
                       tabIndex={0}
@@ -1785,7 +1818,7 @@ export default function QcScanner() {
                       )}
                     </div>
 
-                    {/* ── Expanded body ── */}
+                    {/* -- Expanded body -- */}
                     {isExpanded && (
                       <div className="border-t border-border">
                         <Card className="rounded-none border-0 shadow-none">
@@ -1811,6 +1844,7 @@ export default function QcScanner() {
                                   onFocus={() => {
                                     setActiveScanPalletId(pallet.id);
                                     activeScanPalletIdRef.current = pallet.id;
+                                    void preloadSounds();
                                   }}
                                   placeholder={`Scan into Pallet ${pallet.palletNumber}…`}
                                   className={`text-lg h-12 font-mono ${isActivePallet ? "ring-2 ring-primary" : ""}`}
@@ -2021,8 +2055,9 @@ export default function QcScanner() {
           )}
 
       </div>{/* end scrollable pallet cards area */}
-
-      {/* Pallet Type Selection Dialog */}
+    </div>{/* end flex-col h-full wrapper */}
+    </div>{/* end outer flex column */}
+    {/* Pallet Type Selection Dialog */}
       <Dialog open={palletTypeDialog} onOpenChange={(open) => { if (!open) { setPalletTypeDialog(false); setPendingPalletType(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -2373,7 +2408,6 @@ export default function QcScanner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>{/* end outer flex column */}
     </>
   );
 }

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
-  Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown
+  Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale
 } from "lucide-react";
 
 type ScanItem = {
@@ -1471,6 +1471,25 @@ export default function QcScanner() {
                 const palletSkuCount = palletItems.length;
                 const palletUnitCount = palletItems.reduce((s, i) => s + (i.qty ?? 0), 0);
                 const palletWeight = pallet.weightOverrideLb ?? pallet.calculatedWeightLb;
+                // Live running weight estimate — derived from demoUpcMap (demo) or calculatedWeightLb (real)
+                // For demo sessions: sum(weightLbPerCase / caseAmount * qty) + tare
+                // For real sessions: use calculatedWeightLb (updated after each scan by the server)
+                const liveWeightLb: number | null = (() => {
+                  if (pallet.weightOverrideLb) return parseFloat(pallet.weightOverrideLb);
+                  if (isDemoSession && demoUpcMap.length > 0 && palletItems.length > 0) {
+                    let totalLb = 0;
+                    for (const pi of palletItems) {
+                      const demo = demoUpcMap.find((d) => d.sku === pi.sku);
+                      if (demo?.weightLbPerCase && demo?.caseAmount) {
+                        totalLb += (demo.weightLbPerCase / demo.caseAmount) * pi.qty;
+                      }
+                    }
+                    const tareLb = pallet.palletTareWeightLb ? parseFloat(pallet.palletTareWeightLb) : 30;
+                    return totalLb > 0 ? Math.round((totalLb + tareLb) * 10) / 10 : null;
+                  }
+                  if (pallet.calculatedWeightLb) return parseFloat(pallet.calculatedWeightLb);
+                  return null;
+                })();
                 return (
                   <div key={pallet.id} className="rounded-lg border border-border overflow-hidden">
                     {/* ── Collapsed header row ── */}
@@ -1497,17 +1516,20 @@ export default function QcScanner() {
                           <span className="font-medium text-foreground">{palletSkuCount}</span> SKU{palletSkuCount !== 1 ? "s" : ""}
                           {" · "}
                           <span className="font-medium text-foreground">{palletUnitCount}</span> unit{palletUnitCount !== 1 ? "s" : ""}
-                          {palletWeight && (
-                            <>
-                              {" · "}
-                              {pallet.weightOverrideLb
-                                ? <span className="text-orange-600 font-semibold">{pallet.weightOverrideLb} lbs ✎</span>
-                                : <span className="font-medium text-foreground">{pallet.calculatedWeightLb} lbs</span>}
-                            </>
-                          )}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground italic">Empty</span>
+                      )}
+                      {/* Live running weight badge */}
+                      {liveWeightLb !== null && (
+                        <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                          pallet.weightOverrideLb
+                            ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+                            : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        }`}>
+                          <Scale className="w-3 h-3" />
+                          {liveWeightLb} lbs{pallet.weightOverrideLb ? " ✎" : isDemoSession ? " ~" : ""}
+                        </span>
                       )}
                       {/* UPC indicator */}
                       {hasUpc && (

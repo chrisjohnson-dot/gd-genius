@@ -134,7 +134,7 @@ export function generateGdPalletLabel(
 function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   // ── Zone heights (pt) ──────────────────────────────────────────────────────
   const ADDR_H  = 76;   // Ship From / Ship To
-  const INFO_H  = 66;   // Trans ID + dims (taller for 26pt TX ID)
+  const INFO_H  = 54;   // Trans ID + dims (compact — more space for packing slip)
   const FOOT_H  = 36;   // Total QTY + Pallet row (taller for larger font)
   const BC_H    = PH * 0.25;  // bottom quarter
   const SLIP_H  = PH - ADDR_H - INFO_H - FOOT_H - BC_H;
@@ -186,8 +186,10 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
 
   doc.fillColor(BLACK).fontSize(11).font("Helvetica-Bold");
   doc.text(weightStr, MID + MARGIN, y + 16, { lineBreak: false });
-  doc.fillColor(DARK_GRAY).fontSize(7).font("Helvetica");
-  if (dimStr) doc.text(dimStr, MID + MARGIN, y + 30, { lineBreak: false });
+  if (dimStr) {
+    doc.fillColor(BLACK).fontSize(11).font("Helvetica-Bold");
+    doc.text(dimStr, MID + MARGIN, y + 30, { lineBreak: false });
+  }
 
   doc.save()
     .moveTo(MID, y + 4)
@@ -235,10 +237,16 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   const totalQty = p.items.reduce((s, i) => s + i.qty, 0);
   // Font size chosen so text fills ~80% of FOOT_H (36pt band → 18pt font)
   const FOOT_FONT = 18;
-  const footY = y + (FOOT_H - FOOT_FONT) / 2 - 1;
+  // Vertically center: PDFKit text baseline is at the top of the em-square;
+  // subtract ~2pt to optically center within the band.
+  const footY = y + Math.round((FOOT_H - FOOT_FONT) / 2) - 1;
+  const palletStr = `Pallet: ${p.palletNumber} of ${p.totalPallets}`;
   doc.fillColor(BLACK).fontSize(FOOT_FONT).font("Helvetica-Bold");
+  // Left-justify Total QTY
   doc.text(`Total QTY: ${totalQty}`, MARGIN, footY, { lineBreak: false });
-  doc.text(`Pallet: ${p.palletNumber} of ${p.totalPallets}`, MID, footY, { lineBreak: false });
+  // Right-justify Pallet — measure text width then position so right edge aligns with label right margin
+  const palletWidth = doc.widthOfString(palletStr);
+  doc.text(palletStr, PW - MARGIN - palletWidth, footY, { lineBreak: false });
 
   y += FOOT_H;
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);

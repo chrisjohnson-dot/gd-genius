@@ -1547,9 +1547,24 @@ export default function QcScanner() {
         {/* Pallets section — always visible below items */}
         <div className="mt-6">
           {/* Top toolbar: auto-assign UPCs + weight limit */}
-          {phase === "scanning" && pallets.length > 0 && (
+          {phase === "scanning" && pallets.length > 0 && ((() => {
+            const _toolbarExpected = items.reduce((s, i) => s + (i.expectedQty ?? 0), 0);
+            const _toolbarScanned = items.reduce((s, i) => s + (i.scannedQty ?? 0), 0);
+            const _toolbarRemaining = Math.max(0, _toolbarExpected - _toolbarScanned);
+            return (
             <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-              <h3 className="font-semibold text-sm text-muted-foreground">{pallets.length} pallet{pallets.length !== 1 ? "s" : ""}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-sm text-muted-foreground">{pallets.length} pallet{pallets.length !== 1 ? "s" : ""}</h3>
+                {_toolbarRemaining > 0 ? (
+                  <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                    {_toolbarRemaining} remaining
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                    ✓ All scanned
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 ml-auto">
                 {/* Weight limit configurator */}
                 <div className="flex items-center gap-1.5">
@@ -1601,7 +1616,8 @@ export default function QcScanner() {
 {/* Auto-Assign UPCs removed — label generation now available on the Complete Order screen */}
               </div>
             </div>
-          )}
+            );
+          })())}
 
           {pallets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">No pallets yet. Use the button below to add one.</div>
@@ -1738,15 +1754,9 @@ export default function QcScanner() {
                           {isLocked ? "Unlock" : "Lock"}
                         </button>
                       )}
-                      {/* Remaining units badge — shown on all pallets during scanning */}
-                      {remainingUnits > 0 && phase === "scanning" && (
-                        <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">
-                          {remainingUnits} remaining
-                        </span>
-                      )}
-                      {remainingUnits === 0 && phase === "scanning" && (
-                        <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 shrink-0">
-                          ✓ All scanned
+                      {/* Remaining units badge moved to toolbar — no longer shown per-pallet */}
+                      {false && (
+                        <span className="hidden">
                         </span>
                       )}
                       {/* Print buttons — only visible once order is complete */}

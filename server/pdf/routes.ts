@@ -602,11 +602,13 @@ export function registerPdfRoutes(app: Express) {
     const sessionId = Number(req.params.sessionId);
     if (isNaN(sessionId)) { res.status(400).json({ error: "Invalid sessionId" }); return; }
     const labelType = (req.query.type as string) ?? "gd"; // gd | sscc | both
+    const palletIdFilter = req.query.palletId ? Number(req.query.palletId) : null;
 
     const session = await getQcSessionById(sessionId);
     if (!session) { res.status(404).json({ error: "Session not found" }); return; }
 
-    const pallets = await getQcPallets(sessionId);
+    const allPallets = await getQcPallets(sessionId);
+    const pallets = palletIdFilter != null ? allPallets.filter((p) => p.id === palletIdFilter) : allPallets;
     const items   = await getQcScanItems(sessionId);
 
     // Build a map of sku -> { description, scannedQty } from session items

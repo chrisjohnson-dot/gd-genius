@@ -3957,10 +3957,16 @@ const qcScannerRouter = router({
                (i.upc && i.upc.toUpperCase() === input.barcode.toUpperCase())
       );
       if (!match) {
-        return { found: false, item: null, sessionComplete: false };
+        return { found: false, item: null, sessionComplete: false, overScan: false };
       }
       const amount = input.scanAsCase ? (match.caseAmount ?? 1) : 1;
-      const updated = await incrementQcScanItem(input.sessionId, match.sku, amount);
+      // Block over-scanning: do not allow scannedQty to exceed expectedQty
+      const remaining = Math.max(0, (match.expectedQty ?? 0) - (match.scannedQty ?? 0));
+      if (remaining === 0) {
+        return { found: true, item: match, sessionComplete: false, overScan: true };
+      }
+      const safeAmount = Math.min(amount, remaining);
+      const updated = await incrementQcScanItem(input.sessionId, match.sku, safeAmount);
       // Check if all items are complete
       const allItems = await getQcScanItems(input.sessionId);
       const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);

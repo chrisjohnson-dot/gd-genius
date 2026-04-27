@@ -472,6 +472,10 @@ export default function QcScanner() {
         playBeep("error");
         setLastScan({ sku: barcodeInput, found: false });
         toast.warning("SKU/UPC not found in this order", { description: "Use the Flag button to log it." });
+      } else if ((data as any).overScan) {
+        playBeep("error");
+        setLastScan({ sku: data.item?.sku ?? barcodeInput, found: false });
+        toast.error(`Over-scan blocked: ${data.item?.sku ?? barcodeInput} is already at 100%`, { description: "This SKU has reached its expected quantity." });
       } else {
         if (data.sessionComplete) {
           playBeep("complete");
@@ -1418,11 +1422,16 @@ export default function QcScanner() {
           ) : (
             /* ── Vertical stack of collapsible pallet cards ── */
             <div className="space-y-2">
-              {pallets.map((pallet) => {
+              {pallets.map((pallet, palletIdx) => {
                 const isExpanded = activePalletTab === String(pallet.id);
                 const itemCount = pallet.items?.length ?? 0;
                 const hasUpc = !!pallet.palletUpc?.trim();
                 const hasWeight = !!(pallet.weightOverrideLb ?? pallet.calculatedWeightLb);
+                const isActivePallet = palletIdx === pallets.length - 1;
+                // Remaining = total expected minus total scanned across all items
+                const totalExpected = items.reduce((s, i) => s + (i.expectedQty ?? 0), 0);
+                const totalScanned = items.reduce((s, i) => s + (i.scannedQty ?? 0), 0);
+                const remainingUnits = Math.max(0, totalExpected - totalScanned);
                 return (
                   <div key={pallet.id} className="rounded-lg border border-border overflow-hidden">
                     {/* ── Collapsed header row ── */}
@@ -1461,6 +1470,17 @@ export default function QcScanner() {
                             : <span>{pallet.calculatedWeightLb} lbs</span>}
                         </span>
                       )}
+                      {/* Remaining units badge — only on the active (last) pallet */}
+                      {isActivePallet && remainingUnits > 0 && phase === "scanning" && (
+                        <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">
+                          {remainingUnits} remaining
+                        </span>
+                      )}
+                      {isActivePallet && remainingUnits === 0 && phase === "scanning" && (
+                        <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 shrink-0">
+                          ✓ All scanned
+                        </span>
+                      )}
                       {/* Print buttons — always visible in header */}
                       {phase === "scanning" && (
                         <div className="ml-auto flex gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1470,7 +1490,7 @@ export default function QcScanner() {
                             className="h-7 text-xs"
                             onClick={async () => {
                               await ensurePalletUpcs();
-                              window.open(`/api/pdf/gd-label?sessionId=${session!.id}&palletId=${pallet.id}`, "_blank");
+                              window.open(`/api/pdf/qc-gd-labels/${session!.id}?type=gd&palletId=${pallet.id}`, "_blank");
                             }}
                           >
                             <Printer className="w-3 h-3 mr-1" /> GD
@@ -1481,7 +1501,7 @@ export default function QcScanner() {
                             className="h-7 text-xs"
                             onClick={async () => {
                               await ensurePalletUpcs();
-                              window.open(`/api/pdf/sscc-label?sessionId=${session!.id}&palletId=${pallet.id}`, "_blank");
+                              window.open(`/api/pdf/qc-gd-labels/${session!.id}?type=sscc&palletId=${pallet.id}`, "_blank");
                             }}
                           >
                             <Printer className="w-3 h-3 mr-1" /> SSCC

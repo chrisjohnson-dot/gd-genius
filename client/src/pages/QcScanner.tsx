@@ -479,9 +479,14 @@ export default function QcScanner() {
         setLastScan({ sku: barcodeInput, found: false });
         toast.warning("SKU/UPC not found in this order", { description: "Use the Flag button to log it." });
       } else if ((data as any).overScan) {
+        // Hard block — play a double-buzz error and show a persistent red banner
         playBeep("error");
+        setTimeout(() => playBeep("error"), 300);
         setLastScan({ sku: data.item?.sku ?? barcodeInput, found: false });
-        toast.error(`Over-scan blocked: ${data.item?.sku ?? barcodeInput} is already at 100%`, { description: "This SKU has reached its expected quantity." });
+        toast.error(`⛔ Over-scan blocked — ${data.item?.sku ?? barcodeInput} is already at 100%`, {
+          description: "Remove the extra unit or adjust the expected quantity.",
+          duration: 6000,
+        });
       } else {
         if (data.sessionComplete) {
           playBeep("complete");
@@ -490,10 +495,41 @@ export default function QcScanner() {
           playBeep("success");
         }
         setLastScan({ sku: data.item?.sku ?? barcodeInput, found: true });
+        const scannedSku = data.item?.sku ?? barcodeInput;
+        const scannedUpc = data.item?.upc ?? undefined;
+        const scannedAmount = scanAsCase ? (data.item?.caseAmount ?? 1) : 1;
         setItems((prev) =>
           prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
         );
         if (data.sessionComplete) setPhase("complete");
+        // Auto-assign scanned item to the active (last) pallet
+        const activePallet = pallets[pallets.length - 1];
+        if (activePallet && session) {
+          // Optimistically update pallet items in local state
+          setPallets((prev) => prev.map((p) => {
+            if (p.id !== activePallet.id) return p;
+            const existingItems = (p.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+            const existing = existingItems.find((i) => i.sku === scannedSku);
+            const newItems = existing
+              ? existingItems.map((i) => i.sku === scannedSku ? { ...i, qty: i.qty + scannedAmount } : i)
+              : [...existingItems, { sku: scannedSku, upc: scannedUpc, qty: scannedAmount }];
+            // Recalculate weight from demoUpcMap if available
+            let newWeight = p.calculatedWeightLb;
+            if (isDemoSession && demoUpcMap.length > 0) {
+              let totalLb = 0;
+              for (const pi of newItems) {
+                const demo = demoUpcMap.find((d) => d.sku === pi.sku);
+                if (demo?.weightLbPerCase && demo?.caseAmount) {
+                  totalLb += (demo.weightLbPerCase / demo.caseAmount) * pi.qty;
+                }
+              }
+              newWeight = totalLb > 0 ? String(Math.round(totalLb * 100) / 100) : p.calculatedWeightLb;
+            }
+            return { ...p, items: newItems, calculatedWeightLb: newWeight ?? p.calculatedWeightLb };
+          }));
+          // Persist to server (fire-and-forget)
+          trpcUtils.qcScanner.getSession.invalidate({ sessionId: session.id });
+        }
       }
       setBarcodeInput("");
       barcodeRef.current?.focus();
@@ -1441,8 +1477,8 @@ export default function QcScanner() {
                           ✓ All scanned
                         </span>
                       )}
-                      {/* Print buttons — always visible in header */}
-                      {phase === "scanning" && (
+                      {/* Print buttons — only visible once order is complete */}
+                      {phase === "complete" && (
                         <div className="ml-auto flex gap-1" onClick={(e) => e.stopPropagation()}>
                           <Button
                             size="sm"
@@ -1861,29 +1897,6 @@ export default function QcScanner() {
             </div>
           )}
 
-          {/* ── Persistent Add Pallet button — visible whenever a session is active ── */}
-          {session && (phase === "scanning" || phase === "complete") && (
-            <div className="mt-4">
-              <Button
-                className="w-full h-12 text-base font-semibold gap-2"
-                onClick={() => {
-                  if (!session) return;
-                  const reuseType =
-                    pallets.find((p) => p.palletType)?.palletType ??
-                    pallets[pallets.length - 1]?.palletType ??
-                    "gd_owned";
-                  addPallet.mutate({ sessionId: session.id, palletType: reuseType });
-                }}
-                disabled={addPallet.isPending}
-              >
-                {addPallet.isPending
-                  ? <RefreshCw className="w-5 h-5 animate-spin" />
-                  : <Plus className="w-5 h-5" />}
-                Add Pallet
-              </Button>
-
-            </div>
-          )}
         </div>
       </div>
 
@@ -2068,8 +2081,8 @@ export default function QcScanner() {
               </div>
             </div>
 
-            {/* Pallet Labels */}
-            {pallets.length > 0 && (
+            {/* Pallet Labels — only shown once order is complete */}
+            {pallets.length > 0 && phase === "complete" && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

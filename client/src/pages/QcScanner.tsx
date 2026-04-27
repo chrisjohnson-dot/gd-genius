@@ -672,6 +672,10 @@ export default function QcScanner() {
       setPallets((prev) => [...prev, newPallet]);
       // Auto-expand the new pallet (keyed by pallet.id) so the scan input is immediately visible
       setExpandedPallets((prev) => new Set([...prev, data.id]));
+      // Auto-select the new pallet as the active scan target
+      setActiveScanPalletId(data.id);
+      activeScanPalletIdRef.current = data.id;
+      setTimeout(() => palletInputRefs.current.get(data.id)?.focus(), 100);
       toast.success(`Pallet ${data.palletNumber} added`);
     },
   });
@@ -1632,10 +1636,12 @@ export default function QcScanner() {
                 return (
                   <div key={pallet.id} className="rounded-lg border border-border overflow-hidden">
                     {/* ── Collapsed header row ── */}
-                    <button
-                      type="button"
-                      className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left"
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left cursor-pointer"
                       onClick={() => togglePalletExpand(pallet.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') togglePalletExpand(pallet.id); }}
                     >
                       {/* Expand/collapse chevron */}
                       <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
@@ -1683,37 +1689,16 @@ export default function QcScanner() {
                           <Barcode className="w-3 h-3" /> UPC
                         </span>
                       )}
-                      {/* Remaining units badge — only on the active (last) pallet */}
-                      {isActivePallet && remainingUnits > 0 && phase === "scanning" && (
+                      {/* Remaining units badge — shown on all pallets during scanning */}
+                      {remainingUnits > 0 && phase === "scanning" && (
                         <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">
                           {remainingUnits} remaining
                         </span>
                       )}
-                      {isActivePallet && remainingUnits === 0 && phase === "scanning" && (
+                      {remainingUnits === 0 && phase === "scanning" && (
                         <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 shrink-0">
                           ✓ All scanned
                         </span>
-                      )}
-                      {/* Add More Items button — visible during scanning on non-active pallets */}
-                      {phase === "scanning" && !isActivePallet && (
-                        <div className="ml-auto flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                            onClick={() => {
-                              // Set this pallet as the active scan target
-                              setActiveScanPalletId(pallet.id);
-                              activeScanPalletIdRef.current = pallet.id;
-                              // Expand if collapsed
-                              setExpandedPallets((prev) => new Set([...prev, pallet.id]));
-                              // Focus after expand animation
-                              setTimeout(() => palletInputRefs.current.get(pallet.id)?.focus(), 80);
-                            }}
-                          >
-                            <PackagePlus className="w-3 h-3 mr-1" /> Add Items
-                          </Button>
-                        </div>
                       )}
                       {/* Print buttons — only visible once order is complete */}
                       {phase === "complete" && (
@@ -1722,7 +1707,8 @@ export default function QcScanner() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs"
-                            onClick={async () => {
+                            onClick={async (e) => {
+                              e.stopPropagation();
                               await ensurePalletUpcs();
                               window.open(`/api/pdf/qc-gd-labels/${session!.id}?type=gd&palletId=${pallet.id}`, "_blank");
                             }}
@@ -1733,7 +1719,8 @@ export default function QcScanner() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs"
-                            onClick={async () => {
+                            onClick={async (e) => {
+                              e.stopPropagation();
                               await ensurePalletUpcs();
                               window.open(`/api/pdf/qc-gd-labels/${session!.id}?type=sscc&palletId=${pallet.id}`, "_blank");
                             }}
@@ -1742,7 +1729,7 @@ export default function QcScanner() {
                           </Button>
                         </div>
                       )}
-                    </button>
+                    </div>
 
                     {/* ── Expanded body ── */}
                     {isExpanded && (
@@ -1771,7 +1758,7 @@ export default function QcScanner() {
                                     setActiveScanPalletId(pallet.id);
                                     activeScanPalletIdRef.current = pallet.id;
                                   }}
-                                  placeholder={isActivePallet ? "Scan or type barcode / SKU…" : `Scan into Pallet ${pallet.palletNumber}…`}
+                                  placeholder={`Scan into Pallet ${pallet.palletNumber}…`}
                                   className={`text-lg h-12 font-mono ${isActivePallet ? "ring-2 ring-primary" : ""}`}
                                 />
                                 <Button

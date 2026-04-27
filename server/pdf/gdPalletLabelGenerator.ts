@@ -123,7 +123,10 @@ export function generateGdPalletLabel(
   });
   doc.pipe(outputStream);
 
+  // Print 2 copies of each pallet label
   for (const pallet of pallets) {
+    doc.addPage({ size: [PW, PH], margin: 0 });
+    _drawLabel(doc, pallet);
     doc.addPage({ size: [PW, PH], margin: 0 });
     _drawLabel(doc, pallet);
   }

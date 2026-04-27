@@ -4247,6 +4247,23 @@ const qcScannerRouter = router({
       return { success: true };
     }),
 
+  // Persist pallet item assignments (called after every scan to survive page refresh)
+  updatePalletItems: protectedProcedure
+    .input(z.object({
+      palletId: z.number(),
+      items: z.array(z.object({
+        sku: z.string(),
+        upc: z.string().optional(),
+        qty: z.number().int().min(0),
+      })),
+    }))
+    .mutation(async ({ input }) => {
+      await updateQcPallet(input.palletId, {
+        items: input.items as unknown as null,
+      });
+      return { success: true };
+    }),
+
   // Create a demo QC session with realistic replicated data (no Extensiv connection needed)
   createDemoSession: protectedProcedure
     .input(z.object({

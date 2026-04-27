@@ -527,8 +527,14 @@ export default function QcScanner() {
             }
             return { ...p, items: newItems, calculatedWeightLb: newWeight ?? p.calculatedWeightLb };
           }));
-          // Persist to server (fire-and-forget)
-          trpcUtils.qcScanner.getSession.invalidate({ sessionId: session.id });
+          // Persist pallet item assignments to server so they survive page refresh
+          const updatedPallet = pallets.find((p) => p.id === activePallet.id);
+          const existingItemsForPersist = (updatedPallet?.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+          const existingForPersist = existingItemsForPersist.find((i) => i.sku === scannedSku);
+          const newItemsForPersist = existingForPersist
+            ? existingItemsForPersist.map((i) => i.sku === scannedSku ? { ...i, qty: i.qty + scannedAmount } : i)
+            : [...existingItemsForPersist, { sku: scannedSku, upc: scannedUpc, qty: scannedAmount }];
+          updatePalletItems.mutate({ palletId: activePallet.id, items: newItemsForPersist });
         }
       }
       setBarcodeInput("");
@@ -651,6 +657,8 @@ export default function QcScanner() {
     },
     onError: (e) => toast.error(e.message),
   });
+
+  const updatePalletItems = trpc.qcScanner.updatePalletItems.useMutation();
 
   const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
     onSuccess: (_, vars) => {

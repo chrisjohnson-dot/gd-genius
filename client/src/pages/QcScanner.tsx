@@ -1157,6 +1157,36 @@ export default function QcScanner() {
           >
             <Flag className="w-4 h-4 mr-1 text-amber-500" /> Flag Scan
           </Button>
+          {/* Add Pallet — always visible in header */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-primary text-primary hover:bg-primary/10 font-semibold"
+            onClick={() => {
+              if (!session) return;
+              const reuseType =
+                pallets.find((p) => p.palletType)?.palletType ??
+                pallets[pallets.length - 1]?.palletType ??
+                "gd_owned";
+              addPallet.mutate({ sessionId: session.id, palletType: reuseType });
+            }}
+            disabled={addPallet.isPending}
+            title="Add a new pallet (inherits last pallet type)"
+          >
+            {addPallet.isPending
+              ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+              : <Plus className="w-4 h-4 mr-1" />}
+            Add Pallet
+            {pallets.length > 0 && (() => {
+              const t = pallets.find((p) => p.palletType)?.palletType ?? "gd_owned";
+              const label = t === "customer_owned" ? "CUST" : t === "gd_owned" ? "GD" : "CHEP";
+              return (
+                <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none ${palletTypeBadgeClass(t)}`}>
+                  {label}
+                </span>
+              );
+            })()}
+          </Button>
           {(phase === "complete" || allComplete) ? (
             <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setCompleteDialog(true)}>
               <CheckCircle2 className="w-4 h-4 mr-1" /> Complete Order
@@ -1317,21 +1347,9 @@ export default function QcScanner() {
         </div>
       )}
 
-      {/* Main tabs: Items | Pallets */}
-      <Tabs defaultValue="items" className="flex-1">
-        <TabsList>
-          <TabsTrigger value="items">
-            <ClipboardList className="w-4 h-4 mr-1" />
-            Items ({items.length})
-          </TabsTrigger>
-          <TabsTrigger value="pallets">
-            <Package className="w-4 h-4 mr-1" />
-            Pallets ({pallets.length})
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Items tab — pack-sheet-style table */}
-        <TabsContent value="items" className="mt-3">
+      {/* Items section — always visible */}
+      <div className="flex-1">
+        <div className="mt-3">
           {/* Extensiv load failure banner */}
           {extensivLoadError && !fetchFromExtensiv.isPending && (
             <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 mb-3 text-amber-800">
@@ -1370,10 +1388,10 @@ export default function QcScanner() {
             adjustQty={adjustQty}
             isLoading={fetchFromExtensiv.isPending}
           />
-        </TabsContent>
+        </div>
 
-        {/* Pallets tab */}
-        <TabsContent value="pallets" className="mt-3">
+        {/* Pallets section — always visible below items */}
+        <div className="mt-6">
           {/* Top toolbar: auto-assign UPCs */}
           {phase === "scanning" && pallets.length > 0 && (
             <div className="flex items-center justify-between mb-3">
@@ -1738,8 +1756,8 @@ export default function QcScanner() {
             </div>
           )}
 
-          {/* ── Persistent Add Pallet button ── */}
-          {phase === "scanning" && (
+          {/* ── Persistent Add Pallet button — visible whenever a session is active ── */}
+          {session && (phase === "scanning" || phase === "complete") && (
             <div className="mt-4">
               <Button
                 className="w-full h-12 text-base font-semibold gap-2"
@@ -1777,8 +1795,8 @@ export default function QcScanner() {
               )}
             </div>
           )}
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
 
       {/* Pallet Type Selection Dialog */}
       <Dialog open={palletTypeDialog} onOpenChange={(open) => { if (!open) { setPalletTypeDialog(false); setPendingPalletType(null); } }}>

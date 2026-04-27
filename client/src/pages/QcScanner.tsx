@@ -440,6 +440,8 @@ export default function QcScanner() {
   const [activeScanPalletId, setActiveScanPalletId] = useState<number | null>(null);
   const activeScanPalletIdRef = useRef<number | null>(null);
   useEffect(() => { activeScanPalletIdRef.current = activeScanPalletId; }, [activeScanPalletId]);
+  // Per-pallet input refs — keyed by pallet ID so we can focus the right input after a scan
+  const palletInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   const trpcUtils = trpc.useUtils();
 
@@ -618,13 +620,24 @@ export default function QcScanner() {
         }
       }
       setBarcodeInput("");
-      barcodeRef.current?.focus();
+      // Refocus the input for the pallet we just scanned into
+      const focusId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
+      if (focusId !== null) {
+        palletInputRefs.current.get(focusId)?.focus();
+      } else {
+        barcodeRef.current?.focus();
+      }
     },
     onError: (e) => {
       playBeep("error");
       toast.error(e.message);
       setBarcodeInput("");
-      barcodeRef.current?.focus();
+      const focusId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
+      if (focusId !== null) {
+        palletInputRefs.current.get(focusId)?.focus();
+      } else {
+        barcodeRef.current?.focus();
+      }
     },
   });
 
@@ -867,11 +880,15 @@ export default function QcScanner() {
     }
   }, [phase]);
 
-  // Auto-focus barcode input whenever a pallet card is expanded
+  // Auto-focus the active pallet's scan input when a pallet is expanded
   useEffect(() => {
-    if (activePalletTab && phase === "scanning") {
-      setTimeout(() => barcodeRef.current?.focus(), 50);
+    if (phase !== "scanning") return;
+    // Focus the active scan pallet's input (or last pallet if none set)
+    const targetId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
+    if (targetId !== null) {
+      setTimeout(() => palletInputRefs.current.get(targetId)?.focus(), 50);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePalletTab, phase]);
 
   // ─── Start Screen ──────────────────────────────────────────────────────────
@@ -1558,21 +1575,7 @@ export default function QcScanner() {
                     : <Plus className="w-4 h-4 mr-1" />}
                   Add Pallet
                 </Button>
-                {/* Auto-Assign UPCs — generates SSCC barcodes for pallets without one */}
-                <Button
-                  size="sm"
-                  variant={unassignedCount > 0 ? "default" : "outline"}
-                  onClick={() => bulkGeneratePalletUpcs.mutate({ sessionId: session!.id })}
-                  disabled={bulkGeneratePalletUpcs.isPending || unassignedCount === 0}
-                  title={unassignedCount === 0 ? "All pallets already have UPCs" : `Auto-assign UPCs to ${unassignedCount} unassigned pallet${unassignedCount !== 1 ? "s" : ""}`}
-                >
-                  <Wand2 className="w-4 h-4 mr-1" />
-                  {bulkGeneratePalletUpcs.isPending
-                    ? "Assigning…"
-                    : unassignedCount > 0
-                      ? `Auto-Assign UPCs (${unassignedCount})`
-                      : "All UPCs Assigned"}
-                </Button>
+{/* Auto-Assign UPCs removed — label generation now available on the Complete Order screen */}
               </div>
             </div>
           )}
@@ -1587,7 +1590,9 @@ export default function QcScanner() {
                 const itemCount = pallet.items?.length ?? 0;
                 const hasUpc = !!pallet.palletUpc?.trim();
                 const hasWeight = !!(pallet.weightOverrideLb ?? pallet.calculatedWeightLb);
-                const isActivePallet = palletIdx === pallets.length - 1;
+                // isActivePallet = this pallet is the current scan target (or the last pallet if none selected)
+                const isLastPallet = palletIdx === pallets.length - 1;
+                const isActivePallet = activeScanPalletId !== null ? pallet.id === activeScanPalletId : isLastPallet;
                 // Remaining = total expected minus total scanned across all items
                 const totalExpected = items.reduce((s, i) => s + (i.expectedQty ?? 0), 0);
                 const totalScanned = items.reduce((s, i) => s + (i.scannedQty ?? 0), 0);
@@ -1719,7 +1724,11 @@ export default function QcScanner() {
                             <div className="px-4 pt-4 space-y-2">
                               <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
                                 <Input
-                                  ref={isActivePallet ? barcodeRef : undefined}
+                                  ref={(el) => {
+                                    if (el) palletInputRefs.current.set(pallet.id, el);
+                                    else palletInputRefs.current.delete(pallet.id);
+                                    if (isActivePallet && el) (barcodeRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+                                  }}
                                   value={barcodeInput}
                                   onChange={(e) => setBarcodeInput(e.target.value)}
                                   onFocus={() => {
@@ -1727,7 +1736,7 @@ export default function QcScanner() {
                                     activeScanPalletIdRef.current = pallet.id;
                                   }}
                                   placeholder={isActivePallet ? "Scan or type barcode / SKU…" : `Scan into Pallet ${pallet.palletNumber}…`}
-                                  className="text-lg h-12 font-mono"
+                                  className={`text-lg h-12 font-mono ${isActivePallet ? "ring-2 ring-primary" : ""}`}
                                 />
                                 <Button
                                   type="button"

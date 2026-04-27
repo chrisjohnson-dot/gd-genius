@@ -436,6 +436,10 @@ export default function QcScanner() {
   // Keep a ref to the latest pallets so mutation callbacks don't capture stale closures
   const palletsRef = useRef<Pallet[]>([]);
   useEffect(() => { palletsRef.current = pallets; }, [pallets]);
+  // Track which pallet the operator is currently scanning into (defaults to last pallet)
+  const [activeScanPalletId, setActiveScanPalletId] = useState<number | null>(null);
+  const activeScanPalletIdRef = useRef<number | null>(null);
+  useEffect(() => { activeScanPalletIdRef.current = activeScanPalletId; }, [activeScanPalletId]);
 
   const trpcUtils = trpc.useUtils();
 
@@ -540,8 +544,11 @@ export default function QcScanner() {
           prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
         );
         if (data.sessionComplete) setPhase("complete");
-        // Auto-assign scanned item to the active (last) pallet
-        const activePallet = palletsRef.current[palletsRef.current.length - 1];
+        // Auto-assign scanned item to the selected pallet (or last pallet if none selected)
+        const targetId = activeScanPalletIdRef.current;
+        const activePallet = targetId
+          ? (palletsRef.current.find((p) => p.id === targetId) ?? palletsRef.current[palletsRef.current.length - 1])
+          : palletsRef.current[palletsRef.current.length - 1];
         if (activePallet && session) {
           // Optimistically update pallet items in local state
           setPallets((prev) => prev.map((p) => {
@@ -1309,27 +1316,7 @@ export default function QcScanner() {
           >
             <Flag className="w-4 h-4 mr-1 text-amber-500" /> Flag Scan
           </Button>
-          {/* Add Pallet — always visible in header */}
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-primary text-primary hover:bg-primary/10 font-semibold"
-            onClick={() => {
-              if (!session) return;
-              const reuseType =
-                pallets.find((p) => p.palletType)?.palletType ??
-                pallets[pallets.length - 1]?.palletType ??
-                "gd_owned";
-              addPallet.mutate({ sessionId: session.id, palletType: reuseType });
-            }}
-            disabled={addPallet.isPending}
-            title="Add a new pallet (inherits last pallet type)"
-          >
-            {addPallet.isPending
-              ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
-              : <Plus className="w-4 h-4 mr-1" />}
-            Add Pallet
-          </Button>
+
           {(phase === "complete" || allComplete) ? (
             <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setCompleteDialog(true)}>
               <CheckCircle2 className="w-4 h-4 mr-1" /> Complete Order
@@ -1551,6 +1538,27 @@ export default function QcScanner() {
                     title="Max pallet weight before the weight badge turns red"
                   />
                 </div>
+                {/* Add Pallet — moved here from session header */}
+                <Button
+                  size="sm"
+                  className="border-primary bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                  onClick={() => {
+                    if (!session) return;
+                    const reuseType =
+                      pallets.find((p) => p.palletType)?.palletType ??
+                      pallets[pallets.length - 1]?.palletType ??
+                      "gd_owned";
+                    addPallet.mutate({ sessionId: session.id, palletType: reuseType });
+                  }}
+                  disabled={addPallet.isPending}
+                  title="Add a new pallet (inherits last pallet type)"
+                >
+                  {addPallet.isPending
+                    ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                    : <Plus className="w-4 h-4 mr-1" />}
+                  Add Pallet
+                </Button>
+                {/* Auto-Assign UPCs — generates SSCC barcodes for pallets without one */}
                 <Button
                   size="sm"
                   variant={unassignedCount > 0 ? "default" : "outline"}
@@ -1706,15 +1714,19 @@ export default function QcScanner() {
                     {isExpanded && (
                       <div className="border-t border-border">
                         <Card className="rounded-none border-0 shadow-none">
-                          {/* Barcode input — shown inside the active pallet card only */}
-                          {isActivePallet && phase === "scanning" && (
+                          {/* Barcode input — shown in every expanded pallet during scanning */}
+                          {phase === "scanning" && (
                             <div className="px-4 pt-4 space-y-2">
                               <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
                                 <Input
-                                  ref={barcodeRef}
+                                  ref={isActivePallet ? barcodeRef : undefined}
                                   value={barcodeInput}
                                   onChange={(e) => setBarcodeInput(e.target.value)}
-                                  placeholder="Scan or type barcode / SKU…"
+                                  onFocus={() => {
+                                    setActiveScanPalletId(pallet.id);
+                                    activeScanPalletIdRef.current = pallet.id;
+                                  }}
+                                  placeholder={isActivePallet ? "Scan or type barcode / SKU…" : `Scan into Pallet ${pallet.palletNumber}…`}
                                   className="text-lg h-12 font-mono"
                                 />
                                 <Button

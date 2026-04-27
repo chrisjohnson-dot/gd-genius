@@ -399,6 +399,9 @@ export default function QcScanner() {
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const txInputRef = useRef<HTMLInputElement>(null);
+  // Keep a ref to the latest pallets so mutation callbacks don't capture stale closures
+  const palletsRef = useRef<Pallet[]>([]);
+  useEffect(() => { palletsRef.current = pallets; }, [pallets]);
 
   const trpcUtils = trpc.useUtils();
 
@@ -504,7 +507,7 @@ export default function QcScanner() {
         );
         if (data.sessionComplete) setPhase("complete");
         // Auto-assign scanned item to the active (last) pallet
-        const activePallet = pallets[pallets.length - 1];
+        const activePallet = palletsRef.current[palletsRef.current.length - 1];
         if (activePallet && session) {
           // Optimistically update pallet items in local state
           setPallets((prev) => prev.map((p) => {
@@ -531,8 +534,9 @@ export default function QcScanner() {
             return { ...p, items: newItems, calculatedWeightLb: newWeight ?? p.calculatedWeightLb };
           }));
           // Persist pallet item assignments to server so they survive page refresh
-          const updatedPallet = pallets.find((p) => p.id === activePallet.id);
-          const existingItemsForPersist = (updatedPallet?.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+          // Use the functional updater result — read from palletsRef which is always current
+          const latestPallet = palletsRef.current.find((p) => p.id === activePallet.id);
+          const existingItemsForPersist = (latestPallet?.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
           const existingForPersist = existingItemsForPersist.find((i) => i.sku === scannedSku);
           const newItemsForPersist = existingForPersist
             ? existingItemsForPersist.map((i) => i.sku === scannedSku ? { ...i, qty: i.qty + scannedAmount } : i)
@@ -1580,91 +1584,7 @@ export default function QcScanner() {
                                   Scan
                                 </Button>
                               </form>
-                              {/* Demo Cheat Sheet — inside active pallet card */}
-                              {isDemoSession && demoUpcMap.length > 0 && (
-                                <div className="rounded-lg border border-dashed border-amber-400 overflow-hidden">
-                                  <button
-                                    type="button"
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
-                                    onClick={() => setCheatSheetOpen((v) => !v)}
-                                  >
-                                    <FlaskConical className="w-4 h-4 shrink-0" />
-                                    <span>Demo Cheat Sheet — click any row to scan that UPC</span>
-                                    <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${cheatSheetOpen ? "rotate-180" : ""}`} />
-                                  </button>
-                                  {cheatSheetOpen && (
-                                    <div className="bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2">
-                                      <div
-                                        className="grid text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300 mb-1"
-                                        style={{ gridTemplateColumns: "140px 1fr 130px 80px 90px 90px 110px" }}
-                                      >
-                                        <span>SKU</span><span>Description</span><span>UPC</span>
-                                        <span className="text-right">Case Qty</span>
-                                        <span className="text-right">Expected</span>
-                                        <span className="text-right">Scanned</span>
-                                        <span className="text-center">Scan</span>
-                                      </div>
-                                      <div className="space-y-0.5">
-                                        {demoUpcMap.map((entry) => {
-                                          const liveItem = items.find((i) => i.sku === entry.sku);
-                                          const scanned = liveItem?.scannedQty ?? 0;
-                                          const expected = liveItem?.expectedQty ?? 0;
-                                          const done = expected > 0 && scanned >= expected;
-                                          const over = scanned > expected;
-                                          return (
-                                            <div
-                                              key={entry.sku}
-                                              className="grid items-center rounded text-xs"
-                                              style={{
-                                                gridTemplateColumns: "140px 1fr 130px 80px 90px 90px 110px",
-                                                background: over ? "#FFF3CD" : done ? "#DCFCE7" : "transparent",
-                                                padding: "4px 6px",
-                                              }}
-                                            >
-                                              <span className="font-mono text-[#15527f] truncate">{entry.sku}</span>
-                                              <span className="text-muted-foreground truncate pr-2">{entry.description}</span>
-                                              <span className="font-mono text-[#333] dark:text-gray-300">{entry.upc}</span>
-                                              <span className="text-right font-mono text-muted-foreground">{entry.caseAmount}</span>
-                                              <span className="text-right font-mono text-muted-foreground">{expected}</span>
-                                              <span className={`text-right font-semibold font-mono ${
-                                                over ? "text-amber-600" : done ? "text-green-600" : "text-[#333] dark:text-gray-300"
-                                              }`}>{scanned}</span>
-                                              <div className="flex gap-1 justify-center">
-                                                <button
-                                                  type="button"
-                                                  disabled={done || phase !== "scanning" || scanBarcode.isPending}
-                                                  onClick={() => fireDemoScan(entry.upc)}
-                                                  className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                                >+1</button>
-                                                <button
-                                                  type="button"
-                                                  disabled={done || phase !== "scanning" || scanBarcode.isPending}
-                                                  onClick={() => {
-                                                    if (!session) return;
-                                                    const count = entry.caseAmount;
-                                                    let i = 0;
-                                                    const fireNext = () => {
-                                                      if (i >= count) return;
-                                                      i++;
-                                                      scanBarcode.mutate(
-                                                        { sessionId: session.id, barcode: entry.upc, scanAsCase: false },
-                                                        { onSettled: fireNext }
-                                                      );
-                                                    };
-                                                    fireNext();
-                                                  }}
-                                                  className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-700 hover:bg-amber-800 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                                >+{entry.caseAmount}</button>
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                      <p className="text-[10px] text-muted-foreground mt-2 px-1">+1 scans one unit &nbsp;·&nbsp; +{demoUpcMap[0]?.caseAmount ?? "N"} scans a full case &nbsp;·&nbsp; Green = complete &nbsp;·&nbsp; Amber = over-scanned</p>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                              {/* Demo Cheat Sheet removed — operators scan using the barcode input directly */}
                               {/* Last scan feedback */}
                               {lastScan && (
                                 <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${

@@ -67,8 +67,27 @@ type Session = {
 
 type Phase = "start" | "scanning" | "complete";
 
+// Preload the scan success sound so it plays with zero latency
+const _scanSuccessAudio = typeof window !== "undefined"
+  ? (() => { const a = new Audio("/manus-storage/scan_success_4fcbcd00.wav"); a.preload = "auto"; return a; })()
+  : null;
+
+// Preload the order complete jingle
+const _orderCompleteAudio = typeof window !== "undefined"
+  ? (() => { const a = new Audio("/manus-storage/order_complete_jingle_d15136e3.wav"); a.preload = "auto"; return a; })()
+  : null;
+
 function playBeep(type: "success" | "error" | "complete") {
   try {
+    if (type === "success") {
+      // Play the uploaded WAV sound
+      if (_scanSuccessAudio) {
+        _scanSuccessAudio.currentTime = 0;
+        _scanSuccessAudio.play().catch(() => { /* autoplay blocked — silently ignore */ });
+      }
+      return;
+    }
+
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
 
     /** Helper: schedule a single oscillator tone */
@@ -91,12 +110,7 @@ function playBeep(type: "success" | "error" | "complete") {
       osc.stop(ctx.currentTime + startOffset + duration);
     };
 
-    if (type === "success") {
-      // Two quick ascending sine tones — clean, pleasant
-      tone("sine", 880,  0,    0.08, 0.30);
-      tone("sine", 1320, 0.10, 0.12, 0.25);
-      setTimeout(() => ctx.close(), 500);
-    } else if (type === "error") {
+    if (type === "error") {
       // Three descending square-wave pulses — harsh, attention-grabbing
       // Used for ALL error conditions: not-on-list, over-scan, over-weight
       tone("square", 440, 0,    0.15, 0.40);
@@ -104,11 +118,12 @@ function playBeep(type: "success" | "error" | "complete") {
       tone("square", 220, 0.40, 0.22, 0.30);
       setTimeout(() => ctx.close(), 1000);
     } else {
-      // complete — three ascending tones, celebratory
-      tone("sine", 660,  0,    0.12, 0.30);
-      tone("sine", 880,  0.15, 0.12, 0.28);
-      tone("sine", 1100, 0.30, 0.20, 0.25);
-      setTimeout(() => ctx.close(), 800);
+      // complete — play the uploaded jingle WAV
+      ctx.close();
+      if (_orderCompleteAudio) {
+        _orderCompleteAudio.currentTime = 0;
+        _orderCompleteAudio.play().catch(() => { /* autoplay blocked — silently ignore */ });
+      }
     }
   } catch {
     // Audio not available — silently ignore
@@ -1315,7 +1330,10 @@ export default function QcScanner() {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 max-w-6xl mx-auto">
+    <>
+    <div className="flex flex-col h-full min-h-0">
+    {/* ── Sticky top section: header + progress + items table + pallets toolbar ── */}
+    <div className="sticky top-0 z-20 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4 max-w-6xl w-full mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
@@ -1369,7 +1387,7 @@ export default function QcScanner() {
       </div>
 
       {/* Progress bar */}
-      <div className="space-y-1">
+      <div className="space-y-1 mt-3">
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>{totalScanned} / {totalExpected} units scanned</span>
           <span>{progress}%</span>
@@ -1479,7 +1497,7 @@ export default function QcScanner() {
       )}
 
       {/* Items section — always visible */}
-      <div className="flex-1">
+      <div>
         <div className="mt-3">
           {/* Extensiv load failure banner */}
           {extensivLoadError && !fetchFromExtensiv.isPending && (
@@ -1544,8 +1562,8 @@ export default function QcScanner() {
           />
         </div>
 
-        {/* Pallets section — always visible below items */}
-        <div className="mt-6">
+        {/* Pallets toolbar — still inside sticky section */}
+        <div className="mt-4">
           {/* Top toolbar: auto-assign UPCs + weight limit */}
           {phase === "scanning" && pallets.length > 0 && ((() => {
             const _toolbarExpected = items.reduce((s, i) => s + (i.expectedQty ?? 0), 0);
@@ -1619,8 +1637,13 @@ export default function QcScanner() {
             );
           })())}
 
-          {pallets.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No pallets yet. Use the button below to add one.</div>
+        </div>{/* end pallets toolbar div */}
+      </div>{/* end sticky section */}
+
+      {/* ── Scrollable pallet cards area ── */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 max-w-6xl w-full mx-auto">
+        {pallets.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No pallets yet. Use the button above to add one.</div>
           ) : (
             /* ── Vertical stack of collapsible pallet cards ── */
             <div className="space-y-2">
@@ -2025,8 +2048,7 @@ export default function QcScanner() {
             </div>
           )}
 
-        </div>
-      </div>
+      </div>{/* end scrollable pallet cards area */}
 
       {/* Pallet Type Selection Dialog */}
       <Dialog open={palletTypeDialog} onOpenChange={(open) => { if (!open) { setPalletTypeDialog(false); setPendingPalletType(null); } }}>
@@ -2379,6 +2401,8 @@ export default function QcScanner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div>{/* end outer flex column */}
+    </div>{/* end root return div */}
+    </>
   );
 }

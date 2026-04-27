@@ -4241,6 +4241,106 @@ const qcScannerRouter = router({
       return { success: true };
     }),
 
+  // Create a demo QC session with realistic replicated data (no Extensiv connection needed)
+  createDemoSession: protectedProcedure
+    .input(z.object({
+      scenario: z.enum(["apparel", "electronics", "mixed"]).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const scenario = input.scenario ?? "mixed";
+
+      // ── Demo order catalogue ────────────────────────────────────────────────
+      type DemoItem = { sku: string; upc: string; description: string; expectedQty: number; caseAmount: number; weightLbPerCase: number };
+      const SCENARIOS: Record<string, { customerName: string; warehouseName: string; poNumber: string; destination: string; items: DemoItem[] }> = {
+        apparel: {
+          customerName: "DEMO — Lakeview Apparel Co.",
+          warehouseName: "Columbus, OH",
+          poNumber: "PO-DEMO-2026-APP",
+          destination: "Target DC #0719 — 1000 Nicollet Mall, Minneapolis, MN 55403",
+          items: [
+            { sku: "APP-TEE-SM-BLK",   upc: "012345678901", description: "Classic Tee — Small Black",   expectedQty: 24, caseAmount: 12, weightLbPerCase: 8.5 },
+            { sku: "APP-TEE-MD-BLK",   upc: "012345678902", description: "Classic Tee — Medium Black",  expectedQty: 36, caseAmount: 12, weightLbPerCase: 8.5 },
+            { sku: "APP-TEE-LG-BLK",   upc: "012345678903", description: "Classic Tee — Large Black",   expectedQty: 24, caseAmount: 12, weightLbPerCase: 8.5 },
+            { sku: "APP-HOODIE-SM-NVY",upc: "012345678904", description: "Pullover Hoodie — Small Navy", expectedQty: 12, caseAmount: 6,  weightLbPerCase: 14.0 },
+            { sku: "APP-HOODIE-MD-NVY",upc: "012345678905", description: "Pullover Hoodie — Medium Navy",expectedQty: 18, caseAmount: 6,  weightLbPerCase: 14.0 },
+            { sku: "APP-HOODIE-LG-NVY",upc: "012345678906", description: "Pullover Hoodie — Large Navy", expectedQty: 12, caseAmount: 6,  weightLbPerCase: 14.0 },
+          ],
+        },
+        electronics: {
+          customerName: "DEMO — TechBridge Distribution",
+          warehouseName: "Columbus, OH",
+          poNumber: "PO-DEMO-2026-ELEC",
+          destination: "Best Buy DC #0042 — 7601 Penn Ave S, Richfield, MN 55423",
+          items: [
+            { sku: "ELEC-HDMI-4K-6FT",  upc: "023456789001", description: "4K HDMI Cable 6ft",           expectedQty: 48, caseAmount: 24, weightLbPerCase: 6.0 },
+            { sku: "ELEC-USB-C-HUB-7P", upc: "023456789002", description: "USB-C 7-Port Hub",            expectedQty: 24, caseAmount: 12, weightLbPerCase: 9.0 },
+            { sku: "ELEC-WLESS-CHG-15W",upc: "023456789003", description: "Wireless Charger 15W Pad",    expectedQty: 36, caseAmount: 12, weightLbPerCase: 11.0 },
+            { sku: "ELEC-BT-SPKR-MINI", upc: "023456789004", description: "Bluetooth Mini Speaker",      expectedQty: 12, caseAmount: 6,  weightLbPerCase: 18.0 },
+          ],
+        },
+        mixed: {
+          customerName: "DEMO — Meridian Retail Group",
+          warehouseName: "Columbus, OH",
+          poNumber: "PO-DEMO-2026-MIX",
+          destination: "Walmart DC #6097 — 601 S Walton Blvd, Bentonville, AR 72712",
+          items: [
+            { sku: "MIX-CANDLE-VAN-12OZ", upc: "034567890101", description: "Vanilla Soy Candle 12oz",     expectedQty: 48, caseAmount: 12, weightLbPerCase: 16.0 },
+            { sku: "MIX-CANDLE-LAV-12OZ", upc: "034567890102", description: "Lavender Soy Candle 12oz",   expectedQty: 36, caseAmount: 12, weightLbPerCase: 16.0 },
+            { sku: "MIX-SOAP-SHEA-BAR",   upc: "034567890103", description: "Shea Butter Bar Soap 4pk",   expectedQty: 60, caseAmount: 24, weightLbPerCase: 12.0 },
+            { sku: "MIX-LOTION-ROSE-8OZ", upc: "034567890104", description: "Rose Body Lotion 8oz",       expectedQty: 48, caseAmount: 24, weightLbPerCase: 18.0 },
+            { sku: "MIX-DIFFUSER-EUCAL",  upc: "034567890105", description: "Eucalyptus Reed Diffuser",   expectedQty: 24, caseAmount: 12, weightLbPerCase: 14.0 },
+            { sku: "MIX-GIFT-SET-SPA",    upc: "034567890106", description: "Spa Gift Set — 3pc",         expectedQty: 12, caseAmount: 6,  weightLbPerCase: 22.0 },
+          ],
+        },
+      };
+
+      const order = SCENARIOS[scenario];
+      // Use a negative TX ID range so demo sessions never collide with real Extensiv IDs
+      const demoTxId = -(Date.now() % 1_000_000); // e.g. -847291
+
+      // Create the session
+      const sessionId = await createQcSession({
+        referenceNumber: `DEMO-${scenario.toUpperCase()}-${Math.abs(demoTxId)}`,
+        transactionId: demoTxId,
+        warehouseName: order.warehouseName,
+        customerName: order.customerName,
+        poNumber: order.poNumber,
+        destinationAddress: order.destination,
+        status: "scanning",
+        createdBy: ctx.user.name ?? "Demo",
+        foundInExtensiv: false,
+      });
+
+      // Seed expected items
+      for (const item of order.items) {
+        await upsertQcScanItem(sessionId, item.sku, item.upc, {
+          description: item.description,
+          expectedQty: item.expectedQty,
+          caseAmount: item.caseAmount,
+          scannedQty: 0,
+          scanTimestamps: [],
+        });
+      }
+
+      // Create first pallet
+      await createQcPallet({ sessionId, palletNumber: 1, items: [] });
+
+      const session = await getQcSessionById(sessionId);
+      const items = await getQcScanItems(sessionId);
+      const pallets = await getQcPallets(sessionId);
+
+      return {
+        session,
+        items,
+        pallets,
+        resumed: false,
+        isDemo: true,
+        demoScenario: scenario,
+        // Return the UPC→SKU map so the frontend can simulate barcode scanning
+        demoUpcMap: order.items.map((i) => ({ sku: i.sku, upc: i.upc, description: i.description, weightLbPerCase: i.weightLbPerCase, caseAmount: i.caseAmount })),
+      };
+    }),
+
   // Supervisor history: list all sessions (all statuses) with pallets + scan item summary
   getSessionHistory: protectedProcedure
     .input(z.object({

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
-  Barcode, Wand2, Pencil, Copy, Printer, FileText
+  Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown
 } from "lucide-react";
 
 type ScanItem = {
@@ -363,6 +363,35 @@ export default function QcScanner() {
   const [extensivLoadError, setExtensivLoadError] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
 
+  // Demo mode state
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [demoScenario, setDemoScenario] = useState<"apparel" | "electronics" | "mixed">("mixed");
+  const [demoUpcMap, setDemoUpcMap] = useState<Array<{ sku: string; upc: string; description: string; weightLbPerCase: number; caseAmount: number }>>([]);
+  const [isDemoSession, setIsDemoSession] = useState(false);
+
+  const createDemoSession = trpc.qcScanner.createDemoSession.useMutation({
+    onSuccess: (data) => {
+      const sess = data.session as Session;
+      setSession(sess);
+      setItems((data.items as ScanItem[]) ?? []);
+      setPallets((data.pallets as unknown as Pallet[]) ?? []);
+      setDemoUpcMap(data.demoUpcMap ?? []);
+      setIsDemoSession(true);
+      setPhase("scanning");
+      setDemoOpen(false);
+      toast.success(`Demo session started: ${data.demoScenario} scenario`, {
+        description: `${(data.items as ScanItem[]).length} SKUs pre-loaded. Scan the UPCs shown in the cheat sheet.`,
+        duration: 6000,
+      });
+      // Show pallet type dialog for first pallet
+      setPalletTypeForFirst(true);
+      setPendingPalletType(null);
+      setPalletTypeDialog(true);
+      setTimeout(() => barcodeRef.current?.focus(), 100);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const barcodeRef = useRef<HTMLInputElement>(null);
   const txInputRef = useRef<HTMLInputElement>(null);
 
@@ -699,14 +728,21 @@ export default function QcScanner() {
     { enabled: selectedSessionId !== null }
   );
 
-  const [customerFilter, setCustomerFilter] = useState("");
+  // Search filter (TX ID or Reference Number)
+  const [sessionSearch, setSessionSearch] = useState("");
 
   if (phase === "start") {
     const recent = recentSessionsQuery.data?.sessions ?? [];
-    const filteredRecent = customerFilter.trim()
-      ? recent.filter((s) =>
-          s.customerName?.toLowerCase().includes(customerFilter.trim().toLowerCase())
-        )
+    const filteredRecent = sessionSearch.trim()
+      ? recent.filter((s) => {
+          const q = sessionSearch.trim().toLowerCase();
+          return (
+            String(s.transactionId ?? "").includes(q) ||
+            s.referenceNumber?.toLowerCase().includes(q) ||
+            s.customerName?.toLowerCase().includes(q) ||
+            s.poNumber?.toLowerCase().includes(q)
+          );
+        })
       : recent;
     return (
       <>
@@ -718,21 +754,85 @@ export default function QcScanner() {
           <h1 className="text-3xl font-bold">QC Scanner</h1>
           <p className="text-muted-foreground mt-2">Enter a Transaction ID to start or resume a scan session</p>
         </div>
-        <form onSubmit={handleTxSubmit} className="flex gap-3 w-full max-w-md">
-          <Input
-            ref={txInputRef}
-            value={txInput}
-            onChange={(e) => setTxInput(e.target.value)}
-            placeholder="Transaction ID (numeric)"
-            type="number"
-            className="text-lg h-12"
-            autoFocus
-          />
-          <Button type="submit" size="lg" disabled={startSession.isPending}>
-            {startSession.isPending ? "Loading…" : "Start"}
-            <ChevronRight className="ml-1 w-4 h-4" />
-          </Button>
-        </form>
+
+        {/* TX form + Demo Mode side by side */}
+        <div className="w-full max-w-md space-y-3">
+          <form onSubmit={handleTxSubmit} className="flex gap-3">
+            <Input
+              ref={txInputRef}
+              value={txInput}
+              onChange={(e) => setTxInput(e.target.value)}
+              placeholder="Transaction ID (numeric)"
+              type="number"
+              className="text-lg h-12"
+              autoFocus
+            />
+            <Button type="submit" size="lg" disabled={startSession.isPending}>
+              {startSession.isPending ? "Loading…" : "Start"}
+              <ChevronRight className="ml-1 w-4 h-4" />
+            </Button>
+          </form>
+
+          {/* Demo Mode accordion */}
+          <div className="border border-dashed border-amber-400 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+              onClick={() => setDemoOpen((v) => !v)}
+            >
+              <FlaskConical className="w-4 h-4 shrink-0" />
+              <span>Demo Mode — no live order needed</span>
+              <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${demoOpen ? "rotate-180" : ""}`} />
+            </button>
+            {demoOpen && (
+              <div className="px-4 py-3 bg-amber-50/60 dark:bg-amber-950/20 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Creates a realistic demo session with pre-loaded SKUs so you can walk through the full QC workflow — scanning, pallet building, weight entry, and label printing — without a live Extensiv order.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {(["mixed", "apparel", "electronics"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setDemoScenario(s)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        demoScenario === s
+                          ? "bg-amber-500 text-white border-amber-500"
+                          : "border-amber-300 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                      }`}
+                    >
+                      {s === "mixed" ? "Mixed (Home & Beauty)" : s === "apparel" ? "Apparel" : "Electronics"}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  {demoScenario === "mixed" && (
+                    <><p className="font-medium text-amber-700 dark:text-amber-400">Meridian Retail Group → Walmart DC</p>
+                    <p>6 SKUs · 228 pcs total · Candles, soaps, lotions, diffusers, gift sets</p></>
+                  )}
+                  {demoScenario === "apparel" && (
+                    <><p className="font-medium text-amber-700 dark:text-amber-400">Lakeview Apparel Co. → Target DC</p>
+                    <p>6 SKUs · 126 pcs total · Tees &amp; hoodies in S/M/L</p></>
+                  )}
+                  {demoScenario === "electronics" && (
+                    <><p className="font-medium text-amber-700 dark:text-amber-400">TechBridge Distribution → Best Buy DC</p>
+                    <p>4 SKUs · 120 pcs total · HDMI cables, USB hubs, chargers, speakers</p></>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-600 text-white w-full"
+                  disabled={createDemoSession.isPending}
+                  onClick={() => createDemoSession.mutate({ scenario: demoScenario })}
+                >
+                  <FlaskConical className="w-4 h-4 mr-1.5" />
+                  {createDemoSession.isPending ? "Creating demo session…" : `Start Demo — ${demoScenario}`}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Recent Sessions panel */}
         <div className="w-full max-w-2xl">
@@ -744,16 +844,16 @@ export default function QcScanner() {
             <div className="relative flex-1 max-w-xs">
               <input
                 type="text"
-                value={customerFilter}
-                onChange={(e) => setCustomerFilter(e.target.value)}
-                placeholder="Filter by customer…"
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                placeholder="Search TX ID, ref #, customer…"
                 className="w-full h-8 pl-3 pr-7 text-xs rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
-              {customerFilter && (
+              {sessionSearch && (
                 <button
-                  onClick={() => setCustomerFilter("")}
+                  onClick={() => setSessionSearch("")}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear filter"
+                  aria-label="Clear search"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -774,7 +874,7 @@ export default function QcScanner() {
           ) : filteredRecent.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg">
               <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              No sessions match &ldquo;{customerFilter}&rdquo;
+              No sessions match &ldquo;{sessionSearch}&rdquo;
             </div>
           ) : (
             <div className="rounded-lg border border-border overflow-hidden">
@@ -900,7 +1000,7 @@ export default function QcScanner() {
                 </span>
               </div>
 
-              {/* Items table */}
+              {/* Items table with scan timestamps */}
               {sessionSummaryQuery.data.items.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -911,10 +1011,10 @@ export default function QcScanner() {
                   {/* Header */}
                   <div
                     className="grid text-white text-xs font-bold uppercase tracking-wide"
-                    style={{ gridTemplateColumns: "120px 1fr 110px 90px 90px", background: "#15527f", padding: "0 10px", height: 32, alignItems: "center" }}
+                    style={{ gridTemplateColumns: "120px 1fr 90px 80px 80px", background: "#15527f", padding: "0 10px", height: 32, alignItems: "center" }}
                   >
                     <span>SKU</span>
-                    <span>Description</span>
+                    <span>Description / Scan Timestamps</span>
                     <span>Lot #</span>
                     <span className="text-right">Expected</span>
                     <span className="text-right">Scanned</span>
@@ -922,23 +1022,34 @@ export default function QcScanner() {
                   {sessionSummaryQuery.data.items.map((item, idx) => {
                     const done = item.scannedQty >= item.expectedQty && item.expectedQty > 0;
                     const over = item.scannedQty > item.expectedQty;
+                    const timestamps = (item.scanTimestamps as number[] | null) ?? [];
                     return (
                       <div
                         key={item.id}
                         className="grid text-sm border-b border-[#CDD4DC] last:border-0"
                         style={{
-                          gridTemplateColumns: "120px 1fr 110px 90px 90px",
+                          gridTemplateColumns: "120px 1fr 90px 80px 80px",
                           background: over ? "#FFF8E7" : done ? "#F0FDF4" : idx % 2 === 1 ? "#EEF4FB" : "#ffffff",
-                          minHeight: 38,
                           padding: "5px 10px",
-                          alignItems: "center",
+                          alignItems: "start",
                         }}
                       >
-                        <span className="font-mono text-xs text-[#15527f] truncate">{item.sku}</span>
-                        <span className="text-xs text-[#333333] truncate pr-2">{item.description ?? "—"}</span>
-                        <span className="font-mono text-xs text-[#555]">{item.lotNumber ?? "—"}</span>
-                        <span className="text-right text-xs font-mono text-[#333333]">{item.expectedQty}</span>
-                        <span className={`text-right text-xs font-semibold font-mono ${
+                        <span className="font-mono text-xs text-[#15527f] truncate pt-1">{item.sku}</span>
+                        <div className="pr-2">
+                          <span className="text-xs text-[#333333] truncate block">{item.description ?? "—"}</span>
+                          {timestamps.length > 0 && (
+                            <div className="mt-1 space-y-0.5">
+                              {timestamps.map((ts, ti) => (
+                                <span key={ti} className="block text-[10px] text-muted-foreground font-mono">
+                                  #{ti + 1} {new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <span className="font-mono text-xs text-[#555] pt-1">{item.lotNumber ?? "—"}</span>
+                        <span className="text-right text-xs font-mono text-[#333333] pt-1">{item.expectedQty}</span>
+                        <span className={`text-right text-xs font-semibold font-mono pt-1 ${
                           over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
                         }`}>{item.scannedQty}</span>
                       </div>
@@ -947,7 +1058,7 @@ export default function QcScanner() {
                   {/* Totals footer */}
                   <div
                     className="grid text-sm font-bold"
-                    style={{ gridTemplateColumns: "120px 1fr 110px 90px 90px", background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "5px 10px", alignItems: "center" }}
+                    style={{ gridTemplateColumns: "120px 1fr 90px 80px 80px", background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "5px 10px", alignItems: "center" }}
                   >
                     <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-3">Total</span>
                     <span className="text-right text-xs font-mono text-[#333333]">
@@ -966,14 +1077,28 @@ export default function QcScanner() {
             <Button variant="outline" onClick={() => setSelectedSessionId(null)}>Close</Button>
             <Button
               variant="default"
+              disabled={startSession.isPending}
               onClick={() => {
-                if (sessionSummaryQuery.data?.session) {
-                  setTxInput(sessionSummaryQuery.data.session.transactionId ? String(sessionSummaryQuery.data.session.transactionId) : sessionSummaryQuery.data.session.referenceNumber);
-                  setSelectedSessionId(null);
+                const sess = sessionSummaryQuery.data?.session;
+                if (!sess) return;
+                setSelectedSessionId(null);
+                if (sess.transactionId) {
+                  // Real session: resume via startSession (handles scanning/complete status)
+                  startSession.mutate({ transactionId: sess.transactionId });
+                } else {
+                  // Demo or manual session: load directly from DB
+                  trpcUtils.qcScanner.getSession.fetch({ sessionId: sess.id }).then((data) => {
+                    setSession(data.session as Session);
+                    setItems((data.items as ScanItem[]) ?? []);
+                    setPallets((data.pallets as unknown as Pallet[]) ?? []);
+                    setPhase(sess.status === "complete" ? "complete" : "scanning");
+                    toast.info(`Opened session: ${sess.referenceNumber}`);
+                    setTimeout(() => barcodeRef.current?.focus(), 100);
+                  }).catch((e) => toast.error(e.message));
                 }
               }}
             >
-              Open Session
+              {startSession.isPending ? "Opening…" : "Open Session"}
             </Button>
           </DialogFooter>
         </DialogContent>

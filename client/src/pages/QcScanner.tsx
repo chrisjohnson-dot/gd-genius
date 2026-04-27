@@ -1662,161 +1662,47 @@ export default function QcScanner() {
                               )}
                             </div>
                           )}
-                          <CardHeader className="pb-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <CardTitle className="text-base">Pallet {pallet.palletNumber}</CardTitle>
-                                <Popover>
-                            <PopoverTrigger asChild>
-                              {pallet.palletType ? (
-                                <button
-                                  className={`px-2 py-0.5 rounded text-xs font-semibold cursor-pointer hover:opacity-80 transition-opacity ${palletTypeBadgeClass(pallet.palletType)}`}
-                                  title="Click to change pallet type"
-                                >
-                                  {palletTypeLabel(pallet.palletType)} ✎
-                                </button>
-                              ) : (
-                                <button className="text-xs text-amber-600 underline hover:text-amber-700">
-                                  Set type
-                                </button>
-                              )}
-                            </PopoverTrigger>
-                            <PopoverContent className="w-52 p-2" align="start">
-                              <p className="text-xs text-muted-foreground mb-2 font-medium">Change pallet type</p>
-                              <div className="flex flex-col gap-1">
-                                {PALLET_TYPES.map((pt) => (
-                                  <button
-                                    key={pt.value}
-                                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs font-medium w-full text-left hover:opacity-90 transition-opacity ${
-                                      pallet.palletType === pt.value ? pt.color + " ring-1 ring-current" : "hover:bg-muted"
-                                    }`}
-                                    onClick={() => {
-                                      if (pallet.palletType !== pt.value) {
-                                        updatePalletType.mutate({ palletId: pallet.id, palletType: pt.value });
-                                        toast.success(`Pallet ${pallet.palletNumber} → ${pt.label}`);
-                                      }
-                                    }}
-                                    disabled={updatePalletType.isPending}
-                                  >
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.color}`}>
-                                      {pt.value === "customer_owned" ? "CUST" : pt.value === "gd_owned" ? "GD" : "CHEP"}
-                                    </span>
-                                    {pt.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        {/* UPC assignment section */}
-                        <div className="flex flex-col items-end gap-1 min-w-0">
-                          {pallet.palletUpc && editingUpc !== pallet.id ? (
-                            <div className="flex items-center gap-1.5">
-                              <Barcode className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span className="font-mono text-xs text-emerald-700 font-semibold truncate max-w-[140px]">{pallet.palletUpc}</span>
-                              <button
-                                className="text-muted-foreground hover:text-foreground"
-                                title="Copy UPC"
-                                onClick={() => { navigator.clipboard.writeText(pallet.palletUpc!); toast.success("UPC copied"); }}
-                              ><Copy className="w-3 h-3" /></button>
-                              {phase === "scanning" && (
-                                <button
-                                  className="text-muted-foreground hover:text-foreground"
-                                  title="Edit UPC"
-                                  onClick={() => { setEditingUpc(pallet.id); setUpcInputs((p) => ({ ...p, [pallet.id]: pallet.palletUpc ?? "" })); }}
-                                ><Pencil className="w-3 h-3" /></button>
-                              )}
-                            </div>
-                          ) : phase === "scanning" ? (
-                            editingUpc === pallet.id ? (
-                              <div className="flex items-center gap-1">
-                                <Input
-                                  className="h-7 text-xs w-36 font-mono"
-                                  placeholder="Scan or type UPC"
-                                  value={upcInputs[pallet.id] ?? ""}
-                                  autoFocus
-                                  onChange={(e) => setUpcInputs((p) => ({ ...p, [pallet.id]: e.target.value }))}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && upcInputs[pallet.id]?.trim()) {
-                                      assignPalletUpc.mutate({ palletId: pallet.id, sessionId: session!.id, upc: upcInputs[pallet.id].trim() });
-                                    } else if (e.key === "Escape") {
-                                      setEditingUpc(null);
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  disabled={!upcInputs[pallet.id]?.trim() || assignPalletUpc.isPending}
-                                  onClick={() => assignPalletUpc.mutate({ palletId: pallet.id, sessionId: session!.id, upc: upcInputs[pallet.id].trim() })}
-                                >Save</Button>
-                                <Button size="sm" variant="ghost" className="h-7 px-1" onClick={() => setEditingUpc(null)}>
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                  onClick={() => { setEditingUpc(pallet.id); setUpcInputs((p) => ({ ...p, [pallet.id]: "" })); }}
-                                >
-                                  <Barcode className="w-3 h-3 mr-1" /> Assign UPC
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 text-xs text-muted-foreground"
-                                  title="Auto-generate a UPC"
-                                  disabled={generatePalletUpc.isPending}
-                                  onClick={() => generatePalletUpc.mutate({ palletId: pallet.id, sessionId: session!.id, palletNumber: pallet.palletNumber })}
-                                >
-                                  <Wand2 className="w-3 h-3 mr-1" /> Auto
-                                </Button>
-                              </div>
-                            )
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">No UPC assigned</span>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
                     <CardContent>
-                      {!pallet.items || pallet.items.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No items assigned to this pallet yet.</p>
-                      ) : (
-                        /* Pallet items also use pack-sheet table style */
-                        <div className="rounded-lg overflow-hidden border border-border">
-                          <div
-                            className="grid text-white text-xs font-bold uppercase tracking-wide"
-                            style={{
-                              gridTemplateColumns: "1fr 80px",
-                              background: "#15527f",
-                              padding: "0 8px",
-                              height: 30,
-                              alignItems: "center",
-                            }}
-                          >
-                            <span>SKU</span>
-                            <span className="text-right">Qty</span>
-                          </div>
-                          {pallet.items.map((item, i) => (
+                      {/* Live scanned items table — always visible, populates as items are scanned */}
+                      <div className="rounded-lg overflow-hidden border border-border mb-3">
+                        <div
+                          className="grid text-white text-xs font-bold uppercase tracking-wide"
+                          style={{ gridTemplateColumns: "1fr 80px", background: "#15527f", padding: "0 8px", height: 30, alignItems: "center" }}
+                        >
+                          <span>SKU</span>
+                          <span className="text-right">Qty</span>
+                        </div>
+                        {(!pallet.items || pallet.items.length === 0) ? (
+                          <div className="px-3 py-4 text-xs text-muted-foreground italic text-center">Scan items to populate this pallet…</div>
+                        ) : (
+                          (pallet.items as Array<{ sku: string; upc?: string; qty: number }>).map((item, i) => (
                             <div
                               key={i}
                               className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
-                              style={{
-                                gridTemplateColumns: "1fr 80px",
-                                background: i % 2 === 1 ? "#EEF4FB" : "#ffffff",
-                                padding: "6px 8px",
-                              }}
+                              style={{ gridTemplateColumns: "1fr 80px", background: i % 2 === 1 ? "#EEF4FB" : "#ffffff", padding: "6px 8px" }}
                             >
                               <span className="font-mono text-xs">{item.sku}</span>
                               <span className="text-right font-semibold text-sm">×{item.qty}</span>
                             </div>
-                          ))}
-                        </div>
-                      )}
+                          ))
+                        )}
+                        {/* Live weight footer row */}
+                        {(pallet.calculatedWeightLb || pallet.weightOverrideLb) && (
+                          <div
+                            className="grid items-center border-t-2 border-[#15527f]"
+                            style={{ gridTemplateColumns: "1fr 80px", background: "#f0f7ff", padding: "6px 8px" }}
+                          >
+                            <span className="text-xs font-bold text-[#15527f] uppercase tracking-wide">Total Weight</span>
+                            <span className="text-right font-bold text-sm text-[#15527f]">
+                              {pallet.weightOverrideLb ? (
+                                <span className="text-orange-600">{pallet.weightOverrideLb} lbs</span>
+                              ) : (
+                                `${pallet.calculatedWeightLb} lbs`
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                       {/* Height input and calculated weight row */}
                       {phase === "scanning" && (
                         <div className="mt-3 flex items-center gap-3 flex-wrap">

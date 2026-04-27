@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
-  Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale
+  Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale, PackagePlus
 } from "lucide-react";
 
 type ScanItem = {
@@ -1685,6 +1685,27 @@ export default function QcScanner() {
                         <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 shrink-0">
                           ✓ All scanned
                         </span>
+                      )}
+                      {/* Add More Items button — visible during scanning on non-active pallets */}
+                      {phase === "scanning" && !isActivePallet && (
+                        <div className="ml-auto flex gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                            onClick={() => {
+                              // Set this pallet as the active scan target
+                              setActiveScanPalletId(pallet.id);
+                              activeScanPalletIdRef.current = pallet.id;
+                              // Expand if collapsed
+                              setExpandedPallets((prev) => new Set([...prev, pallet.id]));
+                              // Focus after expand animation
+                              setTimeout(() => palletInputRefs.current.get(pallet.id)?.focus(), 80);
+                            }}
+                          >
+                            <PackagePlus className="w-3 h-3 mr-1" /> Add Items
+                          </Button>
+                        </div>
                       )}
                       {/* Print buttons — only visible once order is complete */}
                       {phase === "complete" && (

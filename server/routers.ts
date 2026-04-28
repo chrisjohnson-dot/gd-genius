@@ -4043,9 +4043,37 @@ const qcScannerRouter = router({
         packError = err instanceof Error ? err.message : String(err);
         console.error(`[QcScanner] markOrderPacked threw unexpectedly:`, err);
       }
-      return { success: true, packedInExtensiv, packError };
+       return { success: true, packedInExtensiv, packError };
     }),
-
+  // Manually retry marking an order as Packed in Extensiv for a completed session
+  retryPackInExtensiv: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.status !== "complete") throw new TRPCError({ code: "BAD_REQUEST", message: "Session is not complete" });
+      if (!session.foundInExtensiv) throw new TRPCError({ code: "BAD_REQUEST", message: "Manual label session — no Extensiv order to sync" });
+      const orderId = session.transactionId ?? null;
+      const warehouseId = session.warehouseId ?? null;
+      if (!orderId || !warehouseId) throw new TRPCError({ code: "BAD_REQUEST", message: "Session is missing transactionId or warehouseId" });
+      const config = await getExtensivConfigById(warehouseId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: `No Extensiv config found for warehouseId ${warehouseId}` });
+      const packResult = await markOrderPacked(config, orderId);
+      if (packResult.success) {
+        await updateQcSession(input.sessionId, { packedInExtensiv: true });
+        await createAuditLog({
+          action: "qc.retryPackInExtensiv",
+          entityType: "qc_scan_session",
+          entityId: String(input.sessionId),
+          userId: ctx.user.id,
+          details: JSON.stringify({ sessionId: input.sessionId, orderId, retriedBy: ctx.user.name }),
+        });
+        console.log(`[QcScanner] Retry: Order ${orderId} marked as Packed in Extensiv by ${ctx.user.name}`);
+        return { success: true };
+      } else {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: packResult.error ?? "Extensiv pack API returned an error" });
+      }
+    }),
   // Add a new pallet to the session
   addPallet: protectedProcedure
     .input(z.object({ sessionId: z.number(), palletType: z.string().optional() }))

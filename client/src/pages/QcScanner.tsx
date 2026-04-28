@@ -905,6 +905,24 @@ export default function QcScanner() {
     onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
+  const retryPackInExtensiv = trpc.qcScanner.retryPackInExtensiv.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success("Order successfully marked as Packed in Extensiv");
+      // Optimistically update the local cache so the badge flips to ✓ Packed immediately
+      trpcUtils.qcScanner.recentSessions.setData(
+        { limit: sessionLimit },
+        (old) => {
+          if (!old) return old;
+          return {
+            sessions: old.sessions.map((s) =>
+              s.id === variables.sessionId ? { ...s, packedInExtensiv: true } : s
+            ),
+          };
+        }
+      );
+    },
+    onError: (e) => toast.error(`Retry failed: ${e.message}`, { duration: Infinity }),
+  });
   const handleTxSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const txId = parseInt(txInput.trim(), 10);
@@ -1171,7 +1189,22 @@ export default function QcScanner() {
                       ) : s.packedInExtensiv ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold" title="Order marked as Packed in Extensiv">✓ Packed</span>
                       ) : (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold" title="Order not yet marked as Packed in Extensiv">Pending</span>
+                        <button
+                          className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold hover:bg-amber-200 transition-colors disabled:opacity-50"
+                          title="Click to retry marking this order as Packed in Extensiv"
+                          disabled={retryPackInExtensiv.isPending && retryPackInExtensiv.variables?.sessionId === s.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            retryPackInExtensiv.mutate({ sessionId: s.id });
+                          }}
+                        >
+                          <RefreshCw className={`w-2.5 h-2.5 ${
+                            retryPackInExtensiv.isPending && retryPackInExtensiv.variables?.sessionId === s.id
+                              ? "animate-spin"
+                              : ""
+                          }`} />
+                          Pending
+                        </button>
                       )}
                     </div>
                   </button>

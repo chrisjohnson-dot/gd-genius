@@ -2,7 +2,10 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, Package, MapPin, Truck, CheckCircle2, Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, Package, MapPin, Truck, CheckCircle2, Search, X, RefreshCw, Wand2 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const POSITIONS = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
@@ -57,6 +60,7 @@ type OutboundOrder = {
   clientName: string;
   facilityId: number;
   facilityName: string | null;
+  configId: number;
   shipToName: string | null;
   shipToCity: string | null;
   palletCount: number | null;
@@ -148,10 +152,121 @@ function DockCell({
   );
 }
 
+// ─── Find Space Dialog ───────────────────────────────────────────────────────
+function FindSpaceDialog({
+  order,
+  open,
+  onClose,
+  onAssigned,
+}: {
+  order: OutboundOrder | null;
+  open: boolean;
+  onClose: () => void;
+  onAssigned: () => void;
+}) {
+  const palletCount = order?.palletCount ?? 1;
+
+  const { data: rec, isLoading, refetch } = trpc.shippingDashboard.recommendDockLocation.useQuery(
+    {
+      configId: order?.configId,
+      palletCount: palletCount > 0 ? palletCount : 1,
+    },
+    { enabled: open && !!order }
+  );
+
+  const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
+    onSuccess: () => {
+      toast.success(`Assigned to ${rec?.label}`);
+      onAssigned();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const isOverflow = rec?.overflow === true;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wand2 className="w-5 h-5 text-primary" />
+            Find Dock Space
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          {order && (
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{order.clientName}</span>
+              {" — "}{palletCount} pallet{palletCount !== 1 ? "s" : ""}
+            </div>
+          )}
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Scanning available positions…
+            </div>
+          ) : isOverflow ? (
+            <div className="text-center space-y-3">
+              <div className="inline-flex items-center justify-center w-28 h-20 rounded-2xl bg-amber-500/10 border-2 border-amber-500">
+                <span className="text-2xl font-black text-amber-600 dark:text-amber-400">Overflow</span>
+              </div>
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                Still no lane with {palletCount} contiguous free positions.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {rec?.occupiedCount} of {rec?.totalCells} cells occupied
+              </p>
+            </div>
+          ) : rec?.recommended ? (
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center justify-center w-28 h-20 rounded-2xl bg-primary/10 border-2 border-primary">
+                <span className="text-3xl font-black text-primary">{rec.label}</span>
+              </div>
+              {rec.positions && rec.positions.length > 1 ? (
+                <p className="text-sm text-muted-foreground">
+                  Lane {rec.lane} · Positions {rec.positions.join(", ")}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Lane {rec.lane} · Position {rec.position}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {rec.occupiedCount} of {rec.totalCells} cells occupied
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+            <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          {rec?.recommended && order && (
+            <Button
+              size="sm"
+              className={isOverflow ? "bg-amber-600 hover:bg-amber-700" : "bg-primary"}
+              disabled={assignDock.isPending}
+              onClick={() => assignDock.mutate({ id: order.id, outboundLocation: rec.label ?? undefined })}
+            >
+              {assignDock.isPending
+                ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                : <CheckCircle2 className="w-3 h-3 mr-1" />}
+              Assign {rec.label}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DockManager() {
   const [selectedFacility, setSelectedFacility] = useState<string>("__all__");
   const [search, setSearch] = useState("");
+  const [findSpaceOrder, setFindSpaceOrder] = useState<OutboundOrder | null>(null);
+  const utils = trpc.useUtils();
 
   const { data: rawOrders = [], isLoading } = trpc.shippingDashboard.listOutbound.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -466,7 +581,7 @@ export default function DockManager() {
                     } ${searchActive && matchedIds.has(o.id) ? "ring-2 ring-primary" : ""}`}
                   >
                     <Package className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-foreground truncate">{o.clientName}</p>
                       <p className="text-[10px] text-muted-foreground">
                         TXN #{o.extensivOrderId}
@@ -474,6 +589,15 @@ export default function DockManager() {
                         {o.palletCount ? ` · ${o.palletCount} plt` : ""}
                       </p>
                     </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 h-6 px-2 text-[10px] border-orange-400 text-orange-700 dark:text-orange-400 hover:bg-orange-500/10"
+                      onClick={() => setFindSpaceOrder(o)}
+                    >
+                      <Wand2 className="w-3 h-3 mr-1" />
+                      Find Space
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -518,6 +642,14 @@ export default function DockManager() {
           )}
         </>
       )}
+
+      {/* Find Space Dialog */}
+      <FindSpaceDialog
+        order={findSpaceOrder}
+        open={!!findSpaceOrder}
+        onClose={() => setFindSpaceOrder(null)}
+        onAssigned={() => utils.shippingDashboard.listOutbound.invalidate()}
+      />
     </div>
   );
 }

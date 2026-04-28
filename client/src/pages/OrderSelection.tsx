@@ -87,16 +87,23 @@ function CustomerOrdersPanel({
 
   // In Extensiv's API: readOnly.orderId = Extensiv Transaction ID (used for API calls)
   //                     referenceNum = client's internal order number (display only)
-  const orderIds = useMemo(() => (orders ?? []).map((o) => o.readOnly.orderId), [orders]);
+
+  // Exclude fully-allocated orders — they should not appear in the wizard
+  const unallocatedOrders = useMemo(
+    () => (orders ?? []).filter((o) => !o.readOnly.fullyAllocated),
+    [orders]
+  );
+
+  const orderIds = useMemo(() => unallocatedOrders.map((o) => o.readOnly.orderId), [unallocatedOrders]);
   const selectedCount = orderIds.filter((id) => selectedOrders.has(id)).length;
   const allSelected = orderIds.length > 0 && selectedCount === orderIds.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
   // Filter orders by search query (transaction ID, PO reference, ship-to name)
   const filteredOrders = useMemo(() => {
-    if (!searchQuery || !orders) return orders ?? [];
+    if (!searchQuery) return unallocatedOrders;
     const q = searchQuery.toLowerCase();
-    return orders.filter((o) => {
+    return unallocatedOrders.filter((o) => {
       const shipTo = (o as unknown as { shipTo?: { companyName?: string; name?: string } }).shipTo;
       const shipToName = (shipTo?.companyName ?? shipTo?.name ?? "").toLowerCase();
       return (
@@ -106,13 +113,13 @@ function CustomerOrdersPanel({
         shipToName.includes(q)
       );
     });
-  }, [orders, searchQuery]);
+  }, [unallocatedOrders, searchQuery]);
 
   const toggleSelectAll = () => {
     if (allSelected) {
       orderIds.forEach((id) => onToggleOrder(id, "", customer.id, customer.name, false));
     } else {
-      (orders ?? []).forEach((o) =>
+      unallocatedOrders.forEach((o) =>
         onToggleOrder(o.readOnly.orderId, o.referenceNum, customer.id, customer.name, true)
       );
     }
@@ -131,7 +138,7 @@ function CustomerOrdersPanel({
                 <div>
                   <CardTitle className="text-sm font-semibold">{customer.name}</CardTitle>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {isLoading ? "Loading..." : `${orders?.length ?? 0} open orders`}
+                    {isLoading ? "Loading..." : `${unallocatedOrders.length} unallocated order${unallocatedOrders.length !== 1 ? "s" : ""}`}
                     {selectedCount > 0 && (
                       <span className="ml-2 text-primary font-medium">· {selectedCount} selected</span>
                     )}
@@ -171,7 +178,7 @@ function CustomerOrdersPanel({
                   <p className="text-xs text-muted-foreground mt-0.5">{ordersError.message}</p>
                 </div>
               </div>
-            ) : !orders || orders.length === 0 ? (
+            ) : unallocatedOrders.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <PackageSearch className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">No open, unallocated orders.</p>
@@ -188,7 +195,7 @@ function CustomerOrdersPanel({
                     className="ml-1"
                   />
                   <Label htmlFor={`selectAll-${customer.id}`} className="text-xs font-medium cursor-pointer text-muted-foreground">
-                    Select All ({orders.length} order{orders.length !== 1 ? "s" : ""}{searchQuery && filteredOrders.length !== orders.length ? ` · ${filteredOrders.length} matching` : ""})
+                    Select All ({unallocatedOrders.length} order{unallocatedOrders.length !== 1 ? "s" : ""}{searchQuery && filteredOrders.length !== unallocatedOrders.length ? ` · ${filteredOrders.length} matching` : ""})
                   </Label>
                 </div>
 

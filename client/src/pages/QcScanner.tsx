@@ -175,8 +175,8 @@ function ItemsTable({
     );
   }
 
-  // Compact QC view: SKU | Description | Req | Scanned
-  const cols = "100px 1fr 44px 56px";
+  // Compact QC view: SKU | Description | Req | − Scanned +
+  const cols = phase === "scanning" ? "100px 1fr 44px 90px" : "100px 1fr 44px 56px";
   return (
     <div className="rounded-lg overflow-hidden border border-border">
       {/* Header */}
@@ -223,15 +223,41 @@ function ItemsTable({
               {item.expectedQty}
             </div>
 
-            {/* Scanned qty */}
-            <div className="text-right">
-              <span className={`font-bold text-xs tabular-nums ${
+            {/* Scanned qty with optional +/- controls */}
+            <div className="flex items-center justify-end gap-0.5">
+              {phase === "scanning" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 shrink-0 p-0"
+                  disabled={item.scannedQty <= 0}
+                  onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: -1 }); onAdjust?.(item.sku, -1); }}
+                >
+                  <Minus className="w-2.5 h-2.5" />
+                </Button>
+              )}
+              <span className={`font-bold text-xs tabular-nums w-6 text-center ${
                 over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
               }`}>
                 {item.scannedQty}
-                {done && !over && <span className="ml-0.5 text-green-500">✓</span>}
-                {over && <span className="ml-0.5 text-amber-500">⚠</span>}
               </span>
+              {phase === "scanning" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 shrink-0 p-0"
+                  disabled={item.scannedQty >= item.expectedQty}
+                  onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: 1 }); onAdjust?.(item.sku, 1); }}
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                </Button>
+              )}
+              {phase !== "scanning" && (
+                <span className="ml-0.5 text-xs">
+                  {done && !over && <span className="text-green-500">✓</span>}
+                  {over && <span className="text-amber-500">⚠</span>}
+                </span>
+              )}
             </div>
           </div>
         );
@@ -1272,7 +1298,7 @@ export default function QcScanner() {
     <div className="flex-1 flex flex-row overflow-hidden">
 
     {/* ===== LEFT COLUMN: Order details (header, progress, items table) ===== */}
-    <div className="w-[380px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-background">
+    <div className="w-[40%] shrink-0 flex flex-col overflow-hidden border-r border-border bg-background">
     {/* Pinned header inside left column — compact */}
     <div className="shrink-0 bg-background border-b border-border pb-2 px-3 pt-2">
       {/* Title row */}

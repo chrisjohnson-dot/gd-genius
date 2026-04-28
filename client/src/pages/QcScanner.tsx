@@ -150,6 +150,7 @@ function ItemsTable({
   adjustQty,
   isLoading,
   onAdjust,
+  flashSku,
 }: {
   items: ScanItem[];
   phase: Phase;
@@ -157,6 +158,7 @@ function ItemsTable({
   adjustQty: ReturnType<typeof trpc.qcScanner.adjustQty.useMutation>;
   isLoading?: boolean;
   onAdjust?: (sku: string, delta: number) => void;
+  flashSku?: string | null;
 }) {
   if (isLoading) {
     return <ItemsTableSkeleton />;
@@ -191,15 +193,17 @@ function ItemsTable({
         const done = item.scannedQty >= item.expectedQty;
         const over = item.scannedQty > item.expectedQty;
         const isAlt = idx % 2 === 1;
+        const isFlashing = flashSku === item.sku;
         let rowBg = isAlt ? "#EEF4FB" : "#ffffff";
         if (over)  rowBg = isAlt ? "#fef3c7" : "#fffbeb";
         if (done && !over) rowBg = isAlt ? "#dcfce7" : "#f0fdf4";
+        if (isFlashing) rowBg = "#bbf7d0"; // bright green flash override
 
         return (
           <div
             key={item.sku}
             className="grid items-center border-b border-[#CDD4DC] last:border-0"
-            style={{ gridTemplateColumns: cols, background: rowBg, minHeight: 32, padding: "3px 8px" }}
+            style={{ gridTemplateColumns: cols, background: rowBg, minHeight: 32, padding: "3px 8px", transition: "background 0.15s ease" }}
           >
             {/* SKU */}
             <div className="font-mono text-[11px] text-[#333333] truncate pr-1">
@@ -338,6 +342,13 @@ export default function QcScanner() {
   // Locked pallets: set of pallet IDs that are locked (scan input hidden)
   // When a new pallet is added, all previous pallets are auto-locked
   const [lockedPallets, setLockedPallets] = useState<Set<number>>(new Set());
+  const [flashSku, setFlashSku] = useState<string | null>(null);
+  const flashSkuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerFlash = useCallback((sku: string) => {
+    if (flashSkuTimerRef.current) clearTimeout(flashSkuTimerRef.current);
+    setFlashSku(sku);
+    flashSkuTimerRef.current = setTimeout(() => setFlashSku(null), 800);
+  }, []);
   // Per-pallet input refs — keyed by pallet ID so we can focus the right input after a scan
   const palletInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
   // Per-pallet card refs — keyed by pallet ID for auto-scroll
@@ -460,6 +471,7 @@ export default function QcScanner() {
           playBeep("success");
         }
         setLastScan({ sku: data.item?.sku ?? barcodeInput, found: true });
+        if (data.item?.sku) triggerFlash(data.item.sku);
         const scannedSku = data.item?.sku ?? barcodeInput;
         const scannedUpc = data.item?.upc ?? undefined;
         const scannedAmount = scanAsCase ? (data.item?.caseAmount ?? 1) : 1;
@@ -572,6 +584,7 @@ export default function QcScanner() {
       setItems((prev) =>
         prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
       );
+      if (data.item?.sku) triggerFlash(data.item.sku);
       if (data.sessionComplete) {
         playBeep("complete");
         toast.success("Order complete!");
@@ -1464,6 +1477,7 @@ export default function QcScanner() {
                 return { ...p, items: newItems };
               }));
             }}
+            flashSku={flashSku}
           />
         </div>
       </div>{/* end left column scrollable body */}

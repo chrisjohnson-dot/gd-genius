@@ -73,64 +73,34 @@ const SOUND_URLS: Record<"success" | "error" | "complete", string> = {
   error: "/manus-storage/wrong_item_angry_c1fd9aee.wav",
   complete: "/manus-storage/order_complete_jingle_d15136e3.wav",
 };
-// Single shared AudioContext + decoded buffer cache
-let _sharedAudioCtx: AudioContext | null = null;
-const _audioBuffers: Partial<Record<"success" | "error" | "complete", AudioBuffer>> = {};
+// HTMLAudioElement-based sound playback — more reliable than AudioContext in mutation callbacks
+const _audioElements: Partial<Record<"success" | "error" | "complete", HTMLAudioElement>> = {};
 
-function getAudioCtx(): AudioContext | null {
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return null;
-    if (!_sharedAudioCtx || _sharedAudioCtx.state === "closed") {
-      _sharedAudioCtx = new AudioCtx();
-    }
-    return _sharedAudioCtx;
-  } catch { return null; }
-}
-
-// Pre-load all sounds into the buffer cache (call once after first user gesture)
-async function preloadSounds() {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  if (ctx.state === "suspended") { try { await ctx.resume(); } catch { return; } }
-  await Promise.all(
-    (Object.keys(SOUND_URLS) as Array<"success" | "error" | "complete">).map(async (type) => {
-      if (_audioBuffers[type]) return;
-      try {
-        const resp = await fetch(SOUND_URLS[type]);
-        const arrayBuf = await resp.arrayBuffer();
-        _audioBuffers[type] = await ctx.decodeAudioData(arrayBuf);
-      } catch { /* ignore */ }
-    })
-  );
+function preloadSounds() {
+  (Object.keys(SOUND_URLS) as Array<"success" | "error" | "complete">).forEach((type) => {
+    if (_audioElements[type]) return;
+    try {
+      const el = new Audio(SOUND_URLS[type]);
+      el.preload = "auto";
+      el.load();
+      _audioElements[type] = el;
+    } catch { /* ignore */ }
+  });
 }
 
 function playBeep(type: "success" | "error" | "complete") {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  const buf = _audioBuffers[type];
-  if (!buf) {
-    // Buffer not ready yet — fetch+decode then play
-    void (async () => {
-      try {
-        if (ctx.state === "suspended") await ctx.resume();
-        const resp = await fetch(SOUND_URLS[type]);
-        const arrayBuf = await resp.arrayBuffer();
-        _audioBuffers[type] = await ctx.decodeAudioData(arrayBuf);
-        const src = ctx.createBufferSource();
-        src.buffer = _audioBuffers[type]!;
-        src.connect(ctx.destination);
-        src.start(0);
-      } catch { /* ignore */ }
-    })();
-    return;
-  }
   try {
-    if (ctx.state === "suspended") { void ctx.resume().then(() => playBeep(type)); return; }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start(0);
+    // Always create a fresh Audio element so rapid scans don't block each other
+    const el = new Audio(SOUND_URLS[type]);
+    el.volume = 1.0;
+    void el.play().catch(() => {
+      // If autoplay blocked, try resuming via the preloaded element
+      const cached = _audioElements[type];
+      if (cached) {
+        cached.currentTime = 0;
+        void cached.play().catch(() => {});
+      }
+    });
   } catch { /* ignore */ }
 }
 

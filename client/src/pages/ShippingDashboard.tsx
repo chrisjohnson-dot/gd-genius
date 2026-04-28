@@ -544,6 +544,7 @@ function DemoB2BSection() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ShippingDashboard() {
+  const [, navigate] = useLocation();
   const [demoMode, setDemoMode] = useState(false);
 
   const { data: liveOrders = [], isLoading, refetch, isFetching } = trpc.shippingDashboard.listOutbound.useQuery(
@@ -642,6 +643,15 @@ export default function ShippingDashboard() {
               <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />Refresh
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/shipping/dock-manager")}
+            className="gap-1.5"
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            Dock Manager
+          </Button>
         </div>
       </div>
 

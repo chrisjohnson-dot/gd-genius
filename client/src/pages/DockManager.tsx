@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Package, MapPin, Truck, CheckCircle2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Package, MapPin, Truck, CheckCircle2, Search, X } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const POSITIONS = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
@@ -16,15 +16,12 @@ const LEVELS = ["A", "B", "C", "D"] as const;
  */
 function parseDockLocation(raw: string | null): { position: number; level: string } | null {
   if (!raw) return null;
-  // Strip common prefixes like "OB-", "OB ", "DOCK-"
   const cleaned = raw.trim().toUpperCase().replace(/^(OB[-\s]?|DOCK[-\s]?)/i, "");
-  // Try: letter then digits  e.g. "A3", "A-3"
   let m = cleaned.match(/^([A-D])[-\s]?(\d{1,2})$/);
   if (m) {
     const pos = parseInt(m[2], 10);
     if (pos >= 1 && pos <= 26) return { level: m[1], position: pos };
   }
-  // Try: digits then letter  e.g. "3A", "3-A"
   m = cleaned.match(/^(\d{1,2})[-\s]?([A-D])$/);
   if (m) {
     const pos = parseInt(m[1], 10);
@@ -35,6 +32,20 @@ function parseDockLocation(raw: string | null): { position: number; level: strin
 
 function cellKey(position: number, level: string) {
   return `${level}${position}`;
+}
+
+/** Returns true if the order matches the search query */
+function matchesSearch(o: OutboundOrder, q: string): boolean {
+  if (!q) return true;
+  const lower = q.toLowerCase();
+  return (
+    o.clientName.toLowerCase().includes(lower) ||
+    String(o.extensivOrderId).includes(lower) ||
+    (o.referenceNum ?? "").toLowerCase().includes(lower) ||
+    (o.poNum ?? "").toLowerCase().includes(lower) ||
+    (o.shipToName ?? "").toLowerCase().includes(lower) ||
+    (o.outboundLocation ?? "").toLowerCase().includes(lower)
+  );
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,14 +69,17 @@ function DockCell({
   position,
   level,
   orders,
+  highlightIds,
 }: {
   position: number;
   level: string;
   orders: OutboundOrder[];
+  highlightIds: Set<number>;
 }) {
   const isEmpty = orders.length === 0;
   const hasShipped = orders.some((o) => o.displayStatus === "shipped");
   const allShipped = orders.length > 0 && orders.every((o) => o.displayStatus === "shipped");
+  const hasHighlight = orders.some((o) => highlightIds.has(o.id));
 
   const bgClass = isEmpty
     ? "bg-muted/20 border-border/30 hover:bg-muted/40"
@@ -75,11 +89,12 @@ function DockCell({
     ? "bg-blue-500/10 border-blue-500/30"
     : "bg-amber-500/10 border-amber-500/40";
 
+  const highlightRing = hasHighlight ? "ring-2 ring-primary ring-offset-1" : "";
   const label = `${level}${position}`;
 
   return (
     <div
-      className={`relative rounded-lg border p-2 min-h-[90px] flex flex-col gap-1 transition-colors ${bgClass}`}
+      className={`relative rounded-lg border p-2 min-h-[90px] flex flex-col gap-1 transition-all ${bgClass} ${highlightRing}`}
     >
       {/* Position label */}
       <div className="flex items-center justify-between mb-0.5">
@@ -100,14 +115,25 @@ function DockCell({
           {orders.map((o) => (
             <div
               key={o.id}
-              className={`rounded px-1.5 py-1 text-[9px] leading-tight ${
+              className={`rounded px-1.5 py-1 text-[9px] leading-tight transition-all ${
+                highlightIds.size > 0 && !highlightIds.has(o.id)
+                  ? "opacity-30"
+                  : highlightIds.has(o.id)
+                  ? "ring-1 ring-primary"
+                  : ""
+              } ${
                 o.displayStatus === "shipped"
                   ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
                   : "bg-amber-500/20 text-amber-800 dark:text-amber-300"
               }`}
             >
               <div className="font-bold truncate max-w-full">{o.clientName}</div>
-              <div className="text-[8px] opacity-70 truncate">{o.referenceNum ?? o.poNum ?? `#${o.extensivOrderId}`}</div>
+              <div className="text-[8px] opacity-70 truncate">
+                {o.referenceNum ?? o.poNum ?? `#${o.extensivOrderId}`}
+              </div>
+              <div className="text-[8px] opacity-60 truncate font-mono">
+                TXN #{o.extensivOrderId}
+              </div>
               {o.displayStatus === "shipped" && (
                 <div className="flex items-center gap-0.5 mt-0.5 text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="h-2.5 w-2.5" />
@@ -125,6 +151,7 @@ function DockCell({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DockManager() {
   const [selectedFacility, setSelectedFacility] = useState<string>("__all__");
+  const [search, setSearch] = useState("");
 
   const { data: rawOrders = [], isLoading } = trpc.shippingDashboard.listOutbound.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -142,16 +169,23 @@ export default function DockManager() {
   }, [rawOrders]);
 
   // Filter by facility
-  const orders: OutboundOrder[] = useMemo(() => {
+  const facilityOrders: OutboundOrder[] = useMemo(() => {
     if (selectedFacility === "__all__") return rawOrders;
     const fid = parseInt(selectedFacility, 10);
     return rawOrders.filter((o) => o.facilityId === fid);
   }, [rawOrders, selectedFacility]);
 
-  // Build a map: cellKey → orders[]
+  // IDs of orders that match the search query (used for highlighting)
+  const matchedIds = useMemo<Set<number>>(() => {
+    const q = search.trim();
+    if (!q) return new Set();
+    return new Set(facilityOrders.filter((o) => matchesSearch(o, q)).map((o) => o.id));
+  }, [facilityOrders, search]);
+
+  // Build a map: cellKey → orders[] (all facility-filtered orders, not just matches)
   const cellMap = useMemo(() => {
     const map = new Map<string, OutboundOrder[]>();
-    for (const o of orders) {
+    for (const o of facilityOrders) {
       const parsed = parseDockLocation(o.outboundLocation);
       if (!parsed) continue;
       const key = cellKey(parsed.position, parsed.level);
@@ -159,16 +193,15 @@ export default function DockManager() {
       map.get(key)!.push(o);
     }
     return map;
-  }, [orders]);
+  }, [facilityOrders]);
 
-  // Summary stats
-  const activeOrders = orders.filter((o) => o.displayStatus === "ship_ready");
-  const shippedOrders = orders.filter((o) => o.displayStatus === "shipped");
-  const unlocatedOrders = orders.filter(
+  // Summary stats (based on all facility orders, not search-filtered)
+  const activeOrders = facilityOrders.filter((o) => o.displayStatus === "ship_ready");
+  const unlocatedOrders = facilityOrders.filter(
     (o) => o.displayStatus === "ship_ready" && !parseDockLocation(o.outboundLocation)
   );
   const occupiedCells = new Set(
-    orders
+    facilityOrders
       .filter((o) => o.displayStatus === "ship_ready")
       .map((o) => {
         const p = parseDockLocation(o.outboundLocation);
@@ -177,6 +210,9 @@ export default function DockManager() {
       .filter(Boolean)
   ).size;
   const totalCells = POSITIONS.length * LEVELS.length;
+
+  const searchActive = search.trim().length > 0;
+  const matchCount = matchedIds.size;
 
   return (
     <div className="p-6 space-y-5 page-enter">
@@ -209,6 +245,34 @@ export default function DockManager() {
             </Select>
           )}
         </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by customer, transaction #, reference / BOL…"
+            className="pl-9 pr-9"
+          />
+          {searchActive && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {searchActive && (
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
+            {matchCount === 0
+              ? "No matches"
+              : `${matchCount} order${matchCount !== 1 ? "s" : ""} highlighted`}
+          </span>
+        )}
       </div>
 
       {/* KPI Strip */}
@@ -256,6 +320,12 @@ export default function DockManager() {
           <div className="w-3 h-3 rounded bg-muted/20 border border-border/30" />
           <span>Empty</span>
         </div>
+        {searchActive && matchCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded border-2 border-primary" />
+            <span>Search match</span>
+          </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -265,12 +335,73 @@ export default function DockManager() {
         </div>
       ) : (
         <>
+          {/* Search results list (shown when searching, above the grid) */}
+          {searchActive && matchCount > 0 && (
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Search className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Search Results — {matchCount} order{matchCount !== 1 ? "s" : ""} found
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {facilityOrders.filter((o) => matchedIds.has(o.id)).map((o) => {
+                  const parsed = parseDockLocation(o.outboundLocation);
+                  const dockPos = parsed ? `${parsed.level}${parsed.position}` : null;
+                  return (
+                    <div
+                      key={o.id}
+                      className="flex items-start gap-2 rounded-lg bg-card border border-border px-3 py-2.5"
+                    >
+                      <Package className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-foreground truncate">{o.clientName}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          TXN #{o.extensivOrderId}
+                          {o.referenceNum ? ` · Ref: ${o.referenceNum}` : ""}
+                          {o.poNum ? ` · BOL: ${o.poNum}` : ""}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {dockPos ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-primary/10 text-primary rounded px-1.5 py-0.5">
+                              <MapPin className="h-2.5 w-2.5" />
+                              Dock {dockPos}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded px-1.5 py-0.5">
+                              <MapPin className="h-2.5 w-2.5" />
+                              No position
+                            </span>
+                          )}
+                          {o.palletCount ? (
+                            <span className="text-[9px] text-muted-foreground">{o.palletCount} plt</span>
+                          ) : null}
+                          <span className={`text-[9px] font-medium ${o.displayStatus === "shipped" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                            {o.displayStatus === "shipped" ? "Shipped" : "Awaiting pickup"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {searchActive && matchCount === 0 && (
+            <div className="rounded-xl border border-border/60 bg-muted/10 p-6 text-center">
+              <Search className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No orders match "<strong>{search}</strong>"</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Try searching by customer name, transaction number, reference, or BOL</p>
+            </div>
+          )}
+
           {/* Dock Grid */}
           <div className="overflow-x-auto">
             <div className="min-w-[900px]">
               {/* Column headers */}
               <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `48px repeat(26, minmax(0, 1fr))` }}>
-                <div /> {/* spacer for level label column */}
+                <div />
                 {POSITIONS.map((pos) => (
                   <div key={pos} className="text-center text-[10px] font-bold text-muted-foreground py-1">
                     {pos}
@@ -285,7 +416,6 @@ export default function DockManager() {
                   className="grid gap-1 mb-1"
                   style={{ gridTemplateColumns: `48px repeat(26, minmax(0, 1fr))` }}
                 >
-                  {/* Level label */}
                   <div className="flex items-center justify-center">
                     <span className="text-xs font-bold text-muted-foreground bg-muted/30 rounded px-2 py-0.5">
                       {level}
@@ -295,7 +425,13 @@ export default function DockManager() {
                     const key = cellKey(pos, level);
                     const cellOrders = cellMap.get(key) ?? [];
                     return (
-                      <DockCell key={key} position={pos} level={level} orders={cellOrders} />
+                      <DockCell
+                        key={key}
+                        position={pos}
+                        level={level}
+                        orders={cellOrders}
+                        highlightIds={matchedIds}
+                      />
                     );
                   })}
                 </div>
@@ -316,13 +452,16 @@ export default function DockManager() {
                 {unlocatedOrders.map((o) => (
                   <div
                     key={o.id}
-                    className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2"
+                    className={`flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 transition-all ${
+                      searchActive && !matchedIds.has(o.id) ? "opacity-30" : ""
+                    } ${searchActive && matchedIds.has(o.id) ? "ring-2 ring-primary" : ""}`}
                   >
                     <Package className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-foreground truncate">{o.clientName}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {o.referenceNum ?? o.poNum ?? `#${o.extensivOrderId}`}
+                        TXN #{o.extensivOrderId}
+                        {o.referenceNum ? ` · ${o.referenceNum}` : o.poNum ? ` · ${o.poNum}` : ""}
                         {o.palletCount ? ` · ${o.palletCount} plt` : ""}
                       </p>
                       {o.outboundLocation && (

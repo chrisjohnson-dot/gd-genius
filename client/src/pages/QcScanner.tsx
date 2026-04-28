@@ -14,7 +14,7 @@ import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
   Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale, PackagePlus,
-  Lock, LockOpen
+  Lock, LockOpen, ChevronsUpDown
 } from "lucide-react";
 
 type ScanItem = {
@@ -1611,6 +1611,28 @@ export default function QcScanner() {
                     title="Max pallet weight before the weight badge turns red"
                   />
                 </div>
+                {/* Collapse all / Expand all toggle */}
+                {pallets.length > 1 && (() => {
+                  const allExpanded = pallets.every((p) => expandedPallets.has(p.id));
+                  return (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (allExpanded) {
+                          setExpandedPallets(new Set());
+                        } else {
+                          setExpandedPallets(new Set(pallets.map((p) => p.id)));
+                        }
+                      }}
+                      title={allExpanded ? "Collapse all pallet cards" : "Expand all pallet cards"}
+                    >
+                      {allExpanded
+                        ? <><ChevronsUpDown className="w-4 h-4 mr-1" />Collapse All</>
+                        : <><ChevronsUpDown className="w-4 h-4 mr-1" />Expand All</>}
+                    </Button>
+                  );
+                })()}
                 {/* Add Pallet — moved here from session header */}
                 <Button
                   size="sm"

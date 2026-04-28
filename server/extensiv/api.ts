@@ -703,6 +703,32 @@ export async function fetchInventory(
   return [];
 }
 
+/**
+ * Fetch all inventory records tied to a specific MU (Movable Unit) label / license plate barcode.
+ * Uses the /inventory/stockdetails endpoint with an RQL filter on muLabel.
+ * Returns one record per SKU/lot on the MU.
+ */
+export async function fetchInventoryByMuLabel(
+  config: ExtensivClientConfig,
+  muLabel: string
+): Promise<ExtensivInventoryRecord[]> {
+  const client = createExtensivClient(config);
+  try {
+    const records = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+      rql: `muLabel==${encodeURIComponent(muLabel)}`,
+    });
+    if (records.length > 0) return records;
+    // Fallback: try without encoding in case the API expects raw value
+    const records2 = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+      rql: `muLabel==${muLabel}`,
+    });
+    return records2;
+  } catch (err) {
+    console.warn(`[fetchInventoryByMuLabel] Failed for muLabel=${muLabel}:`, err);
+    return [];
+  }
+}
+
 // Fetch item descriptions for a customer (paginated, max 100 per page)
 export async function fetchItemDescriptions(
   config: ExtensivClientConfig,

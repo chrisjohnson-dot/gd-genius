@@ -252,7 +252,7 @@ import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdue
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap,
-  fetchItemCaseAmountMap, fetchItemCartonWeightMap, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
+  fetchItemCaseAmountMap, fetchItemCartonWeightMap, fetchInventoryByMuLabel, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
   completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -4708,6 +4708,121 @@ const qcScannerRouter = router({
       return {
         sessions: enriched,
         total: filtered.length,
+      };
+    }),
+
+  /**
+   * Scan an MU (Movable Unit / license plate) barcode.
+   * Looks up the MU in Extensiv, imports all its inventory records as a complete pallet
+   * on the current session, updates scannedQty for each SKU, then creates the next pallet.
+   *
+   * Returns:
+   *   - palletId: the ID of the newly completed MU pallet
+   *   - palletNumber: its number
+   *   - muItems: array of { sku, qty } imported
+   *   - nextPalletId / nextPalletNumber: the new empty pallet ready for scanning
+   *   - notFound: true if the MU was not found in Extensiv
+   */
+  scanMu: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      muLabel: z.string().min(1),
+      palletId: z.number(), // the current active pallet to fill with MU contents
+      palletType: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      // 1. Get the session config
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const configs = await getExtensivConfigs();
+      let config = session.warehouseId ? await getExtensivConfigById(session.warehouseId) : null;
+      if (!config) config = configs.find((c) => c.isActive) ?? configs[0] ?? null;
+      if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found" });
+
+      // 2. Look up the MU in Extensiv
+      const muRecords = await fetchInventoryByMuLabel(config, input.muLabel);
+      if (!muRecords.length) {
+        return { notFound: true, muLabel: input.muLabel, palletId: input.palletId, palletNumber: null, muItems: [], nextPalletId: null, nextPalletNumber: null };
+      }
+
+      // 3. Aggregate qty by SKU (an MU may have multiple records for the same SKU with different lots)
+      const skuQtyMap = new Map<string, number>();
+      for (const rec of muRecords) {
+        const sku = rec.itemIdentifier?.sku;
+        if (!sku) continue;
+        skuQtyMap.set(sku, (skuQtyMap.get(sku) ?? 0) + (rec.onHand ?? rec.available ?? 0));
+      }
+      const muItems = Array.from(skuQtyMap.entries()).map(([sku, qty]) => ({ sku, qty }));
+
+      // 4. Fetch the current pallet and overwrite its items with the MU contents
+      const existingPallets = await getQcPallets(input.sessionId);
+      const activePallet = existingPallets.find((p) => p.id === input.palletId);
+      if (!activePallet) throw new TRPCError({ code: "NOT_FOUND", message: "Active pallet not found" });
+
+      // Merge MU items into the pallet (in case the pallet already has some manually scanned items)
+      const existingItems = (activePallet.items as Array<{ sku: string; qty: number }> | null) ?? [];
+      const mergedItems = [...existingItems];
+      for (const muItem of muItems) {
+        const existing = mergedItems.find((i) => i.sku === muItem.sku);
+        if (existing) {
+          existing.qty += muItem.qty;
+        } else {
+          mergedItems.push({ sku: muItem.sku, qty: muItem.qty });
+        }
+      }
+      await updateQcPallet(input.palletId, { items: mergedItems as unknown as null });
+
+      // 5. Update scannedQty on each session item for the SKUs on this MU
+      const sessionItems = await getQcScanItems(input.sessionId);
+      for (const muItem of muItems) {
+        const sessionItem = sessionItems.find((i) => i.sku === muItem.sku);
+        if (sessionItem) {
+          const newQty = Math.min((sessionItem.scannedQty ?? 0) + muItem.qty, sessionItem.expectedQty ?? Infinity);
+          await upsertQcScanItem(input.sessionId, muItem.sku, sessionItem.upc ?? null, { scannedQty: newQty });
+        }
+      }
+
+      // 6. Auto-calculate weight for the MU pallet
+      const cartonWeightBySkuFromDB = new Map<string, number>();
+      for (const si of sessionItems) {
+        if (si.cartonWeightLb != null) cartonWeightBySkuFromDB.set(si.sku, parseFloat(String(si.cartonWeightLb)));
+      }
+      let totalItemLb = 0;
+      for (const item of mergedItems) {
+        const w = cartonWeightBySkuFromDB.get(item.sku);
+        if (w) totalItemLb += w * item.qty;
+      }
+      const tareLb = activePallet.palletTareWeightLb ? parseFloat(String(activePallet.palletTareWeightLb)) : 30;
+      const calculatedWeightLb = totalItemLb > 0 ? String(Math.round((totalItemLb + tareLb) * 100) / 100) : null;
+      if (calculatedWeightLb) await updateQcPallet(input.palletId, { calculatedWeightLb });
+
+      // 7. Check if the session is now complete
+      const updatedItems = await getQcScanItems(input.sessionId);
+      const sessionComplete = updatedItems.every((i) => (i.scannedQty ?? 0) >= (i.expectedQty ?? 0));
+
+      // 8. Create the next pallet (unless session is complete)
+      let nextPalletId: number | null = null;
+      let nextPalletNumber: number | null = null;
+      if (!sessionComplete) {
+        const allPallets = await getQcPallets(input.sessionId);
+        const nextNumber = allPallets.length + 1;
+        nextPalletId = await createQcPallet({ sessionId: input.sessionId, palletNumber: nextNumber, palletType: input.palletType ?? null, items: [] });
+        nextPalletNumber = nextNumber;
+      } else {
+        // Mark session complete
+        await updateQcSession(input.sessionId, { status: "complete" } as any);
+      }
+
+      return {
+        notFound: false,
+        muLabel: input.muLabel,
+        palletId: input.palletId,
+        palletNumber: activePallet.palletNumber,
+        muItems,
+        nextPalletId,
+        nextPalletNumber,
+        sessionComplete,
+        calculatedWeightLb: calculatedWeightLb ? parseFloat(calculatedWeightLb) : null,
       };
     }),
 });

@@ -303,6 +303,7 @@ export default function QcScanner() {
   const [pallets, setPallets] = useState<Pallet[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [scanAsCase, setScanAsCase] = useState(false);
+  const [scanAsMu, setScanAsMu] = useState(false);
   const [lastScan, setLastScan] = useState<{ sku: string; found: boolean } | null>(null);
   // Admin-only manual quantity entry
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
@@ -744,6 +745,75 @@ export default function QcScanner() {
       }
     },
     onError: () => { /* silently ignore — non-critical */ },
+  });
+
+  const scanMu = trpc.qcScanner.scanMu.useMutation({
+    onSuccess: (data) => {
+      if (data.notFound) {
+        playBeep("error");
+        setLastScan({ sku: data.muLabel, found: false });
+        toast.error(`MU not found: ${data.muLabel}`, {
+          description: "This MU label was not found in Extensiv. Check the label and try again.",
+          duration: 5000,
+        });
+        setBarcodeInput("");
+        return;
+      }
+      playBeep("success");
+      // Update scanned quantities in the item list
+      setItems((prev) =>
+        prev.map((item) => {
+          const muItem = data.muItems.find((m: { sku: string; qty: number }) => m.sku === item.sku);
+          if (!muItem) return item;
+          return { ...item, scannedQty: Math.min(item.scannedQty + muItem.qty, item.expectedQty) };
+        })
+      );
+      // Update pallets: fill the current pallet with MU items
+      setPallets((prev) => {
+        const updated = prev.map((p) => {
+          if (p.id !== data.palletId) return p;
+          const merged = [...(p.items ?? [])];
+          for (const muItem of data.muItems as Array<{ sku: string; qty: number }>) {
+            const ex = merged.find((i) => i.sku === muItem.sku);
+            if (ex) ex.qty = (ex.qty ?? 0) + muItem.qty;
+            else merged.push({ sku: muItem.sku, qty: muItem.qty });
+          }
+          return { ...p, items: merged, calculatedWeightLb: data.calculatedWeightLb ? String(data.calculatedWeightLb) : p.calculatedWeightLb };
+        });
+        // Add next pallet if one was created
+        if (data.nextPalletId && !updated.find((p) => p.id === data.nextPalletId)) {
+          updated.push({ id: data.nextPalletId, palletNumber: data.nextPalletNumber!, items: [], palletType: null });
+        }
+        return updated;
+      });
+      // Expand and activate the next pallet
+      if (data.nextPalletId) {
+        setActiveScanPalletId(data.nextPalletId);
+        activeScanPalletIdRef.current = data.nextPalletId;
+        setExpandedPallets((prev) => new Set([...prev, data.nextPalletId!]));
+        setTimeout(() => {
+          const nextInput = palletInputRefs.current.get(data.nextPalletId!);
+          if (nextInput) nextInput.focus();
+        }, 150);
+      }
+      setBarcodeInput("");
+      setScanAsMu(false);
+      const skuSummary = data.muItems.map((m: { sku: string; qty: number }) => `${m.sku} ×${m.qty}`).join(", ");
+      toast.success(`MU ${data.muLabel} imported as Pallet ${data.palletNumber}`, {
+        description: skuSummary,
+        duration: 5000,
+      });
+      if (data.sessionComplete) {
+        playBeep("complete");
+        toast.success("Order complete!");
+        setPhase("complete");
+      }
+    },
+    onError: (err) => {
+      playBeep("error");
+      toast.error("MU scan failed", { description: err.message });
+      setBarcodeInput("");
+    },
   });
 
   const manualSetQty = trpc.qcScanner.manualSetQty.useMutation({
@@ -2029,7 +2099,12 @@ export default function QcScanner() {
                                 // Always route to THIS pallet's form
                                 setActiveScanPalletId(pallet.id);
                                 activeScanPalletIdRef.current = pallet.id;
-                                scanBarcode.mutate({ sessionId: session.id, barcode: barcodeInput.trim(), scanAsCase });
+                                if (scanAsMu) {
+                                  // MU mode: look up the MU in Extensiv and import as full pallet
+                                  scanMu.mutate({ sessionId: session.id, muLabel: barcodeInput.trim(), palletId: pallet.id, palletType: pallet.palletType ?? undefined });
+                                } else {
+                                  scanBarcode.mutate({ sessionId: session.id, barcode: barcodeInput.trim(), scanAsCase });
+                                }
                               }} className="flex gap-2">
                                 <Input
                                   ref={(el) => {
@@ -2044,14 +2119,25 @@ export default function QcScanner() {
                                     activeScanPalletIdRef.current = pallet.id;
                                     void preloadSounds();
                                   }}
-                                  placeholder={`Scan into Pallet ${pallet.palletNumber}…`}
-                                  className={`text-lg h-12 font-mono ${isActivePallet ? "ring-2 ring-primary" : ""}`}
+                                  placeholder={scanAsMu ? `Scan MU barcode into Pallet ${pallet.palletNumber}…` : `Scan into Pallet ${pallet.palletNumber}…`}
+                                  className={`text-lg h-12 font-mono ${isActivePallet ? "ring-2 ring-primary" : ""} ${scanAsMu ? "ring-2 ring-orange-500" : ""}`}
                                 />
+                                {/* MU (Movable Unit) toggle — scan a Louisville MU barcode to import the full pallet */}
+                                <Button
+                                  type="button"
+                                  variant={scanAsMu ? "default" : "outline"}
+                                  className={`h-12 px-4 shrink-0 ${scanAsMu ? "bg-orange-500 hover:bg-orange-600 text-white border-orange-500" : ""}`}
+                                  onClick={() => { setScanAsMu((v) => !v); if (scanAsCase) setScanAsCase(false); }}
+                                  title="Toggle MU mode: scan a Louisville MU barcode to import the entire pallet at once"
+                                >
+                                  <Package className="w-4 h-4 mr-1" />
+                                  MU
+                                </Button>
                                 <Button
                                   type="button"
                                   variant={scanAsCase ? "default" : "outline"}
                                   className="h-12 px-4 shrink-0"
-                                  onClick={() => setScanAsCase((v) => !v)}
+                                  onClick={() => { setScanAsCase((v) => !v); if (scanAsMu) setScanAsMu(false); }}
                                   title={`Toggle case scan (scan one barcode = full case quantity). Case qty: ${items.find((i) => (i.caseAmount ?? 1) > 1)?.caseAmount ?? "?"}×`}
                                 >
                                   <Layers className="w-4 h-4 mr-1" />
@@ -2060,8 +2146,8 @@ export default function QcScanner() {
                                     <span className="ml-1 text-xs opacity-75">×{items.find((i) => (i.caseAmount ?? 1) > 1)?.caseAmount}</span>
                                   )}
                                 </Button>
-                                <Button type="submit" className="h-12 px-6 shrink-0" disabled={scanBarcode.isPending}>
-                                  Scan
+                                <Button type="submit" className="h-12 px-6 shrink-0" disabled={scanBarcode.isPending || scanMu.isPending}>
+                                  {scanAsMu ? "Import" : "Scan"}
                                 </Button>
                               </form>
                               {/* Admin-only manual quantity entry button */}

@@ -21,10 +21,10 @@ function daysInOutbound(shipReadyAt: Date | string | null): number {
 }
 
 function daysBadgeClass(days: number) {
-  if (days >= 5) return "bg-red-500/15 text-red-400 border-red-500/30";
-  if (days >= 3) return "bg-orange-500/15 text-orange-400 border-orange-500/30";
-  if (days >= 1) return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
-  return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
+  if (days >= 5) return "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30";
+  if (days >= 3) return "bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30";
+  if (days >= 1) return "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/15 dark:text-yellow-400 dark:border-yellow-500/30";
+  return "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30";
 }
 
 function daysBadgeIcon(days: number) {
@@ -184,13 +184,13 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
       <button
-        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left"
+        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors text-left"
         onClick={() => setCollapsed((c) => !c)}
       >
         {collapsed
           ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
           : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
-        <span className="font-semibold text-[15px] text-white flex-1">{facilityName}</span>
+        <span className="font-semibold text-[15px] text-foreground flex-1">{facilityName}</span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1"><Ship className="h-3.5 w-3.5" />{orders.length} order{orders.length !== 1 ? "s" : ""}</span>
           <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" />{totalPallets} pallet{totalPallets !== 1 ? "s" : ""}</span>
@@ -207,7 +207,7 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-t border-white/[0.06] bg-white/[0.02]">
+              <tr className="border-t border-border bg-muted/30">
                 {["Order ID", "Client", "Ship To", "Req. Ship Date"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                 ))}
@@ -229,28 +229,28 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
               {orders.map((order, idx) => {
                 const days = daysInOutbound(order.shipReadyAt);
                 return (
-                  <tr key={order.id} className={cn("border-t border-white/[0.04] hover:bg-white/[0.025] transition-colors", idx % 2 !== 0 && "bg-white/[0.015]")}>
+                  <tr key={order.id} className={cn("border-t border-border hover:bg-muted/30 transition-colors", idx % 2 !== 0 && "bg-muted/10")}>
                     <td className="px-4 py-3">
-                      <div className="font-mono text-[13px] font-semibold text-white">{order.extensivOrderId}</div>
+                      <div className="font-mono text-[13px] font-semibold text-foreground">{order.extensivOrderId}</div>
                       {order.referenceNum && <div className="text-[11px] text-muted-foreground">Ref {order.referenceNum}</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[13px] text-[#e2e8f0] font-medium">{order.clientName}</div>
+                      <div className="text-[13px] text-foreground font-medium">{order.clientName}</div>
                       {(order.totalPieces ?? 0) > 0 && <div className="text-[11px] text-muted-foreground">{order.totalPieces!.toLocaleString()} pcs</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[13px] text-[#cbd5e1]">{order.shipToName ?? "—"}</div>
+                      <div className="text-[13px] text-foreground/80">{order.shipToName ?? "—"}</div>
                       {order.shipToCity && <div className="text-[11px] text-muted-foreground">{order.shipToCity}</div>}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-[#cbd5e1] whitespace-nowrap">{fmtDate(order.requiredShipDate)}</td>
+                    <td className="px-4 py-3 text-[13px] text-foreground/80 whitespace-nowrap">{fmtDate(order.requiredShipDate)}</td>
                     <td className="px-4 py-3">
                       {order.outboundLocation
-                        ? <span className="inline-flex items-center gap-1 text-[13px] text-[#93c5fd]"><MapPin className="h-3 w-3 shrink-0" />{order.outboundLocation}</span>
+                        ? <span className="inline-flex items-center gap-1 text-[13px] text-blue-600 dark:text-blue-400"><MapPin className="h-3 w-3 shrink-0" />{order.outboundLocation}</span>
                         : <span className="text-[12px] text-muted-foreground italic">Not set</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {(order.palletCount ?? 0) > 0
-                        ? <span className="inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-white"><Package className="h-3.5 w-3.5 text-muted-foreground" />{order.palletCount}</span>
+                        ? <span className="inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-foreground"><Package className="h-3.5 w-3.5 text-muted-foreground" />{order.palletCount}</span>
                         : <span className="text-[12px] text-muted-foreground">—</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -350,12 +350,12 @@ function B2BShipmentsSection() {
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
       <button
-        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left"
+        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors text-left"
         onClick={() => setCollapsed((c) => !c)}
       >
         {collapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
-        <Truck className="h-4 w-4 text-blue-400 shrink-0" />
-        <span className="font-semibold text-[15px] text-white flex-1">B2B Shipments — Outbound Staging</span>
+        <Truck className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+        <span className="font-semibold text-[15px] text-foreground flex-1">B2B Shipments — Outbound Staging</span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1"><Ship className="h-3.5 w-3.5" />{MOCK_B2B_SHIPMENTS.length} shipments</span>
           <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" />{MOCK_B2B_SHIPMENTS.reduce((s, o) => s + o.pallets, 0)} pallets</span>
@@ -366,7 +366,7 @@ function B2BShipmentsSection() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-t border-white/[0.06] bg-white/[0.02]">
+              <tr className="border-t border-border bg-muted/30">
                 {["Shipment ID", "Client", "Ship-To Address", "Carrier / PRO#", "Req. Ship Date"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                 ))}
@@ -383,27 +383,27 @@ function B2BShipmentsSection() {
               {MOCK_B2B_SHIPMENTS.map((s, idx) => {
                 const st = statusLabel(s.status);
                 return (
-                  <tr key={s.id} className={cn("border-t border-white/[0.04] hover:bg-white/[0.025] transition-colors", idx % 2 !== 0 && "bg-white/[0.015]")}>
+                  <tr key={s.id} className={cn("border-t border-border hover:bg-muted/30 transition-colors", idx % 2 !== 0 && "bg-muted/10")}>
                     <td className="px-4 py-3">
-                      <div className="font-mono text-[13px] font-semibold text-white">{s.id}</div>
+                      <div className="font-mono text-[13px] font-semibold text-foreground">{s.id}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[13px] text-[#e2e8f0] font-medium">{s.client}</div>
+                      <div className="text-[13px] text-foreground font-medium">{s.client}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[13px] text-[#cbd5e1]">{s.shipTo}</div>
+                      <div className="text-[13px] text-foreground/80">{s.shipTo}</div>
                       <div className="text-[11px] text-muted-foreground">{s.shipToAddress}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[13px] text-[#cbd5e1]">{s.carrier}</div>
+                      <div className="text-[13px] text-foreground/80">{s.carrier}</div>
                       <div className="font-mono text-[11px] text-muted-foreground">{s.proNum}</div>
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-[#cbd5e1] whitespace-nowrap">{fmtDate(s.requiredShipDate)}</td>
+                    <td className="px-4 py-3 text-[13px] text-foreground/80 whitespace-nowrap">{fmtDate(s.requiredShipDate)}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 text-[13px] text-[#93c5fd]"><MapPin className="h-3 w-3 shrink-0" />{s.outboundLocation}</span>
+                      <span className="inline-flex items-center gap-1 text-[13px] text-blue-600 dark:text-blue-400"><MapPin className="h-3 w-3 shrink-0" />{s.outboundLocation}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-white"><Package className="h-3.5 w-3.5 text-muted-foreground" />{s.pallets}</span>
+                      <span className="inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-foreground"><Package className="h-3.5 w-3.5 text-muted-foreground" />{s.pallets}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", st.cls)}>{st.label}</Badge>
@@ -528,7 +528,7 @@ export default function ShippingDashboard() {
           <div key={label} className={cn("rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-3", demoMode && "border-amber-500/20")}>
             <Icon className={cn("h-8 w-8 shrink-0 opacity-80", color)} />
             <div>
-              <div className="text-2xl font-bold text-white tabular-nums">{value}</div>
+              <div className="text-2xl font-bold text-foreground tabular-nums">{value}</div>
               <div className="text-[11px] text-muted-foreground font-medium">{label}</div>
             </div>
           </div>

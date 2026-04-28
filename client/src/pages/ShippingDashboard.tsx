@@ -195,7 +195,7 @@ function ShipmentDetailDrawer({
 
   return (
     <Sheet open onOpenChange={() => onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent side="right" className="!w-[min(90vw,720px)] overflow-y-auto">
         <SheetHeader className="pb-6 border-b border-border">
           <div className="flex items-start justify-between gap-3">
             <div>

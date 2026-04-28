@@ -83,19 +83,23 @@ function DockCell({
   const isEmpty = orders.length === 0;
   const hasShipped = orders.some((o) => o.displayStatus === "shipped");
   const allShipped = orders.length > 0 && orders.every((o) => o.displayStatus === "shipped");
-  const hasHighlight = orders.some((o) => highlightIds.has(o.id));
-
-  const bgClass = isEmpty
-    ? "bg-muted/20 border-border/30 hover:bg-muted/40"
+   const hasHighlight = orders.some((o) => highlightIds.has(o.id));
+  const searchActive = highlightIds.size > 0;
+  // When a search is active and this cell has a match: glow green.
+  // When a search is active and this cell has NO match: dim it.
+  const bgClass = hasHighlight
+    ? "bg-green-500/20 border-green-500/60"
+    : isEmpty
+    ? searchActive ? "bg-muted/10 border-border/20 opacity-40" : "bg-muted/20 border-border/30 hover:bg-muted/40"
+    : searchActive
+    ? "bg-muted/10 border-border/20 opacity-30"
     : allShipped
     ? "bg-emerald-500/10 border-emerald-500/30"
     : hasShipped
     ? "bg-blue-500/10 border-blue-500/30"
     : "bg-amber-500/10 border-amber-500/40";
-
-  const highlightRing = hasHighlight ? "ring-2 ring-primary ring-offset-1" : "";
+  const highlightRing = hasHighlight ? "ring-2 ring-green-500 ring-offset-1" : "";
   const label = `${level}${position}`;
-
   return (
     <div
       className={`relative rounded-lg border p-2 min-h-[90px] flex flex-col gap-1 transition-all ${bgClass} ${highlightRing}`}

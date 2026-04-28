@@ -180,15 +180,15 @@ function ShipmentDetailDrawer({
 
   return (
     <Sheet open onOpenChange={() => onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader className="pb-4 border-b border-border">
+      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+        <SheetHeader className="pb-5 border-b border-border">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <SheetTitle className="text-base font-semibold">
+              <SheetTitle className="text-xl font-bold">
                 Order {order.extensivOrderId}
               </SheetTitle>
               {order.referenceNum && (
-                <p className="text-xs text-muted-foreground mt-0.5">Ref: {order.referenceNum}</p>
+                <p className="text-sm text-muted-foreground mt-1">Ref: {order.referenceNum}</p>
               )}
             </div>
             {isShipped ? (
@@ -204,9 +204,9 @@ function ShipmentDetailDrawer({
           </div>
         </SheetHeader>
 
-        <div className="py-5 space-y-5">
+        <div className="py-6 space-y-6">
           {/* Key details grid */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
             <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Client" value={order.clientName} />
             <DetailField icon={<MapPin className="h-3.5 w-3.5" />} label="Facility" value={order.facilityName ?? "—"} />
             <DetailField icon={<Hash className="h-3.5 w-3.5" />} label="PO Number" value={order.poNum ?? "—"} />
@@ -216,18 +216,18 @@ function ShipmentDetailDrawer({
           </div>
 
           {/* Ship To */}
-          <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Ship To</p>
-            <p className="text-sm font-medium text-foreground">{order.shipToName ?? "—"}</p>
-            {order.shipToCity && <p className="text-xs text-muted-foreground mt-0.5">{order.shipToCity}</p>}
+          <div className="rounded-xl border border-border bg-muted/30 px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Ship To</p>
+            <p className="text-base font-semibold text-foreground">{order.shipToName ?? "—"}</p>
+            {order.shipToCity && <p className="text-sm text-muted-foreground mt-1">{order.shipToCity}</p>}
           </div>
 
           {/* Outbound Location */}
-          <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Outbound Location</p>
+          <div className="rounded-xl border border-border bg-muted/30 px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Outbound Location</p>
             {order.outboundLocation ? (
-              <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                <MapPin className="h-3.5 w-3.5 shrink-0" />{order.outboundLocation}
+              <p className="text-base font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                <MapPin className="h-4 w-4 shrink-0" />{order.outboundLocation}
               </p>
             ) : (
               <p className="text-sm text-muted-foreground italic">Not assigned</p>
@@ -236,14 +236,14 @@ function ShipmentDetailDrawer({
 
           {/* Shipped info */}
           {isShipped && order.shippedAt && (
-            <div className="rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-green-700 dark:text-green-400 mb-1">Shipped</p>
-              <p className="text-sm font-medium text-green-800 dark:text-green-300">{fmtDateTime(order.shippedAt)}</p>
+            <div className="rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400 mb-2">Shipped</p>
+              <p className="text-base font-semibold text-green-800 dark:text-green-300">{fmtDateTime(order.shippedAt)}</p>
             </div>
           )}
 
           {/* Timestamps */}
-          <div className="text-xs text-muted-foreground space-y-1 pt-1 border-t border-border">
+          <div className="text-sm text-muted-foreground space-y-1.5 pt-2 border-t border-border">
             <p>Ship Ready: {fmtDateTime(order.shipReadyAt)}</p>
             <p>First Seen: {fmtDateTime(order.firstSeenAt)}</p>
           </div>
@@ -251,7 +251,7 @@ function ShipmentDetailDrawer({
 
         {/* Action buttons */}
         {!isShipped && (
-          <div className="border-t border-border pt-4 space-y-2">
+          <div className="border-t border-border pt-5 space-y-3">
             <Button
               className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
               onClick={isDemo ? undefined : startCarrierPickup}
@@ -290,10 +290,10 @@ function ShipmentDetailDrawer({
 function DetailField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5 flex items-center gap-1">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1.5">
         {icon}{label}
       </p>
-      <p className="text-sm text-foreground font-medium">{value}</p>
+      <p className="text-base text-foreground font-semibold">{value}</p>
     </div>
   );
 }

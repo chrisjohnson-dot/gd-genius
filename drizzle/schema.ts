@@ -2266,3 +2266,54 @@ export const orderNotes = mysqlTable("order_notes", {
 });
 export type OrderNote = typeof orderNotes.$inferSelect;
 export type InsertOrderNote = typeof orderNotes.$inferInsert;
+
+// ─── Carrier Pickup Scanner ───────────────────────────────────────────────────
+// A pickup session is created when a carrier arrives to collect a staged order.
+export const pickupSessions = mysqlTable("pickup_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Extensiv Transaction ID (readOnly.orderId) */
+  transactionId: int("transactionId"),
+  /** Customer-facing order / reference number */
+  referenceNum: varchar("referenceNum", { length: 128 }),
+  clientName: varchar("clientName", { length: 256 }),
+  shipToName: varchar("shipToName", { length: 256 }),
+  outboundLocation: varchar("outboundLocation", { length: 64 }),
+  /** Expected pallet count from the outbound order */
+  expectedPallets: int("expectedPallets"),
+  warehouseId: int("warehouseId"),
+  warehouseName: varchar("warehouseName", { length: 128 }),
+  /** Carrier name (pre-filled from order, editable) */
+  carrierName: varchar("carrierName", { length: 256 }),
+  /** Driver name entered at arrival */
+  driverName: varchar("driverName", { length: 256 }),
+  /** Trailer / truck number */
+  trailerNumber: varchar("trailerNumber", { length: 64 }),
+  /** Seal number (optional) */
+  sealNumber: varchar("sealNumber", { length: 64 }),
+  /** PRO / BOL number (optional) */
+  proNumber: varchar("proNumber", { length: 128 }),
+  /** Status: scanning | complete */
+  status: varchar("status", { length: 32 }).notNull().default("scanning"),
+  /** Whether the order was successfully marked as Shipped in Extensiv on completion */
+  shippedInExtensiv: boolean("shippedInExtensiv").default(false),
+  /** Whether this session was created in demo mode */
+  isDemo: boolean("isDemo").notNull().default(false),
+  completedAt: timestamp("completedAt"),
+  createdBy: varchar("createdBy", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PickupSession = typeof pickupSessions.$inferSelect;
+export type InsertPickupSession = typeof pickupSessions.$inferInsert;
+
+// Each pallet label scanned during a carrier pickup session.
+export const pickupScans = mysqlTable("pickup_scans", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  /** Raw barcode / label value scanned */
+  labelValue: varchar("labelValue", { length: 256 }).notNull(),
+  scannedAt: timestamp("scannedAt").defaultNow().notNull(),
+  scannedBy: varchar("scannedBy", { length: 256 }),
+});
+export type PickupScan = typeof pickupScans.$inferSelect;
+export type InsertPickupScan = typeof pickupScans.$inferInsert;

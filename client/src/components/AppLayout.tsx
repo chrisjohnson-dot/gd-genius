@@ -105,9 +105,10 @@ const ltlItems = [
 ];
 
 const shippingItems = [
-  { href: "/shipping",         label: "Shipping Dashboard", icon: Ship },
-  { href: "/shipping/history", label: "Shipping History",   icon: ScrollText },
-  { href: "/edi-monitor",      label: "EDI 945 Monitor",    icon: Wifi },
+  { href: "/shipping",                label: "Shipping Dashboard",   icon: Ship },
+  { href: "/shipping/history",        label: "Shipping History",     icon: ScrollText },
+  { href: "/shipping/carrier-pickup", label: "Carrier Pickup",       icon: Truck },
+  { href: "/edi-monitor",             label: "EDI 945 Monitor",      icon: Wifi },
 ];
 
 const returnsItems = [

@@ -221,7 +221,7 @@ import {
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
-import { purchaseOrders, carrierRoutingTable, receivePalletSessions } from "../drizzle/schema";
+import { purchaseOrders, carrierRoutingTable, receivePalletSessions, pickupSessions, pickupScans } from "../drizzle/schema";
 import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, voidFedExLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
@@ -10088,6 +10088,219 @@ const ediEscalationsRouter = router({
     }),
 });
 
+// ─── Carrier Pickup Scanner ────────────────────────────────────────────────────
+const carrierPickupRouter = router({
+  /** Search ship_ready orders by order ID, reference number, carrier, or client name */
+  searchOrders: protectedProcedure
+    .input(z.object({ query: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const { or, like } = await import("drizzle-orm");
+      const { orderTracking } = await import("../drizzle/schema");
+      const q = `%${input.query}%`;
+      const rows = await db
+        .select()
+        .from(orderTracking)
+        .where(
+          or(
+            like(orderTracking.referenceNum, q),
+            like(orderTracking.clientName, q),
+            like(orderTracking.shipToName, q),
+            like(orderTracking.outboundLocation, q)
+          )
+        )
+        .limit(10);
+      return rows;
+    }),
+
+  /** Start a new pickup session */
+  startSession: protectedProcedure
+    .input(z.object({
+      transactionId: z.number().optional(),
+      referenceNum: z.string().optional(),
+      clientName: z.string().optional(),
+      shipToName: z.string().optional(),
+      outboundLocation: z.string().optional(),
+      expectedPallets: z.number().optional(),
+      warehouseId: z.number().optional(),
+      warehouseName: z.string().optional(),
+      carrierName: z.string().optional(),
+      driverName: z.string(),
+      trailerNumber: z.string(),
+      sealNumber: z.string().optional(),
+      proNumber: z.string().optional(),
+      isDemo: z.boolean().default(false),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [result] = await db.insert(pickupSessions).values({
+        transactionId: input.transactionId,
+        referenceNum: input.referenceNum,
+        clientName: input.clientName,
+        shipToName: input.shipToName,
+        outboundLocation: input.outboundLocation,
+        expectedPallets: input.expectedPallets,
+        warehouseId: input.warehouseId,
+        warehouseName: input.warehouseName,
+        carrierName: input.carrierName,
+        driverName: input.driverName,
+        trailerNumber: input.trailerNumber,
+        sealNumber: input.sealNumber ?? null,
+        proNumber: input.proNumber ?? null,
+        status: "scanning",
+        isDemo: input.isDemo,
+        createdBy: ctx.user?.name ?? "unknown",
+      });
+      const sessionId = (result as unknown as { insertId: number }).insertId;
+      return { sessionId };
+    }),
+
+  /** Scan a pallet label during a pickup session */
+  scanPallet: protectedProcedure
+    .input(z.object({ sessionId: z.number(), labelValue: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      const existing = await db
+        .select()
+        .from(pickupScans)
+        .where(eq(pickupScans.sessionId, input.sessionId))
+        .then((rows: Array<{ labelValue: string }>) => rows.find(r => r.labelValue === input.labelValue));
+      if (existing) {
+        return { success: false, duplicate: true, message: `Label ${input.labelValue} already scanned.` };
+      }
+      await db.insert(pickupScans).values({
+        sessionId: input.sessionId,
+        labelValue: input.labelValue,
+        scannedBy: ctx.user?.name ?? "unknown",
+      });
+      const allScans = await db.select().from(pickupScans).where(eq(pickupScans.sessionId, input.sessionId));
+      return { success: true, duplicate: false, totalScanned: allScans.length };
+    }),
+
+  /** Get current session state */
+  getSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      const [session] = await db.select().from(pickupSessions).where(eq(pickupSessions.id, input.sessionId));
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const scans = await db.select().from(pickupScans).where(eq(pickupScans.sessionId, input.sessionId));
+      return { session, scans };
+    }),
+
+  /** Complete a pickup session and mark order as Shipped in Extensiv */
+  completeSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      const [session] = await db.select().from(pickupSessions).where(eq(pickupSessions.id, input.sessionId));
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.status === "complete") return { success: true, shippedInExtensiv: session.shippedInExtensiv ?? false };
+
+      await db.update(pickupSessions)
+        .set({ status: "complete", completedAt: new Date() })
+        .where(eq(pickupSessions.id, input.sessionId));
+
+      // Audit log
+      const { auditLogs } = await import("../drizzle/schema");
+      await db.insert(auditLogs).values({
+        userId: null,
+        action: "carrierPickup.completeSession",
+        entityType: "pickup_session",
+        entityId: String(input.sessionId),
+        details: {
+          operator: ctx.user?.name ?? "unknown",
+          referenceNum: session.referenceNum,
+          driverName: session.driverName,
+          trailerNumber: session.trailerNumber,
+          isDemo: session.isDemo,
+        },
+      });
+
+      if (session.isDemo || !session.transactionId) {
+        return { success: true, shippedInExtensiv: false, skippedExtensiv: true };
+      }
+
+      let shippedInExtensiv = false;
+      try {
+        const configs = await getExtensivConfigs();
+        const config = session.warehouseId
+          ? configs.find(c => c.id === session.warehouseId) ?? configs[0]
+          : configs[0];
+        if (config) {
+          const proNum = session.proNumber ?? session.trailerNumber ?? "PICKUP";
+          const result = await markOrderShipped(config, {
+            orderId: session.transactionId,
+            trackingNumber: proNum,
+            carrierName: session.carrierName ?? undefined,
+          });
+          shippedInExtensiv = result.success;
+          if (result.success) {
+            await db.update(pickupSessions)
+              .set({ shippedInExtensiv: true })
+              .where(eq(pickupSessions.id, input.sessionId));
+          } else {
+            console.warn(`[carrierPickup] markOrderShipped failed for session ${input.sessionId}:`, (result as { error?: string }).error);
+          }
+        }
+      } catch (err) {
+        console.warn(`[carrierPickup] Extensiv ship call threw for session ${input.sessionId}:`, err);
+      }
+
+      return { success: true, shippedInExtensiv };
+    }),
+
+  /** List recent pickup sessions */
+  listHistory: protectedProcedure
+    .input(z.object({ limit: z.number().default(50) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const { desc } = await import("drizzle-orm");
+      return db.select().from(pickupSessions).orderBy(desc(pickupSessions.createdAt)).limit(input.limit);
+    }),
+
+  /** Retry marking a completed session as Shipped in Extensiv */
+  retryShipInExtensiv: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      const [session] = await db.select().from(pickupSessions).where(eq(pickupSessions.id, input.sessionId));
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.isDemo || !session.transactionId) return { success: false, reason: "demo or no transactionId" };
+      try {
+        const configs = await getExtensivConfigs();
+        const config = session.warehouseId
+          ? configs.find(c => c.id === session.warehouseId) ?? configs[0]
+          : configs[0];
+        if (!config) return { success: false, reason: "no Extensiv config found" };
+        const proNum = session.proNumber ?? session.trailerNumber ?? "PICKUP";
+        const result = await markOrderShipped(config, {
+          orderId: session.transactionId,
+          trackingNumber: proNum,
+          carrierName: session.carrierName ?? undefined,
+        });
+        if (result.success) {
+          await db.update(pickupSessions).set({ shippedInExtensiv: true }).where(eq(pickupSessions.id, input.sessionId));
+        }
+        return result;
+      } catch (err: unknown) {
+        return { success: false, reason: String(err) };
+      }
+    }),
+});
+// ──────────────────────────────────────────────────────────────────────────────
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -10115,5 +10328,6 @@ export const appRouterV4 = router({
   ediMonitor: ediMonitorRouter,
   ediRetailers: ediRetailersRouter,
   ediEscalations: ediEscalationsRouter,
+  carrierPickup: carrierPickupRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

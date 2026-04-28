@@ -464,15 +464,15 @@ export default function ShippingDashboard() {
     <div className="p-7 page-enter">
       {/* Demo Mode Banner */}
       {demoMode && (
-        <div className="mb-5 flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          <FlaskConical className="h-4 w-4 shrink-0 text-amber-400" />
+        <div className="mb-5 flex items-center gap-3 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+          <FlaskConical className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <span className="flex-1">
             <strong>Demo Mode is active.</strong> All data shown is synthetic and does not reflect live warehouse operations.
           </span>
           <Button
             size="sm"
             variant="outline"
-            className="border-amber-500/40 text-amber-300 hover:bg-amber-500/15 hover:text-amber-200 h-7 text-xs"
+            className="border-amber-500 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/15 h-7 text-xs"
             onClick={() => setDemoMode(false)}
           >
             Exit Demo
@@ -487,7 +487,7 @@ export default function ShippingDashboard() {
           <h1 className="page-title flex items-center gap-2">
             Shipping Dashboard
             {demoMode && (
-              <Badge variant="outline" className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[11px] px-2 py-0.5 font-semibold">
+              <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-400 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30 text-[11px] px-2 py-0.5 font-semibold">
                 <FlaskConical className="h-3 w-3 mr-1" />Demo
               </Badge>
             )}
@@ -504,7 +504,7 @@ export default function ShippingDashboard() {
               variant="outline"
               size="sm"
               onClick={() => setDemoMode(true)}
-              className="gap-1.5 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+              className="gap-1.5 border-amber-500 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10"
             >
               <FlaskConical className="h-3.5 w-3.5" />Demo Mode
             </Button>
@@ -520,10 +520,10 @@ export default function ShippingDashboard() {
       {/* KPI tiles */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {([
-          { label: "Orders Ready",      value: totalOrders,    Icon: Ship,          color: "text-blue-400" },
-          { label: "Total Pallets",     value: totalPallets,   Icon: Package,       color: "text-purple-400" },
-          { label: "Aging (3+ days)",   value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-orange-400" : "text-emerald-400" },
-          { label: "Critical (5+ days)",value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-400"    : "text-emerald-400" },
+          { label: "Orders Ready",      value: totalOrders,    Icon: Ship,          color: "text-blue-600 dark:text-blue-400" },
+          { label: "Total Pallets",     value: totalPallets,   Icon: Package,       color: "text-purple-600 dark:text-purple-400" },
+          { label: "Aging (3+ days)",   value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-orange-600 dark:text-orange-400" : "text-emerald-600 dark:text-emerald-400" },
+          { label: "Critical (5+ days)",value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-600 dark:text-red-400"    : "text-emerald-600 dark:text-emerald-400" },
         ] as const).map(({ label, value, Icon, color }) => (
           <div key={label} className={cn("rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-3", demoMode && "border-amber-500/20")}>
             <Icon className={cn("h-8 w-8 shrink-0 opacity-80", color)} />
@@ -537,14 +537,14 @@ export default function ShippingDashboard() {
 
       {/* No-location warning */}
       {noLocation > 0 && !demoMode && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-300">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 dark:border-yellow-500/30 px-4 py-2.5 text-sm text-yellow-800 dark:text-yellow-300">
           <MapPin className="h-4 w-4 shrink-0" />
           <span><strong>{noLocation}</strong> order{noLocation !== 1 ? "s have" : " has"} no outbound location set. Click the edit icon to assign one.</span>
         </div>
       )}
       {/* Demo: show "1 order has no location" as a realistic example */}
       {demoMode && noLocation > 0 && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-300">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 dark:border-yellow-500/30 px-4 py-2.5 text-sm text-yellow-800 dark:text-yellow-300">
           <MapPin className="h-4 w-4 shrink-0" />
           <span><strong>{noLocation}</strong> order{noLocation !== 1 ? "s have" : " has"} no outbound location set. <span className="opacity-60">(Demo example)</span></span>
         </div>

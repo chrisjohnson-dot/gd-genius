@@ -1,0 +1,664 @@
+import { useState, useRef, useEffect, useCallback } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Search, Truck, MapPin, Package, CheckCircle2, AlertTriangle,
+  RefreshCw, ClipboardList, ArrowLeft, Zap, XCircle, Volume2, VolumeX,
+} from "lucide-react";
+
+// ─── Demo data ────────────────────────────────────────────────────────────────
+const DEMO_ORDER = {
+  id: 0,
+  extensivOrderId: 9999001,
+  referenceNum: "DEMO-2026-001",
+  clientName: "Keurig Dr Pepper",
+  shipToName: "Walmart Distribution Center #7042",
+  shipToCity: "Bentonville",
+  outboundLocation: "OB-A3",
+  palletCount: 6,
+  facilityId: 1,
+  facilityName: "ACR Logistics",
+  requiredShipDate: "2026-04-30",
+};
+const DEMO_PALLET_LABELS = [
+  "GD-PAL-001234", "GD-PAL-001235", "GD-PAL-001236",
+  "GD-PAL-001237", "GD-PAL-001238", "GD-PAL-001239",
+];
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Phase = "lookup" | "arrival" | "scanning" | "complete";
+
+interface ScannedPallet {
+  labelValue: string;
+  scannedAt: Date;
+}
+
+interface SelectedOrder {
+  id: number;
+  extensivOrderId: number;
+  referenceNum: string | null;
+  clientName: string;
+  shipToName: string | null;
+  shipToCity: string | null;
+  outboundLocation: string | null;
+  palletCount: number | null;
+  facilityId: number;
+  facilityName: string | null;
+  requiredShipDate: string | null;
+}
+
+// ─── Audio ────────────────────────────────────────────────────────────────────
+let soundMuted = false;
+function playBeep(type: "success" | "duplicate" | "complete") {
+  if (soundMuted) return;
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (type === "success") { osc.frequency.value = 880; gain.gain.value = 0.15; }
+    else if (type === "duplicate") { osc.frequency.value = 220; gain.gain.value = 0.2; }
+    else { osc.frequency.value = 1047; gain.gain.value = 0.15; }
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (type === "complete" ? 0.6 : 0.18));
+    osc.stop(ctx.currentTime + (type === "complete" ? 0.6 : 0.18));
+  } catch { /* ignore */ }
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function CarrierPickupScanner() {
+  // Phase
+  const [phase, setPhase] = useState<Phase>("lookup");
+  const [isDemo, setIsDemo] = useState(false);
+
+  // Lookup
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<SelectedOrder | null>(null);
+
+  // Arrival form
+  const [carrierName, setCarrierName] = useState("");
+  const [driverName, setDriverName] = useState("");
+  const [trailerNumber, setTrailerNumber] = useState("");
+  const [sealNumber, setSealNumber] = useState("");
+  const [proNumber, setProNumber] = useState("");
+
+  // Scanning
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [scanInput, setScanInput] = useState("");
+  const [scannedPallets, setScannedPallets] = useState<ScannedPallet[]>([]);
+  const [flashState, setFlashState] = useState<"idle" | "success" | "duplicate">("idle");
+  const [confirmText, setConfirmText] = useState("");
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  // Complete
+  const [shippedInExtensiv, setShippedInExtensiv] = useState<boolean | null>(null);
+
+  // Sound
+  const [muted, setMuted] = useState(() => {
+    try { return localStorage.getItem("carrierPickup_soundMuted") === "true"; } catch { return false; }
+  });
+  useEffect(() => { soundMuted = muted; }, [muted]);
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    try { localStorage.setItem("carrierPickup_soundMuted", String(next)); } catch { /* ignore */ }
+  };
+
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Focus scan input when in scanning phase
+  useEffect(() => {
+    if (phase === "scanning") {
+      setTimeout(() => scanInputRef.current?.focus(), 100);
+    }
+  }, [phase]);
+
+  // Ctrl+Enter to open confirm dialog
+  useEffect(() => {
+    if (phase !== "scanning") return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        setShowConfirmDialog(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [phase]);
+
+  // tRPC
+  const searchQuery2 = debouncedQuery.trim();
+  const searchResult = trpc.carrierPickup.searchOrders.useQuery(
+    { query: searchQuery2 },
+    { enabled: searchQuery2.length >= 2 && !isDemo }
+  );
+
+  const startSessionMutation = trpc.carrierPickup.startSession.useMutation({
+    onSuccess: (data) => {
+      setSessionId(data.sessionId);
+      setPhase("scanning");
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  const scanPalletMutation = trpc.carrierPickup.scanPallet.useMutation({
+    onSuccess: (data) => {
+      if (data.duplicate) {
+        playBeep("duplicate");
+        setFlashState("duplicate");
+        toast.error(data.message ?? "Duplicate scan");
+      } else {
+        playBeep("success");
+        setFlashState("success");
+        setScannedPallets(prev => [{ labelValue: scanInput.trim(), scannedAt: new Date() }, ...prev]);
+      }
+      setScanInput("");
+      setTimeout(() => setFlashState("idle"), 500);
+    },
+    onError: (err) => {
+      toast.error(err.message);
+      setScanInput("");
+    },
+  });
+
+  const completeSessionMutation = trpc.carrierPickup.completeSession.useMutation({
+    onSuccess: (data) => {
+      playBeep("complete");
+      setShippedInExtensiv(data.shippedInExtensiv);
+      setPhase("complete");
+      setShowConfirmDialog(false);
+    },
+    onError: (err) => {
+      toast.error(err.message);
+      setShowConfirmDialog(false);
+    },
+  });
+
+  // Demo scan handler
+  const handleDemoScan = useCallback((label: string) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    if (scannedPallets.find(p => p.labelValue === trimmed)) {
+      playBeep("duplicate");
+      setFlashState("duplicate");
+      toast.error(`${trimmed} already scanned.`);
+      setTimeout(() => setFlashState("idle"), 500);
+      setScanInput("");
+      return;
+    }
+    playBeep("success");
+    setFlashState("success");
+    setScannedPallets(prev => [{ labelValue: trimmed, scannedAt: new Date() }, ...prev]);
+    setScanInput("");
+    setTimeout(() => setFlashState("idle"), 500);
+  }, [scannedPallets, toast]);
+
+  const handleScan = useCallback(() => {
+    const trimmed = scanInput.trim();
+    if (!trimmed) return;
+    if (isDemo) {
+      handleDemoScan(trimmed);
+    } else if (sessionId !== null) {
+      scanPalletMutation.mutate({ sessionId, labelValue: trimmed });
+    }
+  }, [scanInput, isDemo, sessionId, scanPalletMutation, handleDemoScan]);
+
+  const handleStartPickup = () => {
+    if (!selectedOrder) return;
+    if (!driverName.trim() || !trailerNumber.trim()) {
+      toast.error("Driver name and trailer number are required.");
+      return;
+    }
+    if (isDemo) {
+      setSessionId(-1);
+      setPhase("scanning");
+      return;
+    }
+    startSessionMutation.mutate({
+      transactionId: selectedOrder.extensivOrderId,
+      referenceNum: selectedOrder.referenceNum ?? undefined,
+      clientName: selectedOrder.clientName,
+      shipToName: selectedOrder.shipToName ?? undefined,
+      outboundLocation: selectedOrder.outboundLocation ?? undefined,
+      expectedPallets: selectedOrder.palletCount ?? undefined,
+      warehouseId: selectedOrder.facilityId,
+      warehouseName: selectedOrder.facilityName ?? undefined,
+      carrierName: carrierName.trim() || undefined,
+      driverName: driverName.trim(),
+      trailerNumber: trailerNumber.trim(),
+      sealNumber: sealNumber.trim() || undefined,
+      proNumber: proNumber.trim() || undefined,
+      isDemo: false,
+    });
+  };
+
+  const handleComplete = () => {
+    if (confirmText !== "CONFIRMED") return;
+    if (isDemo) {
+      playBeep("complete");
+      setShippedInExtensiv(false);
+      setPhase("complete");
+      setShowConfirmDialog(false);
+      return;
+    }
+    if (sessionId !== null) {
+      completeSessionMutation.mutate({ sessionId });
+    }
+  };
+
+  const handleReset = () => {
+    setPhase("lookup");
+    setIsDemo(false);
+    setSearchQuery("");
+    setDebouncedQuery("");
+    setSelectedOrder(null);
+    setCarrierName("");
+    setDriverName("");
+    setTrailerNumber("");
+    setSealNumber("");
+    setProNumber("");
+    setSessionId(null);
+    setScanInput("");
+    setScannedPallets([]);
+    setFlashState("idle");
+    setConfirmText("");
+    setShowConfirmDialog(false);
+    setShippedInExtensiv(null);
+  };
+
+  const expectedPallets = selectedOrder?.palletCount ?? 0;
+  const scannedCount = scannedPallets.length;
+  const progressPct = expectedPallets > 0 ? Math.min(100, Math.round((scannedCount / expectedPallets) * 100)) : 0;
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <div className="border-b bg-card px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {phase !== "lookup" && (
+            <button onClick={handleReset} className="text-muted-foreground hover:text-foreground mr-1">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
+          <Truck className="h-6 w-6 text-blue-600" />
+          <div>
+            <h1 className="text-xl font-bold">Carrier Pickup Scanner</h1>
+            <p className="text-xs text-muted-foreground">Scan out pallets when a carrier arrives for pickup</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {phase === "scanning" && (
+            <button
+              onClick={toggleMute}
+              className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+              title={muted ? "Unmute sounds" : "Mute sounds"}
+            >
+              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
+          )}
+          {!isDemo && phase === "lookup" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-amber-500 text-amber-700 hover:bg-amber-50"
+              onClick={() => {
+                setIsDemo(true);
+                setSelectedOrder(DEMO_ORDER);
+                setPhase("arrival");
+                setCarrierName("XPO Logistics");
+              }}
+            >
+              <Zap className="h-3.5 w-3.5 mr-1" />
+              Demo Mode
+            </Button>
+          )}
+          {isDemo && (
+            <Badge className="bg-amber-500 text-white text-xs px-2 py-1">DEMO</Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Demo banner */}
+      {isDemo && (
+        <div className="bg-amber-500 text-white px-6 py-2 flex items-center justify-between text-sm font-medium">
+          <span>⚡ Demo Mode — all data is synthetic. No Extensiv changes will be made.</span>
+          <button onClick={handleReset} className="underline text-white/90 hover:text-white text-xs">Exit Demo</button>
+        </div>
+      )}
+
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+
+        {/* ── Phase 1: Order Lookup ── */}
+        {phase === "lookup" && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold mb-1">Find Order</h2>
+              <p className="text-sm text-muted-foreground">Search by reference number, client name, ship-to, or outbound location.</p>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="e.g. 3331807 or Walmart or OB-A3"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            {searchResult.isLoading && (
+              <p className="text-sm text-muted-foreground">Searching...</p>
+            )}
+
+            {searchResult.data && searchResult.data.length === 0 && debouncedQuery.length >= 2 && (
+              <p className="text-sm text-muted-foreground">No ship-ready orders found matching "{debouncedQuery}".</p>
+            )}
+
+            {searchResult.data && searchResult.data.length > 0 && (
+              <div className="space-y-2">
+                {searchResult.data.map((order) => (
+                  <button
+                    key={order.id}
+                    onClick={() => { setSelectedOrder(order as SelectedOrder); setPhase("arrival"); }}
+                    className="w-full text-left border rounded-lg p-4 hover:bg-muted transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-sm">{order.clientName}</div>
+                        <div className="text-sm text-muted-foreground">{order.shipToName}</div>
+                        <div className="text-xs text-muted-foreground mt-1">Ref: {order.referenceNum ?? "—"}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="flex items-center gap-1 text-xs font-medium text-blue-600">
+                          <MapPin className="h-3 w-3" />
+                          {order.outboundLocation ?? "No location"}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                          <Package className="h-3 w-3" />
+                          {order.palletCount ?? 0} pallets
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Phase 2: Carrier Arrival Form ── */}
+        {phase === "arrival" && selectedOrder && (
+          <div className="space-y-5">
+            {/* Order summary card */}
+            <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/30">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-semibold">{selectedOrder.clientName}</div>
+                  <div className="text-sm text-muted-foreground">{selectedOrder.shipToName}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Ref: {selectedOrder.referenceNum ?? "—"}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="flex items-center gap-1 text-sm font-bold text-blue-700 dark:text-blue-400">
+                    <MapPin className="h-4 w-4" />
+                    {selectedOrder.outboundLocation ?? "No location"}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                    <Package className="h-3.5 w-3.5" />
+                    {selectedOrder.palletCount ?? 0} pallets expected
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-lg font-semibold mb-1">Carrier Arrival Details</h2>
+              <p className="text-sm text-muted-foreground">Fill in the carrier info before starting the scan-out.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Carrier Name</label>
+                <Input value={carrierName} onChange={e => setCarrierName(e.target.value)} placeholder="e.g. XPO Logistics" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">PRO / Tracking #</label>
+                <Input value={proNumber} onChange={e => setProNumber(e.target.value)} placeholder="Optional" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Driver Name <span className="text-red-500">*</span></label>
+                <Input value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="First Last" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Trailer / Truck # <span className="text-red-500">*</span></label>
+                <Input value={trailerNumber} onChange={e => setTrailerNumber(e.target.value)} placeholder="e.g. XPO-44821" />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <label className="text-sm font-medium">Seal Number</label>
+                <Input value={sealNumber} onChange={e => setSealNumber(e.target.value)} placeholder="Optional" />
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              size="lg"
+              disabled={!driverName.trim() || !trailerNumber.trim() || startSessionMutation.isPending}
+              onClick={handleStartPickup}
+            >
+              {startSessionMutation.isPending ? (
+                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Starting…</>
+              ) : (
+                <><Truck className="h-4 w-4 mr-2" /> Start Pickup Scan-Out</>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* ── Phase 3: Pallet Scan-Out ── */}
+        {phase === "scanning" && selectedOrder && (
+          <div className="space-y-4">
+            {/* Order bar */}
+            <div className="border rounded-lg p-3 bg-card flex items-center justify-between gap-2 text-sm">
+              <div>
+                <span className="font-semibold">{selectedOrder.clientName}</span>
+                <span className="text-muted-foreground ml-2">{selectedOrder.referenceNum ?? ""}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="flex items-center gap-1 text-blue-600 font-medium">
+                  <MapPin className="h-3.5 w-3.5" /> {selectedOrder.outboundLocation ?? "—"}
+                </span>
+                <span className="text-muted-foreground">{scannedCount}/{expectedPallets} pallets</span>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${scannedCount >= expectedPallets && expectedPallets > 0 ? "bg-green-500" : "bg-blue-500"}`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+
+            {/* Scan input */}
+            <div
+              className={`border-2 rounded-xl p-4 transition-colors duration-300 ${
+                flashState === "success" ? "border-green-500 bg-green-50 dark:bg-green-950/30" :
+                flashState === "duplicate" ? "border-red-500 bg-red-50 dark:bg-red-950/30" :
+                "border-border bg-card"
+              }`}
+            >
+              <div className="flex gap-2">
+                <Input
+                  ref={scanInputRef}
+                  value={scanInput}
+                  onChange={e => setScanInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleScan(); } }}
+                  placeholder="Scan or type pallet label…"
+                  className="text-lg font-mono"
+                  disabled={scanPalletMutation.isPending}
+                />
+                <Button onClick={handleScan} disabled={!scanInput.trim() || scanPalletMutation.isPending}>
+                  {scanPalletMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Scan"}
+                </Button>
+              </div>
+              {flashState === "success" && (
+                <p className="text-green-700 dark:text-green-400 text-sm mt-2 font-medium flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4" /> Pallet scanned successfully
+                </p>
+              )}
+              {flashState === "duplicate" && (
+                <p className="text-red-700 dark:text-red-400 text-sm mt-2 font-medium flex items-center gap-1">
+                  <XCircle className="h-4 w-4" /> Duplicate — already scanned
+                </p>
+              )}
+            </div>
+
+            {/* Demo quick-scan buttons */}
+            {isDemo && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Demo: click a label to simulate a scan</p>
+                <div className="flex flex-wrap gap-2">
+                  {DEMO_PALLET_LABELS.map(label => (
+                    <button
+                      key={label}
+                      onClick={() => { setScanInput(label); setTimeout(() => handleDemoScan(label), 50); }}
+                      className={`text-xs font-mono px-2 py-1 rounded border transition-colors ${
+                        scannedPallets.find(p => p.labelValue === label)
+                          ? "bg-green-100 border-green-400 text-green-700 line-through"
+                          : "bg-muted border-border hover:bg-muted/80"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Scanned list */}
+            {scannedPallets.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-muted px-4 py-2 text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Scanned Pallets ({scannedPallets.length})
+                </div>
+                <div className="divide-y max-h-64 overflow-y-auto">
+                  {scannedPallets.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2 text-sm">
+                      <span className="font-mono font-medium">{p.labelValue}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {p.scannedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Complete button */}
+            <Button
+              variant="default"
+              size="lg"
+              className="w-full bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => setShowConfirmDialog(true)}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Complete Pickup ({scannedCount} pallets scanned)
+              <span className="ml-2 text-xs opacity-75">Ctrl+Enter</span>
+            </Button>
+
+            {/* Confirm dialog */}
+            {showConfirmDialog && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-card border rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
+                  <h3 className="text-lg font-bold">Confirm Pickup Completion</h3>
+                  <div className="text-sm text-muted-foreground space-y-1">
+                    <p><strong>Order:</strong> {selectedOrder.referenceNum ?? selectedOrder.extensivOrderId}</p>
+                    <p><strong>Client:</strong> {selectedOrder.clientName}</p>
+                    <p><strong>Pallets scanned:</strong> {scannedCount} {expectedPallets > 0 ? `of ${expectedPallets} expected` : ""}</p>
+                    <p><strong>Driver:</strong> {driverName}</p>
+                    <p><strong>Trailer:</strong> {trailerNumber}</p>
+                  </div>
+                  {!isDemo && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      This will mark the order as <strong>Shipped</strong> in Extensiv.
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Type CONFIRMED to proceed</label>
+                    <Input
+                      value={confirmText}
+                      onChange={e => setConfirmText(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && confirmText === "CONFIRMED") handleComplete(); }}
+                      placeholder="CONFIRMED"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => { setShowConfirmDialog(false); setConfirmText(""); }}>
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      disabled={confirmText !== "CONFIRMED" || completeSessionMutation.isPending}
+                      onClick={handleComplete}
+                    >
+                      {completeSessionMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Confirm"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Phase 4: Complete ── */}
+        {phase === "complete" && selectedOrder && (
+          <div className="space-y-4 text-center py-8">
+            <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto" />
+            <h2 className="text-2xl font-bold">Pickup Complete!</h2>
+            <p className="text-muted-foreground">
+              {scannedCount} pallet{scannedCount !== 1 ? "s" : ""} scanned out for{" "}
+              <strong>{selectedOrder.clientName}</strong>
+            </p>
+            <div className="border rounded-lg p-4 text-left text-sm space-y-2 max-w-sm mx-auto">
+              <div className="flex justify-between"><span className="text-muted-foreground">Order Ref</span><span className="font-medium">{selectedOrder.referenceNum ?? "—"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Driver</span><span className="font-medium">{driverName}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Trailer</span><span className="font-medium">{trailerNumber}</span></div>
+              {sealNumber && <div className="flex justify-between"><span className="text-muted-foreground">Seal</span><span className="font-medium">{sealNumber}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Pallets</span><span className="font-medium">{scannedCount}</span></div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Extensiv Status</span>
+                {isDemo ? (
+                  <Badge variant="outline" className="text-xs">Demo — skipped</Badge>
+                ) : shippedInExtensiv ? (
+                  <Badge className="bg-green-600 text-white text-xs">Marked Shipped</Badge>
+                ) : (
+                  <Badge variant="outline" className="border-amber-500 text-amber-700 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Pending retry
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <Button onClick={handleReset} size="lg" className="mt-4">
+              <Truck className="h-4 w-4 mr-2" /> Start New Pickup
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

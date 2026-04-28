@@ -1544,3 +1544,13 @@
 - [x] Root cause: Extensiv marks ACR-Staging inventory records as isOnHold=true; engine's pool builder excluded all isOnHold records, so stagingAlreadyThere was always empty
 - [x] Fix: inventory pool builder now includes records in staging-named locations (name contains "staging" or ends with "-stage") regardless of isOnHold flag
 - [x] All 742 tests passing, 0 TypeScript errors
+
+## Carrier Pickup Scanner
+- [ ] Add pickup_sessions and pickup_scans tables to schema + apply migration
+- [ ] Add markOrderShipped to Extensiv API (if not already present)
+- [ ] Add server tRPC procedures: searchOutboundOrders, startPickupSession, scanPickupPallet, completePickupSession
+- [ ] Build CarrierPickupScanner.tsx page with 4 phases: lookup, arrival form, scan-out, completion
+- [ ] Add demo mode with pre-scripted pallet labels
+- [ ] Add "Picked Up" status to Shipping Dashboard rows
+- [ ] Add Carrier Pickup nav item to sidebar
+- [ ] Register route in App.tsx

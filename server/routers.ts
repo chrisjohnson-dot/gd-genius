@@ -3931,11 +3931,14 @@ const qcScannerRouter = router({
 
       // Update session metadata from the order — including the referenceNum from Extensiv
       const customerName = order.readOnly?.customerIdentifier?.name ?? undefined;
+      const customerId = order.readOnly?.customerIdentifier?.id ?? undefined;
       const poNumber = (order as unknown as Record<string, unknown>).poNum as string | undefined;
       const referenceNum = (order as unknown as Record<string, unknown>).referenceNum as string | undefined;
       await updateQcSession(input.sessionId, {
         referenceNumber: referenceNum ?? String(input.transactionId),
         customerName: customerName ?? undefined,
+        customerId: customerId ?? undefined,
+        warehouseId: config.id,
         poNumber: poNumber ?? undefined,
       } as any);
 
@@ -3964,22 +3967,37 @@ const qcScannerRouter = router({
       if (!match) {
         try {
           const session = await getQcSessionById(input.sessionId);
-          const warehouseId = session?.warehouseId ?? null;
-          const customerId = session?.customerId ?? null;
-          if (warehouseId && customerId) {
-            const config = await getExtensivConfigById(warehouseId);
-            if (config) {
-              const upcMap = await fetchItemUpcMap(config, customerId);
-              const normalised = input.barcode.trim().toUpperCase();
-              for (const [sku, upc] of upcMap.entries()) {
-                if (upc.trim().toUpperCase() === normalised) {
-                  match = items.find((i) => i.sku.toUpperCase() === sku.toUpperCase()) ?? null;
-                  if (match) {
-                    // Persist the resolved UPC so future scans are instant (no Extensiv call)
-                    await upsertQcScanItem(input.sessionId, match.sku, upc, {});
-                  }
-                  break;
+          let warehouseId = session?.warehouseId ?? null;
+          let customerId = session?.customerId ?? null;
+          // Fallback: if session is missing warehouseId/customerId (seeded before the fix),
+          // use the first active Extensiv config and resolve customerId from the order.
+          let config = warehouseId ? await getExtensivConfigById(warehouseId) : null;
+          if (!config) {
+            const configs = await getExtensivConfigs();
+            config = configs.find((c) => c.isActive) ?? configs[0] ?? null;
+            if (config) warehouseId = config.id;
+          }
+          if (!customerId && session?.transactionId && config) {
+            try {
+              const { order } = await fetchOrderWithDetail(config, session.transactionId);
+              customerId = order.readOnly?.customerIdentifier?.id ?? null;
+              if (customerId) {
+                // Persist so future scans skip this lookup
+                await updateQcSession(input.sessionId, { customerId, warehouseId: config.id } as any);
+              }
+            } catch { /* order lookup failed, continue without customerId */ }
+          }
+          if (config && customerId) {
+            const upcMap = await fetchItemUpcMap(config, customerId);
+            const normalised = input.barcode.trim().toUpperCase();
+            for (const [sku, upc] of upcMap.entries()) {
+              if (upc.trim().toUpperCase() === normalised) {
+                match = items.find((i) => i.sku.toUpperCase() === sku.toUpperCase()) ?? null;
+                if (match) {
+                  // Persist the resolved UPC so future scans are instant (no Extensiv call)
+                  await upsertQcScanItem(input.sessionId, match.sku, upc, {});
                 }
+                break;
               }
             }
           }
@@ -4032,6 +4050,31 @@ const qcScannerRouter = router({
       return { item: updated, sessionComplete, overScan: false };
     }),
 
+  // Admin-only: set scannedQty to an exact value for a SKU (bypasses scan requirement)
+  manualSetQty: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      sku: z.string(),
+      qty: z.number().int().min(0),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required for manual quantity entry" });
+      }
+      const items = await getQcScanItems(input.sessionId);
+      const match = items.find((i) => i.sku.toUpperCase() === input.sku.toUpperCase());
+      if (!match) throw new TRPCError({ code: "NOT_FOUND", message: `SKU ${input.sku} not found in this session` });
+      // Set scannedQty directly (capped at expectedQty)
+      const safeQty = Math.min(input.qty, match.expectedQty ?? input.qty);
+      const delta = safeQty - (match.scannedQty ?? 0);
+      if (delta !== 0) {
+        await incrementQcScanItem(input.sessionId, match.sku, delta);
+      }
+      const allItems = await getQcScanItems(input.sessionId);
+      const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);
+      const updated = allItems.find((i) => i.sku === match.sku) ?? match;
+      return { item: updated, sessionComplete };
+    }),
   // Complete the order
   completeSession: protectedProcedure
     .input(z.object({ sessionId: z.number() }))

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -296,11 +297,17 @@ export default function QcScanner() {
   const [phase, setPhase] = useState<Phase>("start");
   const [txInput, setTxInput] = useState("");
   const [session, setSession] = useState<Session | null>(null);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [items, setItems] = useState<ScanItem[]>([]);
   const [pallets, setPallets] = useState<Pallet[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [scanAsCase, setScanAsCase] = useState(false);
   const [lastScan, setLastScan] = useState<{ sku: string; found: boolean } | null>(null);
+  // Admin-only manual quantity entry
+  const [manualEntryOpen, setManualEntryOpen] = useState(false);
+  const [manualSku, setManualSku] = useState("");
+  const [manualQty, setManualQty] = useState("");
   const [flagDialog, setFlagDialog] = useState(false);
   const [flagBarcode, setFlagBarcode] = useState("");
   const [flagDesc, setFlagDesc] = useState("");
@@ -702,6 +709,26 @@ export default function QcScanner() {
     },
   });
 
+  const manualSetQty = trpc.qcScanner.manualSetQty.useMutation({
+    onSuccess: (data) => {
+      setItems((prev) =>
+        prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
+      );
+      if (data.item?.sku) triggerFlash(data.item.sku);
+      setManualEntryOpen(false);
+      setManualSku("");
+      setManualQty("");
+      toast.success(`✓ ${data.item?.sku ?? "Item"} manually set to ${data.item?.scannedQty ?? 0}`);
+      if (data.sessionComplete) {
+        playBeep("complete");
+        toast.success("Order complete!");
+        setPhase("complete");
+      }
+    },
+    onError: (err) => {
+      toast.error(err.message ?? "Failed to set quantity");
+    },
+  });
   const addPallet = trpc.qcScanner.addPallet.useMutation({
     onSuccess: (data) => {
       // Auto-calculate weight for the pallet that was just closed (the previous last pallet)
@@ -1997,6 +2024,19 @@ export default function QcScanner() {
                                   Scan
                                 </Button>
                               </form>
+                              {/* Admin-only manual quantity entry button */}
+                              {isAdmin && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full h-9 text-xs text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950"
+                                  onClick={() => { setManualEntryOpen(true); setManualSku(""); setManualQty(""); }}
+                                >
+                                  <Pencil className="w-3 h-3 mr-1.5" />
+                                  Admin: Manual Quantity Entry
+                                </Button>
+                              )}
                               {/* Demo Cheat Sheet removed — operators scan using the barcode input directly */}
                               {/* Last scan feedback */}
                               {lastScan && (
@@ -2293,6 +2333,68 @@ export default function QcScanner() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Admin Manual Quantity Entry dialog ── */}
+      {isAdmin && session && (
+        <Dialog open={manualEntryOpen} onOpenChange={setManualEntryOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-600">
+                <Pencil className="w-4 h-4" />
+                Manual Quantity Entry
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <p className="text-xs text-muted-foreground">Admin only — sets the scanned quantity for a SKU directly, bypassing scan requirement.</p>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">SKU</label>
+                <select
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={manualSku}
+                  onChange={(e) => setManualSku(e.target.value)}
+                >
+                  <option value="">— Select SKU —</option>
+                  {items.map((item) => (
+                    <option key={item.sku} value={item.sku}>
+                      {item.sku} ({item.scannedQty}/{item.expectedQty})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Quantity</label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={items.find((i) => i.sku === manualSku)?.expectedQty ?? 9999}
+                  value={manualQty}
+                  onChange={(e) => setManualQty(e.target.value)}
+                  placeholder="Enter quantity"
+                  className="h-10"
+                />
+                {manualSku && (
+                  <p className="text-xs text-muted-foreground">
+                    Expected: {items.find((i) => i.sku === manualSku)?.expectedQty ?? "—"} &nbsp;|&nbsp;
+                    Currently scanned: {items.find((i) => i.sku === manualSku)?.scannedQty ?? 0}
+                  </p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setManualEntryOpen(false)}>Cancel</Button>
+              <Button
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                disabled={!manualSku || manualQty === "" || manualSetQty.isPending}
+                onClick={() => {
+                  if (!manualSku || manualQty === "") return;
+                  manualSetQty.mutate({ sessionId: session.id, sku: manualSku, qty: parseInt(manualQty, 10) });
+                }}
+              >
+                {manualSetQty.isPending ? "Saving…" : "Set Quantity"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {/* Flag Dialog */}
       <Dialog open={flagDialog} onOpenChange={setFlagDialog}>
         <DialogContent>

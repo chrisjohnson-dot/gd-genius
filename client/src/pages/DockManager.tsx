@@ -74,6 +74,7 @@ function DockCell({
   level,
   orders,
   highlightIds,
+  onOrderClick,
 }: {
   position: number;
   level: string;

@@ -6,7 +6,7 @@ import { Loader2, Package, MapPin, Truck, CheckCircle2, Search, X } from "lucide
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const POSITIONS = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
-const LEVELS = ["A", "B", "C", "D"] as const;
+const LEVELS = ["A", "B", "C", "D", "E"] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 /**
@@ -17,12 +17,12 @@ const LEVELS = ["A", "B", "C", "D"] as const;
 function parseDockLocation(raw: string | null): { position: number; level: string } | null {
   if (!raw) return null;
   const cleaned = raw.trim().toUpperCase().replace(/^(OB[-\s]?|DOCK[-\s]?)/i, "");
-  let m = cleaned.match(/^([A-D])[-\s]?(\d{1,2})$/);
+  let m = cleaned.match(/^([A-E])[-\s]?(\d{1,2})$/);
   if (m) {
     const pos = parseInt(m[2], 10);
     if (pos >= 1 && pos <= 26) return { level: m[1], position: pos };
   }
-  m = cleaned.match(/^(\d{1,2})[-\s]?([A-D])$/);
+  m = cleaned.match(/^(\d{1,2})[-\s]?([A-E])$/);
   if (m) {
     const pos = parseInt(m[1], 10);
     if (pos >= 1 && pos <= 26) return { level: m[2], position: pos };
@@ -225,7 +225,7 @@ export default function DockManager() {
             Dock Manager
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Visual map of all pallets currently on the dock — positions 1–26, levels A–D.
+            Visual map of all pallets currently on the dock — lanes 1–26, positions A–E.
           </p>
         </div>
         <div className="flex items-center gap-2">

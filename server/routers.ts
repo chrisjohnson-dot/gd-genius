@@ -7221,6 +7221,78 @@ const shippingDashboardRouter = router({
   listOutbound: protectedProcedure.query(async () => {
     return getShipReadyOrders();
   }),
+  /**
+   * Recommend an available outbound dock location for a given facility.
+   * Lanes 1–26, positions A–E (5 positions per lane).
+   * Returns the first cell not already occupied by a ship_ready order.
+   */
+  recommendDockLocation: protectedProcedure
+    .input(z.object({
+      facilityId: z.number().optional(),
+      configId: z.number().optional(),  // extensiv_configs.id from QC session warehouseId
+    }))
+    .query(async ({ input }) => {
+      const LANES = Array.from({ length: 26 }, (_, i) => i + 1);
+      const POSITIONS = ["A", "B", "C", "D", "E"];
+
+      function parseLoc(raw: string | null): { lane: number; position: string } | null {
+        if (!raw) return null;
+        const cleaned = raw.trim().toUpperCase().replace(/^(OB[-\s]?|DOCK[-\s]?)/i, "");
+        let m = cleaned.match(/^([A-E])[-\s]?(\d{1,2})$/);
+        if (m) {
+          const lane = parseInt(m[2], 10);
+          if (lane >= 1 && lane <= 26) return { lane, position: m[1] };
+        }
+        m = cleaned.match(/^(\d{1,2})[-\s]?([A-E])$/);
+        if (m) {
+          const lane = parseInt(m[1], 10);
+          if (lane >= 1 && lane <= 26) return { lane, position: m[2] };
+        }
+        return null;
+      }
+
+      const allOrders = await getShipReadyOrders();
+      // Resolve facilityId from configId if provided
+      let resolvedFacilityId = input.facilityId;
+      if (!resolvedFacilityId && input.configId) {
+        const match = allOrders.find((o) => o.configId === input.configId);
+        if (match) resolvedFacilityId = match.facilityId;
+      }
+      const facilityOrders = resolvedFacilityId
+        ? allOrders.filter((o) => o.facilityId === resolvedFacilityId)
+        : allOrders;
+
+      const occupied = new Set<string>();
+      for (const o of facilityOrders) {
+        const parsed = parseLoc(o.outboundLocation);
+        if (parsed) occupied.add(`${parsed.lane}-${parsed.position}`);
+      }
+
+      for (const lane of LANES) {
+        for (const pos of POSITIONS) {
+          if (!occupied.has(`${lane}-${pos}`)) {
+            return {
+              recommended: true,
+              lane,
+              position: pos,
+              label: `${pos}${lane}`,
+              occupiedCount: occupied.size,
+              totalCells: LANES.length * POSITIONS.length,
+            };
+          }
+        }
+      }
+
+      return {
+        recommended: false,
+        lane: null as number | null,
+        position: null as string | null,
+        label: null as string | null,
+        occupiedCount: occupied.size,
+        totalCells: LANES.length * POSITIONS.length,
+      };
+    }),
+
   /** Update outbound location and/or pallet count for an order */
   updateOutbound: protectedProcedure
     .input(z.object({

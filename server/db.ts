@@ -3362,6 +3362,7 @@ export async function getShipReadyOrders(): Promise<Array<{
   extensivOrderId: number;
   referenceNum: string | null;
   poNum: string | null;
+  configId: number;
   clientId: number;
   clientName: string;
   facilityId: number;
@@ -3386,6 +3387,7 @@ export async function getShipReadyOrders(): Promise<Array<{
       extensivOrderId: orderTracking.extensivOrderId,
       referenceNum: orderTracking.referenceNum,
       poNum: orderTracking.poNum,
+      configId: orderTracking.configId,
       clientId: orderTracking.clientId,
       clientName: orderTracking.clientName,
       facilityId: orderTracking.facilityId,

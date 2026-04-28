@@ -61,6 +61,7 @@ type Session = {
   status: string;
   customerName: string | null;
   warehouseName: string | null;
+  warehouseId: number | null;
   poNumber: string | null;
   completedAt: Date | null;
 };
@@ -305,6 +306,9 @@ export default function QcScanner() {
   const [flagDesc, setFlagDesc] = useState("");
   const [completeDialog, setCompleteDialog] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  // Dock location recommendation shown after session completes
+  const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
+  const [completedSessionInfo, setCompletedSessionInfo] = useState<{ sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null } | null>(null);
   // Multi-expand: track a Set of expanded pallet IDs — all pallets start expanded
   const [expandedPallets, setExpandedPallets] = useState<Set<number>>(new Set());
   const togglePalletExpand = (palletId: number) =>
@@ -894,6 +898,14 @@ export default function QcScanner() {
       } else {
         toast.success("Session completed and saved");
       }
+      // Capture session info for dock recommendation before clearing state
+      setCompletedSessionInfo({
+        sessionId: session?.id ?? 0,
+        configId: session?.warehouseId ?? null,
+        palletCount: pallets.length,
+        customerName: session?.customerName ?? null,
+        transactionId: session?.transactionId ?? null,
+      });
       setPhase("start");
       setSession(null);
       setItems([]);
@@ -901,6 +913,8 @@ export default function QcScanner() {
       setTxInput("");
       setCompleteDialog(false);
       setConfirmText("");
+      // Show dock recommendation dialog
+      setDockRecommendDialog(true);
     },
     onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
@@ -2519,6 +2533,100 @@ export default function QcScanner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Dock Location Recommendation Dialog ─────────────────────────── */}
+      <DockRecommendDialog
+        open={dockRecommendDialog}
+        onClose={() => { setDockRecommendDialog(false); setCompletedSessionInfo(null); }}
+        sessionInfo={completedSessionInfo}
+      />
     </>
+  );
+}
+
+// ─── Dock Recommendation Dialog ───────────────────────────────────────────────
+function DockRecommendDialog({
+  open,
+  onClose,
+  sessionInfo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null } | null;
+}) {
+  const { data: rec, isLoading } = trpc.shippingDashboard.recommendDockLocation.useQuery(
+    { configId: sessionInfo?.configId ?? undefined },
+    { enabled: open && !!sessionInfo }
+  );
+  const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
+    onSuccess: () => {
+      toast.success(`Dock location ${rec?.label} assigned`);
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // Find the order_tracking row for this session's transactionId so we can assign the location
+  const { data: outboundOrders } = trpc.shippingDashboard.listOutbound.useQuery(
+    undefined,
+    { enabled: open && !!sessionInfo?.transactionId }
+  );
+  const matchedOrder = outboundOrders?.find(
+    (o) => o.extensivOrderId === sessionInfo?.transactionId
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Package className="w-5 h-5 text-primary" />
+            Suggested Dock Location
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          {sessionInfo && (
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{sessionInfo.customerName ?? `TX ${sessionInfo.transactionId}`}</span>
+              {" — "}{sessionInfo.palletCount} pallet{sessionInfo.palletCount !== 1 ? "s" : ""}
+            </div>
+          )}
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Looking up available dock positions…
+            </div>
+          ) : rec?.recommended ? (
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-primary/10 border-2 border-primary">
+                <span className="text-4xl font-black text-primary">{rec.label}</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Lane {rec.lane} · Position {rec.position}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {rec.occupiedCount} of {rec.totalCells} dock cells currently occupied
+              </p>
+            </div>
+          ) : (
+            <div className="text-center text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3">
+              All {rec?.totalCells ?? 130} dock positions are currently occupied. Please check the Dock Manager for availability.
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>Dismiss</Button>
+          {rec?.recommended && matchedOrder && (
+            <Button
+              className="bg-primary"
+              disabled={assignDock.isPending}
+              onClick={() => assignDock.mutate({ id: matchedOrder.id, outboundLocation: rec.label ?? undefined })}
+            >
+              {assignDock.isPending ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
+              Assign {rec.label}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

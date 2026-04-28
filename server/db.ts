@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, lte, isNotNull, isNull, sql, inArray, or, count, like, SQL } from "drizzle-orm";
+import { eq, desc, and, gte, lte, isNotNull, isNull, sql, inArray, or, count, like, SQL, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -754,6 +754,8 @@ export async function upsertTrackedOrders(
   let removed = 0;
   for (const [extId, row] of Array.from(existingMap.entries())) {
     if (!incomingIds.has(extId)) {
+      // Never delete seed/placeholder rows (extensivOrderId < 0)
+      if (extId < 0) continue;
       if (row.lifecycleStatus === "unallocated") {
         await db.delete(orderTracking).where(eq(orderTracking.id, row.id));
         removed++;
@@ -809,14 +811,15 @@ export async function updateOrderLifecycleStatus(
 export async function getTrackedOrders(facilityId?: number): Promise<OrderTracking[]> {
   const db = await getDb();
   if (!db) return [];
+  // Exclude seed/placeholder rows (extensivOrderId < 0 are facility seed rows, not real orders)
   if (facilityId) {
     return db
       .select()
       .from(orderTracking)
-      .where(eq(orderTracking.facilityId, facilityId))
+      .where(and(eq(orderTracking.facilityId, facilityId), gt(orderTracking.extensivOrderId, 0)))
       .orderBy(orderTracking.firstSeenAt);
   }
-  return db.select().from(orderTracking).orderBy(orderTracking.firstSeenAt);
+  return db.select().from(orderTracking).where(gt(orderTracking.extensivOrderId, 0)).orderBy(orderTracking.firstSeenAt);
 }
 
 /** Get the most recent lastSyncedAt across all tracked orders (for "last synced" display). */
@@ -3403,11 +3406,14 @@ export async function getShipReadyOrders(): Promise<Array<{
     })
     .from(orderTracking)
     .where(
-      or(
-        eq(orderTracking.lifecycleStatus, "ship_ready"),
-        and(
-          eq(orderTracking.lifecycleStatus, "shipped"),
-          gte(orderTracking.shippedAt, cutoff)
+      and(
+        gt(orderTracking.extensivOrderId, 0),
+        or(
+          eq(orderTracking.lifecycleStatus, "ship_ready"),
+          and(
+            eq(orderTracking.lifecycleStatus, "shipped"),
+            gte(orderTracking.shippedAt, cutoff)
+          )
         )
       )
     )

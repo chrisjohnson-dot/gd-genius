@@ -36,7 +36,7 @@ import {
 type PoType = "kitting" | "labor" | "materials";
 type View = "landing" | PoType;
 
-const WAREHOUSES = ["Columbus", "Reno", "Toronto", "Calgary"] as const;
+const WAREHOUSES = ["Columbus", "Reno", "Toronto", "Calgary", "Mississauga"] as const;
 const CURRENCIES = ["CAD", "USD"] as const;
 
 function fmt(n: number) {

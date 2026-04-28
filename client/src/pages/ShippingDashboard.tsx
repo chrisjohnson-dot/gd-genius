@@ -180,8 +180,8 @@ function ShipmentDetailDrawer({
 
   return (
     <Sheet open onOpenChange={() => onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
-        <SheetHeader className="pb-5 border-b border-border">
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader className="pb-6 border-b border-border">
           <div className="flex items-start justify-between gap-3">
             <div>
               <SheetTitle className="text-xl font-bold">
@@ -204,68 +204,80 @@ function ShipmentDetailDrawer({
           </div>
         </SheetHeader>
 
-        <div className="py-6 space-y-6">
-          {/* Key details grid */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-            <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Client" value={order.clientName} />
-            <DetailField icon={<MapPin className="h-3.5 w-3.5" />} label="Facility" value={order.facilityName ?? "—"} />
-            <DetailField icon={<Hash className="h-3.5 w-3.5" />} label="PO Number" value={order.poNum ?? "—"} />
-            <DetailField icon={<Calendar className="h-3.5 w-3.5" />} label="Req. Ship Date" value={fmtDate(order.requiredShipDate)} />
-            <DetailField icon={<Package className="h-3.5 w-3.5" />} label="Pallets" value={order.palletCount ? String(order.palletCount) : "—"} />
-            <DetailField icon={<ClipboardList className="h-3.5 w-3.5" />} label="Total Pieces" value={order.totalPieces ? order.totalPieces.toLocaleString() : "—"} />
+        <div className="py-8 space-y-8">
+          {/* Key details — 2-col grid with generous spacing */}
+          <div className="grid grid-cols-2 gap-x-8 gap-y-7">
+            <DetailField icon={<Building2 className="h-4 w-4" />} label="Client" value={order.clientName} />
+            <DetailField icon={<MapPin className="h-4 w-4" />} label="Facility" value={order.facilityName ?? "—"} />
+            <DetailField icon={<Hash className="h-4 w-4" />} label="PO Number" value={order.poNum ?? "—"} />
+            <DetailField icon={<Calendar className="h-4 w-4" />} label="Req. Ship Date" value={fmtDate(order.requiredShipDate)} />
+            <DetailField icon={<Package className="h-4 w-4" />} label="Pallets" value={order.palletCount ? String(order.palletCount) : "—"} />
+            <DetailField icon={<ClipboardList className="h-4 w-4" />} label="Total Pieces" value={order.totalPieces ? order.totalPieces.toLocaleString() : "—"} />
           </div>
 
           {/* Ship To */}
-          <div className="rounded-xl border border-border bg-muted/30 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Ship To</p>
-            <p className="text-base font-semibold text-foreground">{order.shipToName ?? "—"}</p>
-            {order.shipToCity && <p className="text-sm text-muted-foreground mt-1">{order.shipToCity}</p>}
+          <div className="rounded-xl border border-border bg-muted/30 px-6 py-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Ship To</p>
+            <p className="text-lg font-semibold text-foreground leading-snug">{order.shipToName ?? "—"}</p>
+            {order.shipToCity && <p className="text-sm text-muted-foreground mt-2">{order.shipToCity}</p>}
           </div>
 
           {/* Outbound Location */}
-          <div className="rounded-xl border border-border bg-muted/30 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Outbound Location</p>
+          <div className={`rounded-xl border px-6 py-5 ${
+            order.outboundLocation
+              ? "border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800"
+              : "border-border bg-muted/30"
+          }`}>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Outbound Location</p>
             {order.outboundLocation ? (
-              <p className="text-base font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2">
-                <MapPin className="h-4 w-4 shrink-0" />{order.outboundLocation}
+              <p className="text-2xl font-black text-blue-600 dark:text-blue-400 flex items-center gap-2.5">
+                <MapPin className="h-5 w-5 shrink-0" />{order.outboundLocation}
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground italic">Not assigned</p>
+              <p className="text-base text-muted-foreground italic">Not assigned</p>
             )}
           </div>
 
           {/* Shipped info */}
           {isShipped && order.shippedAt && (
-            <div className="rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400 mb-2">Shipped</p>
-              <p className="text-base font-semibold text-green-800 dark:text-green-300">{fmtDateTime(order.shippedAt)}</p>
+            <div className="rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-6 py-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400 mb-3">Shipped</p>
+              <p className="text-lg font-semibold text-green-800 dark:text-green-300">{fmtDateTime(order.shippedAt)}</p>
             </div>
           )}
 
           {/* Timestamps */}
-          <div className="text-sm text-muted-foreground space-y-1.5 pt-2 border-t border-border">
-            <p>Ship Ready: {fmtDateTime(order.shipReadyAt)}</p>
-            <p>First Seen: {fmtDateTime(order.firstSeenAt)}</p>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4 pt-4 border-t border-border">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Ship Ready</p>
+              <p className="text-sm text-foreground">{fmtDateTime(order.shipReadyAt)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">First Seen</p>
+              <p className="text-sm text-foreground">{fmtDateTime(order.firstSeenAt)}</p>
+            </div>
           </div>
         </div>
 
         {/* Action buttons */}
         {!isShipped && (
-          <div className="border-t border-border pt-5 space-y-3">
+          <div className="border-t border-border pt-6 space-y-3">
             <Button
-              className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              size="lg"
+              className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white h-14 text-base"
               onClick={isDemo ? undefined : startCarrierPickup}
               disabled={isDemo}
               title={isDemo ? "Carrier pickup is disabled in demo mode" : undefined}
             >
-              <Truck className="h-4 w-4" />
+              <Truck className="h-5 w-5" />
               Start Carrier Pickup
-              <ArrowRight className="h-4 w-4 ml-auto" />
+              <ArrowRight className="h-5 w-5 ml-auto" />
             </Button>
             {!isDemo && (
               <Button
                 variant="outline"
-                className="w-full gap-2"
+                size="lg"
+                className="w-full gap-2 h-12"
                 onClick={() => { onClose(); onEdit(order); }}
               >
                 <Pencil className="h-4 w-4" />
@@ -274,10 +286,10 @@ function ShipmentDetailDrawer({
             )}
             <Button
               variant="ghost"
-              className="w-full gap-2 text-muted-foreground"
+              className="w-full gap-2 text-muted-foreground h-10"
               onClick={() => window.open(`https://app.3plcentral.com/ware/orders/${order.extensivOrderId}`, "_blank")}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="h-4 w-4" />
               View in Extensiv
             </Button>
           </div>
@@ -290,10 +302,10 @@ function ShipmentDetailDrawer({
 function DetailField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1.5">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
         {icon}{label}
       </p>
-      <p className="text-base text-foreground font-semibold">{value}</p>
+      <p className="text-lg text-foreground font-bold leading-snug">{value}</p>
     </div>
   );
 }

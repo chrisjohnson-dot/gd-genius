@@ -2105,13 +2105,22 @@ export async function incrementQcScanItem(sessionId: number, sku: string, amount
   const rows = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
   if (rows.length === 0) return null;
   const item = rows[0];
-  const newQty = Math.max(0, item.scannedQty + amount);
   const timestamps = (item.scanTimestamps as number[] | null) ?? [];
   if (amount > 0) timestamps.push(Date.now());
-  await db.update(qcScanItems)
-    .set({ scannedQty: newQty, scanTimestamps: timestamps })
-    .where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
-  return { ...item, scannedQty: newQty, scanTimestamps: timestamps };
+  if (amount > 0) {
+    // Atomic cap: LEAST(scannedQty + amount, expectedQty) prevents race-condition over-scanning
+    await db.execute(
+      sql`UPDATE qc_scan_items SET scannedQty = LEAST(scannedQty + ${amount}, expectedQty), scanTimestamps = ${JSON.stringify(timestamps)} WHERE sessionId = ${sessionId} AND sku = ${sku}`
+    );
+  } else {
+    // Decrement: floor at 0
+    await db.execute(
+      sql`UPDATE qc_scan_items SET scannedQty = GREATEST(scannedQty + ${amount}, 0), scanTimestamps = ${JSON.stringify(timestamps)} WHERE sessionId = ${sessionId} AND sku = ${sku}`
+    );
+  }
+  // Re-read the actual committed value
+  const updated = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
+  return updated[0] ?? null;
 }
 
 // QC Pallets

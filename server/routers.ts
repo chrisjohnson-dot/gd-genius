@@ -6381,7 +6381,7 @@ const purchaseOrderRouter = router({
     .input(z.object({
       poType: z.enum(["kitting", "labor", "materials"]).optional(),
       billingPeriod: z.string().optional(),
-      warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary", "Mississauga"]).optional(),
+      warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary"]).optional(),
       status: z.enum(["pending", "sent", "failed", "skipped"]).optional(),
       limit: z.number().int().min(1).max(200).default(200),
     }))
@@ -6426,7 +6426,7 @@ const purchaseOrderRouter = router({
       poStatus: z.enum(["pending", "approved", "invoiced", "rejected", "received", "ordered"]).default("pending"),
       customerId: z.string().min(1),
       customerName: z.string().min(1),
-      warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary", "Mississauga"]),
+      warehouse: z.enum(["Columbus", "Reno", "Toronto", "Calgary"]),
       poDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       billingPeriod: z.string().regex(/^\d{4}-\d{2}$/),
       // Legacy combined charges

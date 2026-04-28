@@ -24,7 +24,7 @@ export interface PurchaseOrderPayload {
   poNumber: string;
   customerId: string;
   customerName: string;
-  warehouse: "Columbus" | "Reno" | "Toronto" | "Calgary" | "Mississauga";
+  warehouse: "Columbus" | "Reno" | "Toronto" | "Calgary";
   poDate: string;        // YYYY-MM-DD
   billingPeriod: string; // YYYY-MM
   kittingCharge?: number;
@@ -136,7 +136,7 @@ export async function flushPendingPurchaseOrderPushes(): Promise<void> {
       poNumber: po.poNumber,
       customerId: po.customerId,
       customerName: po.customerName,
-      warehouse: po.warehouse as "Columbus" | "Reno" | "Toronto" | "Calgary" | "Mississauga",
+      warehouse: po.warehouse as "Columbus" | "Reno" | "Toronto" | "Calgary",
       poDate: po.poDate,
       billingPeriod: po.billingPeriod,
       kittingCharge: parseFloat(po.kittingCharge ?? "0"),

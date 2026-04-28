@@ -1813,7 +1813,7 @@ export const purchaseOrders = mysqlTable("purchase_orders", {
   poStatus:          mysqlEnum("po_status", ["pending", "approved", "invoiced", "rejected", "received", "ordered"]).notNull().default("pending"),
   customerId:        varchar("customer_id", { length: 64 }).notNull(),
   customerName:      varchar("customer_name", { length: 255 }).notNull(),
-  warehouse:         mysqlEnum("warehouse", ["Columbus", "Reno", "Toronto", "Calgary", "Mississauga"]).notNull(),
+  warehouse:         mysqlEnum("warehouse", ["Columbus", "Reno", "Toronto", "Calgary"]).notNull(),
   poDate:            varchar("po_date", { length: 10 }).notNull(),
   billingPeriod:     varchar("billing_period", { length: 7 }).notNull(),
   // Legacy combined-charge fields (kept for backward compat)

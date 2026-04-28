@@ -766,7 +766,7 @@ function formatToRoles(fmt: string, segCount: number): SegmentRole[] {
 type AisleRule = { aislePrefix: string; description?: string; bays: { bayId: string; bayPrefix?: string; sideValues?: string; hasLeftRight: boolean }[]; levels: string[] };
 type LocalDraft = { locationFormat: string; aisleRules: AisleRule[]; notes: string; segmentRoles?: SegmentRole[]; exampleLocation?: string; segmentWidths?: number[] };
 
-const GD_WAREHOUSES_FALLBACK = ["Columbus", "Reno", "Toronto", "Calgary", "Mississauga"];
+const GD_WAREHOUSES_FALLBACK = ["Columbus", "Reno", "Toronto", "Calgary"];
 const DEFAULT_DRAFT: LocalDraft = { locationFormat: "AISLE-BAY-LEVEL", aisleRules: [], notes: "", segmentWidths: undefined };
 
 /** Detect whether an example location uses a separator or is fixed-width */

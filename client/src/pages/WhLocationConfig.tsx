@@ -16,7 +16,7 @@ type BayRule = { bayId: string; hasLeftRight: boolean; };
 type AisleRule = { aislePrefix: string; description?: string; bays: BayRule[]; levels: string[]; };
 type LocalDraft = { locationFormat: string; aisleRules: AisleRule[]; notes: string; };
 
-const GD_WAREHOUSES_FALLBACK = ["Columbus", "Reno", "Toronto", "Calgary", "Mississauga"];
+const GD_WAREHOUSES_FALLBACK = ["Columbus", "Reno", "Toronto", "Calgary"];
 
 const FORMAT_OPTIONS = [
   { value: "AISLE-BAY-LEVEL",    label: "AISLE-BAY-LEVEL  (e.g. D-017-C)" },

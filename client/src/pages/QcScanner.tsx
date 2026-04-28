@@ -107,54 +107,37 @@ function playBeep(type: "success" | "error" | "complete") {
 // --- Pack-sheet-style item table ----------------------------------------------
 
 function ItemsTableSkeleton() {
-  const cols = "150px 120px 1fr 110px 100px 110px 40px";
+  // Compact: SKU | Description | Req | Scanned
+  const cols = "100px 1fr 54px 60px";
   return (
     <div className="rounded-lg overflow-hidden border border-border">
-      {/* Header */}
       <div
-        className="grid text-white text-xs font-bold uppercase tracking-wide"
-        style={{ gridTemplateColumns: cols, background: "#15527f", padding: "0 8px", height: 34, alignItems: "center" }}
+        className="grid text-white text-[11px] font-bold uppercase tracking-wide"
+        style={{ gridTemplateColumns: cols, background: "#15527f", padding: "0 8px", height: 28, alignItems: "center" }}
       >
-        <span>Location</span>
         <span>SKU</span>
         <span>Description</span>
-        <span>Lot #</span>
-        <span className="text-right">Expected</span>
-        <span className="text-right pr-2">Scanned</span>
-        <span />
+        <span className="text-right">Req</span>
+        <span className="text-right">Scanned</span>
       </div>
-      {/* Skeleton rows */}
       {Array.from({ length: 5 }).map((_, idx) => (
         <div
           key={idx}
           className="grid items-center border-b border-[#CDD4DC] last:border-0"
-          style={{
-            gridTemplateColumns: cols,
-            background: idx % 2 === 1 ? "#EEF4FB" : "#ffffff",
-            minHeight: 40,
-            padding: "6px 8px",
-          }}
+          style={{ gridTemplateColumns: cols, background: idx % 2 === 1 ? "#EEF4FB" : "#ffffff", minHeight: 32, padding: "4px 8px" }}
         >
-          {["w-20", "w-16", "w-32", "w-14", "w-8", "w-8"].map((w, ci) => (
-            <div key={ci} className={`h-3 rounded bg-gray-200 animate-pulse ${w} ${ci >= 4 ? "ml-auto" : ""}`} />
+          {["w-16", "w-28", "w-6", "w-6"].map((w, ci) => (
+            <div key={ci} className={`h-2.5 rounded bg-gray-200 animate-pulse ${w} ${ci >= 2 ? "ml-auto" : ""}`} />
           ))}
-          <div />
         </div>
       ))}
-      {/* Skeleton footer */}
       <div
         className="grid items-center"
-        style={{
-          gridTemplateColumns: cols,
-          background: "#EDFAEB",
-          borderTop: "2px solid #CDD4DC",
-          padding: "6px 8px",
-        }}
+        style={{ gridTemplateColumns: cols, background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "4px 8px" }}
       >
-        <div className="h-3 w-10 rounded bg-gray-200 animate-pulse col-span-4" />
-        <div className="h-3 w-8 rounded bg-gray-200 animate-pulse ml-auto" />
-        <div className="h-3 w-8 rounded bg-gray-200 animate-pulse ml-auto" />
-        <div />
+        <div className="h-2.5 w-10 rounded bg-gray-200 animate-pulse col-span-2" />
+        <div className="h-2.5 w-6 rounded bg-gray-200 animate-pulse ml-auto" />
+        <div className="h-2.5 w-6 rounded bg-gray-200 animate-pulse ml-auto" />
       </div>
     </div>
   );
@@ -188,26 +171,19 @@ function ItemsTable({
     );
   }
 
+  // Compact QC view: SKU | Description | Req | Scanned
+  const cols = "100px 1fr 44px 56px";
   return (
     <div className="rounded-lg overflow-hidden border border-border">
-      {/* Table header — dark navy, matching pack sheet */}
+      {/* Header */}
       <div
-        className="grid text-white text-xs font-bold uppercase tracking-wide"
-        style={{
-          gridTemplateColumns: "150px 120px 1fr 110px 100px 110px 40px",
-          background: "#15527f",
-          padding: "0 8px",
-          height: 34,
-          alignItems: "center",
-        }}
+        className="grid text-white text-[11px] font-bold uppercase tracking-wide"
+        style={{ gridTemplateColumns: cols, background: "#15527f", padding: "0 8px", height: 28, alignItems: "center" }}
       >
-        <span>Location</span>
         <span>SKU</span>
         <span>Description</span>
-        <span>Lot #</span>
-        <span className="text-right">Expected</span>
-        <span className="text-right pr-2">Scanned</span>
-        <span />
+        <span className="text-right">Req</span>
+        <span className="text-right">Scanned</span>
       </div>
 
       {/* Rows */}
@@ -215,7 +191,6 @@ function ItemsTable({
         const done = item.scannedQty >= item.expectedQty;
         const over = item.scannedQty > item.expectedQty;
         const isAlt = idx % 2 === 1;
-
         let rowBg = isAlt ? "#EEF4FB" : "#ffffff";
         if (over)  rowBg = isAlt ? "#fef3c7" : "#fffbeb";
         if (done && !over) rowBg = isAlt ? "#dcfce7" : "#f0fdf4";
@@ -223,127 +198,54 @@ function ItemsTable({
         return (
           <div
             key={item.sku}
-            className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
-            style={{
-              gridTemplateColumns: "150px 120px 1fr 110px 100px 110px 40px",
-              background: rowBg,
-              minHeight: 40,
-              padding: "4px 8px",
-            }}
+            className="grid items-center border-b border-[#CDD4DC] last:border-0"
+            style={{ gridTemplateColumns: cols, background: rowBg, minHeight: 32, padding: "3px 8px" }}
           >
-            {/* Location */}
-            <div className="flex flex-col justify-center min-w-0 pr-2">
-              {item.locationName ? (
-                <span className="font-semibold text-[#15527f] text-xs truncate">
-                  {item.locationName}
-                </span>
-              ) : (
-                <span className="text-muted-foreground text-xs">—</span>
-              )}
-              {item.upc && (
-                <span className="text-[10px] text-muted-foreground font-mono truncate">
-                  UPC: {item.upc}
-                </span>
-              )}
-            </div>
-
             {/* SKU */}
-            <div className="font-mono text-xs text-[#333333] truncate pr-2">
+            <div className="font-mono text-[11px] text-[#333333] truncate pr-1">
               {item.sku}
             </div>
 
             {/* Description */}
-            <div className="text-xs text-[#333333] truncate pr-2">
+            <div className="text-[11px] text-[#333333] truncate pr-1">
               {item.description ?? "—"}
             </div>
 
-            {/* Lot # */}
-            <div className="text-xs font-mono pr-2">
-              {item.lotNumber ? (
-                <span className="text-[#333333]">{item.lotNumber}</span>
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )}
-            </div>
-
-            {/* Expected qty — right-aligned */}
-            <div className="text-right font-semibold text-sm text-[#333333] pr-2">
+            {/* Required qty */}
+            <div className="text-right text-xs font-semibold text-[#333333]">
               {item.expectedQty}
             </div>
 
-            {/* Scanned qty with +/- controls — right-aligned */}
-            <div className="flex items-center justify-end gap-1">
-              {phase === "scanning" && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  disabled={item.scannedQty <= 0}
-                  onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: -1 }); onAdjust?.(item.sku, -1); }}
-                >
-                  <Minus className="w-3 h-3" />
-                </Button>
-              )}
-              <span
-                className={`font-bold text-sm w-8 text-right tabular-nums ${
-                  over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
-                }`}
-              >
+            {/* Scanned qty */}
+            <div className="text-right">
+              <span className={`font-bold text-xs tabular-nums ${
+                over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
+              }`}>
                 {item.scannedQty}
+                {done && !over && <span className="ml-0.5 text-green-500">✓</span>}
+                {over && <span className="ml-0.5 text-amber-500">⚠</span>}
               </span>
-              {phase === "scanning" && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  disabled={item.scannedQty >= item.expectedQty}
-                  title={item.scannedQty >= item.expectedQty ? "Expected quantity reached" : undefined}
-                  onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: 1 }); onAdjust?.(item.sku, 1); }}
-                >
-                  <Plus className="w-3 h-3" />
-                </Button>
-              )}
-            </div>
-
-            {/* Status icon */}
-            <div className="flex items-center justify-center">
-              {done && !over && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-              {over && <AlertTriangle className="w-4 h-4 text-amber-500" />}
             </div>
           </div>
         );
       })}
 
-      {/* Totals footer — matching pack sheet total row */}
+      {/* Totals footer */}
       <div
-        className="grid items-center text-sm font-bold"
-        style={{
-          gridTemplateColumns: "150px 120px 1fr 110px 100px 110px 40px",
-          background: "#EDFAEB",
-          borderTop: "2px solid #CDD4DC",
-          padding: "6px 8px",
-        }}
+        className="grid items-center text-xs font-bold"
+        style={{ gridTemplateColumns: cols, background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "4px 8px" }}
       >
-        <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-4">
-          Total
-        </span>
-        <span className="text-right text-sm text-[#333333] pr-2">
-          {items.reduce((s, i) => s + i.expectedQty, 0)}
-        </span>
-        <span className="text-right text-sm pr-2">
-          <span
-            className={
-              items.every((i) => i.scannedQty >= i.expectedQty)
-                ? "text-green-600"
-                : items.some((i) => i.scannedQty > i.expectedQty)
-                ? "text-amber-600"
-                : "text-[#333333]"
-            }
-          >
+        <span className="text-[#15527f] uppercase tracking-wide col-span-2">Total</span>
+        <span className="text-right text-[#333333]">{items.reduce((s, i) => s + i.expectedQty, 0)}</span>
+        <span className="text-right">
+          <span className={
+            items.every((i) => i.scannedQty >= i.expectedQty) ? "text-green-600"
+            : items.some((i) => i.scannedQty > i.expectedQty) ? "text-amber-600"
+            : "text-[#333333]"
+          }>
             {items.reduce((s, i) => s + i.scannedQty, 0)}
           </span>
         </span>
-        <span />
       </div>
     </div>
   );

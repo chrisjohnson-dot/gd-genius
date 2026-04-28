@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Package, MapPin, Truck, CheckCircle2, Search, X, RefreshCw, Wand2 } from "lucide-react";
+import { Loader2, Package, MapPin, Truck, CheckCircle2, Search, X, RefreshCw, Wand2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -79,6 +79,7 @@ function DockCell({
   level: string;
   orders: OutboundOrder[];
   highlightIds: Set<number>;
+  onOrderClick: (o: OutboundOrder) => void;
 }) {
   const isEmpty = orders.length === 0;
   const hasShipped = orders.some((o) => o.displayStatus === "shipped");
@@ -123,7 +124,8 @@ function DockCell({
           {orders.map((o) => (
             <div
               key={o.id}
-              className={`rounded px-1.5 py-1 text-[9px] leading-tight transition-all ${
+              onClick={() => onOrderClick(o)}
+              className={`rounded px-1.5 py-1 text-[9px] leading-tight transition-all cursor-pointer hover:ring-1 hover:ring-primary/50 ${
                 highlightIds.size > 0 && !highlightIds.has(o.id)
                   ? "opacity-30"
                   : highlightIds.has(o.id)
@@ -153,6 +155,180 @@ function DockCell({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Assign Dock Dialog ─────────────────────────────────────────────────────
+function AssignDockDialog({
+  order,
+  open,
+  onClose,
+  onAssigned,
+  onFindSpace,
+}: {
+  order: OutboundOrder | null;
+  open: boolean;
+  onClose: () => void;
+  onAssigned: () => void;
+  onFindSpace: () => void;
+}) {
+  const [selectedLevel, setSelectedLevel] = useState<string>("A");
+  const [selectedPosition, setSelectedPosition] = useState<number>(1);
+  const [mode, setMode] = useState<"dock" | "overflow">("dock");
+
+  const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(vars.outboundLocation === "OVERFLOW" ? "Assigned to Overflow" : `Assigned to ${vars.outboundLocation}`);
+      onAssigned();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const clearLocation = trpc.shippingDashboard.updateOutbound.useMutation({
+    onSuccess: () => {
+      toast.success("Dock position cleared");
+      onAssigned();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const currentParsed = order ? parseDockLocation(order.outboundLocation) : null;
+  const isCurrentOverflow = order?.outboundLocation?.trim().toLowerCase() === "overflow";
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-primary" />
+            Assign Dock Position
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-2 space-y-4">
+          {order && (
+            <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs">
+              <p className="font-semibold text-foreground">{order.clientName}</p>
+              <p className="text-muted-foreground">
+                TXN #{order.extensivOrderId}
+                {order.referenceNum ? ` · ${order.referenceNum}` : order.poNum ? ` · ${order.poNum}` : ""}
+                {order.palletCount ? ` · ${order.palletCount} plt` : ""}
+              </p>
+              {(currentParsed || isCurrentOverflow) && (
+                <p className="text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                  Current: {isCurrentOverflow ? "Overflow" : `${currentParsed!.level}${currentParsed!.position}`}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMode("dock")}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                mode === "dock"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-muted-foreground border-border hover:border-primary/50"
+              }`}
+            >
+              <MapPin className="w-3 h-3 inline mr-1" />
+              Dock Position
+            </button>
+            <button
+              onClick={() => setMode("overflow")}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                mode === "overflow"
+                  ? "bg-orange-600 text-white border-orange-600"
+                  : "bg-background text-muted-foreground border-border hover:border-orange-400/50"
+              }`}
+            >
+              <Truck className="w-3 h-3 inline mr-1" />
+              Overflow
+            </button>
+          </div>
+          {mode === "dock" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Level</label>
+                  <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {LEVELS.map((l) => <SelectItem key={l} value={l}>Level {l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Position</label>
+                  <Select value={String(selectedPosition)} onValueChange={(v) => setSelectedPosition(parseInt(v, 10))}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {POSITIONS.map((p) => <SelectItem key={p} value={String(p)}>Position {p}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center justify-center">
+                <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 border-2 border-primary">
+                  <span className="text-2xl font-black text-primary">{selectedLevel}{selectedPosition}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          {mode === "overflow" && (
+            <div className="flex flex-col items-center gap-2 py-2">
+              <div className="flex items-center justify-center w-full h-16 rounded-xl bg-orange-500/10 border-2 border-orange-500">
+                <Truck className="w-5 h-5 text-orange-600 mr-2" />
+                <span className="text-lg font-black text-orange-600">OVERFLOW</span>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Order will be staged in the overflow area when no contiguous dock space is available.
+              </p>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={onClose}>Cancel</Button>
+            {(currentParsed || isCurrentOverflow) && order && (
+              <Button
+                variant="outline" size="sm"
+                className="flex-1 sm:flex-none text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-950"
+                disabled={clearLocation.isPending}
+                onClick={() => clearLocation.mutate({ id: order.id, outboundLocation: "" })}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              variant="outline" size="sm"
+              className="flex-1 sm:flex-none text-primary border-primary/40 hover:bg-primary/5"
+              onClick={() => { onClose(); onFindSpace(); }}
+            >
+              <Wand2 className="w-3 h-3 mr-1" /> Auto-Find
+            </Button>
+            <Button
+              size="sm"
+              className={`flex-1 sm:flex-none ${mode === "overflow" ? "bg-orange-600 hover:bg-orange-700" : ""}`}
+              disabled={assignDock.isPending || clearLocation.isPending}
+              onClick={() => {
+                if (!order) return;
+                if (mode === "overflow") {
+                  assignDock.mutate({ id: order.id, outboundLocation: "OVERFLOW" });
+                } else {
+                  assignDock.mutate({ id: order.id, outboundLocation: `${selectedLevel}${selectedPosition}` });
+                }
+              }}
+            >
+              {assignDock.isPending ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+              Assign {mode === "overflow" ? "Overflow" : `${selectedLevel}${selectedPosition}`}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -270,6 +446,7 @@ export default function DockManager() {
   const [selectedFacility, setSelectedFacility] = useState<string>("__all__");
   const [search, setSearch] = useState("");
   const [findSpaceOrder, setFindSpaceOrder] = useState<OutboundOrder | null>(null);
+  const [assignDockOrder, setAssignDockOrder] = useState<OutboundOrder | null>(null);
   const utils = trpc.useUtils();
 
   const { data: rawOrders = [], isLoading } = trpc.shippingDashboard.listOutbound.useQuery(undefined, {
@@ -558,6 +735,7 @@ export default function DockManager() {
                         level={level}
                         orders={cellOrders}
                         highlightIds={matchedIds}
+                        onOrderClick={setAssignDockOrder}
                       />
                     );
                   })}
@@ -580,7 +758,8 @@ export default function DockManager() {
                 {overflowOrders.map((o) => (
                   <div
                     key={o.id}
-                    className={`flex items-start gap-2 rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2 transition-all ${
+                    onClick={() => setAssignDockOrder(o)}
+                    className={`flex items-start gap-2 rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2 transition-all cursor-pointer hover:border-orange-500/50 ${
                       searchActive && !matchedIds.has(o.id) ? "opacity-30" : ""
                     } ${searchActive && matchedIds.has(o.id) ? "ring-2 ring-primary" : ""}`}
                   >
@@ -597,7 +776,7 @@ export default function DockManager() {
                       size="sm"
                       variant="outline"
                       className="shrink-0 h-6 px-2 text-[10px] border-orange-400 text-orange-700 dark:text-orange-400 hover:bg-orange-500/10"
-                      onClick={() => setFindSpaceOrder(o)}
+                      onClick={(e) => { e.stopPropagation(); setFindSpaceOrder(o); }}
                     >
                       <Wand2 className="w-3 h-3 mr-1" />
                       Find Space
@@ -616,17 +795,19 @@ export default function DockManager() {
                 <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
                   Orders Without Dock Position ({unlocatedOrders.length})
                 </h3>
+                <span className="text-xs text-muted-foreground ml-1">— click to assign a position</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {unlocatedOrders.map((o) => (
                   <div
                     key={o.id}
-                    className={`flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 transition-all ${
+                    onClick={() => setAssignDockOrder(o)}
+                    className={`flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 transition-all cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/15 ${
                       searchActive && !matchedIds.has(o.id) ? "opacity-30" : ""
                     } ${searchActive && matchedIds.has(o.id) ? "ring-2 ring-primary" : ""}`}
                   >
                     <Package className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-foreground truncate">{o.clientName}</p>
                       <p className="text-[10px] text-muted-foreground">
                         TXN #{o.extensivOrderId}
@@ -639,6 +820,13 @@ export default function DockManager() {
                         </p>
                       )}
                     </div>
+                    <Button
+                      size="sm" variant="outline"
+                      className="shrink-0 h-6 px-2 text-[10px] border-amber-400 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                      onClick={(e) => { e.stopPropagation(); setAssignDockOrder(o); }}
+                    >
+                      <MapPin className="w-3 h-3 mr-1" /> Assign
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -653,6 +841,18 @@ export default function DockManager() {
         open={!!findSpaceOrder}
         onClose={() => setFindSpaceOrder(null)}
         onAssigned={() => utils.shippingDashboard.listOutbound.invalidate()}
+      />
+      {/* Assign Dock Dialog */}
+      <AssignDockDialog
+        order={assignDockOrder}
+        open={!!assignDockOrder}
+        onClose={() => setAssignDockOrder(null)}
+        onAssigned={() => utils.shippingDashboard.listOutbound.invalidate()}
+        onFindSpace={() => {
+          const o = assignDockOrder;
+          setAssignDockOrder(null);
+          setFindSpaceOrder(o);
+        }}
       />
     </div>
   );

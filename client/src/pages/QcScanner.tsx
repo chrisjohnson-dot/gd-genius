@@ -1334,70 +1334,68 @@ export default function QcScanner() {
     <div className="flex-1 flex flex-row overflow-hidden">
 
     {/* ===== LEFT COLUMN: Order details (header, progress, items table) ===== */}
-    <div className="w-[440px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-background">
-    {/* Pinned header inside left column */}
-    <div className="shrink-0 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ScanBarcode className="w-6 h-6 text-primary" />
-            {session?.transactionId ? `TX ${session.transactionId}` : session?.referenceNumber}
-            {phase === "complete" && (
-              <Badge className="bg-green-500 text-white ml-2">Complete</Badge>
-            )}
-          </h1>
-          <div className="flex gap-3 text-sm text-muted-foreground mt-0.5 flex-wrap">
-            {session?.customerName && <span>{session.customerName}</span>}
-            {session?.warehouseName && <span>· {session.warehouseName}</span>}
-            {session?.poNumber && <span>· PO: {session.poNumber}</span>}
-          </div>
-        </div>
-        <div className="flex gap-2">
+    <div className="w-[380px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-background">
+    {/* Pinned header inside left column — compact */}
+    <div className="shrink-0 bg-background border-b border-border pb-2 px-3 pt-2">
+      {/* Title row */}
+      <div className="flex items-center gap-2 min-w-0">
+        <ScanBarcode className="w-4 h-4 text-primary shrink-0" />
+        <h1 className="text-base font-bold truncate flex-1">
+          {session?.transactionId ? `TX ${session.transactionId}` : session?.referenceNumber}
+        </h1>
+        {phase === "complete" && <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0 shrink-0">Done</Badge>}
+        {/* Action buttons — icon-only with tooltips */}
+        <div className="flex gap-1 shrink-0">
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
+            className="h-7 w-7"
             onClick={() => {
               if (!session) return;
               fetchFromExtensiv.mutate({ sessionId: session.id, transactionId: session.transactionId ?? 0 });
             }}
             disabled={fetchFromExtensiv.isPending}
-            title="Fetch expected items and lot numbers from Extensiv"
+            title={fetchFromExtensiv.isPending ? "Loading from Extensiv…" : "Load from Extensiv"}
           >
             {fetchFromExtensiv.isPending
-              ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
-              : <Download className="w-4 h-4 mr-1 text-blue-500" />}
-            {fetchFromExtensiv.isPending ? "Loading…" : "Load from Extensiv"}
+              ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              : <Download className="w-3.5 h-3.5 text-blue-500" />}
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
+            className="h-7 w-7"
             onClick={() => { setFlagBarcode(""); setFlagDialog(true); }}
+            title="Flag a scan issue"
           >
-            <Flag className="w-4 h-4 mr-1 text-amber-500" /> Flag Scan
+            <Flag className="w-3.5 h-3.5 text-amber-500" />
           </Button>
-
           {(phase === "complete" || allComplete) ? (
-            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setCompleteDialog(true)}>
-              <CheckCircle2 className="w-4 h-4 mr-1" /> Complete Order
+            <Button size="sm" className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700" onClick={() => setCompleteDialog(true)} title="Complete Order">
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Complete
             </Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => setCompleteDialog(true)}>
-              Complete Order
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setCompleteDialog(true)} title="Complete Order">
+              Complete
             </Button>
           )}
         </div>
       </div>
-
-      {/* Progress bar */}
-      <div className="space-y-1 mt-3">
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>{totalScanned} / {totalExpected} units scanned</span>
+      {/* Customer / warehouse / PO — single compact line */}
+      <div className="flex gap-2 text-[11px] text-muted-foreground mt-0.5 truncate">
+        {session?.customerName && <span className="truncate">{session.customerName}</span>}
+        {session?.warehouseName && <span className="shrink-0">· {session.warehouseName}</span>}
+        {session?.poNumber && <span className="shrink-0">· PO: {session.poNumber}</span>}
+      </div>
+      {/* Progress bar — compact */}
+      <div className="mt-1.5">
+        <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
+          <span>{totalScanned} / {totalExpected} units</span>
           <span>{progress}%</span>
         </div>
         <Progress
           value={progress}
-          className={`h-2 ${allComplete ? "[&>div]:bg-green-500" : ""}`}
+          className={`h-1.5 ${allComplete ? "[&>div]:bg-green-500" : ""}`}
         />
       </div>
 

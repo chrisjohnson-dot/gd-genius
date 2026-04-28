@@ -520,6 +520,12 @@ export default function QcScanner() {
       if (data.resumed) {
         toast.info(`Resumed session for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
         setTimeout(() => barcodeRef.current?.focus(), 100);
+        // Silently refresh case amounts in the background for sessions seeded before the fix
+        const loadedItems = (data.items as ScanItem[]) ?? [];
+        const needsRefresh = loadedItems.some((i) => (i.caseAmount ?? 1) <= 1);
+        if (sess?.id && needsRefresh) {
+          refreshCaseAmounts.mutate({ sessionId: sess.id });
+        }
       } else {
         toast.success(`Session started for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
         // Show pallet type selection for the first pallet
@@ -707,6 +713,19 @@ export default function QcScanner() {
         playBeep("success");
       }
     },
+  });
+
+  const refreshCaseAmounts = trpc.qcScanner.refreshCaseAmounts.useMutation({
+    onSuccess: (data) => {
+      if (data.updatedCount > 0) {
+        setItems(data.items as ScanItem[]);
+        toast.success(`Case quantities updated (${data.updatedCount} SKU${data.updatedCount !== 1 ? "s" : ""})`, {
+          description: "Case mode will now scan the correct quantity per scan.",
+          duration: 4000,
+        });
+      }
+    },
+    onError: () => { /* silently ignore — non-critical */ },
   });
 
   const manualSetQty = trpc.qcScanner.manualSetQty.useMutation({
@@ -2015,10 +2034,13 @@ export default function QcScanner() {
                                   variant={scanAsCase ? "default" : "outline"}
                                   className="h-12 px-4 shrink-0"
                                   onClick={() => setScanAsCase((v) => !v)}
-                                  title="Toggle case scan (scan one barcode = full case quantity)"
+                                  title={`Toggle case scan (scan one barcode = full case quantity). Case qty: ${items.find((i) => (i.caseAmount ?? 1) > 1)?.caseAmount ?? "?"}×`}
                                 >
                                   <Layers className="w-4 h-4 mr-1" />
                                   Case
+                                  {items.some((i) => (i.caseAmount ?? 1) > 1) && (
+                                    <span className="ml-1 text-xs opacity-75">×{items.find((i) => (i.caseAmount ?? 1) > 1)?.caseAmount}</span>
+                                  )}
                                 </Button>
                                 <Button type="submit" className="h-12 px-6 shrink-0" disabled={scanBarcode.isPending}>
                                   Scan

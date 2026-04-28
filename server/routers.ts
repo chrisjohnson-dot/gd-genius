@@ -251,7 +251,8 @@ import { getCarrierMarkups, getMarkupPct, applyMarkup, testOpFiConnection } from
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
-import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
+import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap,
+  fetchItemCaseAmountMap, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
   completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -3896,15 +3897,17 @@ const qcScannerRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: `Order found in Extensiv but it has no line items. The order may not have items loaded yet.` });
       }
 
-      // Fetch item descriptions and UPCs for the customer
+      // Fetch item descriptions, UPCs, and case amounts for the customer
       let descMap = new Map<string, string>();
       let upcMap = new Map<string, string>();
+      let caseAmountMap = new Map<string, number>();
       try {
         const customerId = order.readOnly?.customerIdentifier?.id;
         if (customerId) {
-          [descMap, upcMap] = await Promise.all([
+          [descMap, upcMap, caseAmountMap] = await Promise.all([
             fetchItemDescriptions(config, customerId),
             fetchItemUpcMap(config, customerId),
+            fetchItemCaseAmountMap(config, customerId),
           ]);
         }
       } catch (err) {
@@ -3918,11 +3921,12 @@ const qcScannerRouter = router({
         if (!sku) continue;
         const description = descMap.get(sku) ?? undefined;
         const upc = upcMap.get(sku) ?? null;
+        const caseAmount = caseAmountMap.get(sku) ?? 1;
         await upsertQcScanItem(input.sessionId, sku, upc, {
           description,
           lotNumber: item.lotNumber ?? null,
           expectedQty: item.qty ?? 0,
-          caseAmount: 1,
+          caseAmount,
           scannedQty: 0,
           scanTimestamps: [],
         });
@@ -3945,6 +3949,40 @@ const qcScannerRouter = router({
       // Return the freshly seeded items
       const items = await getQcScanItems(input.sessionId);
       return { success: true, seededCount, items, customerName: customerName ?? null, poNumber: poNumber ?? null, referenceNumber: referenceNum ?? String(input.transactionId) };
+    }),
+
+  // Refresh caseAmount for all items in an existing session from Extensiv
+  // Use this for sessions seeded before the caseAmount fix
+  refreshCaseAmounts: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const configs = await getExtensivConfigs();
+      let config = session.warehouseId ? await getExtensivConfigById(session.warehouseId) : null;
+      if (!config) config = configs.find((c) => c.isActive) ?? configs[0] ?? null;
+      if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found" });
+      let customerId = session.customerId ?? null;
+      if (!customerId && session.transactionId) {
+        try {
+          const { order } = await fetchOrderWithDetail(config, session.transactionId);
+          customerId = order.readOnly?.customerIdentifier?.id ?? null;
+          if (customerId) await updateQcSession(input.sessionId, { customerId, warehouseId: config.id } as any);
+        } catch { /* ignore */ }
+      }
+      if (!customerId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Could not determine customer ID for this session" });
+      const caseAmountMap = await fetchItemCaseAmountMap(config, customerId);
+      const items = await getQcScanItems(input.sessionId);
+      let updatedCount = 0;
+      for (const item of items) {
+        const newCaseAmount = caseAmountMap.get(item.sku) ?? 1;
+        if (newCaseAmount !== (item.caseAmount ?? 1)) {
+          await upsertQcScanItem(input.sessionId, item.sku, item.upc ?? null, { caseAmount: newCaseAmount });
+          updatedCount++;
+        }
+      }
+      const updatedItems = await getQcScanItems(input.sessionId);
+      return { success: true, updatedCount, items: updatedItems };
     }),
 
   // Record a barcode scan — increments scannedQty for the matching SKU/UPC

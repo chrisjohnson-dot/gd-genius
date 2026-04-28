@@ -771,6 +771,46 @@ export async function fetchItemUpcMap(
   return upcMap;
 }
 
+/**
+ * Fetch the case (packaging unit) quantity for each SKU from the Extensiv item master.
+ * The value lives at options.packageUnit.qty in the HAL response
+ * (Units of Measure tab → Packaging Unit → Primary Units Per Package).
+ * Returns Map<sku, caseQty> where caseQty >= 1.
+ */
+export async function fetchItemCaseAmountMap(
+  config: ExtensivClientConfig,
+  customerId: number
+): Promise<Map<string, number>> {
+  const client = createExtensivClient(config);
+  const caseMap = new Map<string, number>();
+  let pgnum = 1;
+  const pgsiz = 100;
+
+  interface RawItemWithPackage {
+    sku?: string;
+    options?: {
+      packageUnit?: { qty?: number; upc?: string };
+    };
+  }
+  while (true) {
+    const data = (await client.get(`/customers/${customerId}/items`, {
+      pgsiz,
+      pgnum,
+    })) as {
+      _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawItemWithPackage[] };
+    };
+    const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
+    for (const item of items) {
+      if (!item.sku) continue;
+      const qty = item.options?.packageUnit?.qty;
+      if (qty && qty > 1) caseMap.set(item.sku, qty);
+    }
+    if (items.length < pgsiz) break;
+    pgnum++;
+  }
+  return caseMap;
+}
+
 // In-memory cache: configKey → Map<sku, dims> with expiry
 const _itemDimsCache = new Map<string, { data: Map<string, ExtensivItemDims>; expiresAt: number }>();
 

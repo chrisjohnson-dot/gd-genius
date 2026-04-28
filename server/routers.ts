@@ -3966,11 +3966,17 @@ const qcScannerRouter = router({
         return { found: true, item: match, sessionComplete: false, overScan: true };
       }
       const safeAmount = Math.min(amount, remaining);
+      const qtyBefore = match.scannedQty ?? 0;
       const updated = await incrementQcScanItem(input.sessionId, match.sku, safeAmount);
+      const qtyAfter = updated?.scannedQty ?? qtyBefore;
+      // If the atomic SQL capped the increment to zero (race condition), treat as over-scan
+      if (qtyAfter <= qtyBefore) {
+        return { found: true, item: updated ?? match, sessionComplete: false, overScan: true };
+      }
       // Check if all items are complete
       const allItems = await getQcScanItems(input.sessionId);
       const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);
-      return { found: true, item: updated, sessionComplete };
+      return { found: true, item: updated, sessionComplete, overScan: false };
     }),
 
   // Manual quantity adjustment

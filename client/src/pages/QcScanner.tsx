@@ -514,6 +514,7 @@ export default function QcScanner() {
 
   const scanBarcode = trpc.qcScanner.scanBarcode.useMutation({
     onSuccess: (data) => {
+      console.log("[QcScanner] scanBarcode result:", JSON.stringify({ found: data.found, overScan: (data as any).overScan, sessionComplete: data.sessionComplete }));
       if (!data.found) {
         playBeep("error");
         setLastScan({ sku: barcodeInput, found: false });
@@ -651,6 +652,8 @@ export default function QcScanner() {
         playBeep("complete");
         toast.success("Order complete!");
         setPhase("complete");
+      } else {
+        playBeep("success");
       }
     },
   });

@@ -252,7 +252,7 @@ import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdue
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap,
-  fetchItemCaseAmountMap, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
+  fetchItemCaseAmountMap, fetchItemCartonWeightMap, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
   completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -3897,17 +3897,19 @@ const qcScannerRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: `Order found in Extensiv but it has no line items. The order may not have items loaded yet.` });
       }
 
-      // Fetch item descriptions, UPCs, and case amounts for the customer
+      // Fetch item descriptions, UPCs, case amounts, and carton weights for the customer
       let descMap = new Map<string, string>();
       let upcMap = new Map<string, string>();
       let caseAmountMap = new Map<string, number>();
+      let cartonWeightMap = new Map<string, number>();
       try {
         const customerId = order.readOnly?.customerIdentifier?.id;
         if (customerId) {
-          [descMap, upcMap, caseAmountMap] = await Promise.all([
+          [descMap, upcMap, caseAmountMap, cartonWeightMap] = await Promise.all([
             fetchItemDescriptions(config, customerId),
             fetchItemUpcMap(config, customerId),
             fetchItemCaseAmountMap(config, customerId),
+            fetchItemCartonWeightMap(config, customerId),
           ]);
         }
       } catch (err) {
@@ -3922,14 +3924,16 @@ const qcScannerRouter = router({
         const description = descMap.get(sku) ?? undefined;
         const upc = upcMap.get(sku) ?? null;
         const caseAmount = caseAmountMap.get(sku) ?? 1;
+        const cartonWeightLb = cartonWeightMap.get(sku) ?? null;
         await upsertQcScanItem(input.sessionId, sku, upc, {
           description,
           lotNumber: item.lotNumber ?? null,
           expectedQty: item.qty ?? 0,
           caseAmount,
+          cartonWeightLb: cartonWeightLb !== null ? String(cartonWeightLb) : undefined,
           scannedQty: 0,
           scanTimestamps: [],
-        });
+        } as any);
         seededCount++;
       }
 
@@ -3983,6 +3987,43 @@ const qcScannerRouter = router({
         const newCaseAmount = caseAmountMap.get(item.sku) ?? 1;
         if (newCaseAmount !== (item.caseAmount ?? 1)) {
           await upsertQcScanItem(input.sessionId, item.sku, item.upc ?? null, { caseAmount: newCaseAmount });
+          updatedCount++;
+        }
+      }
+      const updatedItems = await getQcScanItems(input.sessionId);
+      return { success: true, updatedCount, items: updatedItems };
+    }),
+
+  // Refresh cartonWeightLb for all items in an existing session from Extensiv
+  // Use this for sessions seeded before the cartonWeightLb fix
+  refreshCartonWeights: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const configs = await getExtensivConfigs();
+      let config = session.warehouseId ? await getExtensivConfigById(session.warehouseId) : null;
+      if (!config) config = configs.find((c) => c.isActive) ?? configs[0] ?? null;
+      if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found" });
+      let customerId = session.customerId ?? null;
+      if (!customerId && session.transactionId) {
+        try {
+          const { order } = await fetchOrderWithDetail(config, session.transactionId);
+          customerId = order.readOnly?.customerIdentifier?.id ?? null;
+          if (customerId) await updateQcSession(input.sessionId, { customerId, warehouseId: config.id } as any);
+        } catch { /* ignore */ }
+      }
+      if (!customerId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Could not determine customer ID for this session" });
+      const cartonWeightMap = await fetchItemCartonWeightMap(config, customerId);
+      const items = await getQcScanItems(input.sessionId);
+      let updatedCount = 0;
+      for (const item of items) {
+        const newWeight = cartonWeightMap.get(item.sku) ?? null;
+        const currentWeight = item.cartonWeightLb != null ? parseFloat(String(item.cartonWeightLb)) : null;
+        if (newWeight !== currentWeight) {
+          await upsertQcScanItem(input.sessionId, item.sku, item.upc ?? null, {
+            cartonWeightLb: newWeight !== null ? String(newWeight) : null,
+          } as any);
           updatedCount++;
         }
       }
@@ -4429,19 +4470,37 @@ const qcScannerRouter = router({
       // Get the session to find the config
       const session = await getQcSessionById(input.sessionId);
       if (!session?.warehouseId) return { weightLb: null };
-      const config = await getExtensivConfigById(session.warehouseId);
-      if (!config) return { weightLb: null };
 
-      // Fetch item dims for all SKUs on this pallet
-      const skus = Array.from(new Set(items.map(i => i.sku)));
-      const dims = await fetchItemDimsBySkus(config, session.customerId ?? 0, skus);
+      // Build a map of SKU → cartonWeightLb from the session items (populated during Extensiv seeding)
+      const sessionItems = await getQcScanItems(input.sessionId);
+      const cartonWeightBySkuFromDB = new Map<string, number>();
+      for (const si of sessionItems) {
+        if (si.cartonWeightLb != null) {
+          cartonWeightBySkuFromDB.set(si.sku, parseFloat(String(si.cartonWeightLb)));
+        }
+      }
 
-      // Calculate total weight: sum(cartonWeight * qty) per SKU
+      // For SKUs without a stored cartonWeightLb, fall back to fetchItemDimsBySkus
+      const skusNeedingDims = Array.from(new Set(
+        items.filter(i => !cartonWeightBySkuFromDB.has(i.sku)).map(i => i.sku)
+      ));
+      const dimsMap = new Map<string, number>();
+      if (skusNeedingDims.length > 0) {
+        const config = await getExtensivConfigById(session.warehouseId);
+        if (config) {
+          const dims = await fetchItemDimsBySkus(config, session.customerId ?? 0, skusNeedingDims);
+          for (const d of dims) {
+            if (d.weightLb) dimsMap.set(d.sku, d.weightLb);
+          }
+        }
+      }
+
+      // Calculate total weight: sum(cartonWeightLb * qty) per SKU
       let totalLb = 0;
       for (const item of items) {
-        const dim = dims.find(d => d.sku === item.sku);
-        if (dim?.weightLb) {
-          totalLb += dim.weightLb * item.qty;
+        const w = cartonWeightBySkuFromDB.get(item.sku) ?? dimsMap.get(item.sku);
+        if (w) {
+          totalLb += w * item.qty;
         }
       }
 

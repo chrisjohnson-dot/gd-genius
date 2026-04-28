@@ -520,11 +520,16 @@ export default function QcScanner() {
       if (data.resumed) {
         toast.info(`Resumed session for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
         setTimeout(() => barcodeRef.current?.focus(), 100);
-        // Silently refresh case amounts in the background for sessions seeded before the fix
+        // Silently refresh case amounts and carton weights in the background for sessions seeded before the fix
         const loadedItems = (data.items as ScanItem[]) ?? [];
-        const needsRefresh = loadedItems.some((i) => (i.caseAmount ?? 1) <= 1);
-        if (sess?.id && needsRefresh) {
+        const needsCaseRefresh = loadedItems.some((i) => (i.caseAmount ?? 1) <= 1);
+        if (sess?.id && needsCaseRefresh) {
           refreshCaseAmounts.mutate({ sessionId: sess.id });
+        }
+        // Always refresh carton weights on resume — they may not have been populated
+        const needsWeightRefresh = loadedItems.some((i) => (i as any).cartonWeightLb == null);
+        if (sess?.id && needsWeightRefresh) {
+          refreshCartonWeights.mutate({ sessionId: sess.id });
         }
       } else {
         toast.success(`Session started for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
@@ -721,6 +726,19 @@ export default function QcScanner() {
         setItems(data.items as ScanItem[]);
         toast.success(`Case quantities updated (${data.updatedCount} SKU${data.updatedCount !== 1 ? "s" : ""})`, {
           description: "Case mode will now scan the correct quantity per scan.",
+          duration: 4000,
+        });
+      }
+    },
+    onError: () => { /* silently ignore — non-critical */ },
+  });
+
+  const refreshCartonWeights = trpc.qcScanner.refreshCartonWeights.useMutation({
+    onSuccess: (data) => {
+      if (data.updatedCount > 0) {
+        setItems(data.items as ScanItem[]);
+        toast.success(`Carton weights loaded (${data.updatedCount} SKU${data.updatedCount !== 1 ? "s" : ""})`, {
+          description: "Press Calculate on each pallet to update the weight totals.",
           duration: 4000,
         });
       }

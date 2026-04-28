@@ -641,6 +641,8 @@ export const qcScanItems = mysqlTable("qc_scan_items", {
   expectedQty: int("expectedQty").notNull().default(0),
   scannedQty: int("scannedQty").notNull().default(0),
   caseAmount: int("caseAmount").notNull().default(1),
+  /** Carton (master case) weight in lbs from Extensiv packageUnit.weightLbs — used for pallet weight calculation */
+  cartonWeightLb: decimal("cartonWeightLb", { precision: 8, scale: 3 }),
   // Individual scan timestamps stored as JSON array
   scanTimestamps: json("scanTimestamps"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

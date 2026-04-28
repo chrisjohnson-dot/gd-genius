@@ -133,6 +133,12 @@ interface RawExtensivItem {
       height?: number;
       weight?: number;
     };
+    packageUnit?: {
+      qty?: number;
+      upc?: string;
+      /** Carton weight in lbs (Weight (lbs) field in Extensiv Packaging Unit section) */
+      weightLbs?: number;
+    };
   };
 }
 
@@ -809,6 +815,39 @@ export async function fetchItemCaseAmountMap(
     pgnum++;
   }
   return caseMap;
+}
+
+/**
+ * Fetch a map of SKU → carton weight (lbs) from Extensiv item master.
+ * Uses options.packageUnit.weightLbs — the "Weight (lbs)" field in the Packaging Unit section.
+ * Returns only SKUs that have a non-zero packageUnit weight.
+ */
+export async function fetchItemCartonWeightMap(
+  config: ExtensivClientConfig,
+  customerId: number
+): Promise<Map<string, number>> {
+  const client = createExtensivClient(config);
+  const weightMap = new Map<string, number>();
+  let pgnum = 1;
+  const pgsiz = 100;
+
+  while (true) {
+    const data = (await client.get(`/customers/${customerId}/items`, {
+      pgsiz,
+      pgnum,
+    })) as {
+      _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawExtensivItem[] };
+    };
+    const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
+    for (const item of items) {
+      if (!item.sku) continue;
+      const w = item.options?.packageUnit?.weightLbs;
+      if (w != null && w > 0) weightMap.set(item.sku, w);
+    }
+    if (items.length < pgsiz) break;
+    pgnum++;
+  }
+  return weightMap;
 }
 
 // In-memory cache: configKey → Map<sku, dims> with expiry

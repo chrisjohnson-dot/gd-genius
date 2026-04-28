@@ -11,26 +11,12 @@ import { toast } from "sonner";
 const POSITIONS = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
 const LEVELS = ["A", "B", "C", "D", "E"] as const;
 
-// Customer color palette — assigned by sorted clientId index (cycles if > 12)
-const CUSTOMER_PALETTE = [
-  { bg: "#f97316", text: "#fff" }, // orange
-  { bg: "#3b82f6", text: "#fff" }, // blue
-  { bg: "#10b981", text: "#fff" }, // emerald
-  { bg: "#a855f7", text: "#fff" }, // purple
-  { bg: "#ef4444", text: "#fff" }, // red
-  { bg: "#eab308", text: "#000" }, // yellow
-  { bg: "#06b6d4", text: "#fff" }, // cyan
-  { bg: "#ec4899", text: "#fff" }, // pink
-  { bg: "#84cc16", text: "#000" }, // lime
-  { bg: "#f59e0b", text: "#000" }, // amber
-  { bg: "#6366f1", text: "#fff" }, // indigo
-  { bg: "#14b8a6", text: "#fff" }, // teal
-];
-
-function getCustomerColor(clientId: number, allClientIds: number[]): { bg: string; text: string } {
-  const sorted = [...new Set(allClientIds)].sort((a, b) => a - b);
-  const idx = sorted.indexOf(clientId);
-  return CUSTOMER_PALETTE[idx % CUSTOMER_PALETTE.length];
+// Age-based color coding: green 0–2 days, yellow 3–7 days, red 8+ days
+function getAgeColor(shipReadyAt: Date | string | null): { bg: string; text: string } {
+  const days = daysOnDock(shipReadyAt);
+  if (days >= 8) return { bg: "#ef4444", text: "#fff" }; // red
+  if (days >= 3) return { bg: "#eab308", text: "#000" }; // yellow
+  return { bg: "#22c55e", text: "#fff" };                 // green
 }
 
 function formatDockAge(shipReadyAt: Date | string | null): string {
@@ -38,9 +24,9 @@ function formatDockAge(shipReadyAt: Date | string | null): string {
   const ms = Math.max(0, Date.now() - new Date(shipReadyAt).getTime());
   const hrs = Math.floor(ms / 3_600_000);
   const days = Math.floor(ms / 86_400_000);
-  if (days >= 1) return days === 1 ? "1 day" : `${days} days`;
-  if (hrs < 1) return "< 1 hr";
-  return hrs === 1 ? "1 hr" : `${hrs} hrs`;
+  if (days >= 1) return String(days);
+  if (hrs < 1) return "< 1h";
+  return `${hrs}h`;
 }
 
 function daysOnDock(shipReadyAt: Date | string | null): number {
@@ -133,7 +119,7 @@ function DockCell({
 
   const borderStyle =
     !isEmpty && activeOrders.length === 1
-      ? { borderColor: getCustomerColor(activeOrders[0].clientId, allClientIds).bg, borderWidth: 2 }
+      ? { borderColor: getAgeColor(activeOrders[0].shipReadyAt).bg, borderWidth: 2 }
       : {};
 
   const wrapperClass = [
@@ -161,7 +147,7 @@ function DockCell({
       ) : (
         <div className="flex flex-col gap-1">
           {activeOrders.map((o) => {
-            const color = getCustomerColor(o.clientId, allClientIds);
+            const color = getAgeColor(o.shipReadyAt);
             const age = formatDockAge(o.shipReadyAt);
             const dimmed = searchActive && !highlightIds.has(o.id);
             return (
@@ -179,8 +165,8 @@ function DockCell({
                 </div>
                 {age && (
                   <div
-                    className="px-1.5 pb-1 text-[9px] font-semibold leading-tight"
-                    style={{ color: color.text, opacity: 0.8 }}
+                    className="px-1.5 pb-1 text-[9px] font-bold leading-tight tabular-nums"
+                    style={{ color: color.text, opacity: 0.85 }}
                   >
                     {age}
                   </div>
@@ -671,18 +657,20 @@ export default function DockManager() {
         </div>
       </div>
 
-      {/* Legend — one swatch per customer currently on dock */}
-      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        {[...new Set(activeOrders.map((o) => o.clientId))].sort((a, b) => a - b).map((cid) => {
-          const color = getCustomerColor(cid, allClientIds);
-          const name = activeOrders.find((o) => o.clientId === cid)?.clientName ?? String(cid);
-          return (
-            <div key={cid} className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded" style={{ backgroundColor: color.bg }} />
-              <span className="font-medium text-foreground">{name}</span>
-            </div>
-          );
-        })}
+      {/* Legend — age-based color scale */}
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: "#22c55e" }} />
+          <span className="font-medium text-foreground">0–2 days</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: "#eab308" }} />
+          <span className="font-medium text-foreground">3–7 days</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: "#ef4444" }} />
+          <span className="font-medium text-foreground">8+ days</span>
+        </div>
         {searchActive && matchCount > 0 && (
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded border-2 border-primary" />

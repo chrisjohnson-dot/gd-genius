@@ -434,6 +434,52 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { try { localStorage.setItem("sidebar:configOpen", String(configOpen)); } catch { /* ignore */ } }, [configOpen]);
   useEffect(() => { if (isOnConfigRoute) setConfigOpen(true); }, [isOnConfigRoute]);
 
+  // ── Collapsible state for all other sections ──────────────────────────────
+  const isOnDashboardRoute = dashboardItems.some((i) => location === i.href);
+  const isOnReceivingRoute = receivingItems.some((i) => location === i.href);
+  const isOnAllocationRoute = allocationItems.some((i) => location === i.href);
+  const isOnSmallParcelRoute = smallParcelItems.some((i) => location === i.href);
+  const isOnLtlRoute = ltlItems.some((i) => location === i.href);
+  const isOnShippingRoute = shippingItems.some((i) => location === i.href);
+  const isOnReturnsRoute = returnsItems.some((i) => location === i.href);
+  const isOnBillingRoute = purchaseOrderItems.some((i) => location === i.href);
+  const isOnPackagingRoute = packagingItems.some((i) => location === i.href);
+  const isOnAuditRoute = auditItems.some((i) => location === i.href);
+
+  const [dashboardOpen, setDashboardOpen] = useState(() => readStoredBool("sidebar:dashboardOpen", true));
+  const [receivingOpen, setReceivingOpen] = useState(() => readStoredBool("sidebar:receivingOpen", true));
+  const [allocationOpen, setAllocationOpen] = useState(() => readStoredBool("sidebar:allocationOpen", true));
+  const [smallParcelOpen, setSmallParcelOpen] = useState(() => readStoredBool("sidebar:smallParcelOpen", true));
+  const [ltlOpen, setLtlOpen] = useState(() => readStoredBool("sidebar:ltlOpen", true));
+  const [shippingOpen, setShippingOpen] = useState(() => readStoredBool("sidebar:shippingOpen", true));
+  const [returnsOpen, setReturnsOpen] = useState(() => readStoredBool("sidebar:returnsOpen", true));
+  const [billingOpen, setBillingOpen] = useState(() => readStoredBool("sidebar:billingOpen", true));
+  const [packagingOpen, setPackagingOpen] = useState(() => readStoredBool("sidebar:packagingOpen", true));
+  const [auditOpen, setAuditOpen] = useState(() => readStoredBool("sidebar:auditOpen", true));
+
+  useEffect(() => { try { localStorage.setItem("sidebar:dashboardOpen", String(dashboardOpen)); } catch { /* ignore */ } }, [dashboardOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:receivingOpen", String(receivingOpen)); } catch { /* ignore */ } }, [receivingOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:allocationOpen", String(allocationOpen)); } catch { /* ignore */ } }, [allocationOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:smallParcelOpen", String(smallParcelOpen)); } catch { /* ignore */ } }, [smallParcelOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:ltlOpen", String(ltlOpen)); } catch { /* ignore */ } }, [ltlOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:shippingOpen", String(shippingOpen)); } catch { /* ignore */ } }, [shippingOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:returnsOpen", String(returnsOpen)); } catch { /* ignore */ } }, [returnsOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:billingOpen", String(billingOpen)); } catch { /* ignore */ } }, [billingOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:packagingOpen", String(packagingOpen)); } catch { /* ignore */ } }, [packagingOpen]);
+  useEffect(() => { try { localStorage.setItem("sidebar:auditOpen", String(auditOpen)); } catch { /* ignore */ } }, [auditOpen]);
+
+  // Auto-expand section when navigating to a route within it
+  useEffect(() => { if (isOnDashboardRoute) setDashboardOpen(true); }, [isOnDashboardRoute]);
+  useEffect(() => { if (isOnReceivingRoute) setReceivingOpen(true); }, [isOnReceivingRoute]);
+  useEffect(() => { if (isOnAllocationRoute) setAllocationOpen(true); }, [isOnAllocationRoute]);
+  useEffect(() => { if (isOnSmallParcelRoute) setSmallParcelOpen(true); }, [isOnSmallParcelRoute]);
+  useEffect(() => { if (isOnLtlRoute) setLtlOpen(true); }, [isOnLtlRoute]);
+  useEffect(() => { if (isOnShippingRoute) setShippingOpen(true); }, [isOnShippingRoute]);
+  useEffect(() => { if (isOnReturnsRoute) setReturnsOpen(true); }, [isOnReturnsRoute]);
+  useEffect(() => { if (isOnBillingRoute) setBillingOpen(true); }, [isOnBillingRoute]);
+  useEffect(() => { if (isOnPackagingRoute) setPackagingOpen(true); }, [isOnPackagingRoute]);
+  useEffect(() => { if (isOnAuditRoute) setAuditOpen(true); }, [isOnAuditRoute]);
+
 
 
   // Save nav scroll position before navigation, restore after
@@ -519,115 +565,159 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
           {/* Dashboard section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Dashboard
-            </p>
-            <div className="space-y-0.5">
-              {dashboardItems.map(item => (
-                <NavItem
-                  key={item.href}
-                  {...item}
-                  active={location === item.href}
-                  exceptionCount={item.exceptionsBadge ? exceptionsCount : undefined}
-                  workloadCount={(item as any).workloadBadge ? workloadCriticalCount : undefined}
-                  workloadWarehouses={(item as any).workloadBadge ? workloadCriticalWarehouses : undefined}
-                />
-              ))}
-            </div>
+            <button onClick={() => setDashboardOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Dashboard</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${dashboardOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {dashboardOpen && (
+              <div className="space-y-0.5">
+                {dashboardItems.map(item => (
+                  <NavItem
+                    key={item.href}
+                    {...item}
+                    active={location === item.href}
+                    exceptionCount={item.exceptionsBadge ? exceptionsCount : undefined}
+                    workloadCount={(item as any).workloadBadge ? workloadCriticalCount : undefined}
+                    workloadWarehouses={(item as any).workloadBadge ? workloadCriticalWarehouses : undefined}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Receiving section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Receiving
-            </p>
-            <div className="space-y-0.5">
-              {receivingItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setReceivingOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Receiving</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${receivingOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {receivingOpen && (
+              <div className="space-y-0.5">
+                {receivingItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Allocation section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-2">
-              Allocation
-            </p>
-            <div className="space-y-0.5">
-              {allocationItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setAllocationOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Allocation</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${allocationOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {allocationOpen && (
+              <div className="space-y-0.5">
+                {allocationItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Small Parcel section — always expanded */}
+          {/* Small Parcel section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Small Parcel</p>
-            <div className="space-y-0.5">
-              {smallParcelItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setSmallParcelOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Small Parcel</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${smallParcelOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {smallParcelOpen && (
+              <div className="space-y-0.5">
+                {smallParcelItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* QC section — always expanded */}
+          {/* LTL section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">LTL</p>
-            <div className="space-y-0.5">
-              {ltlItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setLtlOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">LTL</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${ltlOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {ltlOpen && (
+              <div className="space-y-0.5">
+                {ltlItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Shipping section — always expanded */}
+          {/* Shipping section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Shipping</p>
-            <div className="space-y-0.5">
-              {shippingItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setShippingOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Shipping</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${shippingOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {shippingOpen && (
+              <div className="space-y-0.5">
+                {shippingItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Returns section — always expanded */}
+          {/* Returns section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Returns</p>
-            <div className="space-y-0.5">
-              {returnsItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setReturnsOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Returns</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${returnsOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {returnsOpen && (
+              <div className="space-y-0.5">
+                {returnsItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Purchase Orders section — between Returns and Packaging */}
+          {/* Billing section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Billing</p>
-            <div className="space-y-0.5">
-              {purchaseOrderItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setBillingOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Billing</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${billingOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {billingOpen && (
+              <div className="space-y-0.5">
+                {purchaseOrderItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Packaging section — between Billing and Audit */}
+          {/* Packaging section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Packaging</p>
-            <div className="space-y-0.5">
-              {packagingItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setPackagingOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Packaging</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${packagingOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {packagingOpen && (
+              <div className="space-y-0.5">
+                {packagingItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Audit section — always expanded */}
+          {/* Audit section */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 px-2 mb-1">Audit</p>
-            <div className="space-y-0.5">
-              {auditItems.map(item => (
-                <NavItem key={item.href} {...item} active={location === item.href} />
-              ))}
-            </div>
+            <button onClick={() => setAuditOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
+              <p className="text-[10px] font-semibold uppercase tracking-[1.2px] text-[#94a3b8]/50 group-hover:text-[#94a3b8]/80 transition-colors">Audit</p>
+              <svg className={`w-3 h-3 text-[#94a3b8]/40 group-hover:text-[#94a3b8]/70 transition-transform duration-200 ${auditOpen ? "rotate-180" : "rotate-0"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {auditOpen && (
+              <div className="space-y-0.5">
+                {auditItems.map(item => (
+                  <NavItem key={item.href} {...item} active={location === item.href} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Configuration section — collapsible */}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,44 @@ import { toast } from "sonner";
 // ─── Constants ────────────────────────────────────────────────────────────────
 const POSITIONS = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
 const LEVELS = ["A", "B", "C", "D", "E"] as const;
+
+// Customer color palette — assigned by sorted clientId index (cycles if > 12)
+const CUSTOMER_PALETTE = [
+  { bg: "#f97316", text: "#fff" }, // orange
+  { bg: "#3b82f6", text: "#fff" }, // blue
+  { bg: "#10b981", text: "#fff" }, // emerald
+  { bg: "#a855f7", text: "#fff" }, // purple
+  { bg: "#ef4444", text: "#fff" }, // red
+  { bg: "#eab308", text: "#000" }, // yellow
+  { bg: "#06b6d4", text: "#fff" }, // cyan
+  { bg: "#ec4899", text: "#fff" }, // pink
+  { bg: "#84cc16", text: "#000" }, // lime
+  { bg: "#f59e0b", text: "#000" }, // amber
+  { bg: "#6366f1", text: "#fff" }, // indigo
+  { bg: "#14b8a6", text: "#fff" }, // teal
+];
+
+function getCustomerColor(clientId: number, allClientIds: number[]): { bg: string; text: string } {
+  const sorted = [...new Set(allClientIds)].sort((a, b) => a - b);
+  const idx = sorted.indexOf(clientId);
+  return CUSTOMER_PALETTE[idx % CUSTOMER_PALETTE.length];
+}
+
+function formatDockAge(shipReadyAt: Date | string | null): string {
+  if (!shipReadyAt) return "";
+  const ms = Math.max(0, Date.now() - new Date(shipReadyAt).getTime());
+  const hrs = Math.floor(ms / 3_600_000);
+  const days = Math.floor(ms / 86_400_000);
+  if (days >= 1) return days === 1 ? "1 day" : `${days} days`;
+  if (hrs < 1) return "< 1 hr";
+  return hrs === 1 ? "1 hr" : `${hrs} hrs`;
+}
+
+function daysOnDock(shipReadyAt: Date | string | null): number {
+  if (!shipReadyAt) return 0;
+  return Math.floor(Math.max(0, Date.now() - new Date(shipReadyAt).getTime()) / 86_400_000);
+}
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 /**
@@ -58,6 +96,7 @@ type OutboundOrder = {
   referenceNum: string | null;
   poNum: string | null;
   clientName: string;
+  clientId: number;
   facilityId: number;
   facilityName: string | null;
   configId: number;
@@ -66,6 +105,7 @@ type OutboundOrder = {
   palletCount: number | null;
   outboundLocation: string | null;
   displayStatus: "ship_ready" | "shipped";
+  shipReadyAt: Date | string | null;
 };
 
 // ─── Cell Component ───────────────────────────────────────────────────────────
@@ -74,92 +114,86 @@ function DockCell({
   level,
   orders,
   highlightIds,
+  allClientIds,
   onOrderClick,
 }: {
   position: number;
   level: string;
   orders: OutboundOrder[];
   highlightIds: Set<number>;
+  allClientIds: number[];
   onOrderClick: (o: OutboundOrder) => void;
 }) {
-  const isEmpty = orders.length === 0;
-  const hasShipped = orders.some((o) => o.displayStatus === "shipped");
-  const allShipped = orders.length > 0 && orders.every((o) => o.displayStatus === "shipped");
-   const hasHighlight = orders.some((o) => highlightIds.has(o.id));
+  // Only show awaiting-pickup — skip shipped orders
+  const activeOrders = orders.filter((o) => o.displayStatus !== "shipped");
+  const isEmpty = activeOrders.length === 0;
+  const hasHighlight = activeOrders.some((o) => highlightIds.has(o.id));
   const searchActive = highlightIds.size > 0;
-  // When a search is active and this cell has a match: glow green.
-  // When a search is active and this cell has NO match: dim it.
-  const bgClass = hasHighlight
-    ? "bg-green-500/20 border-green-500/60"
-    : isEmpty
-    ? searchActive ? "bg-muted/10 border-border/20 opacity-40" : "bg-muted/20 border-border/30 hover:bg-muted/40"
-    : searchActive
-    ? "bg-muted/10 border-border/20 opacity-30"
-    : allShipped
-    ? "bg-emerald-500/10 border-emerald-500/30"
-    : hasShipped
-    ? "bg-blue-500/10 border-blue-500/30"
-    : "bg-amber-500/10 border-amber-500/40";
-  const highlightRing = hasHighlight ? "ring-2 ring-green-500 ring-offset-1" : "";
   const label = `${level}${position}`;
+
+  const borderStyle =
+    !isEmpty && activeOrders.length === 1
+      ? { borderColor: getCustomerColor(activeOrders[0].clientId, allClientIds).bg, borderWidth: 2 }
+      : {};
+
+  const wrapperClass = [
+    "relative rounded-lg border p-1.5 min-h-[90px] flex flex-col gap-1 transition-all bg-card",
+    hasHighlight ? "ring-2 ring-green-500 ring-offset-1 border-green-500/60" : "",
+    isEmpty && searchActive ? "opacity-40" : "",
+    !isEmpty && searchActive && !hasHighlight ? "opacity-30" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <div
-      className={`relative rounded-lg border p-2 min-h-[90px] flex flex-col gap-1 transition-all ${bgClass} ${highlightRing}`}
-    >
+    <div className={wrapperClass} style={borderStyle}>
       {/* Position label */}
       <div className="flex items-center justify-between mb-0.5">
         <span className="text-[10px] font-bold text-muted-foreground tracking-wider">{label}</span>
         {!isEmpty && (
           <span className="text-[9px] font-semibold text-muted-foreground">
-            {orders.reduce((s, o) => s + (o.palletCount ?? 0), 0)} plt
+            {activeOrders.reduce((s, o) => s + (o.palletCount ?? 0), 0)} plt
           </span>
         )}
       </div>
-
       {isEmpty ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-[9px] text-muted-foreground/40 uppercase tracking-widest">Empty</span>
+          <span className="text-[9px] text-muted-foreground/30">—</span>
         </div>
       ) : (
         <div className="flex flex-col gap-1">
-          {orders.map((o) => (
-            <div
-              key={o.id}
-              onClick={() => onOrderClick(o)}
-              className={`rounded px-1.5 py-1 text-[9px] leading-tight transition-all cursor-pointer hover:ring-1 hover:ring-primary/50 ${
-                highlightIds.size > 0 && !highlightIds.has(o.id)
-                  ? "opacity-30"
-                  : highlightIds.has(o.id)
-                  ? "ring-1 ring-primary"
-                  : ""
-              } ${
-                o.displayStatus === "shipped"
-                  ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
-                  : "bg-amber-500/20 text-amber-800 dark:text-amber-300"
-              }`}
-            >
-              <div className="font-bold truncate max-w-full">{o.clientName}</div>
-              <div className="text-[8px] opacity-70 truncate">
-                {o.referenceNum ?? o.poNum ?? `#${o.extensivOrderId}`}
-              </div>
-              <div className="text-[8px] opacity-60 truncate font-mono">
-                TXN #{o.extensivOrderId}
-              </div>
-              {o.displayStatus === "shipped" && (
-                <div className="flex items-center gap-0.5 mt-0.5 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-2.5 w-2.5" />
-                  <span className="text-[8px]">Shipped</span>
+          {activeOrders.map((o) => {
+            const color = getCustomerColor(o.clientId, allClientIds);
+            const age = formatDockAge(o.shipReadyAt);
+            const dimmed = searchActive && !highlightIds.has(o.id);
+            return (
+              <div
+                key={o.id}
+                onClick={() => onOrderClick(o)}
+                className={`rounded cursor-pointer transition-all hover:opacity-90 active:scale-95 ${dimmed ? "opacity-20" : ""}`}
+                style={{ backgroundColor: color.bg }}
+              >
+                <div
+                  className="px-1.5 pt-1 pb-0.5 text-[10px] font-black leading-tight truncate"
+                  style={{ color: color.text }}
+                >
+                  {o.clientName}
                 </div>
-              )}
-            </div>
-          ))}
+                {age && (
+                  <div
+                    className="px-1.5 pb-1 text-[9px] font-semibold leading-tight"
+                    style={{ color: color.text, opacity: 0.8 }}
+                  >
+                    {age}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Assign Dock Dialog ─────────────────────────────────────────────────────
 function AssignDockDialog({
   order,
   open,
@@ -220,6 +254,16 @@ function AssignDockDialog({
                 <p className="text-amber-600 dark:text-amber-400 mt-1 font-medium">
                   Current: {isCurrentOverflow ? "Overflow" : `${currentParsed!.level}${currentParsed!.position}`}
                 </p>
+              )}
+              {order.shipReadyAt && (
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="inline-flex items-center gap-1 font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">
+                    {formatDockAge(order.shipReadyAt)} on dock
+                  </span>
+                  <span className="text-muted-foreground text-[10px]">
+                    placed {new Date(order.shipReadyAt).toLocaleString()}
+                  </span>
+                </div>
               )}
             </div>
           )}
@@ -377,9 +421,21 @@ function FindSpaceDialog({
         </DialogHeader>
         <div className="space-y-4 py-1">
           {order && (
-            <div className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{order.clientName}</span>
-              {" — "}{palletCount} pallet{palletCount !== 1 ? "s" : ""}
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{order.clientName}</span>
+                {" — "}{palletCount} pallet{palletCount !== 1 ? "s" : ""}
+              </div>
+              {order.shipReadyAt && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded px-2 py-0.5">
+                    {formatDockAge(order.shipReadyAt)} on dock
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    since {new Date(order.shipReadyAt).toLocaleString()}
+                  </span>
+                </div>
+              )}
             </div>
           )}
           {isLoading ? (
@@ -491,6 +547,10 @@ export default function DockManager() {
     }
     return map;
   }, [facilityOrders]);
+  const allClientIds = useMemo(
+    () => facilityOrders.filter((o) => o.displayStatus === "ship_ready").map((o) => o.clientId),
+    [facilityOrders]
+  );
 
   // Summary stats (based on all facility orders, not search-filtered)
   const activeOrders = facilityOrders.filter((o) => o.displayStatus === "ship_ready");
@@ -611,20 +671,18 @@ export default function DockManager() {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-amber-500/20 border border-amber-500/40" />
-          <span>Awaiting Pickup</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500/30" />
-          <span>Shipped (last 48h)</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-muted/20 border border-border/30" />
-          <span>Empty</span>
-        </div>
+      {/* Legend — one swatch per customer currently on dock */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        {[...new Set(activeOrders.map((o) => o.clientId))].sort((a, b) => a - b).map((cid) => {
+          const color = getCustomerColor(cid, allClientIds);
+          const name = activeOrders.find((o) => o.clientId === cid)?.clientName ?? String(cid);
+          return (
+            <div key={cid} className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: color.bg }} />
+              <span className="font-medium text-foreground">{name}</span>
+            </div>
+          );
+        })}
         {searchActive && matchCount > 0 && (
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded border-2 border-primary" />
@@ -736,6 +794,7 @@ export default function DockManager() {
                         level={level}
                         orders={cellOrders}
                         highlightIds={matchedIds}
+                        allClientIds={allClientIds}
                         onOrderClick={setAssignDockOrder}
                       />
                     );

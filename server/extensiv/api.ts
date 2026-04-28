@@ -744,13 +744,13 @@ export async function fetchItemUpcMap(
   let pgnum = 1;
   const pgsiz = 100;
 
-  interface RawItemWithUpc {
+   interface RawItemWithUpc {
     sku?: string;
+    upc?: string; // item-level UPC (HAL+JSON camelCase)
     options?: {
       packageUnit?: { upc?: string };
     };
   }
-
   while (true) {
     const data = (await client.get(`/customers/${customerId}/items`, {
       pgsiz,
@@ -758,18 +758,16 @@ export async function fetchItemUpcMap(
     })) as {
       _embedded?: { "http://api.3plCentral.com/rels/customers/item"?: RawItemWithUpc[] };
     };
-
     const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
     for (const item of items) {
       if (!item.sku) continue;
-      const upc = item.options?.packageUnit?.upc;
+      // Prefer packageUnit UPC (primary), fall back to item-level UPC
+      const upc = item.options?.packageUnit?.upc ?? item.upc;
       if (upc) upcMap.set(item.sku, upc);
     }
-
     if (items.length < pgsiz) break;
     pgnum++;
   }
-
   return upcMap;
 }
 

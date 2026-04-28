@@ -3953,10 +3953,40 @@ const qcScannerRouter = router({
     }))
     .mutation(async ({ input }) => {
       const items = await getQcScanItems(input.sessionId);
-      const match = items.find(
+      let match: typeof items[0] | null | undefined = items.find(
         (i) => i.sku.toUpperCase() === input.barcode.toUpperCase() ||
                (i.upc && i.upc.toUpperCase() === input.barcode.toUpperCase())
       );
+      // --- Live Extensiv UPC fallback ---
+      // If not found by stored SKU/UPC, try resolving the barcode via Extensiv item master.
+      // This handles cases where the UPC was not stored during seeding (e.g. item-level UPC
+      // vs package-level UPC mismatch) or the session was seeded before the UPC fix.
+      if (!match) {
+        try {
+          const session = await getQcSessionById(input.sessionId);
+          const warehouseId = session?.warehouseId ?? null;
+          const customerId = session?.customerId ?? null;
+          if (warehouseId && customerId) {
+            const config = await getExtensivConfigById(warehouseId);
+            if (config) {
+              const upcMap = await fetchItemUpcMap(config, customerId);
+              const normalised = input.barcode.trim().toUpperCase();
+              for (const [sku, upc] of upcMap.entries()) {
+                if (upc.trim().toUpperCase() === normalised) {
+                  match = items.find((i) => i.sku.toUpperCase() === sku.toUpperCase()) ?? null;
+                  if (match) {
+                    // Persist the resolved UPC so future scans are instant (no Extensiv call)
+                    await upsertQcScanItem(input.sessionId, match.sku, upc, {});
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`[scanBarcode] Live UPC fallback failed for barcode ${input.barcode}:`, err);
+        }
+      }
       if (!match) {
         return { found: false, item: null, sessionComplete: false, overScan: false };
       }

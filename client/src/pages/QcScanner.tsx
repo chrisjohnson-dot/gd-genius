@@ -151,6 +151,7 @@ function ItemsTable({
   isLoading,
   onAdjust,
   flashSku,
+  onRowRef,
 }: {
   items: ScanItem[];
   phase: Phase;
@@ -159,6 +160,7 @@ function ItemsTable({
   isLoading?: boolean;
   onAdjust?: (sku: string, delta: number) => void;
   flashSku?: string | null;
+  onRowRef?: (sku: string, el: HTMLDivElement | null) => void;
 }) {
   if (isLoading) {
     return <ItemsTableSkeleton />;
@@ -202,6 +204,7 @@ function ItemsTable({
         return (
           <div
             key={item.sku}
+            ref={(el) => onRowRef?.(item.sku, el)}
             className="grid items-center border-b border-[#CDD4DC] last:border-0"
             style={{ gridTemplateColumns: cols, background: rowBg, minHeight: 32, padding: "3px 8px", transition: "background 0.15s ease" }}
           >
@@ -355,6 +358,26 @@ export default function QcScanner() {
   const palletCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   // Ref to the scrollable pallet cards container
   const palletScrollContainerRef = useRef<HTMLDivElement>(null);
+  // Per-item row refs — keyed by SKU for auto-scroll on flash
+  const itemRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Ref to the left column scrollable body
+  const leftScrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll the left column to the flashed SKU row whenever flashSku changes
+  useEffect(() => {
+    if (!flashSku) return;
+    const row = itemRowRefs.current.get(flashSku);
+    const container = leftScrollContainerRef.current;
+    if (!row || !container) return;
+    const rowTop = row.offsetTop - container.offsetTop;
+    const rowBottom = rowTop + row.offsetHeight;
+    const containerTop = container.scrollTop;
+    const containerBottom = containerTop + container.clientHeight;
+    const isVisible = rowTop >= containerTop && rowBottom <= containerBottom;
+    if (!isVisible) {
+      container.scrollTo({ top: rowTop - 12, behavior: "smooth" });
+    }
+  }, [flashSku]);
 
   // Auto-scroll to the active pallet card whenever activeScanPalletId changes
   useEffect(() => {
@@ -1415,7 +1438,7 @@ export default function QcScanner() {
       </div>{/* end left column pinned header */}
 
       {/* Left column scrollable body: items table + error banner */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div ref={leftScrollContainerRef} className="flex-1 overflow-y-auto px-4 pb-4">
         {/* Extensiv load failure banner */}
         {extensivLoadError && !fetchFromExtensiv.isPending && (
           <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 mt-3 mb-3 text-amber-800">
@@ -1478,6 +1501,10 @@ export default function QcScanner() {
               }));
             }}
             flashSku={flashSku}
+            onRowRef={(sku, el) => {
+              if (el) itemRowRefs.current.set(sku, el);
+              else itemRowRefs.current.delete(sku);
+            }}
           />
         </div>
       </div>{/* end left column scrollable body */}

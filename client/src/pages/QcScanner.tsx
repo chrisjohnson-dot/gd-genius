@@ -600,13 +600,15 @@ export default function QcScanner() {
             }
           }
           // Persist pallet item assignments to server so they survive page refresh
-          // Use the functional updater result — read from palletsRef which is always current
+          // Use the already-updated palletsRef (after setPallets above) to get the capped qty
           const latestPallet = palletsRef.current.find((p) => p.id === activePallet.id);
           const existingItemsForPersist = (latestPallet?.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
           const existingForPersist = existingItemsForPersist.find((i) => i.sku === scannedSku);
+          // Use server-committed scannedQty capped at expectedQty — never write over-count to DB
+          const cappedPersistQty = Math.min(committedTotal, expectedQty === Infinity ? committedTotal : expectedQty);
           const newItemsForPersist = existingForPersist
-            ? existingItemsForPersist.map((i) => i.sku === scannedSku ? { ...i, qty: i.qty + scannedAmount } : i)
-            : [...existingItemsForPersist, { sku: scannedSku, upc: scannedUpc, qty: scannedAmount }];
+            ? existingItemsForPersist.map((i) => i.sku === scannedSku ? { ...i, qty: cappedPersistQty } : i)
+            : [...existingItemsForPersist, { sku: scannedSku, upc: scannedUpc, qty: cappedPersistQty }];
           updatePalletItems.mutate({ palletId: activePallet.id, items: newItemsForPersist });
         }
       }
@@ -643,6 +645,19 @@ export default function QcScanner() {
         prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
       );
       if (data.item?.sku) triggerFlash(data.item.sku);
+      // Persist pallet item assignments so they survive page refresh and appear on labels
+      if (data.item?.sku && activeScanPalletIdRef.current !== null) {
+        const palletId = activeScanPalletIdRef.current;
+        const latestPallet = palletsRef.current.find((p) => p.id === palletId);
+        const existingItems = (latestPallet?.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+        const committedQty = data.item.scannedQty ?? 0;
+        const expectedQty = items.find((i) => i.sku === data.item!.sku)?.expectedQty ?? committedQty;
+        const cappedQty = Math.min(committedQty, expectedQty);
+        const newItems = existingItems.find((i) => i.sku === data.item!.sku)
+          ? existingItems.map((i) => i.sku === data.item!.sku ? { ...i, qty: cappedQty } : i)
+          : [...existingItems, { sku: data.item.sku, qty: cappedQty }];
+        updatePalletItems.mutate({ palletId, items: newItems });
+      }
       if (data.sessionComplete) {
         playBeep("complete");
         toast.success("Order complete!");

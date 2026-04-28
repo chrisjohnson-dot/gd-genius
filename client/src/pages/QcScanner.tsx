@@ -1187,6 +1187,9 @@ export default function QcScanner() {
                 {sessionSummaryQuery.data.session.warehouseName && (
                   <><span className="text-muted-foreground">Warehouse</span><span className="font-medium">{sessionSummaryQuery.data.session.warehouseName}</span></>
                 )}
+                {sessionSummaryQuery.data.session.createdBy && (
+                  <><span className="text-muted-foreground">QC Operator</span><span className="font-medium">{sessionSummaryQuery.data.session.createdBy}</span></>
+                )}
                 {sessionSummaryQuery.data.session.completedAt && (
                   <><span className="text-muted-foreground">Completed</span><span className="font-medium">{new Date(sessionSummaryQuery.data.session.completedAt).toLocaleString()}</span></>
                 )}
@@ -1198,7 +1201,7 @@ export default function QcScanner() {
                 </span>
               </div>
 
-              {/* Items table with scan timestamps */}
+              {/* Items table */}
               {sessionSummaryQuery.data.items.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -1209,45 +1212,41 @@ export default function QcScanner() {
                   {/* Header */}
                   <div
                     className="grid text-white text-xs font-bold uppercase tracking-wide"
-                    style={{ gridTemplateColumns: "120px 1fr 90px 80px 80px", background: "#15527f", padding: "0 10px", height: 32, alignItems: "center" }}
+                    style={{ gridTemplateColumns: "110px 1fr 70px 70px", background: "#15527f", padding: "0 10px", height: 32, alignItems: "center" }}
                   >
                     <span>SKU</span>
-                    <span>Description / Scan Timestamps</span>
-                    <span>Lot #</span>
-                    <span className="text-right">Expected</span>
+                    <span>Description</span>
+                    <span className="text-right">Req</span>
                     <span className="text-right">Scanned</span>
                   </div>
                   {sessionSummaryQuery.data.items.map((item, idx) => {
                     const done = item.scannedQty >= item.expectedQty && item.expectedQty > 0;
                     const over = item.scannedQty > item.expectedQty;
                     const timestamps = (item.scanTimestamps as number[] | null) ?? [];
+                    const firstScan = timestamps.length > 0 ? new Date(Math.min(...timestamps)).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : null;
+                    const lastScan = timestamps.length > 1 ? new Date(Math.max(...timestamps)).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : null;
                     return (
                       <div
                         key={item.id}
                         className="grid text-sm border-b border-[#CDD4DC] last:border-0"
                         style={{
-                          gridTemplateColumns: "120px 1fr 90px 80px 80px",
+                          gridTemplateColumns: "110px 1fr 70px 70px",
                           background: over ? "#FFF8E7" : done ? "#F0FDF4" : idx % 2 === 1 ? "#EEF4FB" : "#ffffff",
                           padding: "5px 10px",
                           alignItems: "start",
                         }}
                       >
-                        <span className="font-mono text-xs text-[#15527f] truncate pt-1">{item.sku}</span>
+                        <span className="font-mono text-xs text-[#15527f] truncate pt-0.5">{item.sku}</span>
                         <div className="pr-2">
-                          <span className="text-xs text-[#333333] truncate block">{item.description ?? "—"}</span>
-                          {timestamps.length > 0 && (
-                            <div className="mt-1 space-y-0.5">
-                              {timestamps.map((ts, ti) => (
-                                <span key={ti} className="block text-[10px] text-muted-foreground font-mono">
-                                  #{ti + 1} {new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                                </span>
-                              ))}
-                            </div>
+                          <span className="text-xs text-[#333333] block leading-tight">{item.description ?? "—"}</span>
+                          {firstScan && (
+                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5 block">
+                              {firstScan}{lastScan ? ` – ${lastScan}` : ""} · {timestamps.length} scan{timestamps.length !== 1 ? "s" : ""}
+                            </span>
                           )}
                         </div>
-                        <span className="font-mono text-xs text-[#555] pt-1">{item.lotNumber ?? "—"}</span>
-                        <span className="text-right text-xs font-mono text-[#333333] pt-1">{item.expectedQty}</span>
-                        <span className={`text-right text-xs font-semibold font-mono pt-1 ${
+                        <span className="text-right text-xs font-mono text-[#333333] pt-0.5">{item.expectedQty}</span>
+                        <span className={`text-right text-xs font-semibold font-mono pt-0.5 ${
                           over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
                         }`}>{item.scannedQty}</span>
                       </div>
@@ -1256,9 +1255,9 @@ export default function QcScanner() {
                   {/* Totals footer */}
                   <div
                     className="grid text-sm font-bold"
-                    style={{ gridTemplateColumns: "120px 1fr 90px 80px 80px", background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "5px 10px", alignItems: "center" }}
+                    style={{ gridTemplateColumns: "110px 1fr 70px 70px", background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "5px 10px", alignItems: "center" }}
                   >
-                    <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-3">Total</span>
+                    <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-2">Total</span>
                     <span className="text-right text-xs font-mono text-[#333333]">
                       {sessionSummaryQuery.data.items.reduce((s, i) => s + i.expectedQty, 0)}
                     </span>

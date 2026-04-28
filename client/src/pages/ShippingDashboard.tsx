@@ -1,16 +1,20 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Ship, RefreshCw, MapPin, Package, Clock, Search,
   ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer, Truck,
-  FlaskConical,
+  FlaskConical, ArrowRight, ClipboardList, Calendar, Hash, Building2, ExternalLink,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -37,6 +41,12 @@ function fmtDate(d: string | null | undefined) {
   if (!d) return "—";
   const dt = new Date(d);
   return isNaN(dt.getTime()) ? d : dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fmtDateTime(d: Date | string | null | undefined) {
+  if (!d) return "—";
+  const dt = new Date(d as string);
+  return isNaN(dt.getTime()) ? "—" : dt.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -136,6 +146,158 @@ const DEMO_ORDERS: OutboundOrder[] = [
   },
 ];
 
+// ─── Demo B2B Shipments (only shown in demo mode) ─────────────────────────────
+
+const DEMO_B2B_SHIPMENTS = [
+  { id: "B2B-001", client: "Keurig Dr Pepper", shipTo: "Walmart Distribution Center #7042", shipToAddress: "1050 Walmart Blvd, Bentonville, AR 72712", pallets: 24, outboundLocation: "OB-A3", carrier: "XPO Logistics", proNum: "XPO-8841923", requiredShipDate: "2026-04-09", status: "staged" as const },
+  { id: "B2B-002", client: "Keurig Dr Pepper", shipTo: "Costco Wholesale — Mississauga DC", shipToAddress: "5900 Hurontario St, Mississauga, ON L5R 4B3", pallets: 18, outboundLocation: "OB-B1", carrier: "Day & Ross Freight", proNum: "DR-20261104", requiredShipDate: "2026-04-10", status: "staged" as const },
+  { id: "B2B-003", client: "Keurig Dr Pepper", shipTo: "Loblaw Companies — Brampton RDC", shipToAddress: "1 Presidents Choice Circle, Brampton, ON L6Y 5S5", pallets: 30, outboundLocation: "OB-C2", carrier: "Challenger Motor Freight", proNum: "CMF-774412", requiredShipDate: "2026-04-08", status: "awaiting_pickup" as const },
+  { id: "B2B-004", client: "Keurig Dr Pepper", shipTo: "Amazon Fulfillment Center YYZ4", shipToAddress: "8050 Heritage Rd, Brampton, ON L6Y 0C4", pallets: 12, outboundLocation: "OB-A1", carrier: "FedEx Freight", proNum: "FXF-9920341", requiredShipDate: "2026-04-11", status: "staged" as const },
+  { id: "B2B-005", client: "Keurig Dr Pepper", shipTo: "Metro Inc. — Laval DC", shipToAddress: "3050 Boul. Le Carrefour, Laval, QC H7T 2K7", pallets: 20, outboundLocation: "OB-D4", carrier: "Mullen Trucking", proNum: "MUL-330192", requiredShipDate: "2026-04-12", status: "staged" as const },
+];
+
+// ─── Shipment Detail Drawer ───────────────────────────────────────────────────
+
+function ShipmentDetailDrawer({
+  order,
+  isDemo,
+  onClose,
+  onEdit,
+}: {
+  order: OutboundOrder;
+  isDemo: boolean;
+  onClose: () => void;
+  onEdit: (o: OutboundOrder) => void;
+}) {
+  const [, navigate] = useLocation();
+  const days = daysInOutbound(order.shipReadyAt);
+  const isShipped = order.displayStatus === "shipped";
+
+  function startCarrierPickup() {
+    onClose();
+    navigate(`/shipping/carrier-pickup?orderId=${order.extensivOrderId}`);
+  }
+
+  return (
+    <Sheet open onOpenChange={() => onClose()}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader className="pb-4 border-b border-border">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <SheetTitle className="text-base font-semibold">
+                Order {order.extensivOrderId}
+              </SheetTitle>
+              {order.referenceNum && (
+                <p className="text-xs text-muted-foreground mt-0.5">Ref: {order.referenceNum}</p>
+              )}
+            </div>
+            {isShipped ? (
+              <Badge className="bg-green-100 text-green-700 border-green-300 dark:bg-green-900/40 dark:text-green-400 dark:border-green-700 shrink-0">
+                <CheckCircle2 className="h-3 w-3 mr-1" />Shipped
+              </Badge>
+            ) : (
+              <Badge variant="outline" className={cn("shrink-0", daysBadgeClass(days))}>
+                {daysBadgeIcon(days)}
+                <span className="ml-1">{days === 0 ? "Today" : `${days}d in outbound`}</span>
+              </Badge>
+            )}
+          </div>
+        </SheetHeader>
+
+        <div className="py-5 space-y-5">
+          {/* Key details grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Client" value={order.clientName} />
+            <DetailField icon={<MapPin className="h-3.5 w-3.5" />} label="Facility" value={order.facilityName ?? "—"} />
+            <DetailField icon={<Hash className="h-3.5 w-3.5" />} label="PO Number" value={order.poNum ?? "—"} />
+            <DetailField icon={<Calendar className="h-3.5 w-3.5" />} label="Req. Ship Date" value={fmtDate(order.requiredShipDate)} />
+            <DetailField icon={<Package className="h-3.5 w-3.5" />} label="Pallets" value={order.palletCount ? String(order.palletCount) : "—"} />
+            <DetailField icon={<ClipboardList className="h-3.5 w-3.5" />} label="Total Pieces" value={order.totalPieces ? order.totalPieces.toLocaleString() : "—"} />
+          </div>
+
+          {/* Ship To */}
+          <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Ship To</p>
+            <p className="text-sm font-medium text-foreground">{order.shipToName ?? "—"}</p>
+            {order.shipToCity && <p className="text-xs text-muted-foreground mt-0.5">{order.shipToCity}</p>}
+          </div>
+
+          {/* Outbound Location */}
+          <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Outbound Location</p>
+            {order.outboundLocation ? (
+              <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />{order.outboundLocation}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Not assigned</p>
+            )}
+          </div>
+
+          {/* Shipped info */}
+          {isShipped && order.shippedAt && (
+            <div className="rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-green-700 dark:text-green-400 mb-1">Shipped</p>
+              <p className="text-sm font-medium text-green-800 dark:text-green-300">{fmtDateTime(order.shippedAt)}</p>
+            </div>
+          )}
+
+          {/* Timestamps */}
+          <div className="text-xs text-muted-foreground space-y-1 pt-1 border-t border-border">
+            <p>Ship Ready: {fmtDateTime(order.shipReadyAt)}</p>
+            <p>First Seen: {fmtDateTime(order.firstSeenAt)}</p>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        {!isShipped && (
+          <div className="border-t border-border pt-4 space-y-2">
+            <Button
+              className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={isDemo ? undefined : startCarrierPickup}
+              disabled={isDemo}
+              title={isDemo ? "Carrier pickup is disabled in demo mode" : undefined}
+            >
+              <Truck className="h-4 w-4" />
+              Start Carrier Pickup
+              <ArrowRight className="h-4 w-4 ml-auto" />
+            </Button>
+            {!isDemo && (
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => { onClose(); onEdit(order); }}
+              >
+                <Pencil className="h-4 w-4" />
+                Edit Location / Pallet Count
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              className="w-full gap-2 text-muted-foreground"
+              onClick={() => window.open(`https://app.3plcentral.com/ware/orders/${order.extensivOrderId}`, "_blank")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              View in Extensiv
+            </Button>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DetailField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5 flex items-center gap-1">
+        {icon}{label}
+      </p>
+      <p className="text-sm text-foreground font-medium">{value}</p>
+    </div>
+  );
+}
+
 // ─── Edit Dialog ──────────────────────────────────────────────────────────────
 
 function EditOutboundDialog({ order, onClose }: { order: OutboundOrder; onClose: () => void }) {
@@ -184,13 +346,17 @@ function EditOutboundDialog({ order, onClose }: { order: OutboundOrder; onClose:
 
 // ─── Warehouse Section ────────────────────────────────────────────────────────
 
-function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
-  facilityName: string; orders: OutboundOrder[]; onEdit: (o: OutboundOrder) => void; isDemo?: boolean;
+function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo }: {
+  facilityName: string;
+  orders: OutboundOrder[];
+  onEdit: (o: OutboundOrder) => void;
+  onSelect: (o: OutboundOrder) => void;
+  isDemo?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const totalPallets = orders.reduce((s, o) => s + (o.palletCount ?? 0), 0);
   const maxDays = Math.max(...orders.map((o) => daysInOutbound(o.shipReadyAt)));
-  const urgentCount = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 3).length;
+  const urgentCount = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 3 && o.displayStatus !== "shipped").length;
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
@@ -229,11 +395,8 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
                   <span className="flex items-center justify-center gap-1"><Package className="h-3 w-3" />Pallets</span>
                 </th>
                 <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  <span className="flex items-center justify-center gap-1"><Clock className="h-3 w-3" />Days Out</span>
+                  <span className="flex items-center justify-center gap-1"><Clock className="h-3 w-3" />Status</span>
                 </th>
-                {!isDemo && (
-                  <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Edit</th>
-                )}
               </tr>
             </thead>
             <tbody>
@@ -241,7 +404,18 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
                 const days = daysInOutbound(order.shipReadyAt);
                 const isShipped = order.displayStatus === "shipped";
                 return (
-                  <tr key={order.id} className={cn("border-t border-border hover:bg-muted/30 transition-colors", isShipped ? "bg-green-50/60 dark:bg-green-950/20" : idx % 2 !== 0 ? "bg-muted/10" : "")}>
+                  <tr
+                    key={order.id}
+                    className={cn(
+                      "border-t border-border transition-colors cursor-pointer",
+                      isShipped
+                        ? "bg-green-50/60 dark:bg-green-950/20 hover:bg-green-100/60 dark:hover:bg-green-950/30"
+                        : idx % 2 !== 0
+                          ? "bg-muted/10 hover:bg-muted/30"
+                          : "hover:bg-muted/20"
+                    )}
+                    onClick={() => onSelect(order)}
+                  >
                     <td className="px-4 py-3">
                       <div className="font-mono text-[13px] font-semibold text-foreground">{order.extensivOrderId}</div>
                       {order.referenceNum && <div className="text-[11px] text-muted-foreground">Ref {order.referenceNum}</div>}
@@ -268,8 +442,7 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
                     <td className="px-4 py-3 text-center">
                       {isShipped ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border bg-green-100 text-green-700 border-green-300 dark:bg-green-900/40 dark:text-green-400 dark:border-green-700">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Shipped
+                          <CheckCircle2 className="h-3 w-3" />Shipped
                         </span>
                       ) : (
                         <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border", daysBadgeClass(days))}>
@@ -278,97 +451,30 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
                         </span>
                       )}
                     </td>
-                    {!isDemo && !isShipped && (
-                      <td className="px-4 py-3 text-center">
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-white" onClick={() => onEdit(order)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </td>
-                    )}
-                    {!isDemo && isShipped && <td />}
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          <p className="px-4 py-2 text-[11px] text-muted-foreground italic border-t border-border">
+            Click any row to open shipment details and start the outbound process.
+          </p>
         </div>
       )}
     </div>
   );
 }
 
-// ─── B2B Shipments Mock Data ────────────────────────────────────────────────────────────────
+// ─── Demo B2B Section (demo mode only) ───────────────────────────────────────
 
-const MOCK_B2B_SHIPMENTS = [
-  {
-    id: "B2B-001",
-    client: "Keurig Dr Pepper",
-    shipTo: "Walmart Distribution Center #7042",
-    shipToAddress: "1050 Walmart Blvd, Bentonville, AR 72712",
-    pallets: 24,
-    outboundLocation: "OB-A3",
-    carrier: "XPO Logistics",
-    proNum: "XPO-8841923",
-    requiredShipDate: "2026-04-09",
-    status: "staged" as const,
-  },
-  {
-    id: "B2B-002",
-    client: "Keurig Dr Pepper",
-    shipTo: "Costco Wholesale — Mississauga DC",
-    shipToAddress: "5900 Hurontario St, Mississauga, ON L5R 4B3",
-    pallets: 18,
-    outboundLocation: "OB-B1",
-    carrier: "Day & Ross Freight",
-    proNum: "DR-20261104",
-    requiredShipDate: "2026-04-10",
-    status: "staged" as const,
-  },
-  {
-    id: "B2B-003",
-    client: "Keurig Dr Pepper",
-    shipTo: "Loblaw Companies — Brampton RDC",
-    shipToAddress: "1 Presidents Choice Circle, Brampton, ON L6Y 5S5",
-    pallets: 30,
-    outboundLocation: "OB-C2",
-    carrier: "Challenger Motor Freight",
-    proNum: "CMF-774412",
-    requiredShipDate: "2026-04-08",
-    status: "awaiting_pickup" as const,
-  },
-  {
-    id: "B2B-004",
-    client: "Keurig Dr Pepper",
-    shipTo: "Amazon Fulfillment Center YYZ4",
-    shipToAddress: "8050 Heritage Rd, Brampton, ON L6Y 0C4",
-    pallets: 12,
-    outboundLocation: "OB-A1",
-    carrier: "FedEx Freight",
-    proNum: "FXF-9920341",
-    requiredShipDate: "2026-04-11",
-    status: "staged" as const,
-  },
-  {
-    id: "B2B-005",
-    client: "Keurig Dr Pepper",
-    shipTo: "Metro Inc. — Laval DC",
-    shipToAddress: "3050 Boul. Le Carrefour, Laval, QC H7T 2K7",
-    pallets: 20,
-    outboundLocation: "OB-D4",
-    carrier: "Mullen Trucking",
-    proNum: "MUL-330192",
-    requiredShipDate: "2026-04-12",
-    status: "staged" as const,
-  },
-];
-
-function B2BShipmentsSection() {
+function DemoB2BSection() {
   const [collapsed, setCollapsed] = useState(false);
   const statusLabel = (s: string) =>
-    s === "staged" ? { label: "Staged", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" }
-    : { label: "Awaiting Pickup", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+    s === "staged"
+      ? { label: "Staged", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" }
+      : { label: "Awaiting Pickup", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
+    <div className="rounded-xl border border-amber-400/40 bg-card overflow-hidden mb-4">
       <button
         className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors text-left"
         onClick={() => setCollapsed((c) => !c)}
@@ -377,9 +483,9 @@ function B2BShipmentsSection() {
         <Truck className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
         <span className="font-semibold text-[15px] text-foreground flex-1">B2B Shipments — Outbound Staging</span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1"><Ship className="h-3.5 w-3.5" />{MOCK_B2B_SHIPMENTS.length} shipments</span>
-          <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" />{MOCK_B2B_SHIPMENTS.reduce((s, o) => s + o.pallets, 0)} pallets</span>
-          <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">Mock Data</Badge>
+          <span className="flex items-center gap-1"><Ship className="h-3.5 w-3.5" />{DEMO_B2B_SHIPMENTS.length} shipments</span>
+          <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" />{DEMO_B2B_SHIPMENTS.reduce((s, o) => s + o.pallets, 0)} pallets</span>
+          <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-[10px] px-1.5 py-0">Demo Data</Badge>
         </div>
       </button>
       {!collapsed && (
@@ -400,16 +506,12 @@ function B2BShipmentsSection() {
               </tr>
             </thead>
             <tbody>
-              {MOCK_B2B_SHIPMENTS.map((s, idx) => {
+              {DEMO_B2B_SHIPMENTS.map((s, idx) => {
                 const st = statusLabel(s.status);
                 return (
                   <tr key={s.id} className={cn("border-t border-border hover:bg-muted/30 transition-colors", idx % 2 !== 0 && "bg-muted/10")}>
-                    <td className="px-4 py-3">
-                      <div className="font-mono text-[13px] font-semibold text-foreground">{s.id}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-[13px] text-foreground font-medium">{s.client}</div>
-                    </td>
+                    <td className="px-4 py-3"><div className="font-mono text-[13px] font-semibold text-foreground">{s.id}</div></td>
+                    <td className="px-4 py-3"><div className="text-[13px] text-foreground font-medium">{s.client}</div></td>
                     <td className="px-4 py-3">
                       <div className="text-[13px] text-foreground/80">{s.shipTo}</div>
                       <div className="text-[11px] text-muted-foreground">{s.shipToAddress}</div>
@@ -450,6 +552,7 @@ export default function ShippingDashboard() {
 
   const [search, setSearch] = useState("");
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
 
   // In demo mode use synthetic data, otherwise use live data
   const orders: OutboundOrder[] = demoMode ? DEMO_ORDERS : liveOrders;
@@ -471,7 +574,6 @@ export default function ShippingDashboard() {
       map.get(key)!.push(o);
     }
     for (const list of Array.from(map.values())) list.sort((a: OutboundOrder, b: OutboundOrder) => {
-      // Shipped rows always sink to the bottom
       const aShipped = a.displayStatus === "shipped" ? 1 : 0;
       const bShipped = b.displayStatus === "shipped" ? 1 : 0;
       if (aShipped !== bShipped) return aShipped - bShipped;
@@ -480,11 +582,11 @@ export default function ShippingDashboard() {
     return map;
   }, [orders, search]);
 
-  const totalOrders = orders.length;
-  const totalPallets = orders.reduce((s, o) => s + (o.palletCount ?? 0), 0);
-  const agingOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 3).length;
-  const criticalOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 5).length;
-  const noLocation = orders.filter((o) => !o.outboundLocation).length;
+  const totalOrders = orders.filter((o) => o.displayStatus !== "shipped").length;
+  const totalPallets = orders.filter((o) => o.displayStatus !== "shipped").reduce((s, o) => s + (o.palletCount ?? 0), 0);
+  const agingOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 3 && o.displayStatus !== "shipped").length;
+  const criticalOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 5 && o.displayStatus !== "shipped").length;
+  const noLocation = orders.filter((o) => !o.outboundLocation && o.displayStatus !== "shipped").length;
 
   return (
     <div className="p-7 page-enter">
@@ -521,7 +623,7 @@ export default function ShippingDashboard() {
           <p className="text-sm text-muted-foreground mt-1">
             {demoMode
               ? "Showing synthetic demo data — safe to share in presentations."
-              : "All orders staged and ready to ship — outbound locations, pallet counts, and dwell time."}
+              : "All orders staged and ready to ship. Click any row to open the shipment and start the outbound process."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -546,10 +648,10 @@ export default function ShippingDashboard() {
       {/* KPI tiles */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {([
-          { label: "Orders Ready",      value: totalOrders,    Icon: Ship,          color: "text-blue-600 dark:text-blue-400" },
-          { label: "Total Pallets",     value: totalPallets,   Icon: Package,       color: "text-purple-600 dark:text-purple-400" },
-          { label: "Aging (3+ days)",   value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-orange-600 dark:text-orange-400" : "text-emerald-600 dark:text-emerald-400" },
-          { label: "Critical (5+ days)",value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-600 dark:text-red-400"    : "text-emerald-600 dark:text-emerald-400" },
+          { label: "Orders Ready",       value: totalOrders,    Icon: Ship,          color: "text-blue-600 dark:text-blue-400" },
+          { label: "Total Pallets",      value: totalPallets,   Icon: Package,       color: "text-purple-600 dark:text-purple-400" },
+          { label: "Aging (3+ days)",    value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-orange-600 dark:text-orange-400" : "text-emerald-600 dark:text-emerald-400" },
+          { label: "Critical (5+ days)", value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-600 dark:text-red-400"    : "text-emerald-600 dark:text-emerald-400" },
         ] as const).map(({ label, value, Icon, color }) => (
           <div key={label} className={cn("rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-3", demoMode && "border-amber-500/20")}>
             <Icon className={cn("h-8 w-8 shrink-0 opacity-80", color)} />
@@ -565,10 +667,9 @@ export default function ShippingDashboard() {
       {noLocation > 0 && !demoMode && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 dark:border-yellow-500/30 px-4 py-2.5 text-sm text-yellow-800 dark:text-yellow-300">
           <MapPin className="h-4 w-4 shrink-0" />
-          <span><strong>{noLocation}</strong> order{noLocation !== 1 ? "s have" : " has"} no outbound location set. Click the edit icon to assign one.</span>
+          <span><strong>{noLocation}</strong> order{noLocation !== 1 ? "s have" : " has"} no outbound location set. Click the row to assign one.</span>
         </div>
       )}
-      {/* Demo: show "1 order has no location" as a realistic example */}
       {demoMode && noLocation > 0 && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 dark:border-yellow-500/30 px-4 py-2.5 text-sm text-yellow-800 dark:text-yellow-300">
           <MapPin className="h-4 w-4 shrink-0" />
@@ -582,8 +683,8 @@ export default function ShippingDashboard() {
         <Input className="pl-8 text-sm h-9" placeholder="Search order, client, location…" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      {/* B2B Shipments section */}
-      <B2BShipmentsSection />
+      {/* Demo B2B section — only visible in demo mode */}
+      {demoMode && <DemoB2BSection />}
 
       {/* Content */}
       {!demoMode && isLoading ? (
@@ -598,8 +699,25 @@ export default function ShippingDashboard() {
         </div>
       ) : (
         Array.from(grouped.entries()).map(([facility, facilityOrders]: [string, OutboundOrder[]]) => (
-          <WarehouseSection key={facility} facilityName={facility} orders={facilityOrders} onEdit={setEditOrder} isDemo={demoMode} />
+          <WarehouseSection
+            key={facility}
+            facilityName={facility}
+            orders={facilityOrders}
+            onEdit={setEditOrder}
+            onSelect={setSelectedOrder}
+            isDemo={demoMode}
+          />
         ))
+      )}
+
+      {/* Shipment detail drawer */}
+      {selectedOrder && (
+        <ShipmentDetailDrawer
+          order={selectedOrder}
+          isDemo={demoMode}
+          onClose={() => setSelectedOrder(null)}
+          onEdit={(o) => { setSelectedOrder(null); setEditOrder(o); }}
+        />
       )}
 
       {!demoMode && editOrder && <EditOutboundDialog order={editOrder} onClose={() => setEditOrder(null)} />}

@@ -261,11 +261,12 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   const footY = y + 15;
   const palletStr = `Pallet: ${p.palletNumber} of ${p.totalPallets}`;
   doc.fillColor(BLACK).fontSize(FOOT_FONT).font("Helvetica-Bold");
-  // Left-justify Total QTY
-  doc.text(`Total QTY: ${totalQty}`, MARGIN, footY, { lineBreak: false });
-  // Right-justify Pallet — measure text width then position so right edge aligns with label right margin
-  const palletWidth = doc.widthOfString(palletStr);
-  doc.text(palletStr, PW - MARGIN - palletWidth, footY, { lineBreak: false });
+  // Left-justify Pallet
+  doc.text(palletStr, MARGIN, footY, { lineBreak: false });
+  // Right-justify Total QTY — measure text width then position so right edge aligns with label right margin
+  const totalQtyStr = `Total QTY: ${totalQty}`;
+  const totalQtyWidth = doc.widthOfString(totalQtyStr);
+  doc.text(totalQtyStr, PW - MARGIN - totalQtyWidth, footY, { lineBreak: false });
 
   y += FOOT_H;
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);

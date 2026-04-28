@@ -614,10 +614,20 @@ export function registerPdfRoutes(app: Express) {
     // Build a map of sku -> { description, scannedQty } from session items
     const itemMap = new Map(items.map((i) => [i.sku, i]));
 
-    // GD address (hardcoded — always the same warehouse)
-    const GD_NAME    = "Go Direct Logistics";
-    const GD_ADDRESS = "4-149 High Plains Place";
-    const GD_CSZ     = "Rockyview County, AB  T4A0W7";
+    // GD address — resolved from session's warehouseId / facilityId
+    const GD_NAME = "Go Direct Logistics";
+    // Facility address map keyed by Extensiv facilityId
+    const FACILITY_ADDRESSES: Record<number, { address: string; csz: string }> = {
+      4: { address: "#4 – 149 High Plains Place",  csz: "Rocky View County, AB  T4A 0W7" },  // Calgary
+      2: { address: "5830 Saltzgaber Road",          csz: "Groveport, OH  43125" },             // Columbus
+      5: { address: "460 Admiral Boulevard",         csz: "Mississauga, ON  L5T 3A3" },         // Mississauga
+      3: { address: "#105 – 1175 Trademark Dr.",    csz: "Reno, NV  89521" },                  // Reno
+    };
+    const facilityInfo = session.warehouseId != null
+      ? (FACILITY_ADDRESSES[session.warehouseId] ?? FACILITY_ADDRESSES[4])
+      : FACILITY_ADDRESSES[4]; // default to Calgary if unknown
+    const GD_ADDRESS = facilityInfo.address;
+    const GD_CSZ     = facilityInfo.csz;
 
     // Ship-to from session
     let shipToName = session.customerName ?? "Customer";

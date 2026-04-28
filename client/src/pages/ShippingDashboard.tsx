@@ -639,6 +639,7 @@ export default function ShippingDashboard() {
   }, []);
 
   const [search, setSearch] = useState("");
+  const [tierFilter, setTierFilter] = useState<"green" | "yellow" | "red" | null>(null);
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
 
@@ -647,7 +648,7 @@ export default function ShippingDashboard() {
 
   const grouped = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const filtered = q
+    let filtered = q
       ? orders.filter((o) =>
           String(o.extensivOrderId).includes(q) ||
           (o.referenceNum ?? "").toLowerCase().includes(q) ||
@@ -655,6 +656,14 @@ export default function ShippingDashboard() {
           (o.shipToName ?? "").toLowerCase().includes(q) ||
           (o.outboundLocation ?? "").toLowerCase().includes(q))
       : orders;
+    if (tierFilter) {
+      filtered = filtered.filter((o) => {
+        const d = daysInOutbound(o.shipReadyAt);
+        if (tierFilter === "green") return d < 4;
+        if (tierFilter === "yellow") return d >= 4 && d < 8;
+        return d >= 8;
+      });
+    }
     const map = new Map<string, OutboundOrder[]>();
     for (const o of filtered) {
       const key = o.facilityName ?? `Facility ${o.facilityId}`;
@@ -774,10 +783,44 @@ export default function ShippingDashboard() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative mb-5 max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input className="pl-8 text-sm h-9" placeholder="Search order, client, location…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* Search + Tier Filter */}
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="relative max-w-sm flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input className="pl-8 text-sm h-9" placeholder="Search order, client, location…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          {(
+            [
+              { tier: "green" as const, bg: "#22c55e", label: "0–3 days" },
+              { tier: "yellow" as const, bg: "#eab308", label: "4–7 days" },
+              { tier: "red" as const, bg: "#ef4444", label: "8+ days" },
+            ] as const
+          ).map(({ tier, bg, label }) => {
+            const active = tierFilter === tier;
+            return (
+              <button
+                key={tier}
+                onClick={() => setTierFilter(active ? null : tier)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all"
+                style={{
+                  backgroundColor: active ? bg : "transparent",
+                  borderColor: bg,
+                  color: active ? (tier === "yellow" ? "#000" : "#fff") : "inherit",
+                  fontWeight: active ? 700 : 400,
+                }}
+              >
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: bg }} />
+                {label}
+              </button>
+            );
+          })}
+          {tierFilter && (
+            <button onClick={() => setTierFilter(null)} className="text-xs text-muted-foreground underline">
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Demo B2B section — only visible in demo mode */}

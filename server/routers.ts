@@ -4013,7 +4013,35 @@ const qcScannerRouter = router({
         userId: ctx.user.id,
         details: JSON.stringify({ sessionId: input.sessionId, completedBy: ctx.user.name }),
       });
-      return { success: true };
+      // --- Non-fatal: mark the order as Packed (status=2) in Extensiv ---
+      let packedInExtensiv = false;
+      let packError: string | undefined;
+      try {
+        const session = await getQcSessionById(input.sessionId);
+        const orderId = session?.transactionId ?? null;
+        const warehouseId = session?.warehouseId ?? null;
+        const foundInExtensiv = session?.foundInExtensiv ?? true;
+        if (orderId && warehouseId && foundInExtensiv) {
+          const config = await getExtensivConfigById(warehouseId);
+          if (config) {
+            const packResult = await markOrderPacked(config, orderId);
+            packedInExtensiv = packResult.success;
+            if (!packResult.success) {
+              packError = packResult.error;
+              console.warn(`[QcScanner] markOrderPacked failed for order ${orderId}: ${packResult.error}`);
+            } else {
+              console.log(`[QcScanner] Order ${orderId} marked as Packed in Extensiv by ${ctx.user.name}`);
+            }
+          } else {
+            packError = `No Extensiv config found for warehouseId ${warehouseId}`;
+            console.warn(`[QcScanner] ${packError}`);
+          }
+        }
+      } catch (err) {
+        packError = err instanceof Error ? err.message : String(err);
+        console.error(`[QcScanner] markOrderPacked threw unexpectedly:`, err);
+      }
+      return { success: true, packedInExtensiv, packError };
     }),
 
   // Add a new pallet to the session

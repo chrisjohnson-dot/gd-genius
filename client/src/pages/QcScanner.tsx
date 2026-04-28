@@ -391,6 +391,17 @@ export default function QcScanner() {
   }, []);
   // Sync initial mute state to module-level flag
   useEffect(() => { setSoundMutedFlag(soundMuted); }, [soundMuted]);
+  // Ctrl+Enter keyboard shortcut — opens the Complete Order dialog when in scanning phase
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && phase === "scanning" && !completeDialog) {
+        e.preventDefault();
+        setCompleteDialog(true);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [phase, completeDialog]);
   const flashSkuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerFlash = useCallback((sku: string) => {
     if (flashSkuTimerRef.current) clearTimeout(flashSkuTimerRef.current);
@@ -873,8 +884,16 @@ export default function QcScanner() {
   const openFlags = (flagsQuery.data?.flags ?? []).filter((f) => f.status === "open");
 
   const completeSession = trpc.qcScanner.completeSession.useMutation({
-    onSuccess: () => {
-      toast.success("Session completed and saved");
+    onSuccess: (data) => {
+      if (data.packedInExtensiv) {
+        toast.success("Session completed — order marked as Packed in Extensiv");
+      } else if (data.packError) {
+        // Session saved locally but Extensiv pack failed — warn, don't block
+        toast.success("Session completed and saved");
+        toast.warning(`Could not mark order as Packed in Extensiv: ${data.packError}`, { duration: Infinity });
+      } else {
+        toast.success("Session completed and saved");
+      }
       setPhase("start");
       setSession(null);
       setItems([]);

@@ -4031,6 +4031,8 @@ const qcScannerRouter = router({
               console.warn(`[QcScanner] markOrderPacked failed for order ${orderId}: ${packResult.error}`);
             } else {
               console.log(`[QcScanner] Order ${orderId} marked as Packed in Extensiv by ${ctx.user.name}`);
+              // Persist the result so Scanner History can display the sync status
+              await updateQcSession(input.sessionId, { packedInExtensiv: true });
             }
           } else {
             packError = `No Extensiv config found for warehouseId ${warehouseId}`;

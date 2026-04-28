@@ -2220,6 +2220,10 @@ export type RecentQcSession = {
   itemCount: number;
   totalExpected: number;
   totalScanned: number;
+  /** true = Extensiv pack API succeeded; false/null = not yet synced or failed */
+  packedInExtensiv: boolean | null;
+  /** false = manual label session (no Extensiv order), so pack sync is N/A */
+  foundInExtensiv: boolean;
 };
 
 export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcSession[]> {
@@ -2257,6 +2261,8 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
         itemCount: Number(agg.itemCount),
         totalExpected: Number(agg.totalExpected),
         totalScanned: Number(agg.totalScanned),
+        packedInExtensiv: s.packedInExtensiv ?? null,
+        foundInExtensiv: s.foundInExtensiv,
       };
     })
   );

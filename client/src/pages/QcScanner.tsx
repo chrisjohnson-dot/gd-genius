@@ -1118,7 +1118,7 @@ export default function QcScanner() {
               <div
                 className="grid text-white text-xs font-bold uppercase tracking-wide"
                 style={{
-                  gridTemplateColumns: "1fr 160px 90px 90px 90px",
+                  gridTemplateColumns: "1fr 160px 90px 90px 90px 80px",
                   background: "#15527f",
                   padding: "0 12px",
                   height: 32,
@@ -1130,6 +1130,7 @@ export default function QcScanner() {
                 <span className="text-right">Items</span>
                 <span className="text-right">Expected</span>
                 <span className="text-right">Scanned</span>
+                <span className="text-right">Extensiv</span>
               </div>
               {filteredRecent.map((s, idx) => {
                 const isAlt = idx % 2 === 1;
@@ -1139,7 +1140,7 @@ export default function QcScanner() {
                     key={s.id}
                     className="grid w-full text-left text-sm border-b border-[#CDD4DC] last:border-0 hover:brightness-95 transition-all"
                     style={{
-                      gridTemplateColumns: "1fr 160px 90px 90px 90px",
+                      gridTemplateColumns: "1fr 160px 90px 90px 90px 80px",
                       background: isAlt ? "#EEF4FB" : "#ffffff",
                       minHeight: 44,
                       padding: "6px 12px",
@@ -1163,6 +1164,16 @@ export default function QcScanner() {
                     <div className={`text-right text-xs font-semibold font-mono ${
                       allScanned ? "text-green-600" : "text-amber-600"
                     }`}>{s.totalScanned}</div>
+                    {/* Extensiv pack sync status badge */}
+                    <div className="flex justify-end">
+                      {!s.foundInExtensiv ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium" title="Manual label — no Extensiv order">N/A</span>
+                      ) : s.packedInExtensiv ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold" title="Order marked as Packed in Extensiv">✓ Packed</span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold" title="Order not yet marked as Packed in Extensiv">Pending</span>
+                      )}
+                    </div>
                   </button>
                 );
               })}

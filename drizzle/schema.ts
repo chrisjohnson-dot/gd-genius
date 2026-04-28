@@ -614,6 +614,8 @@ export const qcScanSessions = mysqlTable("qc_scan_sessions", {
   status: varchar("status", { length: 32 }).notNull().default("scanning"),
   // Whether the order was found in Extensiv (false = manual label)
   foundInExtensiv: boolean("foundInExtensiv").notNull().default(true),
+  /** Whether the order was successfully marked as Packed (status=2) in Extensiv on session completion */
+  packedInExtensiv: boolean("packedInExtensiv").default(false),
   completedAt: timestamp("completedAt"),
   shippedAt: timestamp("shippedAt"),
   createdBy: varchar("createdBy", { length: 256 }),

@@ -2554,13 +2554,18 @@ function DockRecommendDialog({
   onClose: () => void;
   sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null } | null;
 }) {
+  const palletCount = sessionInfo?.palletCount ?? 1;
+
   const { data: rec, isLoading } = trpc.shippingDashboard.recommendDockLocation.useQuery(
-    { configId: sessionInfo?.configId ?? undefined },
+    {
+      configId: sessionInfo?.configId ?? undefined,
+      palletCount: palletCount > 0 ? palletCount : 1,
+    },
     { enabled: open && !!sessionInfo }
   );
   const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
     onSuccess: () => {
-      toast.success(`Dock location ${rec?.label} assigned`);
+      toast.success(`Dock location “${rec?.label}” assigned`);
       onClose();
     },
     onError: (e) => toast.error(e.message),
@@ -2575,6 +2580,8 @@ function DockRecommendDialog({
     (o) => o.extensivOrderId === sessionInfo?.transactionId
   );
 
+  const isOverflow = rec?.overflow === true;
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-sm">
@@ -2588,36 +2595,50 @@ function DockRecommendDialog({
           {sessionInfo && (
             <div className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{sessionInfo.customerName ?? `TX ${sessionInfo.transactionId}`}</span>
-              {" — "}{sessionInfo.palletCount} pallet{sessionInfo.palletCount !== 1 ? "s" : ""}
+              {" — "}{palletCount} pallet{palletCount !== 1 ? "s" : ""}
             </div>
           )}
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <RefreshCw className="w-4 h-4 animate-spin" /> Looking up available dock positions…
             </div>
+          ) : isOverflow ? (
+            <div className="text-center space-y-3">
+              <div className="inline-flex items-center justify-center w-28 h-20 rounded-2xl bg-amber-500/10 border-2 border-amber-500">
+                <span className="text-2xl font-black text-amber-600 dark:text-amber-400">Overflow</span>
+              </div>
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                No lane has {palletCount} contiguous free positions.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {rec?.occupiedCount} of {rec?.totalCells} dock cells currently occupied
+              </p>
+            </div>
           ) : rec?.recommended ? (
             <div className="text-center space-y-2">
-              <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-primary/10 border-2 border-primary">
-                <span className="text-4xl font-black text-primary">{rec.label}</span>
+              <div className="inline-flex items-center justify-center w-28 h-20 rounded-2xl bg-primary/10 border-2 border-primary">
+                <span className="text-3xl font-black text-primary">{rec.label}</span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Lane {rec.lane} · Position {rec.position}
-              </p>
+              {rec.positions && rec.positions.length > 1 ? (
+                <p className="text-sm text-muted-foreground">
+                  Lane {rec.lane} · Positions {rec.positions.join(", ")}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Lane {rec.lane} · Position {rec.position}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 {rec.occupiedCount} of {rec.totalCells} dock cells currently occupied
               </p>
             </div>
-          ) : (
-            <div className="text-center text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3">
-              All {rec?.totalCells ?? 130} dock positions are currently occupied. Please check the Dock Manager for availability.
-            </div>
-          )}
+          ) : null}
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>Dismiss</Button>
           {rec?.recommended && matchedOrder && (
             <Button
-              className="bg-primary"
+              className={isOverflow ? "bg-amber-600 hover:bg-amber-700" : "bg-primary"}
               disabled={assignDock.isPending}
               onClick={() => assignDock.mutate({ id: matchedOrder.id, outboundLocation: rec.label ?? undefined })}
             >

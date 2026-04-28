@@ -197,8 +197,16 @@ export default function DockManager() {
 
   // Summary stats (based on all facility orders, not search-filtered)
   const activeOrders = facilityOrders.filter((o) => o.displayStatus === "ship_ready");
+  // Orders assigned to the Overflow location
+  const overflowOrders = facilityOrders.filter(
+    (o) => o.displayStatus === "ship_ready" && o.outboundLocation?.trim().toLowerCase() === "overflow"
+  );
+  // Orders with no dock position AND not in Overflow
   const unlocatedOrders = facilityOrders.filter(
-    (o) => o.displayStatus === "ship_ready" && !parseDockLocation(o.outboundLocation)
+    (o) =>
+      o.displayStatus === "ship_ready" &&
+      !parseDockLocation(o.outboundLocation) &&
+      o.outboundLocation?.trim().toLowerCase() !== "overflow"
   );
   const occupiedCells = new Set(
     facilityOrders
@@ -438,6 +446,39 @@ export default function DockManager() {
               ))}
             </div>
           </div>
+
+          {/* Overflow Orders */}
+          {overflowOrders.length > 0 && (
+            <div className="rounded-xl border border-orange-500/40 bg-orange-500/5 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Truck className="h-4 w-4 text-orange-500" />
+                <h3 className="text-sm font-semibold text-orange-700 dark:text-orange-400">
+                  Overflow ({overflowOrders.length})
+                </h3>
+                <span className="text-xs text-muted-foreground ml-1">— no contiguous lane space available</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {overflowOrders.map((o) => (
+                  <div
+                    key={o.id}
+                    className={`flex items-start gap-2 rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2 transition-all ${
+                      searchActive && !matchedIds.has(o.id) ? "opacity-30" : ""
+                    } ${searchActive && matchedIds.has(o.id) ? "ring-2 ring-primary" : ""}`}
+                  >
+                    <Package className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground truncate">{o.clientName}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        TXN #{o.extensivOrderId}
+                        {o.referenceNum ? ` · ${o.referenceNum}` : o.poNum ? ` · ${o.poNum}` : ""}
+                        {o.palletCount ? ` · ${o.palletCount} plt` : ""}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Unlocated Orders */}
           {unlocatedOrders.length > 0 && (

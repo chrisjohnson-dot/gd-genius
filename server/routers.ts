@@ -7230,6 +7230,7 @@ const shippingDashboardRouter = router({
     .input(z.object({
       facilityId: z.number().optional(),
       configId: z.number().optional(),  // extensiv_configs.id from QC session warehouseId
+      palletCount: z.number().int().min(1).optional(), // number of pallets needing contiguous space
     }))
     .query(async ({ input }) => {
       const LANES = Array.from({ length: 26 }, (_, i) => i + 1);
@@ -7268,28 +7269,60 @@ const shippingDashboardRouter = router({
         if (parsed) occupied.add(`${parsed.lane}-${parsed.position}`);
       }
 
+      const totalCells = LANES.length * POSITIONS.length;
+      const occupiedCount = occupied.size;
+
+      // palletCount from the input (optional, defaults to 1)
+      const palletCount = input.palletCount ?? 1;
+      const needed = Math.max(1, palletCount);
+
+      // Search for a lane that has `needed` contiguous free positions
       for (const lane of LANES) {
-        for (const pos of POSITIONS) {
-          if (!occupied.has(`${lane}-${pos}`)) {
-            return {
-              recommended: true,
-              lane,
-              position: pos,
-              label: `${pos}${lane}`,
-              occupiedCount: occupied.size,
-              totalCells: LANES.length * POSITIONS.length,
-            };
+        // Build the list of free positions in this lane in order
+        const freePositions = POSITIONS.filter((pos) => !occupied.has(`${lane}-${pos}`));
+        if (freePositions.length >= needed) {
+          // Find the first contiguous run of `needed` positions
+          // Positions are A,B,C,D,E — contiguous means consecutive in the POSITIONS array
+          let runStart = -1;
+          let runLen = 0;
+          for (let i = 0; i < POSITIONS.length; i++) {
+            const pos = POSITIONS[i];
+            if (!occupied.has(`${lane}-${pos}`)) {
+              if (runStart === -1) runStart = i;
+              runLen++;
+              if (runLen >= needed) {
+                // Found a valid block starting at runStart, length needed
+                const block = POSITIONS.slice(runStart, runStart + needed);
+                return {
+                  recommended: true,
+                  overflow: false,
+                  lane,
+                  position: block[0],
+                  positions: block,
+                  label: block.length === 1 ? `${block[0]}${lane}` : `${block[0]}${lane}–${block[block.length - 1]}${lane}`,
+                  occupiedCount,
+                  totalCells,
+                };
+              }
+            } else {
+              // Reset run
+              runStart = -1;
+              runLen = 0;
+            }
           }
         }
       }
 
+      // No lane has a contiguous block — fall back to Overflow
       return {
-        recommended: false,
+        recommended: true,
+        overflow: true,
         lane: null as number | null,
         position: null as string | null,
-        label: null as string | null,
-        occupiedCount: occupied.size,
-        totalCells: LANES.length * POSITIONS.length,
+        positions: [] as string[],
+        label: "Overflow",
+        occupiedCount,
+        totalCells,
       };
     }),
 

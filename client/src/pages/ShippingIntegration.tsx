@@ -502,7 +502,7 @@ function RateWizardCarrierPanel() {
             <div className="border-t pt-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Origin Address (optional)</p>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5 col-span-2"><Label className="text-xs">Company / Warehouse Name</Label><Input placeholder="Go Direct Logistics — Calgary" value={form.originName} onChange={(e) => setForm((f) => ({ ...f, originName: e.target.value }))} /></div>
+                <div className="space-y-1.5 col-span-2"><Label className="text-xs">Company / Warehouse Name</Label><Input placeholder="Go Direct Solutions — Calgary" value={form.originName} onChange={(e) => setForm((f) => ({ ...f, originName: e.target.value }))} /></div>
                 <div className="space-y-1.5 col-span-2"><Label className="text-xs">Address Line 1</Label><Input value={form.originAddress1} onChange={(e) => setForm((f) => ({ ...f, originAddress1: e.target.value }))} /></div>
                 <div className="space-y-1.5"><Label className="text-xs">City</Label><Input value={form.originCity} onChange={(e) => setForm((f) => ({ ...f, originCity: e.target.value }))} /></div>
                 <div className="space-y-1.5"><Label className="text-xs">State / Province</Label><Input value={form.originState} onChange={(e) => setForm((f) => ({ ...f, originState: e.target.value }))} /></div>

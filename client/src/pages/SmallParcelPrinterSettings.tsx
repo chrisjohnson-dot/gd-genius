@@ -41,7 +41,7 @@ const DEFAULT_BRIDGE_PORT = 9101;
 function makeTestZpl(printerName: string) {
   return `^XA
 ^FO50,60^A0N,48,48^FDZebra Test Print^FS
-^FO50,130^A0N,32,32^FDGo Direct Logistics^FS
+^FO50,130^A0N,32,32^FDGo Direct Solutions^FS
 ^FO50,180^A0N,26,26^FD${printerName}^FS
 ^FO50,230^A0N,22,22^FD${new Date().toLocaleString()}^FS
 ^XZ`;

@@ -133,7 +133,7 @@ export function useBrowserPrint() {
   const testPrint = useCallback(async () => {
     const testZpl = `^XA
 ^FO50,50^A0N,40,40^FDZebra Test Print^FS
-^FO50,110^A0N,28,28^FDGo Direct Logistics^FS
+^FO50,110^A0N,28,28^FDGo Direct Solutions^FS
 ^FO50,150^A0N,22,22^FD${new Date().toLocaleString()}^FS
 ^XZ`;
     return printZpl(testZpl);

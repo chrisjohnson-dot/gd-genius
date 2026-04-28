@@ -7664,7 +7664,7 @@ function buildFallbackZpl(
     `^FO30,320^BY3,2,100^BCN,100,Y,N,N^FD${zplSanitize(trackingNumber)}^FS`,
     `^FO30,440^A0N,28,28^FD${zplSanitize(trackingNumber)}^FS`,
     "^FO30,490^GB752,3,3^FS",
-    "^FO30,500^A0N,22,22^FDGo Direct Logistics^FS",
+    "^FO30,500^A0N,22,22^FDGo Direct Solutions^FS",
     "^XZ",
   ].join("\n");
 }
@@ -7944,7 +7944,7 @@ const smallParcelRouter = router({
         const heightIn = session.heightCm ? parseFloat(String(session.heightCm)) / 2.54 : 4;
 
         const labelInput: CarrierLabelInput = {
-          originName: originAccount?.originName ?? "Go Direct Logistics",
+          originName: originAccount?.originName ?? "Go Direct Solutions",
           originAddress1: originAccount?.originAddress1 ?? "123 Warehouse Dr",
           originCity: originAccount?.originCity ?? "",
           originState: originAccount?.originState ?? "",
@@ -9639,7 +9639,7 @@ const rateWizardRouter = router({
           // Build origin address from the first active account that has origin info
           const originAccount = activeAccounts.find((a) => a.originAddress1 && a.originPostal);
           const shipFrom: VeeqoAddress = {
-            name: originAccount?.originName ?? "Go Direct Logistics",
+            name: originAccount?.originName ?? "Go Direct Solutions",
             address_line1: originAccount?.originAddress1 ?? "123 Warehouse Dr",
             city: originAccount?.originCity ?? "",
             state_or_region: originAccount?.originState ?? "",
@@ -9753,7 +9753,7 @@ const rateWizardRouter = router({
       if (activeIntegration === 'rate_wizard' && input.destPostal) {
         const originAccount = activeAccounts.find((a) => a.originAddress1 && a.originPostal);
         const carrierInput: CarrierRateInput = {
-          originName: originAccount?.originName ?? "Go Direct Logistics",
+          originName: originAccount?.originName ?? "Go Direct Solutions",
           originAddress1: originAccount?.originAddress1 ?? "",
           originCity: originAccount?.originCity ?? "",
           originState: originAccount?.originState ?? "",

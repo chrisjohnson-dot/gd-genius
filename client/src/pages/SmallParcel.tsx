@@ -1711,7 +1711,7 @@ function buildStubZpl(params: {
   const city = [shipTo?.city, shipTo?.state, shipTo?.zip].filter(Boolean).join(", ");
 
   return `^XA
-^FO30,30^A0N,28,28^FDGo Direct Logistics^FS
+^FO30,30^A0N,28,28^FDGo Direct Solutions^FS
 ^FO30,70^A0N,22,22^FD${carrier} ${serviceLevel}^FS
 ^FO30,110^BY2,2,80^BCN,80,Y,N,N^FD${trackingNumber}^FS
 ^FO30,210^A0N,20,20^FDShip To:^FS

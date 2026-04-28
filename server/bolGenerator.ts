@@ -48,7 +48,7 @@ export async function generateBolPdf(data: BolData): Promise<string> {
     // ── Header ──────────────────────────────────────────────────────────────
     doc.fontSize(20).font("Helvetica-Bold").text("BILL OF LADING", { align: "center" });
     doc.moveDown(0.3);
-    doc.fontSize(10).font("Helvetica").text("Go Direct Logistics", { align: "center" });
+    doc.fontSize(10).font("Helvetica").text("Go Direct Solutions", { align: "center" });
     doc.moveDown(0.5);
     doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
     doc.moveDown(0.5);
@@ -88,7 +88,7 @@ export async function generateBolPdf(data: BolData): Promise<string> {
     doc.moveDown(0.3);
 
     y = doc.y;
-    doc.fontSize(11).font("Helvetica-Bold").fillColor("#111827").text("Go Direct Logistics", col1, y);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#111827").text("Go Direct Solutions", col1, y);
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#111827").text(data.shipToName ?? data.clientName, col2, y);
     doc.moveDown(1.5);
 

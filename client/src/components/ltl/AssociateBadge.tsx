@@ -137,7 +137,7 @@ function BadgeCard({
     >
       {/* Header strip */}
       <div className="bg-gray-900 px-3 py-1.5 flex items-center justify-between">
-        <span className="text-white text-xs font-bold tracking-widest uppercase">Go Direct Logistics</span>
+        <span className="text-white text-xs font-bold tracking-widest uppercase">Go Direct Solutions</span>
         {roleLabel && (
           <span className="text-yellow-300 text-xs font-semibold uppercase tracking-wide">{roleLabel}</span>
         )}
@@ -215,7 +215,7 @@ function BadgeCardPrint({
         }}
       >
         <span style={{ color: "#ffffff", fontSize: "9px", fontWeight: "bold", letterSpacing: "2px", textTransform: "uppercase" }}>
-          Go Direct Logistics
+          Go Direct Solutions
         </span>
         {roleLabel && (
           <span style={{ color: "#fde047", fontSize: "9px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>

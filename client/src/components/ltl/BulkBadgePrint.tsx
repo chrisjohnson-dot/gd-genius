@@ -115,7 +115,7 @@ function PreviewBadge({ associate }: { associate: AssociateBadgeData }) {
   return (
     <div className="bg-white border-2 border-gray-700 rounded-lg overflow-hidden flex-shrink-0" style={{ width: "100%" }}>
       <div className="bg-gray-900 px-3 py-1 flex items-center justify-between">
-        <span className="text-white text-xs font-bold tracking-widest uppercase">Go Direct Logistics</span>
+        <span className="text-white text-xs font-bold tracking-widest uppercase">Go Direct Solutions</span>
         {roleLabel && <span className="text-yellow-300 text-xs font-semibold uppercase">{roleLabel}</span>}
       </div>
       <div className="px-3 pt-1.5 pb-1">
@@ -161,7 +161,7 @@ function PrintBadgeCard({ associate, roleLabel }: { associate: AssociateBadgeDat
       backgroundColor: "#ffffff", display: "flex", flexDirection: "column",
     }}>
       <div style={{ backgroundColor: "#111827", padding: "4px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ color: "#fff", fontSize: "9px", fontWeight: "bold", letterSpacing: "2px", textTransform: "uppercase" }}>Go Direct Logistics</span>
+        <span style={{ color: "#fff", fontSize: "9px", fontWeight: "bold", letterSpacing: "2px", textTransform: "uppercase" }}>Go Direct Solutions</span>
         {roleLabel && <span style={{ color: "#fde047", fontSize: "9px", fontWeight: "bold", textTransform: "uppercase" }}>{roleLabel}</span>}
       </div>
       <div style={{ padding: "6px 10px 4px", flex: 1, display: "flex", flexDirection: "column" }}>

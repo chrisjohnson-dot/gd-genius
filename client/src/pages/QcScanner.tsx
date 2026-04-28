@@ -2657,17 +2657,32 @@ function DockRecommendDialog({
   sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null } | null;
 }) {
   const palletCount = sessionInfo?.palletCount ?? 1;
+  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
 
-  const { data: rec, isLoading } = trpc.shippingDashboard.recommendDockLocation.useQuery(
+  const { data: spaces, isLoading } = trpc.shippingDashboard.listAvailableDockSpaces.useQuery(
     {
       configId: sessionInfo?.configId ?? undefined,
       palletCount: palletCount > 0 ? palletCount : 1,
     },
     { enabled: open && !!sessionInfo }
   );
+
+  const recommended = spaces?.recommended;
+  const isOverflow = spaces?.overflow === true;
+
+  // Auto-select the recommended location when data first loads
+  useEffect(() => {
+    if (!spaces || selectedLocation) return;
+    if (spaces.recommended) {
+      setSelectedLocation(spaces.recommended.label);
+    } else if (spaces.overflow) {
+      setSelectedLocation("Overflow");
+    }
+  }, [spaces]);
+
   const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
     onSuccess: () => {
-      toast.success(`Dock location “${rec?.label}” assigned`);
+      toast.success(`Order moved to outbound: ${selectedLocation ?? "Overflow"}`);
       onClose();
     },
     onError: (e) => toast.error(e.message),
@@ -2682,71 +2697,153 @@ function DockRecommendDialog({
     (o) => o.extensivOrderId === sessionInfo?.transactionId
   );
 
-  const isOverflow = rec?.overflow === true;
+  function handleAssign() {
+    if (!matchedOrder) return;
+    const loc = selectedLocation === "Overflow" ? "Overflow" : (selectedLocation ?? undefined);
+    assignDock.mutate({ id: matchedOrder.id, outboundLocation: loc });
+  }
+
+  // Group available cells by lane for display
+  const byLane: Record<number, string[]> = {};
+  for (const cell of spaces?.available ?? []) {
+    if (!byLane[cell.lane]) byLane[cell.lane] = [];
+    byLane[cell.lane].push(cell.label);
+  }
+  const laneNumbers = Object.keys(byLane).map(Number).sort((a, b) => a - b);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5 text-primary" />
-            Suggested Dock Location
+            Move to Outbound
           </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-1">
           {sessionInfo && (
-            <div className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground mt-1">
               <span className="font-medium text-foreground">{sessionInfo.customerName ?? `TX ${sessionInfo.transactionId}`}</span>
               {" — "}{palletCount} pallet{palletCount !== 1 ? "s" : ""}
-            </div>
+            </p>
           )}
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
           {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <RefreshCw className="w-4 h-4 animate-spin" /> Looking up available dock positions…
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Finding available dock positions…
             </div>
-          ) : isOverflow ? (
-            <div className="text-center space-y-3">
-              <div className="inline-flex items-center justify-center w-28 h-20 rounded-2xl bg-amber-500/10 border-2 border-amber-500">
-                <span className="text-2xl font-black text-amber-600 dark:text-amber-400">Overflow</span>
+          ) : (
+            <>
+              {/* Recommended banner */}
+              {recommended && (
+                <div
+                  className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    selectedLocation === recommended.label
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-muted/30 hover:border-primary/50"
+                  }`}
+                  onClick={() => setSelectedLocation(recommended.label)}
+                >
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Recommended</p>
+                    <p className="text-2xl font-black text-primary">{recommended.label}</p>
+                    {recommended.positions.length > 1 && (
+                      <p className="text-xs text-muted-foreground">Lane {recommended.lane} · Positions {recommended.positions.join(", ")}</p>
+                    )}
+                  </div>
+                  {selectedLocation === recommended.label && (
+                    <CheckCircle2 className="w-6 h-6 text-primary shrink-0" />
+                  )}
+                </div>
+              )}
+
+              {/* Overflow suggested when no contiguous block */}
+              {isOverflow && !recommended && (
+                <div
+                  className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    selectedLocation === "Overflow"
+                      ? "border-amber-500 bg-amber-500/10"
+                      : "border-border bg-muted/30 hover:border-amber-500/50"
+                  }`}
+                  onClick={() => setSelectedLocation("Overflow")}
+                >
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">No contiguous space — suggested</p>
+                    <p className="text-2xl font-black text-amber-600 dark:text-amber-400">Overflow</p>
+                  </div>
+                  {selectedLocation === "Overflow" && (
+                    <CheckCircle2 className="w-6 h-6 text-amber-500 shrink-0" />
+                  )}
+                </div>
+              )}
+
+              {/* All available positions grid */}
+              {laneNumbers.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    All Available Positions ({spaces?.available.length} of {spaces?.totalCells})
+                  </p>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                    {laneNumbers.map((lane) => (
+                      <div key={lane} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-12 shrink-0">Lane {lane}</span>
+                        <div className="flex gap-1 flex-wrap">
+                          {byLane[lane].map((label) => (
+                            <button
+                              key={label}
+                              onClick={() => setSelectedLocation(label)}
+                              className={`px-2.5 py-1 rounded-lg text-sm font-bold border transition-all ${
+                                selectedLocation === label
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-muted/50 text-foreground border-border hover:border-primary/60 hover:bg-primary/10"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Overflow option always available at bottom */}
+              <div
+                className={`flex items-center justify-between px-4 py-2.5 rounded-xl border cursor-pointer transition-all ${
+                  selectedLocation === "Overflow"
+                    ? "border-amber-500 bg-amber-500/10"
+                    : "border-dashed border-border hover:border-amber-500/50 hover:bg-amber-500/5"
+                }`}
+                onClick={() => setSelectedLocation("Overflow")}
+              >
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Overflow</span>
+                {selectedLocation === "Overflow" && <CheckCircle2 className="w-4 h-4 text-amber-500" />}
               </div>
-              <p className="text-sm text-amber-700 dark:text-amber-400">
-                No lane has {palletCount} contiguous free positions.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {rec?.occupiedCount} of {rec?.totalCells} dock cells currently occupied
-              </p>
-            </div>
-          ) : rec?.recommended ? (
-            <div className="text-center space-y-2">
-              <div className="inline-flex items-center justify-center w-28 h-20 rounded-2xl bg-primary/10 border-2 border-primary">
-                <span className="text-3xl font-black text-primary">{rec.label}</span>
-              </div>
-              {rec.positions && rec.positions.length > 1 ? (
-                <p className="text-sm text-muted-foreground">
-                  Lane {rec.lane} · Positions {rec.positions.join(", ")}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Lane {rec.lane} · Position {rec.position}
+
+              {spaces && (
+                <p className="text-xs text-muted-foreground text-center">
+                  {spaces.occupiedCount} of {spaces.totalCells} dock cells currently occupied
                 </p>
               )}
-              <p className="text-xs text-muted-foreground">
-                {rec.occupiedCount} of {rec.totalCells} dock cells currently occupied
-              </p>
-            </div>
-          ) : null}
+            </>
+          )}
         </div>
+
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Dismiss</Button>
-          {rec?.recommended && matchedOrder && (
+          <Button variant="outline" onClick={onClose}>Skip</Button>
+          {matchedOrder && selectedLocation && (
             <Button
-              className={isOverflow ? "bg-amber-600 hover:bg-amber-700" : "bg-primary"}
+              className={selectedLocation === "Overflow" ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}
               disabled={assignDock.isPending}
-              onClick={() => assignDock.mutate({ id: matchedOrder.id, outboundLocation: rec.label ?? undefined })}
+              onClick={handleAssign}
             >
               {assignDock.isPending ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
-              Assign {rec.label}
+              Assign to {selectedLocation}
             </Button>
+          )}
+          {!matchedOrder && !isLoading && (
+            <p className="text-xs text-muted-foreground self-center">Order not found in outbound tracking — set location manually in Dock Manager.</p>
           )}
         </DialogFooter>
       </DialogContent>

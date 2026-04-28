@@ -7415,6 +7415,82 @@ const shippingDashboardRouter = router({
       };
     }),
 
+  /**
+   * Return all available (unoccupied) dock cells for a facility, plus the recommended one.
+   * Used by the QC completion flow to let the user pick from open spaces.
+   */
+  listAvailableDockSpaces: protectedProcedure
+    .input(z.object({
+      facilityId: z.number().optional(),
+      configId: z.number().optional(),
+      palletCount: z.number().int().min(1).optional(),
+    }))
+    .query(async ({ input }) => {
+      const LANES = Array.from({ length: 26 }, (_, i) => i + 1);
+      const POSITIONS = ["A", "B", "C", "D", "E"];
+      function parseLoc(raw: string | null): { lane: number; position: string } | null {
+        if (!raw) return null;
+        const cleaned = raw.trim().toUpperCase().replace(/^(OB[-\s]?|DOCK[-\s]?)/i, "");
+        let m = cleaned.match(/^([A-E])[-\s]?(\d{1,2})$/);
+        if (m) { const lane = parseInt(m[2], 10); if (lane >= 1 && lane <= 26) return { lane, position: m[1] }; }
+        m = cleaned.match(/^(\d{1,2})[-\s]?([A-E])$/);
+        if (m) { const lane = parseInt(m[1], 10); if (lane >= 1 && lane <= 26) return { lane, position: m[2] }; }
+        return null;
+      }
+      const allOrders = await getShipReadyOrders();
+      let resolvedFacilityId = input.facilityId;
+      if (!resolvedFacilityId && input.configId) {
+        const match = allOrders.find((o) => o.configId === input.configId);
+        if (match) resolvedFacilityId = match.facilityId;
+      }
+      const facilityOrders = resolvedFacilityId
+        ? allOrders.filter((o) => o.facilityId === resolvedFacilityId)
+        : allOrders;
+      const occupied = new Set<string>();
+      for (const o of facilityOrders) {
+        const parsed = parseLoc(o.outboundLocation);
+        if (parsed) occupied.add(`${parsed.lane}-${parsed.position}`);
+      }
+      // Build list of all available cells sorted by lane then position
+      const available: { lane: number; position: string; label: string }[] = [];
+      for (const lane of LANES) {
+        for (const pos of POSITIONS) {
+          if (!occupied.has(`${lane}-${pos}`)) {
+            available.push({ lane, position: pos, label: `${pos}${lane}` });
+          }
+        }
+      }
+      // Find recommended (first contiguous block for palletCount)
+      const palletCount = input.palletCount ?? 1;
+      let recommended: { lane: number; position: string; positions: string[]; label: string } | null = null;
+      outer: for (const lane of LANES) {
+        let runStart = -1; let runLen = 0;
+        for (let i = 0; i < POSITIONS.length; i++) {
+          const pos = POSITIONS[i];
+          if (!occupied.has(`${lane}-${pos}`)) {
+            if (runStart === -1) runStart = i;
+            runLen++;
+            if (runLen >= palletCount) {
+              const block = POSITIONS.slice(runStart, runStart + palletCount);
+              recommended = {
+                lane,
+                position: block[0],
+                positions: block,
+                label: block.length === 1 ? `${block[0]}${lane}` : `${block[0]}${lane}\u2013${block[block.length - 1]}${lane}`,
+              };
+              break outer;
+            }
+          } else { runStart = -1; runLen = 0; }
+        }
+      }
+      return {
+        available,
+        recommended,
+        occupiedCount: occupied.size,
+        totalCells: LANES.length * POSITIONS.length,
+        overflow: recommended === null,
+      };
+    }),
   /** Update outbound location and/or pallet count for an order */
   updateOutbound: protectedProcedure
     .input(z.object({

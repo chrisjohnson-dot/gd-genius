@@ -846,7 +846,8 @@ const _appRouter = router({
           input.customerIds.map(async (customerId) => {
             try {
               const orders = await fetchOpenOrders(config, customerId, input.facilityId);
-              return { customerId, count: orders.length };
+              const unallocated = orders.filter((o) => !o.readOnly.fullyAllocated);
+              return { customerId, count: unallocated.length };
             } catch {
               return { customerId, count: 0 };
             }

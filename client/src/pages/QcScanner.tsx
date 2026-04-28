@@ -2208,14 +2208,14 @@ export default function QcScanner() {
 
       {/* Complete Order — Mandatory Confirmation Gate */}
       <Dialog open={completeDialog} onOpenChange={(open) => { setCompleteDialog(open); if (!open) setConfirmText(""); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col" style={{ maxHeight: '90vh' }}>
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-green-500" /> Complete &amp; Confirm Order
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 text-sm">
+          <div className="flex-1 overflow-y-auto pr-1 space-y-4 text-sm">
             {/* Session summary */}
             <div className="bg-muted rounded-lg p-3 space-y-1.5">
               <div className="flex justify-between">
@@ -2375,9 +2375,12 @@ export default function QcScanner() {
               </div>
             )}
 
-            {/* Confirmation input */}
+          </div>
+
+          {/* Pinned confirm input + footer — always visible */}
+          <div className="shrink-0 space-y-3 pt-2 border-t">
             <div className="space-y-2">
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Type <span className="font-mono font-bold text-foreground">CONFIRMED</span> below to close this session and return to the scanner.
               </p>
               <Input
@@ -2399,7 +2402,7 @@ export default function QcScanner() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="shrink-0 gap-2">
             <Button variant="outline" onClick={() => { setCompleteDialog(false); setConfirmText(""); }}>Cancel</Button>
             <Button
               className="bg-green-600 hover:bg-green-700"

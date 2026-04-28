@@ -4770,7 +4770,7 @@ const qcScannerRouter = router({
           mergedItems.push({ sku: muItem.sku, qty: muItem.qty });
         }
       }
-      await updateQcPallet(input.palletId, { items: mergedItems as unknown as null });
+      await updateQcPallet(input.palletId, { items: mergedItems as unknown as null, muLabel: input.muLabel });
 
       // 5. Update scannedQty on each session item for the SKUs on this MU
       const sessionItems = await getQcScanItems(input.sessionId);

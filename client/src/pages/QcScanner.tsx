@@ -40,6 +40,7 @@ type Pallet = {
   calculatedWeightLb?: string | null;
   weightOverrideLb?: string | null;
   palletTareWeightLb?: string | null;
+  muLabel?: string | null;
 };
 
 const PALLET_TYPES = [
@@ -1978,6 +1979,13 @@ export default function QcScanner() {
                           palletTypeBadgeClass(pallet.palletType)
                         }`}>
                           {pallet.palletType === "customer_owned" ? "CUST" : pallet.palletType === "gd_owned" ? "GD" : "CHEP"}
+                        </span>
+                      )}
+                      {/* MU badge — shown when this pallet was imported via MU scan */}
+                      {pallet.muLabel && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none shrink-0 bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" title={`Imported from MU ${pallet.muLabel}`}>
+                          <Package className="w-2.5 h-2.5" />
+                          MU {pallet.muLabel}
                         </span>
                       )}
                       {/* Summary: SKUs · units · weight */}

@@ -674,6 +674,8 @@ export const qcPallets = mysqlTable("qc_pallets", {
   weightOverrideLb: decimal("weightOverrideLb", { precision: 8, scale: 2 }),
   // Tare weight of the pallet itself (lbs) — defaults to 30 lbs, editable by operator
   palletTareWeightLb: decimal("palletTareWeightLb", { precision: 6, scale: 2 }).default("30"),
+  // MU (Movable Unit) label — set when this pallet was imported via MU scan
+  muLabel: varchar("muLabel", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type QcPallet = typeof qcPallets.$inferSelect;

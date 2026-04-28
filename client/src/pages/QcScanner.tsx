@@ -355,7 +355,7 @@ export default function QcScanner() {
       setPalletTypeDialog(true);
       setTimeout(() => barcodeRef.current?.focus(), 100);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const barcodeRef = useRef<HTMLInputElement>(null);
@@ -493,7 +493,7 @@ export default function QcScanner() {
         }
       }
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const scanBarcode = trpc.qcScanner.scanBarcode.useMutation({
@@ -502,7 +502,7 @@ export default function QcScanner() {
       if (!data.found) {
         playBeep("error");
         setLastScan({ sku: barcodeInput, found: false });
-        toast.warning("SKU/UPC not found in this order", { description: "Use the Flag button to log it." });
+        toast.warning("SKU/UPC not found in this order", { description: "Use the Flag button to log it.", duration: Infinity });
       } else if ((data as any).overScan) {
         // Hard block — play a double-buzz error and show a persistent red banner
         playBeep("error");
@@ -510,7 +510,7 @@ export default function QcScanner() {
         setLastScan({ sku: data.item?.sku ?? barcodeInput, found: false });
         toast.error(`⛔ Over-scan blocked — ${data.item?.sku ?? barcodeInput} is already at 100%`, {
           description: "Remove the extra unit or adjust the expected quantity.",
-          duration: 6000,
+          duration: Infinity,
         });
       } else {
         if (data.sessionComplete) {
@@ -585,7 +585,7 @@ export default function QcScanner() {
               playBeep("error");
               toast.warning(`⚠️ Pallet ${activePallet.palletNumber} exceeds weight limit`, {
                 description: `${newTotalLb} lbs — over the ${weightLimitLbRef.current} lb threshold. Consider starting a new pallet.`,
-                duration: 8000,
+                duration: Infinity,
               });
             }
           } else if (activePallet.calculatedWeightLb) {
@@ -595,7 +595,7 @@ export default function QcScanner() {
               playBeep("error");
               toast.warning(`⚠️ Pallet ${activePallet.palletNumber} exceeds weight limit`, {
                 description: `${w} lbs — over the ${weightLimitLbRef.current} lb threshold. Consider starting a new pallet.`,
-                duration: 8000,
+                duration: Infinity,
               });
             }
           }
@@ -623,7 +623,7 @@ export default function QcScanner() {
     },
     onError: (e) => {
       playBeep("error");
-      toast.error(e.message);
+      toast.error(e.message, { duration: Infinity });
       setBarcodeInput("");
       const focusId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
       if (focusId !== null) {
@@ -638,7 +638,7 @@ export default function QcScanner() {
     onSuccess: (data) => {
       if ((data as any).overScan) {
         playBeep("error");
-        toast.warning(`⚠️ ${data.item?.sku ?? "Item"} is already at the expected quantity — cannot add more.`, { duration: 4000 });
+        toast.warning(`⚠️ ${data.item?.sku ?? "Item"} is already at the expected quantity — cannot add more.`, { duration: Infinity });
         return;
       }
       setItems((prev) =>
@@ -719,7 +719,7 @@ export default function QcScanner() {
         prev.map((p) => p.id === data.palletId ? { ...p, palletType: data.palletType } : p)
       );
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const assignPalletUpc = trpc.qcScanner.assignPalletUpc.useMutation({
@@ -731,7 +731,7 @@ export default function QcScanner() {
       setUpcInputs((prev) => ({ ...prev, [data.palletId]: "" }));
       toast.success(`UPC assigned: ${data.upc}`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const generatePalletUpc = trpc.qcScanner.generatePalletUpc.useMutation({
@@ -741,7 +741,7 @@ export default function QcScanner() {
       );
       toast.success(`Auto-generated UPC: ${data.upc}`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const bulkGeneratePalletUpcs = trpc.qcScanner.bulkGeneratePalletUpcs.useMutation({
@@ -760,7 +760,7 @@ export default function QcScanner() {
         );
       }
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   // Derived: how many pallets are still missing a UPC
@@ -780,7 +780,7 @@ export default function QcScanner() {
       );
       toast.success(`Pallet height saved: ${vars.heightIn}"`); 
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const updatePalletItems = trpc.qcScanner.updatePalletItems.useMutation();
@@ -791,7 +791,7 @@ export default function QcScanner() {
         prev.map((p) => p.id === vars.palletId ? { ...p, palletTareWeightLb: String(vars.tareLb) } : p)
       );
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
@@ -805,7 +805,7 @@ export default function QcScanner() {
         toast.success('Weight override cleared');
       }
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const calculatePalletWeight = trpc.qcScanner.calculatePalletWeight.useMutation({
@@ -819,7 +819,7 @@ export default function QcScanner() {
         toast.info("Weight could not be calculated — item dims may be missing in Extensiv");
       }
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   // Helper: auto-assign UPCs to any pallets missing one, then update local state
@@ -833,7 +833,7 @@ export default function QcScanner() {
         toast.success(`Auto-assigned UPCs to ${result.assigned.length} pallet${result.assigned.length !== 1 ? 's' : ''} before printing`);
       }
     } catch {
-      toast.error('Failed to auto-assign UPCs — printing with available data');
+      toast.error('Failed to auto-assign UPCs — printing with available data', { duration: Infinity });
     }
   };
 
@@ -844,7 +844,7 @@ export default function QcScanner() {
       setFlagBarcode("");
       setFlagDesc("");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const flagsQuery = trpc.qcScanner.listFlaggedBySession.useQuery(
@@ -864,7 +864,7 @@ export default function QcScanner() {
       setCompleteDialog(false);
       setConfirmText("");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
   const handleTxSubmit = (e: React.FormEvent) => {

@@ -23,6 +23,7 @@ import { startSlaNightlySnapshot } from "../scheduler/slaNightlySnapshot";
 import { startScanImagePurgeScheduler } from "../scheduler/scanImagePurge";
 import { startOpFiHealthCheckScheduler } from "../scheduler/opfiHealthCheck";
 import { startClearSightRulesSyncScheduler } from "../scheduler/clearsightRulesSync";
+import { startPackRetryScheduler } from "../scheduler/packRetry";
 import { checkOverdueSessions } from "../routers/pullAlerts";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -110,6 +111,8 @@ async function startServer() {
     startOpFiHealthCheckScheduler();
     // Nightly ClearSight retailer rules sync at 02:30 UTC (stub — activates when ClearSight endpoint is ready)
     startClearSightRulesSyncScheduler();
+    // Nightly Extensiv pack-retry at 03:00 UTC — retries all sessions where packedInExtensiv = false
+    startPackRetryScheduler();
     // Pull session overdue alert check every 5 minutes
     const runPullAlertCheck = () => {
       checkOverdueSessions()

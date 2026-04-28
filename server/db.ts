@@ -2269,8 +2269,44 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
   return results;
 }
 
-// ─── Customer Pallet Default (learned from history) ─────────────────────────
+/// ─── QC Scanner — Pending Pack Sync ─────────────────────────────────────────
+/** Returns all completed sessions that have not yet been marked as Packed in Extensiv. */
+export async function getPendingPackSessions(): Promise<Array<{
+  id: number;
+  referenceNumber: string;
+  transactionId: number;
+  warehouseId: number;
+}>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      id: qcScanSessions.id,
+      referenceNumber: qcScanSessions.referenceNumber,
+      transactionId: qcScanSessions.transactionId,
+      warehouseId: qcScanSessions.warehouseId,
+    })
+    .from(qcScanSessions)
+    .where(
+      and(
+        eq(qcScanSessions.status, "complete"),
+        eq(qcScanSessions.foundInExtensiv, true),
+        // packedInExtensiv IS NULL or FALSE
+        or(
+          isNull(qcScanSessions.packedInExtensiv),
+          eq(qcScanSessions.packedInExtensiv, false)
+        )
+      )
+    )
+    .orderBy(qcScanSessions.completedAt);
+  // Filter out rows missing transactionId or warehouseId
+  return rows.filter(
+    (r): r is { id: number; referenceNumber: string; transactionId: number; warehouseId: number } =>
+      r.transactionId != null && r.warehouseId != null
+  );
+}
 
+// ─── Customer Pallet Default (learned from history) ─────────────────────────
 /** Returns the most-used pallet type for a customer across all completed QC sessions. */
 export async function getCustomerPalletDefaultFromDb(customerName: string): Promise<{
   suggestedType: string | null;

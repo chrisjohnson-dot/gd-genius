@@ -20,9 +20,23 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function daysInOutbound(shipReadyAt: Date | string | null): number {
+/** Returns elapsed ms since shipReadyAt (0 if null). */
+function msInOutbound(shipReadyAt: Date | string | null): number {
   if (!shipReadyAt) return 0;
-  return Math.floor((Date.now() - new Date(shipReadyAt).getTime()) / 86_400_000);
+  return Math.max(0, Date.now() - new Date(shipReadyAt).getTime());
+}
+/** Returns whole days (used for sorting / threshold logic). */
+function daysInOutbound(shipReadyAt: Date | string | null): number {
+  return Math.floor(msInOutbound(shipReadyAt) / 86_400_000);
+}
+/** Human-readable dock age: "< 1 hr", "4 hrs", "1 day", "3 days". */
+function formatDockAge(shipReadyAt: Date | string | null): string {
+  const ms = msInOutbound(shipReadyAt);
+  const hrs = Math.floor(ms / 3_600_000);
+  const days = Math.floor(ms / 86_400_000);
+  if (days >= 1) return days === 1 ? "1 day" : `${days} days`;
+  if (hrs < 1) return "< 1 hr";
+  return hrs === 1 ? "1 hr" : `${hrs} hrs`;
 }
 
 function daysBadgeClass(days: number) {
@@ -513,7 +527,7 @@ function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo }: {
                       ) : (
                         <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border", daysBadgeClass(days))}>
                           {daysBadgeIcon(days)}
-                          {days === 0 ? "Today" : `${days}d`}
+                          {formatDockAge(order.shipReadyAt)}
                         </span>
                       )}
                     </td>

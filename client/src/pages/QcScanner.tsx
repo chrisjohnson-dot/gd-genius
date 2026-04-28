@@ -1336,7 +1336,7 @@ export default function QcScanner() {
   return (
     <>
     {/* Outer flex column: fills main, sticky top + scrollable pallet cards */}
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex-1 flex flex-col overflow-hidden">
     {/* -- Sticky top section: header + progress + items table + pallets toolbar -- */}
     <div className="shrink-0 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4 max-w-6xl w-full mx-auto">
       {/* Header */}
@@ -1643,6 +1643,7 @@ export default function QcScanner() {
           })())}
 
         </div>{/* end pallets toolbar div */}
+      </div>{/* end items section */}
       </div>{/* end sticky section */}
 
       {/* -- Scrollable pallet cards area -- */}
@@ -2055,7 +2056,6 @@ export default function QcScanner() {
           )}
 
       </div>{/* end scrollable pallet cards area */}
-    </div>{/* end flex-col h-full wrapper */}
     </div>{/* end outer flex column */}
     {/* Pallet Type Selection Dialog */}
       <Dialog open={palletTypeDialog} onOpenChange={(open) => { if (!open) { setPalletTypeDialog(false); setPendingPalletType(null); } }}>

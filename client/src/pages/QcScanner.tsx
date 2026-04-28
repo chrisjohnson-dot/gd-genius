@@ -1330,10 +1330,13 @@ export default function QcScanner() {
 
   return (
     <>
-    {/* Outer flex column: fills main, sticky top + scrollable pallet cards */}
-    <div className="flex-1 flex flex-col overflow-hidden">
-    {/* -- Sticky top section: header + progress + items table + pallets toolbar -- */}
-    <div className="shrink-0 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4 max-w-6xl w-full mx-auto">
+    {/* Two-column layout: order details left | scanning + pallets right */}
+    <div className="flex-1 flex flex-row overflow-hidden">
+
+    {/* ===== LEFT COLUMN: Order details (header, progress, items table) ===== */}
+    <div className="w-[440px] shrink-0 flex flex-col overflow-hidden border-r border-border bg-background">
+    {/* Pinned header inside left column */}
+    <div className="shrink-0 bg-background border-b border-border shadow-sm pb-3 px-4 pt-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
@@ -1496,40 +1499,42 @@ export default function QcScanner() {
         </div>
       )}
 
-      {/* Items section — always visible */}
-      <div>
-        <div className="mt-3">
-          {/* Extensiv load failure banner */}
-          {extensivLoadError && !fetchFromExtensiv.isPending && (
-            <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 mb-3 text-amber-800">
-              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-amber-500" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm">Could not load items from Extensiv</p>
-                <p className="text-xs mt-0.5 break-words">{extensivLoadError}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
-                  onClick={() => {
-                    if (session) {
-                      fetchFromExtensiv.mutate({ sessionId: session.id, transactionId: session.transactionId ?? 0 });
-                    }
-                  }}
-                >
-                  <RefreshCw className="w-3 h-3 mr-1" /> Retry
-                </Button>
-                <button
-                  className="text-amber-500 hover:text-amber-700"
-                  onClick={() => setExtensivLoadError(null)}
-                  aria-label="Dismiss"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+      </div>{/* end left column pinned header */}
+
+      {/* Left column scrollable body: items table + error banner */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
+        {/* Extensiv load failure banner */}
+        {extensivLoadError && !fetchFromExtensiv.isPending && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 mt-3 mb-3 text-amber-800">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-amber-500" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm">Could not load items from Extensiv</p>
+              <p className="text-xs mt-0.5 break-words">{extensivLoadError}</p>
             </div>
-          )}
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
+                onClick={() => {
+                  if (session) {
+                    fetchFromExtensiv.mutate({ sessionId: session.id, transactionId: session.transactionId ?? 0 });
+                  }
+                }}
+              >
+                <RefreshCw className="w-3 h-3 mr-1" /> Retry
+              </Button>
+              <button
+                className="text-amber-500 hover:text-amber-700"
+                onClick={() => setExtensivLoadError(null)}
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="mt-3">
           <ItemsTable
             items={items}
             phase={phase}
@@ -1561,11 +1566,17 @@ export default function QcScanner() {
             }}
           />
         </div>
+      </div>{/* end left column scrollable body */}
 
-        {/* Pallets toolbar — still inside sticky section */}
-        <div className="mt-4">
-          {/* Top toolbar: auto-assign UPCs + weight limit */}
-          {phase === "scanning" && pallets.length > 0 && ((() => {
+    </div>{/* end LEFT COLUMN */}
+
+    {/* ===== RIGHT COLUMN: Pallets toolbar (pinned) + pallet cards (scrollable) ===== */}
+    <div className="flex-1 flex flex-col overflow-hidden bg-muted/30">
+
+      {/* Right column pinned toolbar */}
+      <div className="shrink-0 bg-background border-b border-border px-4 pt-3 pb-3">
+        {/* Pallets toolbar */}
+        {phase === "scanning" && pallets.length > 0 && ((() => {
             const _toolbarExpected = items.reduce((s, i) => s + (i.expectedQty ?? 0), 0);
             const _toolbarScanned = items.reduce((s, i) => s + (i.scannedQty ?? 0), 0);
             const _toolbarRemaining = Math.max(0, _toolbarExpected - _toolbarScanned);
@@ -1659,12 +1670,10 @@ export default function QcScanner() {
             );
           })())}
 
-        </div>{/* end pallets toolbar div */}
-      </div>{/* end items section */}
-      </div>{/* end sticky section */}
+      </div>{/* end right column pinned toolbar */}
 
-      {/* -- Scrollable pallet cards area -- */}
-      <div ref={palletScrollContainerRef} className="flex-1 overflow-y-auto px-4 pb-4 max-w-6xl w-full mx-auto">
+      {/* -- Scrollable pallet cards area (right column) -- */}
+      <div ref={palletScrollContainerRef} className="flex-1 overflow-y-auto px-4 pb-4">
         {pallets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">No pallets yet. Use the button above to add one.</div>
           ) : (
@@ -2073,7 +2082,9 @@ export default function QcScanner() {
           )}
 
       </div>{/* end scrollable pallet cards area */}
-    </div>{/* end outer flex column */}
+    </div>{/* end RIGHT COLUMN */}
+
+    </div>{/* end two-column wrapper */}
     {/* Pallet Type Selection Dialog */}
       <Dialog open={palletTypeDialog} onOpenChange={(open) => { if (!open) { setPalletTypeDialog(false); setPendingPalletType(null); } }}>
         <DialogContent className="max-w-sm">

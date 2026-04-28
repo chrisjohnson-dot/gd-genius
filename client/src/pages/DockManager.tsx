@@ -94,6 +94,10 @@ type OutboundOrder = {
   shipReadyAt: Date | string | null;
 };
 
+// Returns the first "word" of a client name (split on space, dash, or comma)
+function shortClientName(name: string): string {
+  return name.split(/[\s\-,]+/)[0];
+}
 // ─── Cell Component ───────────────────────────────────────────────────────────
 function DockCell({
   position,
@@ -161,7 +165,7 @@ function DockCell({
                   className="px-1 pt-1 pb-0 text-[8px] font-bold leading-tight truncate text-center"
                   style={{ color: color.text }}
                 >
-                  {o.clientName}
+                  {shortClientName(o.clientName)}
                 </div>
                 {age && (
                   <div

@@ -1153,13 +1153,18 @@ export default function QcScanner() {
               {filteredRecent.map((s, idx) => {
                 const isAlt = idx % 2 === 1;
                 const allScanned = s.totalScanned >= s.totalExpected && s.totalExpected > 0;
+                const isPending = s.foundInExtensiv && !s.packedInExtensiv;
+                // Amber tint for unsynced rows, otherwise alternate white/blue
+                const rowBg = isPending
+                  ? isAlt ? "#FEF3C7" : "#FFFBEB"
+                  : isAlt ? "#EEF4FB" : "#ffffff";
                 return (
                   <button
                     key={s.id}
                     className="grid w-full text-left text-sm border-b border-[#CDD4DC] last:border-0 hover:brightness-95 transition-all"
                     style={{
                       gridTemplateColumns: "1fr 160px 90px 90px 90px 80px",
-                      background: isAlt ? "#EEF4FB" : "#ffffff",
+                      background: rowBg,
                       minHeight: 44,
                       padding: "6px 12px",
                       alignItems: "center",

@@ -492,6 +492,7 @@ function FindSpaceDialog({
 export default function DockManager() {
   const [selectedFacility, setSelectedFacility] = useState<string>("__all__");
   const [search, setSearch] = useState("");
+  const [tierFilter, setTierFilter] = useState<"green" | "yellow" | "red" | null>(null);
   const [findSpaceOrder, setFindSpaceOrder] = useState<OutboundOrder | null>(null);
   const [assignDockOrder, setAssignDockOrder] = useState<OutboundOrder | null>(null);
   const utils = trpc.useUtils();
@@ -518,12 +519,28 @@ export default function DockManager() {
     return rawOrders.filter((o) => o.facilityId === fid);
   }, [rawOrders, selectedFacility]);
 
-  // IDs of orders that match the search query (used for highlighting)
+  // IDs of orders that match the search query OR the tier filter (used for highlighting)
   const matchedIds = useMemo<Set<number>>(() => {
     const q = search.trim();
-    if (!q) return new Set();
-    return new Set(facilityOrders.filter((o) => matchesSearch(o, q)).map((o) => o.id));
-  }, [facilityOrders, search]);
+    const tierIds = tierFilter
+      ? new Set(
+          facilityOrders
+            .filter((o) => {
+              const days = daysOnDock(o.shipReadyAt ?? null);
+              if (tierFilter === "green") return days < 4;
+              if (tierFilter === "yellow") return days >= 4 && days < 8;
+              return days >= 8;
+            })
+            .map((o) => o.id)
+        )
+      : null;
+    if (!q && !tierIds) return new Set();
+    const searchIds = q
+      ? new Set(facilityOrders.filter((o) => matchesSearch(o, q)).map((o) => o.id))
+      : null;
+    if (searchIds && tierIds) return new Set([...searchIds].filter((id) => tierIds.has(id)));
+    return searchIds ?? tierIds ?? new Set();
+  }, [facilityOrders, search, tierFilter]);
 
   // Build a map: cellKey → orders[] (all facility-filtered orders, not just matches)
   const cellMap = useMemo(() => {
@@ -566,7 +583,7 @@ export default function DockManager() {
   ).size;
   const totalCells = POSITIONS.length * LEVELS.length;
 
-  const searchActive = search.trim().length > 0;
+  const searchActive = search.trim().length > 0 || tierFilter !== null;
   const matchCount = matchedIds.size;
 
   return (
@@ -661,22 +678,47 @@ export default function DockManager() {
         </div>
       </div>
 
-      {/* Legend — age-based color scale */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: "#22c55e" }} />
-          <span className="font-medium text-foreground">0–3 days</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: "#eab308" }} />
-          <span className="font-medium text-foreground">4–7 days</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: "#ef4444" }} />
-          <span className="font-medium text-foreground">8+ days</span>
-        </div>
+      {/* Legend + tier filter buttons */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span className="text-muted-foreground mr-1">Filter:</span>
+        {(
+          [
+            { tier: "green" as const, bg: "#22c55e", label: "0–3 days" },
+            { tier: "yellow" as const, bg: "#eab308", label: "4–7 days" },
+            { tier: "red" as const, bg: "#ef4444", label: "8+ days" },
+          ] as const
+        ).map(({ tier, bg, label }) => {
+          const active = tierFilter === tier;
+          return (
+            <button
+              key={tier}
+              onClick={() => setTierFilter(active ? null : tier)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all"
+              style={{
+                backgroundColor: active ? bg : "transparent",
+                borderColor: bg,
+                color: active ? (tier === "yellow" ? "#000" : "#fff") : "inherit",
+                fontWeight: active ? 700 : 400,
+              }}
+            >
+              <div
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: bg }}
+              />
+              {label}
+            </button>
+          );
+        })}
+        {tierFilter && (
+          <button
+            onClick={() => setTierFilter(null)}
+            className="ml-1 text-xs text-muted-foreground underline"
+          >
+            Clear
+          </button>
+        )}
         {searchActive && matchCount > 0 && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 ml-2">
             <div className="w-3 h-3 rounded border-2 border-primary" />
             <span>Search match</span>
           </div>

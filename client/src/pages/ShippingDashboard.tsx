@@ -39,16 +39,16 @@ function formatDockAge(shipReadyAt: Date | string | null): string {
   return hrs === 1 ? "1 hr" : `${hrs} hrs`;
 }
 
+// Matches Dock Manager thresholds: green 0–3 days, yellow 4–7 days, red 8+ days
 function daysBadgeClass(days: number) {
-  if (days >= 5) return "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30";
-  if (days >= 3) return "bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30";
-  if (days >= 1) return "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/15 dark:text-yellow-400 dark:border-yellow-500/30";
+  if (days >= 8) return "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30";
+  if (days >= 4) return "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/15 dark:text-yellow-400 dark:border-yellow-500/30";
   return "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30";
 }
 
 function daysBadgeIcon(days: number) {
-  if (days >= 5) return <AlertTriangle className="h-3 w-3" />;
-  if (days >= 3) return <Timer className="h-3 w-3" />;
+  if (days >= 8) return <AlertTriangle className="h-3 w-3" />;
+  if (days >= 4) return <Timer className="h-3 w-3" />;
   return <CheckCircle2 className="h-3 w-3" />;
 }
 

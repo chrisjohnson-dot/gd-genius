@@ -10,6 +10,7 @@ import {
 import {
   Ship, RefreshCw, MapPin, Package, Clock, Search,
   ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer, Truck,
+  FlaskConical,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,6 +60,71 @@ type OutboundOrder = {
   firstSeenAt: Date | string;
 };
 
+// ─── Demo Data ────────────────────────────────────────────────────────────────
+
+function daysAgo(n: number): string {
+  return new Date(Date.now() - n * 86_400_000).toISOString();
+}
+
+const DEMO_ORDERS: OutboundOrder[] = [
+  {
+    id: 1001, extensivOrderId: 3_290_001, referenceNum: "REF-88201", poNum: "PO-44901",
+    clientId: 1, clientName: "Keurig Dr Pepper", facilityId: 1, facilityName: "GD — Brampton",
+    shipToName: "Walmart Distribution Center #7042", shipToCity: "Bentonville, AR",
+    totalPieces: 1_440, requiredShipDate: fmtDate(daysAgo(-1)),
+    outboundLocation: "OB-A3", palletCount: 24, shipReadyAt: daysAgo(0), firstSeenAt: daysAgo(0),
+  },
+  {
+    id: 1002, extensivOrderId: 3_290_002, referenceNum: "REF-88202", poNum: "PO-44902",
+    clientId: 1, clientName: "Keurig Dr Pepper", facilityId: 1, facilityName: "GD — Brampton",
+    shipToName: "Costco Wholesale — Mississauga DC", shipToCity: "Mississauga, ON",
+    totalPieces: 1_080, requiredShipDate: fmtDate(daysAgo(0)),
+    outboundLocation: "OB-B1", palletCount: 18, shipReadyAt: daysAgo(3), firstSeenAt: daysAgo(3),
+  },
+  {
+    id: 1003, extensivOrderId: 3_290_003, referenceNum: "REF-88203", poNum: "PO-44903",
+    clientId: 1, clientName: "Keurig Dr Pepper", facilityId: 1, facilityName: "GD — Brampton",
+    shipToName: "Loblaw Companies — Brampton RDC", shipToCity: "Brampton, ON",
+    totalPieces: 1_800, requiredShipDate: fmtDate(daysAgo(2)),
+    outboundLocation: "OB-C2", palletCount: 30, shipReadyAt: daysAgo(6), firstSeenAt: daysAgo(6),
+  },
+  {
+    id: 1004, extensivOrderId: 3_290_004, referenceNum: "REF-88204", poNum: "PO-44904",
+    clientId: 2, clientName: "Clearwater Seafoods", facilityId: 1, facilityName: "GD — Brampton",
+    shipToName: "Amazon Fulfillment Center YYZ4", shipToCity: "Brampton, ON",
+    totalPieces: 720, requiredShipDate: fmtDate(daysAgo(-2)),
+    outboundLocation: "OB-A1", palletCount: 12, shipReadyAt: daysAgo(1), firstSeenAt: daysAgo(1),
+  },
+  {
+    id: 1005, extensivOrderId: 3_290_005, referenceNum: "REF-88205", poNum: "PO-44905",
+    clientId: 2, clientName: "Clearwater Seafoods", facilityId: 1, facilityName: "GD — Brampton",
+    shipToName: "Metro Inc. — Laval DC", shipToCity: "Laval, QC",
+    totalPieces: 1_200, requiredShipDate: fmtDate(daysAgo(-1)),
+    outboundLocation: "OB-D4", palletCount: 20, shipReadyAt: daysAgo(4), firstSeenAt: daysAgo(4),
+  },
+  {
+    id: 1006, extensivOrderId: 3_290_006, referenceNum: "REF-88206", poNum: "PO-44906",
+    clientId: 3, clientName: "Nature's Path Organic", facilityId: 2, facilityName: "GD — Mississauga",
+    shipToName: "Sobeys Distribution — Vaughan", shipToCity: "Vaughan, ON",
+    totalPieces: 960, requiredShipDate: fmtDate(daysAgo(-1)),
+    outboundLocation: null, palletCount: 16, shipReadyAt: daysAgo(2), firstSeenAt: daysAgo(2),
+  },
+  {
+    id: 1007, extensivOrderId: 3_290_007, referenceNum: "REF-88207", poNum: "PO-44907",
+    clientId: 3, clientName: "Nature's Path Organic", facilityId: 2, facilityName: "GD — Mississauga",
+    shipToName: "FreshCo — Hamilton DC", shipToCity: "Hamilton, ON",
+    totalPieces: 480, requiredShipDate: fmtDate(daysAgo(1)),
+    outboundLocation: "OB-E2", palletCount: 8, shipReadyAt: daysAgo(5), firstSeenAt: daysAgo(5),
+  },
+  {
+    id: 1008, extensivOrderId: 3_290_008, referenceNum: "REF-88208", poNum: "PO-44908",
+    clientId: 4, clientName: "Burt's Bees Canada", facilityId: 2, facilityName: "GD — Mississauga",
+    shipToName: "Shoppers Drug Mart — Etobicoke DC", shipToCity: "Etobicoke, ON",
+    totalPieces: 360, requiredShipDate: fmtDate(daysAgo(-3)),
+    outboundLocation: "OB-F1", palletCount: 6, shipReadyAt: daysAgo(0), firstSeenAt: daysAgo(0),
+  },
+];
+
 // ─── Edit Dialog ──────────────────────────────────────────────────────────────
 
 function EditOutboundDialog({ order, onClose }: { order: OutboundOrder; onClose: () => void }) {
@@ -107,8 +173,8 @@ function EditOutboundDialog({ order, onClose }: { order: OutboundOrder; onClose:
 
 // ─── Warehouse Section ────────────────────────────────────────────────────────
 
-function WarehouseSection({ facilityName, orders, onEdit }: {
-  facilityName: string; orders: OutboundOrder[]; onEdit: (o: OutboundOrder) => void;
+function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
+  facilityName: string; orders: OutboundOrder[]; onEdit: (o: OutboundOrder) => void; isDemo?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const totalPallets = orders.reduce((s, o) => s + (o.palletCount ?? 0), 0);
@@ -154,7 +220,9 @@ function WarehouseSection({ facilityName, orders, onEdit }: {
                 <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <span className="flex items-center justify-center gap-1"><Clock className="h-3 w-3" />Days Out</span>
                 </th>
-                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Edit</th>
+                {!isDemo && (
+                  <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Edit</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -191,11 +259,13 @@ function WarehouseSection({ facilityName, orders, onEdit }: {
                         {days === 0 ? "Today" : `${days}d`}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-white" onClick={() => onEdit(order)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </td>
+                    {!isDemo && (
+                      <td className="px-4 py-3 text-center">
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-white" onClick={() => onEdit(order)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -277,7 +347,6 @@ function B2BShipmentsSection() {
   const statusLabel = (s: string) =>
     s === "staged" ? { label: "Staged", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" }
     : { label: "Awaiting Pickup", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
-
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
       <button
@@ -293,7 +362,6 @@ function B2BShipmentsSection() {
           <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">Mock Data</Badge>
         </div>
       </button>
-
       {!collapsed && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -354,11 +422,17 @@ function B2BShipmentsSection() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ShippingDashboard() {
-  const { data: orders = [], isLoading, refetch, isFetching } = trpc.shippingDashboard.listOutbound.useQuery(
-    undefined, { refetchInterval: 60_000 }
+  const [demoMode, setDemoMode] = useState(false);
+
+  const { data: liveOrders = [], isLoading, refetch, isFetching } = trpc.shippingDashboard.listOutbound.useQuery(
+    undefined, { refetchInterval: demoMode ? false : 60_000 }
   );
+
   const [search, setSearch] = useState("");
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);
+
+  // In demo mode use synthetic data, otherwise use live data
+  const orders: OutboundOrder[] = demoMode ? DEMO_ORDERS : liveOrders;
 
   const grouped = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -388,18 +462,59 @@ export default function ShippingDashboard() {
 
   return (
     <div className="p-7 page-enter">
+      {/* Demo Mode Banner */}
+      {demoMode && (
+        <div className="mb-5 flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          <FlaskConical className="h-4 w-4 shrink-0 text-amber-400" />
+          <span className="flex-1">
+            <strong>Demo Mode is active.</strong> All data shown is synthetic and does not reflect live warehouse operations.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-amber-500/40 text-amber-300 hover:bg-amber-500/15 hover:text-amber-200 h-7 text-xs"
+            onClick={() => setDemoMode(false)}
+          >
+            Exit Demo
+          </Button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <p className="page-breadcrumb">Shipping</p>
-          <h1 className="page-title">Shipping Dashboard</h1>
+          <h1 className="page-title flex items-center gap-2">
+            Shipping Dashboard
+            {demoMode && (
+              <Badge variant="outline" className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[11px] px-2 py-0.5 font-semibold">
+                <FlaskConical className="h-3 w-3 mr-1" />Demo
+              </Badge>
+            )}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            All orders staged and ready to ship — outbound locations, pallet counts, and dwell time.
+            {demoMode
+              ? "Showing synthetic demo data — safe to share in presentations."
+              : "All orders staged and ready to ship — outbound locations, pallet counts, and dwell time."}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
-          <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {!demoMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDemoMode(true)}
+              className="gap-1.5 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+            >
+              <FlaskConical className="h-3.5 w-3.5" />Demo Mode
+            </Button>
+          )}
+          {!demoMode && (
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
+              <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />Refresh
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* KPI tiles */}
@@ -410,7 +525,7 @@ export default function ShippingDashboard() {
           { label: "Aging (3+ days)",   value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-orange-400" : "text-emerald-400" },
           { label: "Critical (5+ days)",value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-400"    : "text-emerald-400" },
         ] as const).map(({ label, value, Icon, color }) => (
-          <div key={label} className="rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-3">
+          <div key={label} className={cn("rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-3", demoMode && "border-amber-500/20")}>
             <Icon className={cn("h-8 w-8 shrink-0 opacity-80", color)} />
             <div>
               <div className="text-2xl font-bold text-white tabular-nums">{value}</div>
@@ -421,10 +536,17 @@ export default function ShippingDashboard() {
       </div>
 
       {/* No-location warning */}
-      {noLocation > 0 && (
+      {noLocation > 0 && !demoMode && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-300">
           <MapPin className="h-4 w-4 shrink-0" />
           <span><strong>{noLocation}</strong> order{noLocation !== 1 ? "s have" : " has"} no outbound location set. Click the edit icon to assign one.</span>
+        </div>
+      )}
+      {/* Demo: show "1 order has no location" as a realistic example */}
+      {demoMode && noLocation > 0 && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-300">
+          <MapPin className="h-4 w-4 shrink-0" />
+          <span><strong>{noLocation}</strong> order{noLocation !== 1 ? "s have" : " has"} no outbound location set. <span className="opacity-60">(Demo example)</span></span>
         </div>
       )}
 
@@ -438,7 +560,7 @@ export default function ShippingDashboard() {
       <B2BShipmentsSection />
 
       {/* Content */}
-      {isLoading ? (
+      {!demoMode && isLoading ? (
         <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
           <RefreshCw className="h-5 w-5 animate-spin" /><span className="text-sm">Loading outbound orders…</span>
         </div>
@@ -450,11 +572,11 @@ export default function ShippingDashboard() {
         </div>
       ) : (
         Array.from(grouped.entries()).map(([facility, facilityOrders]: [string, OutboundOrder[]]) => (
-          <WarehouseSection key={facility} facilityName={facility} orders={facilityOrders} onEdit={setEditOrder} />
+          <WarehouseSection key={facility} facilityName={facility} orders={facilityOrders} onEdit={setEditOrder} isDemo={demoMode} />
         ))
       )}
 
-      {editOrder && <EditOutboundDialog order={editOrder} onClose={() => setEditOrder(null)} />}
+      {!demoMode && editOrder && <EditOutboundDialog order={editOrder} onClose={() => setEditOrder(null)} />}
     </div>
   );
 }

@@ -438,6 +438,28 @@ export default function QcScanner() {
   const [lockedPallets, setLockedPallets] = useState<Set<number>>(new Set());
   // Per-pallet input refs — keyed by pallet ID so we can focus the right input after a scan
   const palletInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  // Per-pallet card refs — keyed by pallet ID for auto-scroll
+  const palletCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  // Ref to the scrollable pallet cards container
+  const palletScrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to the active pallet card whenever activeScanPalletId changes
+  useEffect(() => {
+    const activeId = activeScanPalletId ?? (pallets[pallets.length - 1]?.id ?? null);
+    if (!activeId) return;
+    const card = palletCardRefs.current.get(activeId);
+    const container = palletScrollContainerRef.current;
+    if (!card || !container) return;
+    // Use scrollIntoView with smooth behavior, contained within the scroll container
+    const cardTop = card.offsetTop - container.offsetTop;
+    const cardBottom = cardTop + card.offsetHeight;
+    const containerTop = container.scrollTop;
+    const containerBottom = containerTop + container.clientHeight;
+    const isVisible = cardTop >= containerTop && cardBottom <= containerBottom;
+    if (!isVisible) {
+      container.scrollTo({ top: cardTop - 12, behavior: "smooth" });
+    }
+  }, [activeScanPalletId, pallets]);
 
   const trpcUtils = trpc.useUtils();
 
@@ -1620,7 +1642,7 @@ export default function QcScanner() {
       </div>{/* end sticky section */}
 
       {/* -- Scrollable pallet cards area -- */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 max-w-6xl w-full mx-auto">
+      <div ref={palletScrollContainerRef} className="flex-1 overflow-y-auto px-4 pb-4 max-w-6xl w-full mx-auto">
         {pallets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">No pallets yet. Use the button above to add one.</div>
           ) : (
@@ -1665,7 +1687,7 @@ export default function QcScanner() {
                   return null;
                 })();
                 return (
-                  <div key={pallet.id} className={`rounded-lg border overflow-hidden transition-colors ${isActivePallet && !isLocked ? "border-l-4 border-l-blue-500 border-t-blue-200 border-r-blue-200 border-b-blue-200 dark:border-t-blue-800 dark:border-r-blue-800 dark:border-b-blue-800" : "border-border"}`}>
+                  <div key={pallet.id} ref={(el) => { if (el) palletCardRefs.current.set(pallet.id, el); else palletCardRefs.current.delete(pallet.id); }} className={`rounded-lg border overflow-hidden transition-colors ${isActivePallet && !isLocked ? "border-l-4 border-l-blue-500 border-t-blue-200 border-r-blue-200 border-b-blue-200 dark:border-t-blue-800 dark:border-r-blue-800 dark:border-b-blue-800" : "border-border"}`}>
                     {/* -- Collapsed header row -- */}
                     <div
                       role="button"

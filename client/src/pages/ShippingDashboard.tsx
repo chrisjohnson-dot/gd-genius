@@ -15,6 +15,7 @@ import {
   Ship, RefreshCw, MapPin, Package, Clock, Search,
   ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer, Truck,
   FlaskConical, ArrowRight, ClipboardList, Calendar, Hash, Building2, ExternalLink,
+  Plus, X,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -170,12 +171,26 @@ function ShipmentDetailDrawer({
   onEdit: (o: OutboundOrder) => void;
 }) {
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
   const days = daysInOutbound(order.shipReadyAt);
   const isShipped = order.displayStatus === "shipped";
+  const [assigningDock, setAssigningDock] = useState(false);
+  const [dockInput, setDockInput] = useState(order.outboundLocation ?? "");
+  const [dockSaving, setDockSaving] = useState(false);
+
+  const updateLocation = trpc.shippingDashboard.updateOutbound.useMutation({
+    onSuccess: () => { utils.shippingDashboard.listOutbound.invalidate(); setAssigningDock(false); },
+    onSettled: () => setDockSaving(false),
+  });
 
   function startCarrierPickup() {
     onClose();
     navigate(`/shipping/carrier-pickup?orderId=${order.extensivOrderId}`);
+  }
+
+  function saveLocation() {
+    setDockSaving(true);
+    updateLocation.mutate({ id: order.id, outboundLocation: dockInput.trim() || undefined });
   }
 
   return (
@@ -226,15 +241,54 @@ function ShipmentDetailDrawer({
           <div className={`rounded-xl border px-6 py-5 ${
             order.outboundLocation
               ? "border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800"
-              : "border-border bg-muted/30"
+              : "border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700"
           }`}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Outbound Location</p>
-            {order.outboundLocation ? (
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Outbound Location</p>
+              {!isShipped && !isDemo && !assigningDock && (
+                <button
+                  onClick={() => { setDockInput(order.outboundLocation ?? ""); setAssigningDock(true); }}
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  {order.outboundLocation ? <Pencil className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                  {order.outboundLocation ? "Change" : "Assign"}
+                </button>
+              )}
+            </div>
+            {assigningDock ? (
+              <div className="space-y-3">
+                <Input
+                  autoFocus
+                  value={dockInput}
+                  onChange={(e) => setDockInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveLocation(); if (e.key === "Escape") setAssigningDock(false); }}
+                  placeholder="e.g. Door 3, Staging-A, Overflow"
+                  className="text-base h-11"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={saveLocation} disabled={dockSaving}>
+                    {dockSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Save Location
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setAssigningDock(false)} disabled={dockSaving}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {order.outboundLocation && (
+                  <button
+                    className="text-xs text-red-500 hover:underline w-full text-center"
+                    onClick={() => { setDockSaving(true); updateLocation.mutate({ id: order.id, outboundLocation: undefined }); }}
+                  >
+                    Clear location
+                  </button>
+                )}
+              </div>
+            ) : order.outboundLocation ? (
               <p className="text-2xl font-black text-blue-600 dark:text-blue-400 flex items-center gap-2.5">
                 <MapPin className="h-5 w-5 shrink-0" />{order.outboundLocation}
               </p>
             ) : (
-              <p className="text-base text-muted-foreground italic">Not assigned</p>
+              <p className="text-base text-amber-700 dark:text-amber-400 font-medium">Not assigned — tap Assign to set a dock position</p>
             )}
           </div>
 

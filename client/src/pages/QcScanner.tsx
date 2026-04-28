@@ -534,14 +534,23 @@ export default function QcScanner() {
           ? (palletsRef.current.find((p) => p.id === targetId) ?? palletsRef.current[palletsRef.current.length - 1])
           : palletsRef.current[palletsRef.current.length - 1];
         if (activePallet && session) {
+          // Use the server-committed scannedQty as the cap source of truth.
+          // The server uses LEAST(scannedQty + amount, expectedQty), so data.item.scannedQty
+          // is the actual committed value. We compute how much was actually added vs requested.
+          const committedTotal = data.item?.scannedQty ?? 0;
+          const expectedQty = data.item?.expectedQty ?? Infinity;
           // Optimistically update pallet items in local state
           setPallets((prev) => prev.map((p) => {
             if (p.id !== activePallet.id) return p;
             const existingItems = (p.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
             const existing = existingItems.find((i) => i.sku === scannedSku);
+            // Cap the pallet qty: never let the pallet show more than expectedQty for this SKU
+            const prevPalletQty = existing?.qty ?? 0;
+            const newPalletQty = Math.min(prevPalletQty + scannedAmount, expectedQty);
             const newItems = existing
-              ? existingItems.map((i) => i.sku === scannedSku ? { ...i, qty: i.qty + scannedAmount } : i)
-              : [...existingItems, { sku: scannedSku, upc: scannedUpc, qty: scannedAmount }];
+              ? existingItems.map((i) => i.sku === scannedSku ? { ...i, qty: newPalletQty } : i)
+              : [...existingItems, { sku: scannedSku, upc: scannedUpc, qty: Math.min(scannedAmount, expectedQty) }];
+            void committedTotal; // used for reference — pallet qty is capped independently per-pallet
             // Recalculate weight from demoUpcMap if available
             let newWeight = p.calculatedWeightLb;
             if (isDemoSession && demoUpcMap.length > 0) {
@@ -1504,22 +1513,26 @@ export default function QcScanner() {
             adjustQty={adjustQty}
             isLoading={fetchFromExtensiv.isPending}
             onAdjust={(sku, delta) => {
-              // Mirror + / - adjustments into the active pallet's item list
+              // Mirror + / - adjustments into the active pallet's item list,
+              // capped at the item's expectedQty to match server-side enforcement
               const targetId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
               const activePallet = palletsRef.current.find((p) => p.id === targetId) ?? palletsRef.current[palletsRef.current.length - 1];
               if (!activePallet) return;
+              // Look up the server-enforced expected qty for this SKU
+              const orderItem = items.find((i) => i.sku === sku);
+              const maxQty = orderItem?.expectedQty ?? Infinity;
               setPallets((prev) => prev.map((p) => {
                 if (p.id !== activePallet.id) return p;
                 const existingItems = (p.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
                 const existing = existingItems.find((i) => i.sku === sku);
                 let newItems: Array<{ sku: string; upc?: string; qty: number }>;
                 if (existing) {
-                  const newQty = existing.qty + delta;
+                  const newQty = Math.min(Math.max(0, existing.qty + delta), maxQty);
                   newItems = newQty <= 0
                     ? existingItems.filter((i) => i.sku !== sku)
                     : existingItems.map((i) => i.sku === sku ? { ...i, qty: newQty } : i);
                 } else if (delta > 0) {
-                  newItems = [...existingItems, { sku, qty: delta }];
+                  newItems = [...existingItems, { sku, qty: Math.min(delta, maxQty) }];
                 } else {
                   return p;
                 }

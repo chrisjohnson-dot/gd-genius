@@ -69,7 +69,7 @@ type Phase = "start" | "scanning" | "complete";
 
 //// WAV URLs for each sound type
 const SOUND_URLS: Record<"success" | "error" | "complete", string> = {
-  success: "/manus-storage/cryo_pistol_gunshot_9f6c9d5d.wav",
+  success: "/manus-storage/cryo_pistol_gunshot_454de70d.wav",
   error: "/manus-storage/wrong_item_angry_c1fd9aee.wav",
   complete: "/manus-storage/order_complete_jingle_d15136e3.wav",
 };

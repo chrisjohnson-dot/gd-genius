@@ -3938,11 +3938,16 @@ const qcScannerRouter = router({
       const customerId = order.readOnly?.customerIdentifier?.id ?? undefined;
       const poNumber = (order as unknown as Record<string, unknown>).poNum as string | undefined;
       const referenceNum = (order as unknown as Record<string, unknown>).referenceNum as string | undefined;
+      // Capture the Extensiv facility (physical warehouse location) from the order
+      const facilityId = order.readOnly?.facilityIdentifier?.id ?? undefined;
+      const facilityName = order.readOnly?.facilityIdentifier?.name ?? undefined;
       await updateQcSession(input.sessionId, {
         referenceNumber: referenceNum ?? String(input.transactionId),
         customerName: customerName ?? undefined,
         customerId: customerId ?? undefined,
         warehouseId: config.id,
+        facilityId: facilityId ?? undefined,
+        facilityName: facilityName ?? undefined,
         poNumber: poNumber ?? undefined,
       } as any);
 

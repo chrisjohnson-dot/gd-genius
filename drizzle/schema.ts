@@ -606,6 +606,9 @@ export const qcScanSessions = mysqlTable("qc_scan_sessions", {
   batchIdentifiers: text("batchIdentifiers"),
   warehouseId: int("warehouseId"),
   warehouseName: varchar("warehouseName", { length: 128 }),
+  /** Extensiv facilityId (readOnly.facilityIdentifier.id) — used for address lookup on pallet labels */
+  facilityId: int("facilityId"),
+  facilityName: varchar("facilityName", { length: 256 }),
   customerId: int("customerId"),
   customerName: varchar("customerName", { length: 256 }),
   destinationAddress: text("destinationAddress"),

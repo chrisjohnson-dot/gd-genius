@@ -614,7 +614,7 @@ export function registerPdfRoutes(app: Express) {
     // Build a map of sku -> { description, scannedQty } from session items
     const itemMap = new Map(items.map((i) => [i.sku, i]));
 
-    // GD address — resolved from session's warehouseId / facilityId
+    // GD address — resolved from session's facilityId (Extensiv facilityIdentifier.id)
     const GD_NAME = "Go Direct Solutions";
     // Facility address map keyed by Extensiv facilityId
     const FACILITY_ADDRESSES: Record<number, { address: string; csz: string }> = {
@@ -623,9 +623,16 @@ export function registerPdfRoutes(app: Express) {
       5: { address: "460 Admiral Boulevard",         csz: "Mississauga, ON  L5T 3A3" },         // Mississauga
       3: { address: "#105 – 1175 Trademark Dr.",    csz: "Reno, NV  89521" },                  // Reno
     };
-    const facilityInfo = session.warehouseId != null
-      ? (FACILITY_ADDRESSES[session.warehouseId] ?? FACILITY_ADDRESSES[2])
-      : FACILITY_ADDRESSES[2]; // default to Columbus if unknown
+    // Require a known facilityId — no silent fallback
+    const resolvedFacilityId = session.facilityId ?? null;
+    if (resolvedFacilityId == null || !(resolvedFacilityId in FACILITY_ADDRESSES)) {
+      const hint = resolvedFacilityId == null
+        ? "Session has no facilityId. Re-fetch the order from Extensiv to populate the facility."
+        : `Unknown facilityId ${resolvedFacilityId}. Add it to the FACILITY_ADDRESSES map in server/pdf/routes.ts.`;
+      res.status(422).json({ error: `Cannot generate label: facility address unknown. ${hint}` });
+      return;
+    }
+    const facilityInfo = FACILITY_ADDRESSES[resolvedFacilityId];
     const GD_ADDRESS = facilityInfo.address;
     const GD_CSZ     = facilityInfo.csz;
 

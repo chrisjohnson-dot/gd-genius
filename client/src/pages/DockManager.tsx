@@ -11,11 +11,11 @@ import { toast } from "sonner";
 const POSITIONS = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
 const LEVELS = ["A", "B", "C", "D", "E"] as const;
 
-// Age-based color coding: green 0–2 days, yellow 3–7 days, red 8+ days
+// Age-based color coding: green 0–3 days, yellow 4–7 days, red 8+ days
 function getAgeColor(shipReadyAt: Date | string | null): { bg: string; text: string } {
   const days = daysOnDock(shipReadyAt);
   if (days >= 8) return { bg: "#ef4444", text: "#fff" }; // red
-  if (days >= 3) return { bg: "#eab308", text: "#000" }; // yellow
+  if (days >= 4) return { bg: "#eab308", text: "#000" }; // yellow
   return { bg: "#22c55e", text: "#fff" };                 // green
 }
 
@@ -24,7 +24,7 @@ function formatDockAge(shipReadyAt: Date | string | null): string {
   const ms = Math.max(0, Date.now() - new Date(shipReadyAt).getTime());
   const hrs = Math.floor(ms / 3_600_000);
   const days = Math.floor(ms / 86_400_000);
-  if (days >= 1) return String(days);
+  if (days >= 1) return `${days}D`;
   if (hrs < 1) return "< 1h";
   return `${hrs}h`;
 }
@@ -158,15 +158,15 @@ function DockCell({
                 style={{ backgroundColor: color.bg }}
               >
                 <div
-                  className="px-1.5 pt-1 pb-0.5 text-[10px] font-black leading-tight truncate"
+                  className="px-1 pt-1 pb-0 text-[8px] font-bold leading-tight truncate text-center"
                   style={{ color: color.text }}
                 >
                   {o.clientName}
                 </div>
                 {age && (
                   <div
-                    className="px-1.5 pb-1 text-[9px] font-bold leading-tight tabular-nums"
-                    style={{ color: color.text, opacity: 0.85 }}
+                    className="px-1 pb-1 text-[11px] font-black leading-tight tabular-nums text-center"
+                    style={{ color: color.text }}
                   >
                     {age}
                   </div>
@@ -661,11 +661,11 @@ export default function DockManager() {
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: "#22c55e" }} />
-          <span className="font-medium text-foreground">0–2 days</span>
+          <span className="font-medium text-foreground">0–3 days</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: "#eab308" }} />
-          <span className="font-medium text-foreground">3–7 days</span>
+          <span className="font-medium text-foreground">4–7 days</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: "#ef4444" }} />

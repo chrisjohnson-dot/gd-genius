@@ -4073,6 +4073,22 @@ const qcScannerRouter = router({
       const allItems = await getQcScanItems(input.sessionId);
       const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);
       const updated = allItems.find((i) => i.sku === match.sku) ?? match;
+      // Write audit log entry
+      await createAuditLog({
+        action: "qc.manualSetQty",
+        entityType: "qc_scan_session",
+        entityId: String(input.sessionId),
+        userId: ctx.user.id,
+        details: JSON.stringify({
+          sessionId: input.sessionId,
+          sku: match.sku,
+          prevQty: match.scannedQty ?? 0,
+          newQty: updated.scannedQty ?? safeQty,
+          expectedQty: match.expectedQty ?? null,
+          adminName: ctx.user.name,
+          adminId: ctx.user.id,
+        }),
+      });
       return { item: updated, sessionComplete };
     }),
   // Complete the order

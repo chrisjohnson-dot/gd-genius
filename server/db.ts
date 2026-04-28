@@ -3438,7 +3438,7 @@ export async function getOrderById(id: number): Promise<OrderTracking | null> {
 // ─── QC Audit Log ─────────────────────────────────────────────────────────────
 export type QcAuditEvent = {
   id: string;
-  eventType: "qc_scan" | "label_scan";
+  eventType: "qc_scan" | "label_scan" | "manual_entry";
   sessionId: number;
   referenceNumber: string | null;
   customerName: string | null;
@@ -3454,6 +3454,10 @@ export type QcAuditEvent = {
   palletTypes: string | null;
   /** Total number of pallets in this session (qc_scan events only) */
   palletCount: number | null;
+  /** For manual_entry events: quantity before the admin change */
+  prevQty: number | null;
+  /** For manual_entry events: name of the admin who made the change */
+  adminName: string | null;
 };
 
 export async function listQcAuditLog(opts: {
@@ -3504,6 +3508,18 @@ export async function listQcAuditLog(opts: {
     .from(labelScanCartons)
     .innerJoin(labelScanSessions, eq(labelScanCartons.sessionId, labelScanSessions.id));
 
+  // ── Manual quantity entry events from audit_logs ─────────────────────────
+  const manualEntryQuery = db
+    .select({
+      logId: auditLogs.id,
+      entityId: auditLogs.entityId,
+      details: auditLogs.details,
+      createdAt: auditLogs.createdAt,
+      userName: users.name,
+    })
+    .from(auditLogs)
+    .leftJoin(users, eq(auditLogs.userId, users.id))
+    .where(eq(auditLogs.action, "qc.manualSetQty"));
   // ── Pallet types per QC session ───────────────────────────────────────────
   const palletRows = await db
     .select({
@@ -3532,7 +3548,7 @@ export async function listQcAuditLog(opts: {
     palletCountBySession.set(row.sessionId, (palletCountBySession.get(row.sessionId) ?? 0) + 1);
   }
 
-  const [qcRows, labelRows] = await Promise.all([qcQuery, labelQuery]);
+  const [qcRows, labelRows, manualEntryRows] = await Promise.all([qcQuery, labelQuery, manualEntryQuery]);
 
   // Merge into unified events
   const allEvents: QcAuditEvent[] = [
@@ -3552,6 +3568,8 @@ export async function listQcAuditLog(opts: {
       sessionCreatedAt: r.sessionCreatedAt,
       palletTypes: palletTypesBySession.get(r.sessionId) ?? null,
       palletCount: palletCountBySession.get(r.sessionId) ?? null,
+      prevQty: null,
+      adminName: null,
     })),
     ...labelRows.map((r) => ({
       id: `label-${r.sessionId}-${r.cartonId}`,
@@ -3569,7 +3587,32 @@ export async function listQcAuditLog(opts: {
       sessionCreatedAt: r.sessionCreatedAt,
       palletTypes: null,
       palletCount: null,
+      prevQty: null,
+      adminName: null,
     })),
+    ...manualEntryRows.map((r) => {
+      const sessionId = r.entityId ? parseInt(r.entityId, 10) : 0;
+      const det = (r.details ?? {}) as Record<string, unknown>;
+      return {
+        id: `manual-${r.logId}`,
+        eventType: "manual_entry" as const,
+        sessionId,
+        referenceNumber: null,
+        customerName: null,
+        warehouseName: null,
+        createdBy: (det.adminName as string | null) ?? r.userName ?? null,
+        sku: (det.sku as string | null) ?? null,
+        barcode: null,
+        scannedQty: typeof det.newQty === "number" ? det.newQty : null,
+        prevQty: typeof det.prevQty === "number" ? det.prevQty : null,
+        adminName: (det.adminName as string | null) ?? r.userName ?? null,
+        status: null,
+        scannedAt: r.createdAt,
+        sessionCreatedAt: r.createdAt,
+        palletTypes: null,
+        palletCount: null,
+      };
+    }),
   ];
 
   // Apply filters

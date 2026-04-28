@@ -31,12 +31,13 @@ import {
   Calendar,
   Package,
   ArrowUpDown,
+  Pencil,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AuditEvent = {
   id: string;
-  eventType: "qc_scan" | "label_scan";
+  eventType: "qc_scan" | "label_scan" | "manual_entry";
   sessionId: number;
   referenceNumber: string | null;
   customerName: string | null;
@@ -50,6 +51,8 @@ type AuditEvent = {
   sessionCreatedAt: Date;
   palletTypes: string | null;
   palletCount: number | null;
+  prevQty?: number | null;
+  adminName?: string | null;
 };
 
 type SortKey = "scannedAt" | "eventType" | "createdBy" | "customerName" | "referenceNumber";
@@ -65,12 +68,20 @@ function formatDateInput(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function EventTypeBadge({ type }: { type: "qc_scan" | "label_scan" }) {
+function EventTypeBadge({ type }: { type: "qc_scan" | "label_scan" | "manual_entry" }) {
   if (type === "qc_scan") {
     return (
       <Badge className="bg-blue-100 text-blue-800 border-blue-200 gap-1 font-medium">
         <ScanLine className="w-3 h-3" />
         QC Scan
+      </Badge>
+    );
+  }
+  if (type === "manual_entry") {
+    return (
+      <Badge className="bg-amber-100 text-amber-800 border-amber-200 gap-1 font-medium">
+        <Pencil className="w-3 h-3" />
+        Manual Entry
       </Badge>
     );
   }
@@ -112,7 +123,7 @@ export default function QcAuditLog() {
   const [toDate, setToDate] = useState<Date>(today);
   const [userFilter, setUserFilter] = useState("");
   const [itemFilter, setItemFilter] = useState("");
-  const [eventTypeFilter, setEventTypeFilter] = useState<"all" | "qc_scan" | "label_scan">("all");
+  const [eventTypeFilter, setEventTypeFilter] = useState<"all" | "qc_scan" | "label_scan" | "manual_entry">("all");
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("scannedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -332,7 +343,7 @@ export default function QcAuditLog() {
             {/* Event type filter */}
             <div className="flex items-center gap-2 mt-3">
               <span className="text-xs text-muted-foreground font-medium">Event type:</span>
-              {(["all", "qc_scan", "label_scan"] as const).map((t) => (
+              {(["all", "qc_scan", "label_scan", "manual_entry"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => { setEventTypeFilter(t); setPage(0); }}
@@ -342,7 +353,7 @@ export default function QcAuditLog() {
                       : "bg-background text-muted-foreground border-border hover:border-primary/50"
                   }`}
                 >
-                  {t === "all" ? "All" : t === "qc_scan" ? "QC Scan" : "Label Scan"}
+                  {t === "all" ? "All" : t === "qc_scan" ? "QC Scan" : t === "label_scan" ? "Label Scan" : "Manual Entry"}
                 </button>
               ))}
               {sorted.length > 0 && (
@@ -461,7 +472,12 @@ export default function QcAuditLog() {
                             )}
                           </TableCell>
                           <TableCell className="text-center">
-                            {event.scannedQty != null ? (
+                            {event.eventType === "manual_entry" && event.prevQty != null && event.scannedQty != null ? (
+                              <span className="flex items-center gap-1 justify-center font-mono text-xs">
+                                <span className="text-muted-foreground line-through">{event.prevQty}</span>
+                                <span className="text-amber-600 font-bold">→ {event.scannedQty}</span>
+                              </span>
+                            ) : event.scannedQty != null ? (
                               <span className="font-semibold">{event.scannedQty}</span>
                             ) : (
                               <span className="text-muted-foreground text-xs">—</span>

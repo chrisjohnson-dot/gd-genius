@@ -1692,7 +1692,7 @@ export default function QcScanner() {
                   return null;
                 })();
                 return (
-                  <div key={pallet.id} className="rounded-lg border border-border overflow-hidden">
+                  <div key={pallet.id} className={`rounded-lg border overflow-hidden transition-colors ${isActivePallet && !isLocked ? "border-l-4 border-l-blue-500 border-t-blue-200 border-r-blue-200 border-b-blue-200 dark:border-t-blue-800 dark:border-r-blue-800 dark:border-b-blue-800" : "border-border"}`}>
                     {/* -- Collapsed header row -- */}
                     <div
                       role="button"

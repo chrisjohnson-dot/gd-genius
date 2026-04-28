@@ -535,12 +535,25 @@ export default function CarrierPickupScanner() {
             <div className="px-4 py-3 border-b bg-muted/50 shrink-0">
               <div className="font-semibold text-sm">{selectedOrder.clientName}</div>
               <div className="text-xs text-muted-foreground truncate">{selectedOrder.shipToName}</div>
+
+              {/* Dock location — prominent display */}
+              <div className={`mt-3 rounded-lg px-3 py-2 flex items-center gap-2 ${
+                selectedOrder.outboundLocation
+                  ? "bg-blue-600 text-white"
+                  : "bg-muted text-muted-foreground border border-dashed"
+              }`}>
+                <MapPin className="h-4 w-4 shrink-0" />
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide opacity-75">Dock Location</div>
+                  <div className="text-base font-bold leading-tight">
+                    {selectedOrder.outboundLocation ?? "Not assigned"}
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 mt-2">
-                <span className="flex items-center gap-1 text-xs font-medium text-blue-600">
-                  <MapPin className="h-3 w-3" /> {selectedOrder.outboundLocation ?? "—"}
-                </span>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Package className="h-3 w-3" /> {scannedCount}/{expectedPallets}
+                  <Package className="h-3 w-3" /> {scannedCount}/{expectedPallets} pallets
                 </span>
               </div>
               {/* Progress bar */}

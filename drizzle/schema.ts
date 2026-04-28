@@ -242,6 +242,7 @@ export const orderTracking = mysqlTable("order_tracking", {
     "qc",
     "qc_complete",
     "ship_ready",
+    "shipped",
   ]).notNull().default("unallocated"),
   // Associate assigned when order moves to Picking
   assignedAssociate: varchar("assignedAssociate", { length: 256 }),
@@ -268,6 +269,7 @@ export const orderTracking = mysqlTable("order_tracking", {
   qcAt: timestamp("qcAt"),
   qcCompleteAt: timestamp("qcCompleteAt"),
   shipReadyAt: timestamp("shipReadyAt"),
+  shippedAt: timestamp("shippedAt"),
   // Outbound staging details (set when order moves to ship_ready)
   outboundLocation: varchar("outboundLocation", { length: 256 }),  // e.g. "Door 3", "Staging-A"
   palletCount: int("palletCount").default(0),                       // number of pallets for this order

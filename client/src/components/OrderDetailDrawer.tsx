@@ -53,7 +53,8 @@ type LifecycleStatus =
   | "picking"
   | "qc"
   | "qc_complete"
-  | "ship_ready";
+  | "ship_ready"
+  | "shipped";
 
 const LIFECYCLE_STEPS: Array<{
   key: LifecycleStatus;
@@ -69,10 +70,11 @@ const LIFECYCLE_STEPS: Array<{
   { key: "qc", label: "QC", icon: <FlaskConical className="h-3.5 w-3.5" />, color: "#be185d", bg: "#fce7f3", tsField: "qcAt" },
   { key: "qc_complete", label: "QC Done", icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: "#065f46", bg: "#d1fae5", tsField: "qcCompleteAt" },
   { key: "ship_ready", label: "Ship Ready", icon: <ShipIcon className="h-3.5 w-3.5" />, color: "#15803d", bg: "#dcfce7", tsField: "shipReadyAt" },
+  { key: "shipped", label: "Shipped", icon: <ShipIcon className="h-3.5 w-3.5" />, color: "#1d4ed8", bg: "#dbeafe", tsField: "shippedAt" },
 ];
 
 const LIFECYCLE_INDEX: Record<LifecycleStatus, number> = {
-  unallocated: 0, allocated: 1, picking: 2, qc: 3, qc_complete: 4, ship_ready: 5,
+  unallocated: 0, allocated: 1, picking: 2, qc: 3, qc_complete: 4, ship_ready: 5, shipped: 6,
 };
 
 // Human-readable labels for audit log action names

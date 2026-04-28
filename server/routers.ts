@@ -10247,6 +10247,14 @@ const carrierPickupRouter = router({
             await db.update(pickupSessions)
               .set({ shippedInExtensiv: true })
               .where(eq(pickupSessions.id, input.sessionId));
+            // Mark the orderTracking row as shipped so the Shipping Dashboard shows the Shipped badge
+            if (session.transactionId) {
+              const { orderTracking } = await import("../drizzle/schema");
+              await db.update(orderTracking)
+                .set({ lifecycleStatus: "shipped", shippedAt: new Date() })
+                .where(eq(orderTracking.extensivOrderId, session.transactionId))
+                .catch(e => console.warn("[carrierPickup] orderTracking shipped update failed:", e));
+            }
           } else {
             console.warn(`[carrierPickup] markOrderShipped failed for session ${input.sessionId}:`, (result as { error?: string }).error);
           }

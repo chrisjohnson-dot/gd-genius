@@ -57,7 +57,9 @@ type OutboundOrder = {
   outboundLocation: string | null;
   palletCount: number | null;
   shipReadyAt: Date | string | null;
+  shippedAt?: Date | string | null;
   firstSeenAt: Date | string;
+  displayStatus?: "ship_ready" | "shipped";
 };
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
@@ -122,6 +124,15 @@ const DEMO_ORDERS: OutboundOrder[] = [
     shipToName: "Shoppers Drug Mart — Etobicoke DC", shipToCity: "Etobicoke, ON",
     totalPieces: 360, requiredShipDate: fmtDate(daysAgo(-3)),
     outboundLocation: "OB-F1", palletCount: 6, shipReadyAt: daysAgo(0), firstSeenAt: daysAgo(0),
+  },
+  {
+    id: 1009, extensivOrderId: 3_290_009, referenceNum: "REF-88209", poNum: "PO-44909",
+    clientId: 1, clientName: "Keurig Dr Pepper", facilityId: 1, facilityName: "GD — Brampton",
+    shipToName: "Real Canadian Superstore — Oakville", shipToCity: "Oakville, ON",
+    totalPieces: 600, requiredShipDate: fmtDate(daysAgo(1)),
+    outboundLocation: "OB-G2", palletCount: 10,
+    shipReadyAt: daysAgo(2), shippedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    firstSeenAt: daysAgo(3), displayStatus: "shipped",
   },
 ];
 
@@ -228,8 +239,9 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
             <tbody>
               {orders.map((order, idx) => {
                 const days = daysInOutbound(order.shipReadyAt);
+                const isShipped = order.displayStatus === "shipped";
                 return (
-                  <tr key={order.id} className={cn("border-t border-border hover:bg-muted/30 transition-colors", idx % 2 !== 0 && "bg-muted/10")}>
+                  <tr key={order.id} className={cn("border-t border-border hover:bg-muted/30 transition-colors", isShipped ? "bg-green-50/60 dark:bg-green-950/20" : idx % 2 !== 0 ? "bg-muted/10" : "")}>
                     <td className="px-4 py-3">
                       <div className="font-mono text-[13px] font-semibold text-foreground">{order.extensivOrderId}</div>
                       {order.referenceNum && <div className="text-[11px] text-muted-foreground">Ref {order.referenceNum}</div>}
@@ -254,18 +266,26 @@ function WarehouseSection({ facilityName, orders, onEdit, isDemo }: {
                         : <span className="text-[12px] text-muted-foreground">—</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border", daysBadgeClass(days))}>
-                        {daysBadgeIcon(days)}
-                        {days === 0 ? "Today" : `${days}d`}
-                      </span>
+                      {isShipped ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border bg-green-100 text-green-700 border-green-300 dark:bg-green-900/40 dark:text-green-400 dark:border-green-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Shipped
+                        </span>
+                      ) : (
+                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border", daysBadgeClass(days))}>
+                          {daysBadgeIcon(days)}
+                          {days === 0 ? "Today" : `${days}d`}
+                        </span>
+                      )}
                     </td>
-                    {!isDemo && (
+                    {!isDemo && !isShipped && (
                       <td className="px-4 py-3 text-center">
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-white" onClick={() => onEdit(order)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       </td>
                     )}
+                    {!isDemo && isShipped && <td />}
                   </tr>
                 );
               })}
@@ -450,7 +470,13 @@ export default function ShippingDashboard() {
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(o);
     }
-    for (const list of Array.from(map.values())) list.sort((a: OutboundOrder, b: OutboundOrder) => daysInOutbound(b.shipReadyAt) - daysInOutbound(a.shipReadyAt));
+    for (const list of Array.from(map.values())) list.sort((a: OutboundOrder, b: OutboundOrder) => {
+      // Shipped rows always sink to the bottom
+      const aShipped = a.displayStatus === "shipped" ? 1 : 0;
+      const bShipped = b.displayStatus === "shipped" ? 1 : 0;
+      if (aShipped !== bShipped) return aShipped - bShipped;
+      return daysInOutbound(b.shipReadyAt) - daysInOutbound(a.shipReadyAt);
+    });
     return map;
   }, [orders, search]);
 

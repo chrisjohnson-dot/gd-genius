@@ -3373,11 +3373,14 @@ export async function getShipReadyOrders(): Promise<Array<{
   outboundLocation: string | null;
   palletCount: number | null;
   shipReadyAt: Date | null;
+  shippedAt: Date | null;
   firstSeenAt: Date;
+  displayStatus: "ship_ready" | "shipped";
 }>> {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const rows = await db
     .select({
       id: orderTracking.id,
       extensivOrderId: orderTracking.extensivOrderId,
@@ -3394,11 +3397,22 @@ export async function getShipReadyOrders(): Promise<Array<{
       outboundLocation: orderTracking.outboundLocation,
       palletCount: orderTracking.palletCount,
       shipReadyAt: orderTracking.shipReadyAt,
+      shippedAt: orderTracking.shippedAt,
       firstSeenAt: orderTracking.firstSeenAt,
+      lifecycleStatus: orderTracking.lifecycleStatus,
     })
     .from(orderTracking)
-    .where(eq(orderTracking.lifecycleStatus, "ship_ready"))
+    .where(
+      or(
+        eq(orderTracking.lifecycleStatus, "ship_ready"),
+        and(
+          eq(orderTracking.lifecycleStatus, "shipped"),
+          gte(orderTracking.shippedAt, cutoff)
+        )
+      )
+    )
     .orderBy(orderTracking.shipReadyAt);
+  return rows.map(r => ({ ...r, displayStatus: r.lifecycleStatus as "ship_ready" | "shipped" }));
 }
 
 /** Update outbound location and pallet count for an order. */

@@ -2318,20 +2318,7 @@ export default function QcScanner() {
                       >
                         <FileText className="w-3 h-3 mr-1" /> SSCC Labels
                       </Button>
-                      {/* Print Both */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        disabled={bulkGeneratePalletUpcs.isPending}
-                        onClick={async () => {
-                          if (!session) return;
-                          await ensurePalletUpcs();
-                          window.open(`/api/pdf/qc-gd-labels/${session.id}?type=both`, '_blank');
-                        }}
-                      >
-                        <Printer className="w-3 h-3 mr-1" /> Print Both
-                      </Button>
+
                     </div>
                   )}
                 </div>

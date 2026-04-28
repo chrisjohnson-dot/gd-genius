@@ -195,8 +195,8 @@ function ShipmentDetailDrawer({
 
   return (
     <Sheet open onOpenChange={() => onClose()}>
-      <SheetContent side="right" className="!w-[min(90vw,720px)] overflow-y-auto">
-        <SheetHeader className="pb-6 border-b border-border">
+      <SheetContent side="right" className="!w-[min(90vw,720px)] overflow-y-auto px-6">
+        <SheetHeader className="pb-6 pt-2 border-b border-border px-0">
           <div className="flex items-start justify-between gap-3">
             <div>
               <SheetTitle className="text-xl font-bold">
@@ -219,7 +219,7 @@ function ShipmentDetailDrawer({
           </div>
         </SheetHeader>
 
-        <div className="py-8 space-y-8">
+        <div className="py-8 space-y-8 px-0">
           {/* Key details — 2-col grid with generous spacing */}
           <div className="grid grid-cols-2 gap-x-8 gap-y-7">
             <DetailField icon={<Building2 className="h-4 w-4" />} label="Client" value={order.clientName} />

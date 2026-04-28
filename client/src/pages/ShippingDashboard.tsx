@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -628,8 +628,15 @@ export default function ShippingDashboard() {
   const [demoMode, setDemoMode] = useState(false);
 
   const { data: liveOrders = [], isLoading, refetch, isFetching } = trpc.shippingDashboard.listOutbound.useQuery(
-    undefined, { refetchInterval: demoMode ? false : 60_000 }
+    undefined, { refetchInterval: demoMode ? false : 300_000 }
   );
+
+  // Tick every minute so the dock-age badges update without a full refetch
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [search, setSearch] = useState("");
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);

@@ -10196,6 +10196,22 @@ const ediEscalationsRouter = router({
 
 // ─── Carrier Pickup Scanner ────────────────────────────────────────────────────
 const carrierPickupRouter = router({
+  /** Fetch a single ship_ready order by extensivOrderId (used when navigating from Shipping Dashboard) */
+  getOrderById: protectedProcedure
+    .input(z.object({ extensivOrderId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const { eq } = await import("drizzle-orm");
+      const { orderTracking } = await import("../drizzle/schema");
+      const rows = await db
+        .select()
+        .from(orderTracking)
+        .where(eq(orderTracking.extensivOrderId, input.extensivOrderId))
+        .limit(1);
+      return rows[0] ?? null;
+    }),
+
   /** Search ship_ready orders by order ID, reference number, carrier, or client name */
   searchOrders: protectedProcedure
     .input(z.object({ query: z.string().min(1) }))

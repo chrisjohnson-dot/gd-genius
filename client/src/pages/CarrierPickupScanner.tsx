@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Truck, MapPin, Package, CheckCircle2, AlertTriangle,
   RefreshCw, ClipboardList, ArrowLeft, Zap, XCircle, Volume2, VolumeX,
-  User, Hash,
+  User, Hash, PenLine, Printer, Download, FileCheck,
 } from "lucide-react";
+import { SignaturePad } from "@/components/SignaturePad";
 
 // ─── Demo data ────────────────────────────────────────────────────────────────
 const DEMO_ORDER = {
@@ -75,6 +76,12 @@ function playBeep(type: "success" | "duplicate" | "complete") {
 export default function CarrierPickupScanner() {
   // Phase
   const [phase, setPhase] = useState<Phase>("lookup");
+  const [showSignatureCapture, setShowSignatureCapture] = useState(false);
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [appointmentId, setAppointmentId] = useState<number | null>(null);
+  const [signedBolUrl, setSignedBolUrl] = useState<string | null>(null);
+  const [bolUrl, setBolUrl] = useState<string | null>(null);
+  const [isSubmittingSignature, setIsSubmittingSignature] = useState(false);
   const [isDemo, setIsDemo] = useState(false);
 
   // Lookup
@@ -102,6 +109,18 @@ export default function CarrierPickupScanner() {
 
   // Complete
   const [shippedInExtensiv, setShippedInExtensiv] = useState<boolean | null>(null);
+  const submitSignatureMutation = trpc.carrierAppointments.submitSignature.useMutation({
+    onSuccess: (data) => {
+      if (data.signedBolUrl) setSignedBolUrl(data.signedBolUrl);
+      setShowSignatureCapture(false);
+      setIsSubmittingSignature(false);
+      toast.success("Signature captured — BOL signed and ready to print");
+    },
+    onError: (err) => {
+      setIsSubmittingSignature(false);
+      toast.error("Signature failed: " + err.message);
+    },
+  });
 
   // Sound
   const [muted, setMuted] = useState(() => {
@@ -124,6 +143,11 @@ export default function CarrierPickupScanner() {
     if (id) {
       const parsed = parseInt(id, 10);
       if (!isNaN(parsed)) setUrlOrderId(parsed);
+    }
+    const apptId = params.get("appointmentId");
+    if (apptId) {
+      const parsed = parseInt(apptId, 10);
+      if (!isNaN(parsed)) setAppointmentId(parsed);
     }
   }, []);
 
@@ -323,6 +347,12 @@ export default function CarrierPickupScanner() {
     setShippedInExtensiv(null);
     setUrlOrderId(null);
     setShowQuickstartForm(false);
+    setShowSignatureCapture(false);
+    setSignatureDataUrl(null);
+    setAppointmentId(null);
+    setSignedBolUrl(null);
+    setBolUrl(null);
+    setIsSubmittingSignature(false);
     // Clear the URL param
     const url = new URL(window.location.href);
     url.searchParams.delete("orderId");
@@ -719,8 +749,8 @@ export default function CarrierPickupScanner() {
 
       {/* ── Phase 4: Complete ── */}
       {phase === "complete" && selectedOrder && (
-        <div className="max-w-3xl mx-auto px-4 py-6 space-y-4 text-center w-full">
-          <div className="py-8">
+        <div className="max-w-3xl mx-auto px-4 py-6 space-y-6 text-center w-full">
+          <div className="py-6">
             <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto" />
             <h2 className="text-2xl font-bold mt-4">Pickup Complete!</h2>
             <p className="text-muted-foreground mt-2">
@@ -746,6 +776,54 @@ export default function CarrierPickupScanner() {
                 )}
               </div>
             </div>
+
+            {/* ── Document & Signature Actions ── */}
+            <div className="max-w-sm mx-auto mt-6 space-y-3">
+              {/* Signature capture */}
+              {!signatureDataUrl ? (
+                <Button
+                  size="lg"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => setShowSignatureCapture(true)}
+                >
+                  <PenLine className="h-4 w-4 mr-2" /> Capture Driver Signature
+                </Button>
+              ) : (
+                <div className="border border-green-300 rounded-lg p-3 bg-green-50 dark:bg-green-950/30 text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 shrink-0" />
+                  <span>Driver signature captured</span>
+                  <button className="ml-auto text-xs underline" onClick={() => setShowSignatureCapture(true)}>Re-sign</button>
+                </div>
+              )}
+
+              {/* BOL / Signed BOL download + print */}
+              {(signedBolUrl || bolUrl) && (
+                <div className="flex gap-2">
+                  <a
+                    href={signedBolUrl ?? bolUrl ?? ""}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1"
+                  >
+                    <Button variant="outline" size="sm" className="w-full">
+                      <Download className="h-4 w-4 mr-2" /> {signedBolUrl ? "Signed BOL" : "BOL"}
+                    </Button>
+                  </a>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      const win = window.open(signedBolUrl ?? bolUrl ?? "", "_blank");
+                      win?.print();
+                    }}
+                  >
+                    <Printer className="h-4 w-4 mr-2" /> Print BOL
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <Button onClick={handleReset} size="lg" className="mt-6">
               <Truck className="h-4 w-4 mr-2" /> Start New Pickup
             </Button>
@@ -822,6 +900,46 @@ export default function CarrierPickupScanner() {
                 )}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Signature Capture Overlay ── */}
+      {showSignatureCapture && selectedOrder && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border rounded-2xl p-6 w-full max-w-lg space-y-5 shadow-2xl">
+            <div>
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <PenLine className="h-5 w-5 text-blue-600" /> Driver Signature
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Please have the driver sign below to acknowledge receipt of{" "}
+                <strong>{scannedCount} pallet{scannedCount !== 1 ? "s" : ""}</strong> for{" "}
+                <strong>{selectedOrder.clientName}</strong>.
+              </p>
+            </div>
+            <SignaturePad
+              onSave={(dataUrl: string) => {
+                setSignatureDataUrl(dataUrl);
+                if (appointmentId) {
+                  setIsSubmittingSignature(true);
+                  submitSignatureMutation.mutate({
+                    id: appointmentId,
+                    signatureDataUrl: dataUrl,
+                  });
+                } else {
+                  // No appointment — just capture signature locally
+                  setShowSignatureCapture(false);
+                  toast.success("Signature captured");
+                }
+              }}
+              onCancel={() => setShowSignatureCapture(false)}
+            />
+            {isSubmittingSignature && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin" /> Generating signed BOL…
+              </div>
+            )}
           </div>
         </div>
       )}

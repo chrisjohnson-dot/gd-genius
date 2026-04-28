@@ -221,7 +221,7 @@ import {
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
-import { purchaseOrders, carrierRoutingTable, receivePalletSessions, pickupSessions, pickupScans } from "../drizzle/schema";
+import { purchaseOrders, carrierRoutingTable, receivePalletSessions, pickupSessions, pickupScans, carrierAppointments } from "../drizzle/schema";
 import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, voidFedExLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
@@ -10429,8 +10429,269 @@ const carrierPickupRouter = router({
       }
     }),
 });
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── Carrier Appointments ────────────────────────────────────────────────────
+const carrierAppointmentsRouter = router({
+  list: protectedProcedure
+    .input(z.object({
+      facilityId: z.number().optional(),
+      status: z.enum(["scheduled", "confirmed", "cancelled", "completed", "all"]).default("all"),
+      date: z.string().optional(), // ISO date string filter
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq, and, or, gte, lte, desc } = await import("drizzle-orm");
+      const conditions: any[] = [];
+      if (input.facilityId) conditions.push(eq(carrierAppointments.facilityId, input.facilityId));
+      if (input.status !== "all") conditions.push(eq(carrierAppointments.status, input.status as any));
+      if (input.date) conditions.push(eq(carrierAppointments.scheduledDate, input.date));
+      const rows = await db
+        .select()
+        .from(carrierAppointments)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(carrierAppointments.scheduledDate), carrierAppointments.scheduledTimeStart);
+      return rows;
+    }),
 
+  getByOrder: protectedProcedure
+    .input(z.object({ extensivOrderId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq, and, desc } = await import("drizzle-orm");
+      const rows = await db
+        .select()
+        .from(carrierAppointments)
+        .where(and(
+          eq(carrierAppointments.extensivOrderId, input.extensivOrderId),
+          // Only return active appointments (not cancelled)
+        ))
+        .orderBy(desc(carrierAppointments.createdAt))
+        .limit(1);
+      return rows[0] ?? null;
+    }),
+
+  create: protectedProcedure
+    .input(z.object({
+      extensivOrderId: z.number(),
+      referenceNum: z.string().optional(),
+      clientName: z.string(),
+      shipToName: z.string().optional(),
+      facilityId: z.number(),
+      facilityName: z.string().optional(),
+      outboundLocation: z.string().optional(),
+      palletCount: z.number().optional(),
+      scheduledDate: z.string(),
+      scheduledTimeStart: z.string().optional(),
+      scheduledTimeEnd: z.string().optional(),
+      carrierName: z.string().optional(),
+      driverName: z.string().optional(),
+      trailerNumber: z.string().optional(),
+      contactPhone: z.string().optional(),
+      contactEmail: z.string().optional(),
+      bolNumber: z.string().optional(),
+      proNumber: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const now = new Date();
+      // Auto-generate BOL number if not provided
+      const bolNumber = input.bolNumber || `BOL-${Date.now()}`;
+      const [result] = await db.insert(carrierAppointments).values({
+        ...input,
+        bolNumber,
+        status: "scheduled",
+        createdBy: ctx.user?.id,
+        createdByName: ctx.user?.name ?? undefined,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const id = (result as any).insertId;
+      const rows = await db.select().from(carrierAppointments).where((await import("drizzle-orm")).eq(carrierAppointments.id, id)).limit(1);
+      return rows[0];
+    }),
+
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      scheduledDate: z.string().optional(),
+      scheduledTimeStart: z.string().optional(),
+      scheduledTimeEnd: z.string().optional(),
+      carrierName: z.string().optional(),
+      driverName: z.string().optional(),
+      trailerNumber: z.string().optional(),
+      contactPhone: z.string().optional(),
+      contactEmail: z.string().optional(),
+      bolNumber: z.string().optional(),
+      proNumber: z.string().optional(),
+      notes: z.string().optional(),
+      outboundLocation: z.string().optional(),
+      palletCount: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      const { id, ...fields } = input;
+      await db.update(carrierAppointments).set({ ...fields, updatedAt: new Date() }).where(eq(carrierAppointments.id, id));
+      const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, id)).limit(1);
+      return rows[0];
+    }),
+
+  confirm: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      const now = new Date();
+      await db.update(carrierAppointments)
+        .set({ status: "confirmed", confirmedAt: now, updatedAt: now })
+        .where(eq(carrierAppointments.id, input.id));
+      const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
+      return rows[0];
+    }),
+
+  cancel: protectedProcedure
+    .input(z.object({ id: z.number(), reason: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      const now = new Date();
+      await db.update(carrierAppointments)
+        .set({ status: "cancelled", cancelledAt: now, updatedAt: now, notes: input.reason })
+        .where(eq(carrierAppointments.id, input.id));
+      const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
+      return rows[0];
+    }),
+
+  complete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      const now = new Date();
+      await db.update(carrierAppointments)
+        .set({ status: "completed", completedAt: now, updatedAt: now })
+        .where(eq(carrierAppointments.id, input.id));
+      const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
+      return rows[0];
+    }),
+
+  // Look up order details from order_tracking for the booking form
+  getOrderDetails: protectedProcedure
+    .input(z.object({ extensivOrderId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      const { orderTracking } = await import("../drizzle/schema.js");
+      const rows = await db
+        .select({
+          extensivOrderId: orderTracking.extensivOrderId,
+          clientName: orderTracking.clientName,
+          facilityId: orderTracking.facilityId,
+          facilityName: orderTracking.facilityName,
+          outboundLocation: orderTracking.outboundLocation,
+          palletCount: orderTracking.palletCount,
+          referenceNum: orderTracking.referenceNum,
+          shipToName: orderTracking.shipToName,
+        })
+        .from(orderTracking)
+        .where(eq(orderTracking.extensivOrderId, input.extensivOrderId))
+        .limit(1);
+      return rows[0] ?? null;
+    }),
+
+  // Generate BOL and packing list documents for an appointment
+  generateDocuments: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      const { orderTracking } = await import("../drizzle/schema.js");
+      const { generateBolPdf } = await import("./bolGenerator.js");
+      // Fetch the appointment
+      const apptRows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
+      if (!apptRows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Appointment not found' });
+      const appt = apptRows[0];
+      // Fetch order details
+      const orderRows = await db
+        .select()
+        .from(orderTracking)
+        .where(eq(orderTracking.extensivOrderId, appt.extensivOrderId))
+        .limit(1);
+      const order = orderRows[0];
+      // Generate BOL PDF
+      const bolUrl = await generateBolPdf({
+        orderNumber: appt.extensivOrderId,
+        referenceNum: appt.referenceNum ?? order?.referenceNum,
+        clientName: appt.clientName,
+        shipToName: appt.shipToName ?? order?.shipToName,
+        facilityName: appt.facilityName,
+        outboundLocation: appt.outboundLocation ?? order?.outboundLocation,
+        palletCount: appt.palletCount ?? order?.palletCount,
+        carrierName: appt.carrierName,
+        driverName: appt.driverName,
+        trailerNumber: appt.trailerNumber,
+        bolNumber: appt.bolNumber,
+        proNumber: appt.proNumber,
+        appointmentId: appt.id,
+        scheduledDate: appt.scheduledDate,
+        scheduledTimeStart: appt.scheduledTimeStart,
+      });
+      const now = new Date();
+      await db.update(carrierAppointments)
+        .set({
+          bolUrl,
+          documentsGeneratedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(carrierAppointments.id, input.id));
+      const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
+      return { appointment: rows[0], bolUrl };
+    }),
+
+  // Submit driver signature — overlays it on the BOL PDF and saves the signed URL
+  submitSignature: protectedProcedure
+    .input(z.object({
+      id: z.number(),              // appointment id
+      signatureDataUrl: z.string(), // base64 PNG data URL
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      const { overlaySignatureOnBol } = await import("./bolGenerator.js");
+      const apptRows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
+      if (!apptRows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Appointment not found' });
+      const appt = apptRows[0];
+      if (!appt.bolUrl) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BOL not yet generated. Generate documents first.' });
+      const signedBolUrl = await overlaySignatureOnBol(
+        appt.bolUrl,
+        input.signatureDataUrl,
+        appt.id,
+        appt.extensivOrderId
+      );
+      const now = new Date();
+      await db.update(carrierAppointments)
+        .set({
+          signedBolUrl,
+          driverSignedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(carrierAppointments.id, input.id));
+      const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
+      return { appointment: rows[0], signedBolUrl };
+    }),
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -10459,5 +10720,6 @@ export const appRouterV4 = router({
   ediRetailers: ediRetailersRouter,
   ediEscalations: ediEscalationsRouter,
   carrierPickup: carrierPickupRouter,
+  carrierAppointments: carrierAppointmentsRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

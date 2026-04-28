@@ -2319,3 +2319,65 @@ export const pickupScans = mysqlTable("pickup_scans", {
 });
 export type PickupScan = typeof pickupScans.$inferSelect;
 export type InsertPickupScan = typeof pickupScans.$inferInsert;
+
+// ─── Carrier Appointments ──────────────────────────────────────────────────────
+// Scheduled pickup appointments — carriers must have a confirmed appointment
+// before arriving. Documents (BOL, packing list) are generated on confirmation.
+export const carrierAppointments = mysqlTable("carrier_appointments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Extensiv Transaction ID — links to order_tracking.extensivOrderId */
+  extensivOrderId: int("extensivOrderId").notNull(),
+  referenceNum: varchar("referenceNum", { length: 256 }),
+  clientName: varchar("clientName", { length: 256 }).notNull(),
+  shipToName: varchar("shipToName", { length: 512 }),
+  facilityId: int("facilityId").notNull(),
+  facilityName: varchar("facilityName", { length: 256 }),
+  outboundLocation: varchar("outboundLocation", { length: 64 }),
+  palletCount: int("palletCount"),
+  /** Scheduled pickup date (ISO date string, e.g. "2026-04-30") */
+  scheduledDate: varchar("scheduledDate", { length: 32 }).notNull(),
+  /** Scheduled time window start (e.g. "09:00") */
+  scheduledTimeStart: varchar("scheduledTimeStart", { length: 8 }),
+  /** Scheduled time window end (e.g. "11:00") */
+  scheduledTimeEnd: varchar("scheduledTimeEnd", { length: 8 }),
+  /** Carrier / trucking company name */
+  carrierName: varchar("carrierName", { length: 256 }),
+  /** Driver name (optional at booking, required at confirmation) */
+  driverName: varchar("driverName", { length: 256 }),
+  /** Trailer / truck number */
+  trailerNumber: varchar("trailerNumber", { length: 64 }),
+  /** Carrier contact phone */
+  contactPhone: varchar("contactPhone", { length: 64 }),
+  /** Carrier contact email */
+  contactEmail: varchar("contactEmail", { length: 256 }),
+  /** BOL number (assigned at booking or auto-generated) */
+  bolNumber: varchar("bolNumber", { length: 128 }),
+  /** PRO number (optional) */
+  proNumber: varchar("proNumber", { length: 128 }),
+  /** Notes / special instructions */
+  notes: text("notes"),
+  /** Appointment status */
+  status: mysqlEnum("status", ["scheduled", "confirmed", "cancelled", "completed"]).notNull().default("scheduled"),
+  /** S3 URL of the generated BOL PDF */
+  bolDocUrl: varchar("bolDocUrl", { length: 1024 }),
+  /** S3 URL of the generated BOL PDF (alias used by procedures) */
+  bolUrl: varchar("bolUrl", { length: 1024 }),
+  /** S3 URL of the signed BOL PDF (after driver signature overlay) */
+  signedBolUrl: varchar("signedBolUrl", { length: 1024 }),
+  /** S3 URL of the generated packing list PDF */
+  packingListDocUrl: varchar("packingListDocUrl", { length: 1024 }),
+  /** When documents were generated */
+  documentsGeneratedAt: timestamp("documentsGeneratedAt"),
+  /** When the driver signed the BOL */
+  driverSignedAt: timestamp("driverSignedAt"),
+  /** FK to users table (who booked the appointment) */
+  createdBy: int("createdBy"),
+  createdByName: varchar("createdByName", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  confirmedAt: timestamp("confirmedAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  completedAt: timestamp("completedAt"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CarrierAppointment = typeof carrierAppointments.$inferSelect;
+export type InsertCarrierAppointment = typeof carrierAppointments.$inferInsert;

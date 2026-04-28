@@ -14,7 +14,7 @@ import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
   Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale, PackagePlus,
-  Lock, LockOpen, ChevronsUpDown
+  Lock, LockOpen, ChevronsUpDown, Volume2, VolumeX
 } from "lucide-react";
 
 type ScanItem = {
@@ -88,7 +88,12 @@ function preloadSounds() {
   });
 }
 
+// Module-level mute flag — updated by the component's toggleMute callback
+let _soundMuted = false;
+function setSoundMutedFlag(muted: boolean) { _soundMuted = muted; }
+
 function playBeep(type: "success" | "error" | "complete") {
+  if (_soundMuted) return;
   try {
     // Always create a fresh Audio element so rapid scans don't block each other
     const el = new Audio(SOUND_URLS[type]);
@@ -372,6 +377,20 @@ export default function QcScanner() {
   // When a new pallet is added, all previous pallets are auto-locked
   const [lockedPallets, setLockedPallets] = useState<Set<number>>(new Set());
   const [flashSku, setFlashSku] = useState<string | null>(null);
+  // Sound mute toggle — persisted in localStorage
+  const [soundMuted, setSoundMuted] = useState<boolean>(() => {
+    try { return localStorage.getItem("qc_sound_muted") === "1"; } catch { return false; }
+  });
+  const toggleMute = useCallback(() => {
+    setSoundMuted((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("qc_sound_muted", next ? "1" : "0"); } catch { /* ignore */ }
+      setSoundMutedFlag(next);
+      return next;
+    });
+  }, []);
+  // Sync initial mute state to module-level flag
+  useEffect(() => { setSoundMutedFlag(soundMuted); }, [soundMuted]);
   const flashSkuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerFlash = useCallback((sku: string) => {
     if (flashSkuTimerRef.current) clearTimeout(flashSkuTimerRef.current);
@@ -1638,6 +1657,18 @@ export default function QcScanner() {
                     </Button>
                   );
                 })()}
+                {/* Sound mute toggle */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={toggleMute}
+                  title={soundMuted ? "Unmute scan sounds" : "Mute scan sounds"}
+                  className={soundMuted ? "text-muted-foreground opacity-60" : ""}
+                >
+                  {soundMuted
+                    ? <><VolumeX className="w-4 h-4 mr-1" />Muted</>
+                    : <><Volume2 className="w-4 h-4 mr-1" />Sound</>}
+                </Button>
                 {/* Add Pallet — moved here from session header */}
                 <Button
                   size="sm"
@@ -1783,11 +1814,11 @@ export default function QcScanner() {
                               setLockedPallets((prev) => { const next = new Set(prev); next.delete(pallet.id); return next; });
                               setActiveScanPalletId(pallet.id);
                               activeScanPalletIdRef.current = pallet.id;
-                              setExpandedPallets((prev) => new Set([...prev, pallet.id]));
+                              setExpandedPallets((prev) => new Set(Array.from(prev).concat(pallet.id)));
                               setTimeout(() => palletInputRefs.current.get(pallet.id)?.focus(), 100);
                             } else {
                               // Lock: add to locked set
-                              setLockedPallets((prev) => new Set([...prev, pallet.id]));
+                              setLockedPallets((prev) => new Set(Array.from(prev).concat(pallet.id)));
                               if (activeScanPalletId === pallet.id) {
                                 // Switch active target to last pallet
                                 const lastId = palletsRef.current[palletsRef.current.length - 1]?.id ?? null;

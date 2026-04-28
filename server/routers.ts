@@ -7451,19 +7451,11 @@ const shippingDashboardRouter = router({
         const parsed = parseLoc(o.outboundLocation);
         if (parsed) occupied.add(`${parsed.lane}-${parsed.position}`);
       }
-      // Build list of all available cells sorted by lane then position
-      const available: { lane: number; position: string; label: string }[] = [];
-      for (const lane of LANES) {
-        for (const pos of POSITIONS) {
-          if (!occupied.has(`${lane}-${pos}`)) {
-            available.push({ lane, position: pos, label: `${pos}${lane}` });
-          }
-        }
-      }
-      // Find recommended (first contiguous block for palletCount)
+      // Find all lanes that have a contiguous block of >= palletCount free positions
       const palletCount = input.palletCount ?? 1;
-      let recommended: { lane: number; position: string; positions: string[]; label: string } | null = null;
-      outer: for (const lane of LANES) {
+      type DockBlock = { lane: number; position: string; positions: string[]; label: string };
+      const qualifyingBlocks: DockBlock[] = [];
+      for (const lane of LANES) {
         let runStart = -1; let runLen = 0;
         for (let i = 0; i < POSITIONS.length; i++) {
           const pos = POSITIONS[i];
@@ -7472,23 +7464,32 @@ const shippingDashboardRouter = router({
             runLen++;
             if (runLen >= palletCount) {
               const block = POSITIONS.slice(runStart, runStart + palletCount);
-              recommended = {
+              qualifyingBlocks.push({
                 lane,
                 position: block[0],
                 positions: block,
                 label: block.length === 1 ? `${block[0]}${lane}` : `${block[0]}${lane}\u2013${block[block.length - 1]}${lane}`,
-              };
-              break outer;
+              });
+              // Only record the first qualifying block per lane
+              break;
             }
           } else { runStart = -1; runLen = 0; }
         }
       }
+      // The recommended spot is the first qualifying block overall
+      const recommended: DockBlock | null = qualifyingBlocks[0] ?? null;
+      // available = only the starting positions of qualifying lanes (for display in the picker)
+      const available: { lane: number; position: string; label: string }[] = qualifyingBlocks.map((b) => ({
+        lane: b.lane,
+        position: b.position,
+        label: b.label,
+      }));
       return {
         available,
         recommended,
         occupiedCount: occupied.size,
         totalCells: LANES.length * POSITIONS.length,
-        overflow: recommended === null,
+        overflow: qualifyingBlocks.length === 0,
       };
     }),
   /** Update outbound location and/or pallet count for an order */

@@ -745,9 +745,8 @@ export default function DockManager() {
             </div>
           </div>
 
-          {/* Overflow Orders */}
-          {overflowOrders.length > 0 && (
-            <div className="rounded-xl border border-orange-500/40 bg-orange-500/5 p-4">
+          {/* Overflow Orders — always visible */}
+          <div className="rounded-xl border border-orange-500/40 bg-orange-500/5 p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Truck className="h-4 w-4 text-orange-500" />
                 <h3 className="text-sm font-semibold text-orange-700 dark:text-orange-400">
@@ -785,8 +784,10 @@ export default function DockManager() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            {overflowOrders.length === 0 && (
+              <p className="text-xs text-muted-foreground italic py-2">No orders currently in overflow.</p>
+            )}
+          </div>
 
           {/* Unlocated Orders */}
           {unlocatedOrders.length > 0 && (
@@ -817,7 +818,7 @@ export default function DockManager() {
                       </p>
                       {o.outboundLocation && (
                         <p className="text-[9px] text-amber-600 dark:text-amber-400 mt-0.5">
-                          Location "{o.outboundLocation}" not parsed
+                          Prev: "{o.outboundLocation}" — reassign below
                         </p>
                       )}
                     </div>

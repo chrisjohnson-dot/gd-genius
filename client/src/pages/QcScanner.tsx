@@ -747,9 +747,15 @@ export default function QcScanner() {
   const refreshCaseAmounts = trpc.qcScanner.refreshCaseAmounts.useMutation({
     onSuccess: (data) => {
       if (data.updatedCount > 0) {
-        setItems(data.items as ScanItem[]);
+        const updatedItems = data.items as ScanItem[];
+        setItems(updatedItems);
+        // Auto-enable Case mode if every item now has a case amount > 1
+        const allHaveCase = updatedItems.length > 0 && updatedItems.every((i) => (i.caseAmount ?? 1) > 1);
+        if (allHaveCase) setScanAsCase(true);
         toast.success(`Case quantities updated (${data.updatedCount} SKU${data.updatedCount !== 1 ? "s" : ""})`, {
-          description: "Case mode will now scan the correct quantity per scan.",
+          description: allHaveCase
+            ? "Case mode auto-enabled — every item has a case quantity configured."
+            : "Case mode will now scan the correct quantity per scan.",
           duration: 4000,
         });
       }
@@ -2182,7 +2188,12 @@ export default function QcScanner() {
                                   variant={scanAsCase ? "default" : "outline"}
                                   className="h-12 px-4 shrink-0"
                                   onClick={() => { setScanAsCase((v) => !v); if (scanAsMu) setScanAsMu(false); }}
-                                  title={`Toggle case scan (scan one barcode = full case quantity). Case qty: ${items.find((i) => (i.caseAmount ?? 1) > 1)?.caseAmount ?? "?"}×`}
+                                  title={(() => {
+                                    const caseItems = items.filter((i) => (i.caseAmount ?? 1) > 1);
+                                    if (caseItems.length === 0) return "Toggle case scan — no case quantities configured for this customer";
+                                    const lines = caseItems.map((i) => `${i.sku}: ×${i.caseAmount}`).join("\n");
+                                    return `Toggle case scan (scan one barcode = full case quantity)\n\nCase quantities:\n${lines}`;
+                                  })()}
                                 >
                                   <Layers className="w-4 h-4 mr-1" />
                                   Case

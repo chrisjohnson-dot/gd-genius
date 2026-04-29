@@ -2871,11 +2871,13 @@ export default function QcScanner() {
 function DockRecommendDialog({
   open,
   onClose,
+  onConfirm,
   sessionInfo,
 }: {
   open: boolean;
   onClose: () => void;
-  sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null } | null;
+  onConfirm: () => void;
+  sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null; customerId: number | null } | null;
 }) {
   const palletCount = sessionInfo?.palletCount ?? 1;
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
@@ -2884,6 +2886,7 @@ function DockRecommendDialog({
     {
       configId: sessionInfo?.configId ?? undefined,
       palletCount: palletCount > 0 ? palletCount : 1,
+      clientId: sessionInfo?.customerId ?? undefined,
     },
     { enabled: open && !!sessionInfo }
   );

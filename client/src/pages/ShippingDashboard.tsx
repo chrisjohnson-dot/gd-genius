@@ -1,4 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip as ChartTooltip,
+  Filler,
+} from "chart.js";
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTooltip, Filler);
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -630,6 +641,9 @@ export default function ShippingDashboard() {
   const { data: liveOrders = [], isLoading, refetch, isFetching } = trpc.shippingDashboard.listOutbound.useQuery(
     undefined, { refetchInterval: demoMode ? false : 300_000 }
   );
+  const { data: trendData = [] } = trpc.shippingDashboard.overduepalletTrend.useQuery(
+    undefined, { refetchInterval: demoMode ? false : 300_000 }
+  );
 
   // Tick every minute so the dock-age badges update without a full refetch
   const [, setTick] = useState(0);
@@ -768,6 +782,77 @@ export default function ShippingDashboard() {
           </div>
         ))}
       </div>
+
+      {/* 30-Day Overdue Pallet Trend Chart */}
+      {(trendData.length > 0 || demoMode) && (
+        <div className="rounded-xl border border-border bg-card p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-semibold text-foreground">30-Day Overdue Pallet Trend</div>
+            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />&nbsp;0–3 days</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />&nbsp;4–7 days</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-red-500" />&nbsp;8+ days</span>
+            </div>
+          </div>
+          <div style={{ height: 160 }}>
+            <Line
+              data={{
+                labels: demoMode
+                  ? Array.from({ length: 30 }, (_, i) => {
+                      const d = new Date(); d.setDate(d.getDate() - (29 - i));
+                      return d.toISOString().slice(5, 10);
+                    })
+                  : trendData.map((r) => r.date.slice(5)),
+                datasets: [
+                  {
+                    label: "0–3 days",
+                    data: demoMode
+                      ? Array.from({ length: 30 }, (_, i) => Math.max(0, Math.round(2 + Math.sin(i / 3) * 1.5)))
+                      : trendData.map((r) => r.overdueOrders),
+                    borderColor: "#10b981",
+                    backgroundColor: "rgba(16,185,129,0.08)",
+                    borderWidth: 2,
+                    pointRadius: 2,
+                    tension: 0.4,
+                    fill: false,
+                  },
+                  {
+                    label: "4–7 days",
+                    data: demoMode
+                      ? Array.from({ length: 30 }, (_, i) => Math.max(0, Math.round(1 + Math.cos(i / 4) * 1.2)))
+                      : trendData.map((r) => r.overduePallets),
+                    borderColor: "#f59e0b",
+                    backgroundColor: "rgba(245,158,11,0.08)",
+                    borderWidth: 2,
+                    pointRadius: 2,
+                    tension: 0.4,
+                    fill: false,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { mode: "index", intersect: false },
+                },
+                scales: {
+                  x: {
+                    ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+                    grid: { display: false },
+                  },
+                  y: {
+                    beginAtZero: true,
+                    ticks: { font: { size: 10 }, stepSize: 1 },
+                    grid: { color: "rgba(128,128,128,0.1)" },
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* No-location warning */}
       {noLocation > 0 && !demoMode && (

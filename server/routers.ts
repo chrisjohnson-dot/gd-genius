@@ -7721,6 +7721,46 @@ const shippingDashboardRouter = router({
       await updateOutboundDetails(id, data);
       return { success: true };
     }),
+
+  /**
+   * Returns daily overdue pallet counts for the past 30 days.
+   */
+  overduepalletTrend: protectedProcedure.query(async () => {
+    const { orderTracking } = await import("../drizzle/schema.js");
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db
+      .select({
+        shipReadyAt: orderTracking.shipReadyAt,
+        shippedAt: orderTracking.shippedAt,
+        palletCount: orderTracking.palletCount,
+      })
+      .from(orderTracking)
+      .where(sql`${orderTracking.shipReadyAt} IS NOT NULL`);
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const result: { date: string; overdueOrders: number; overduePallets: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const day = new Date(today);
+      day.setDate(day.getDate() - i);
+      day.setHours(23, 59, 59, 999);
+      let overdueOrders = 0;
+      let overduePallets = 0;
+      for (const row of rows) {
+        if (!row.shipReadyAt) continue;
+        const placedAt = new Date(row.shipReadyAt);
+        if (placedAt > day) continue;
+        const daysOnDock = (day.getTime() - placedAt.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysOnDock < 4) continue;
+        if (row.shippedAt && new Date(row.shippedAt) <= day) continue;
+        overdueOrders++;
+        overduePallets += row.palletCount ?? 0;
+      }
+      result.push({ date: day.toISOString().slice(0, 10), overdueOrders, overduePallets });
+    }
+    return result;
+  }),
 });
 
 const slaPerformanceRouter = router({

@@ -258,6 +258,13 @@ import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
 
+// 10-minute in-memory cache for pallet weight calculation (carton weights + case amounts)
+const _palletWeightCache = new Map<string, {
+  cartonWeightMap: Map<string, number>;
+  caseAmountMap: Map<string, number>;
+  expiresAt: number;
+}>();
+
 const _appRouter = router({
   system: systemRouter,
   auth: router({
@@ -4573,10 +4580,55 @@ const qcScannerRouter = router({
       const config = await getExtensivConfigById(session.warehouseId);
       if (!config) return { weightLb: null };
       const customerId = session.customerId ?? 0;
-      const [cartonWeightMap, caseAmountMap] = await Promise.all([
-        fetchItemCartonWeightMap(config, customerId),
-        fetchItemCaseAmountMap(config, customerId),
-      ]);
+      // ── 1. Try 10-minute in-memory cache ──────────────────────────────────
+      const cacheKey = `dims:${config.id}:${customerId}`;
+      const now = Date.now();
+      const cached = _palletWeightCache.get(cacheKey);
+      let cartonWeightMap: Map<string, number>;
+      let caseAmountMap: Map<string, number>;
+      if (cached && cached.expiresAt > now) {
+        cartonWeightMap = cached.cartonWeightMap;
+        caseAmountMap = cached.caseAmountMap;
+      } else {
+        // ── 2. Try DB item_dims table (populated by nightly sync) ──────────
+        const db = await getDb();
+        let loadedFromDb = false;
+        if (db) {
+          try {
+            const rows = await db.execute(
+              sql`SELECT sku, carton_weight_lb, units_per_carton FROM item_dims WHERE config_id = ${config.id} AND customer_id = ${customerId}`
+            ) as any;
+            const rowArr: Array<{ sku: string; carton_weight_lb: number | null; units_per_carton: number | null }> =
+              Array.isArray(rows) ? rows : (rows?.rows ?? []);
+            if (rowArr.length > 0) {
+              cartonWeightMap = new Map();
+              caseAmountMap = new Map();
+              for (const row of rowArr) {
+                if (row.sku && row.carton_weight_lb != null) cartonWeightMap.set(row.sku, row.carton_weight_lb);
+                if (row.sku && row.units_per_carton != null) caseAmountMap.set(row.sku, row.units_per_carton);
+              }
+              loadedFromDb = true;
+              console.log(`[calculatePalletWeight] Loaded ${rowArr.length} SKU dims from DB cache`);
+            }
+          } catch (e) {
+            console.warn("[calculatePalletWeight] DB dims lookup failed, falling back to Extensiv:", e);
+          }
+        }
+        if (!loadedFromDb) {
+          // ── 3. Fall back to live Extensiv API calls ─────────────────────
+          console.log(`[calculatePalletWeight] Fetching dims from Extensiv for config ${config.id} / customer ${customerId}`);
+          [cartonWeightMap, caseAmountMap] = await Promise.all([
+            fetchItemCartonWeightMap(config, customerId),
+            fetchItemCaseAmountMap(config, customerId),
+          ]);
+        }
+        // Store in 10-minute in-memory cache
+        _palletWeightCache.set(cacheKey, {
+          cartonWeightMap: cartonWeightMap!,
+          caseAmountMap: caseAmountMap!,
+          expiresAt: now + 10 * 60 * 1000,
+        });
+      }
 
       // Calculate total weight: sum(perUnitWeightLb * qty) per SKU
       // perUnitWeightLb = cartonWeightLb / unitsPerCarton

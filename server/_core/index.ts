@@ -24,6 +24,7 @@ import { startScanImagePurgeScheduler } from "../scheduler/scanImagePurge";
 import { startOpFiHealthCheckScheduler } from "../scheduler/opfiHealthCheck";
 import { startClearSightRulesSyncScheduler } from "../scheduler/clearsightRulesSync";
 import { startPackRetryScheduler } from "../scheduler/packRetry";
+import { startItemDimsSyncScheduler } from "../scheduler/itemDimsSync";
 import { checkOverdueSessions } from "../routers/pullAlerts";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -113,6 +114,8 @@ async function startServer() {
     startClearSightRulesSyncScheduler();
     // Nightly Extensiv pack-retry at 03:00 UTC — retries all sessions where packedInExtensiv = false
     startPackRetryScheduler();
+    // Nightly SKU dims sync at 07:00 UTC (2:00 AM Eastern) — caches carton weights and case amounts
+    startItemDimsSyncScheduler();
     // Pull session overdue alert check every 5 minutes
     const runPullAlertCheck = () => {
       checkOverdueSessions()

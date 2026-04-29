@@ -2388,3 +2388,29 @@ export const carrierAppointments = mysqlTable("carrier_appointments", {
 });
 export type CarrierAppointment = typeof carrierAppointments.$inferSelect;
 export type InsertCarrierAppointment = typeof carrierAppointments.$inferInsert;
+
+// ─── Item Dimensions Cache ──────────────────────────────────────────────────
+// Synced nightly from Extensiv item master. Stores per-unit weight, carton
+// weight, units per carton, and physical dimensions for fast pallet weight
+// calculation without live Extensiv API calls.
+export const itemDims = mysqlTable("item_dims", {
+  id: int("id").autoincrement().primaryKey(),
+  configId: int("config_id").notNull(),
+  customerId: int("customer_id").notNull(),
+  sku: varchar("sku", { length: 100 }).notNull(),
+  /** Per-unit weight in lbs (cartonWeightLb / unitsPerCarton) */
+  unitWeightLb: decimal("unit_weight_lb", { precision: 10, scale: 4 }),
+  /** Carton weight in lbs from Extensiv packageUnit.weightLbs */
+  cartonWeightLb: decimal("carton_weight_lb", { precision: 10, scale: 4 }),
+  /** Units per carton from Extensiv packageUnit.inventoryUnitsPerUnit */
+  unitsPerCarton: int("units_per_carton"),
+  /** Length in inches */
+  lengthIn: decimal("length_in", { precision: 10, scale: 4 }),
+  /** Width in inches */
+  widthIn: decimal("width_in", { precision: 10, scale: 4 }),
+  /** Height in inches */
+  heightIn: decimal("height_in", { precision: 10, scale: 4 }),
+  syncedAt: timestamp("synced_at").notNull().defaultNow().onUpdateNow(),
+});
+export type ItemDims = typeof itemDims.$inferSelect;
+export type InsertItemDims = typeof itemDims.$inferInsert;

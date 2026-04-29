@@ -4177,16 +4177,17 @@ const qcScannerRouter = router({
             } catch { /* order lookup failed, continue without customerId */ }
           }
           if (config && customerId) {
-            const upcMap = await fetchItemUpcMap(config, customerId);
+            // fetchItemUpcMap now returns Map<upcUpperCase, sku> (reverse map).
+            // Both the each/primary UPC and the carton/packaging UPC are registered,
+            // so scanning either barcode resolves to the correct SKU.
+            const upcToSku = await fetchItemUpcMap(config, customerId);
             const normalised = input.barcode.trim().toUpperCase();
-            for (const [sku, upc] of upcMap.entries()) {
-              if (upc.trim().toUpperCase() === normalised) {
-                match = items.find((i) => i.sku.toUpperCase() === sku.toUpperCase()) ?? null;
-                if (match) {
-                  // Persist the resolved UPC so future scans are instant (no Extensiv call)
-                  await upsertQcScanItem(input.sessionId, match.sku, upc, {});
-                }
-                break;
+            const resolvedSku = upcToSku.get(normalised);
+            if (resolvedSku) {
+              match = items.find((i) => i.sku.toUpperCase() === resolvedSku.toUpperCase()) ?? null;
+              if (match) {
+                // Persist the resolved UPC so future scans are instant (no Extensiv call)
+                await upsertQcScanItem(input.sessionId, match.sku, input.barcode.trim(), {});
               }
             }
           }
@@ -4584,8 +4585,8 @@ const qcScannerRouter = router({
       const cacheKey = `dims:${config.id}:${customerId}`;
       const now = Date.now();
       const cached = _palletWeightCache.get(cacheKey);
-      let cartonWeightMap: Map<string, number>;
-      let caseAmountMap: Map<string, number>;
+      let cartonWeightMap: Map<string, number> = new Map();
+      let caseAmountMap: Map<string, number> = new Map();
       if (cached && cached.expiresAt > now) {
         cartonWeightMap = cached.cartonWeightMap;
         caseAmountMap = cached.caseAmountMap;

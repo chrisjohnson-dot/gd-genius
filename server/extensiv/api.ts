@@ -827,23 +827,33 @@ export async function fetchItemDescriptions(
 }
 
 /**
- * Fetch Primary UPC for each SKU from the Extensiv item master.
- * The Primary UPC lives at options.packageUnit.upc in the HAL response
- * (Units of Measure tab → Inventory Units of Measure → Primary UPC).
- * Returns Map<sku, upc>.
+ * Fetch all UPCs for each SKU from the Extensiv item master and return a
+ * reverse lookup map: UPC (uppercased) → SKU.
+ *
+ * Each item in Extensiv can have TWO distinct barcodes:
+ *   • item.upc                        — the each/primary UPC (scanned on individual units)
+ *   • item.options.packageUnit.upc    — the carton/packaging UPC (scanned on cases)
+ *
+ * Both are registered in the returned map so that scanning either barcode
+ * resolves to the correct SKU.  Previously only one was stored, which caused
+ * "Not found" errors when the scanned barcode was the each UPC but the map
+ * only contained the carton UPC (or vice-versa).
+ *
+ * Returns Map<upcUpperCase, sku>.
  */
 export async function fetchItemUpcMap(
   config: ExtensivClientConfig,
   customerId: number
 ): Promise<Map<string, string>> {
   const client = createExtensivClient(config);
-  const upcMap = new Map<string, string>();
+  // Reverse map: UPC (uppercased) → SKU
+  const upcToSku = new Map<string, string>();
   let pgnum = 1;
   const pgsiz = 100;
 
-   interface RawItemWithUpc {
+  interface RawItemWithUpc {
     sku?: string;
-    upc?: string; // item-level UPC (HAL+JSON camelCase)
+    upc?: string; // item-level / each UPC (HAL+JSON camelCase)
     options?: {
       packageUnit?: { upc?: string };
     };
@@ -858,14 +868,16 @@ export async function fetchItemUpcMap(
     const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
     for (const item of items) {
       if (!item.sku) continue;
-      // Prefer packageUnit UPC (primary), fall back to item-level UPC
-      const upc = item.options?.packageUnit?.upc ?? item.upc;
-      if (upc) upcMap.set(item.sku, upc);
+      const eachUpc = item.upc?.trim();                         // each/primary UPC
+      const caseUpc = item.options?.packageUnit?.upc?.trim();   // carton/packaging UPC
+      // Register both UPCs → SKU so scanning either barcode resolves correctly
+      if (eachUpc) upcToSku.set(eachUpc.toUpperCase(), item.sku);
+      if (caseUpc) upcToSku.set(caseUpc.toUpperCase(), item.sku);
     }
     if (items.length < pgsiz) break;
     pgnum++;
   }
-  return upcMap;
+  return upcToSku;
 }
 
 /**

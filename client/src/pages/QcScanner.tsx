@@ -15,7 +15,7 @@ import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
   Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale, PackagePlus,
-  Lock, LockOpen, ChevronsUpDown, Volume2, VolumeX, Loader2
+  Lock, LockOpen, ChevronsUpDown, Volume2, VolumeX, Loader2, Truck, MapPin, Send, Weight
 } from "lucide-react";
 
 type ScanItem = {
@@ -334,7 +334,8 @@ export default function QcScanner() {
   const [confirmText, setConfirmText] = useState("");
   // Dock location recommendation shown after session completes
   const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
-  const [completedSessionInfo, setCompletedSessionInfo] = useState<{ sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null } | null>(null);
+  const [shipwellDialog, setShipwellDialog] = useState(false);
+  const [completedSessionInfo, setCompletedSessionInfo] = useState<{ sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null; customerId: number | null } | null>(null);
   // Multi-expand: track a Set of expanded pallet IDs — all pallets start expanded
   const [expandedPallets, setExpandedPallets] = useState<Set<number>>(new Set());
   const togglePalletExpand = (palletId: number) =>
@@ -1068,6 +1069,7 @@ export default function QcScanner() {
         palletCount: pallets.length,
         customerName: session?.customerName ?? null,
         transactionId: session?.transactionId ?? null,
+        customerId: (session as any)?.customerId ?? null,
       });
       setPhase("start");
       setSession(null);
@@ -2852,6 +2854,13 @@ export default function QcScanner() {
       <DockRecommendDialog
         open={dockRecommendDialog}
         onClose={() => { setDockRecommendDialog(false); setCompletedSessionInfo(null); }}
+        onConfirm={() => { setDockRecommendDialog(false); setShipwellDialog(true); }}
+        sessionInfo={completedSessionInfo}
+      />
+      {/* ─── Shipwell LTL Confirmation Dialog ────────────────────────────── */}
+      <ShipwellConfirmDialog
+        open={shipwellDialog}
+        onClose={() => { setShipwellDialog(false); setCompletedSessionInfo(null); }}
         sessionInfo={completedSessionInfo}
       />
     </>
@@ -2894,8 +2903,8 @@ function DockRecommendDialog({
 
   const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
     onSuccess: () => {
-      toast.success(`Order moved to outbound: ${selectedLocation ?? "Overflow"}`);
-      onClose();
+      toast.success(`Staged at: ${selectedLocation ?? "Overflow"}`);
+      onConfirm();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -3043,21 +3052,212 @@ function DockRecommendDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Skip</Button>
+          <Button variant="outline" onClick={onClose}>Skip All</Button>
+          <Button variant="ghost" onClick={onConfirm} className="text-muted-foreground">
+            Skip to Shipwell →
+          </Button>
           {matchedOrder && selectedLocation && (
             <Button
               className={selectedLocation === "Overflow" ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}
               disabled={assignDock.isPending}
               onClick={handleAssign}
             >
-              {assignDock.isPending ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
-              Assign to {selectedLocation}
+              {assignDock.isPending ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <MapPin className="w-4 h-4 mr-1" />}
+              Confirm Staging →
             </Button>
           )}
           {!matchedOrder && !isLoading && (
-            <p className="text-xs text-muted-foreground self-center">Order not found in outbound tracking — set location manually in Dock Manager.</p>
+            <div className="flex items-center gap-2 w-full justify-between">
+              <p className="text-xs text-muted-foreground">Order not found in outbound tracking.</p>
+              <Button onClick={onConfirm}><Truck className="w-4 h-4 mr-1" />Continue to Shipwell →</Button>
+            </div>
           )}
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Shipwell LTL Confirmation Dialog ────────────────────────────────────────
+function ShipwellConfirmDialog({
+  open,
+  onClose,
+  sessionInfo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null; customerId: number | null } | null;
+}) {
+  const [palletCount, setPalletCount] = useState<number>(sessionInfo?.palletCount ?? 1);
+  const [totalWeightLb, setTotalWeightLb] = useState<string>("");
+  const [confirmed, setConfirmed] = useState(false);
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open && sessionInfo) {
+      setPalletCount(sessionInfo.palletCount > 0 ? sessionInfo.palletCount : 1);
+      setTotalWeightLb("");
+      setConfirmed(false);
+    }
+  }, [open, sessionInfo?.sessionId]);
+
+  // Check if Shipwell is configured
+  const { data: shipwellConfig, isLoading: configLoading } = trpc.shipwell.getConfig.useQuery(
+    undefined,
+    { enabled: open }
+  );
+  const isShipwellConfigured = !!shipwellConfig?.isActive;
+
+  const sendToShipwell = trpc.qcScanner.sendToShipwell.useMutation({
+    onSuccess: (data) => {
+      setConfirmed(true);
+      toast.success("Sent to Shipwell — PO created successfully");
+      // Open Shipwell PO in new tab
+      if (data.poUrl) window.open(data.poUrl, "_blank");
+    },
+    onError: (e) => toast.error(`Shipwell error: ${e.message}`, { duration: Infinity }),
+  });
+
+  function handleSend() {
+    if (!sessionInfo) return;
+    sendToShipwell.mutate({
+      sessionId: sessionInfo.sessionId,
+      palletCountOverride: palletCount,
+      totalWeightLbOverride: totalWeightLb ? parseFloat(totalWeightLb) : undefined,
+    });
+  }
+
+  const customerLabel = sessionInfo?.customerName ?? `Session ${sessionInfo?.sessionId}`;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Truck className="w-5 h-5 text-primary" />
+            Send to Shipwell — LTL
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            <span className="font-medium text-foreground">{customerLabel}</span>
+            {sessionInfo?.transactionId ? ` — TX ${sessionInfo.transactionId}` : ""}
+          </p>
+        </DialogHeader>
+
+        {confirmed ? (
+          <div className="py-6 flex flex-col items-center gap-3 text-center">
+            <CheckCircle2 className="w-12 h-12 text-green-500" />
+            <p className="text-lg font-semibold">Shipwell PO Created</p>
+            <p className="text-sm text-muted-foreground">The LTL shipment has been submitted to Shipwell for rate shopping and carrier tendering.</p>
+            <Button className="mt-2" onClick={onClose}>Done — Back to Scanner</Button>
+          </div>
+        ) : configLoading ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+            <RefreshCw className="w-4 h-4 animate-spin" /> Checking Shipwell configuration…
+          </div>
+        ) : !isShipwellConfigured ? (
+          <div className="py-4 space-y-3">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Shipwell Not Configured</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">Configure Shipwell credentials in Shipping Integration settings to enable LTL shipment creation.</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Close</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-4 py-1">
+            <p className="text-sm text-muted-foreground">
+              Review the shipment details below. All fields are auto-populated from the order — adjust if needed before sending.
+            </p>
+
+            {/* Pallet Count */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-muted-foreground" />
+                Pallet Count
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors"
+                  onClick={() => setPalletCount((n) => Math.max(1, n - 1))}
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <span className="w-10 text-center text-lg font-bold">{palletCount}</span>
+                <button
+                  className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-muted transition-colors"
+                  onClick={() => setPalletCount((n) => n + 1)}
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Total Weight */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Scale className="w-4 h-4 text-muted-foreground" />
+                Total Weight (lbs)
+                <span className="text-xs text-muted-foreground font-normal">— auto-calculated from pallets if blank</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                placeholder="Auto-calculated"
+                value={totalWeightLb}
+                onChange={(e) => setTotalWeightLb(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Summary */}
+            <div className="rounded-xl bg-muted/40 border px-4 py-3 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Customer</span>
+                <span className="font-medium">{customerLabel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Pallets</span>
+                <span className="font-medium">{palletCount}</span>
+              </div>
+              {totalWeightLb && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Weight</span>
+                  <span className="font-medium">{parseFloat(totalWeightLb).toLocaleString()} lbs</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Mode</span>
+                <span className="font-medium">LTL</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Environment</span>
+                <span className={`font-medium ${shipwellConfig?.environment === "production" ? "text-green-600" : "text-amber-600"}`}>
+                  {shipwellConfig?.environment === "production" ? "Production" : "Sandbox"}
+                </span>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={onClose}>Skip</Button>
+              <Button
+                disabled={sendToShipwell.isPending}
+                onClick={handleSend}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {sendToShipwell.isPending ? (
+                  <><RefreshCw className="w-4 h-4 mr-1.5 animate-spin" />Sending…</>
+                ) : (
+                  <><Send className="w-4 h-4 mr-1.5" />Send to Shipwell</>
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

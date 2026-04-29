@@ -4969,6 +4969,126 @@ const qcScannerRouter = router({
         calculatedWeightLb: calculatedWeightLb ? parseFloat(calculatedWeightLb) : null,
       };
     }),
+  /**
+   * Send a completed QC session's order to Shipwell as a purchase order (LTL shipment).
+   * Auto-populates from session + order_tracking data. Returns the Shipwell PO id and URL.
+   */
+  sendToShipwell: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      /** Optional operator overrides */
+      palletCountOverride: z.number().int().min(1).optional(),
+      totalWeightLbOverride: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const config = await getShipwellConfig();
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "No Shipwell config found. Please configure Shipwell credentials first." });
+
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "QC session not found." });
+
+      // Find the matching order_tracking row via transactionId
+      let trackedOrder: Awaited<ReturnType<typeof getTrackedOrders>>[number] | undefined;
+      if (session.transactionId) {
+        const orders = await getTrackedOrders();
+        trackedOrder = orders.find((o) => o.extensivOrderId === session.transactionId);
+      }
+
+      // Calculate total pallet weight from qcPallets
+      const pallets = await getQcPallets(input.sessionId);
+      const activePallets = pallets.filter((p) => !p.deletedAt);
+      const palletCount = input.palletCountOverride ?? activePallets.length;
+      let totalWeightLb = input.totalWeightLbOverride;
+      if (!totalWeightLb) {
+        totalWeightLb = activePallets.reduce((sum, p) => {
+          const weight = p.weightOverrideLb ? parseFloat(String(p.weightOverrideLb)) :
+            p.calculatedWeightLb ? parseFloat(String(p.calculatedWeightLb)) : 0;
+          const tare = p.palletTareWeightLb ? parseFloat(String(p.palletTareWeightLb)) : 30;
+          return sum + weight + tare;
+        }, 0);
+      }
+
+      // Build Shipwell client
+      const client = createShipwellClient({
+        email: config.email,
+        password: config.password,
+        environment: config.environment as "sandbox" | "production",
+      });
+
+      // Origin: GD warehouse (facility name)
+      const facilityName = session.facilityName ?? trackedOrder?.facilityName ?? "Go Direct Warehouse";
+      const originAddress = {
+        address_1: facilityName,
+        city: "Warehouse",
+        country: "CA",
+      };
+
+      // Destination: ship-to from session or order_tracking
+      const shipToName = trackedOrder?.shipToName ?? session.destinationAddress ?? "Unknown";
+      const shipToCity = trackedOrder?.shipToCity ?? "Unknown";
+      const destinationAddress = {
+        address_1: shipToName,
+        city: shipToCity,
+        country: "CA",
+      };
+
+      const orderNumber = session.referenceNumber ?? String(session.transactionId ?? session.id);
+      const customerName = session.customerName ?? trackedOrder?.clientName ?? undefined;
+
+      const po = await client.createPurchaseOrder({
+        order_number: orderNumber,
+        purchase_order_number: session.poNumber ?? trackedOrder?.poNum ?? undefined,
+        origin_address: originAddress,
+        destination_address: destinationAddress,
+        customer_name: customerName,
+        source: "SHIPWELL_WEB",
+        custom_data: {
+          gd_qc_session_id: session.id,
+          gd_reference_num: session.referenceNumber,
+          gd_pallet_count: palletCount,
+          gd_total_weight_lb: totalWeightLb,
+          gd_facility: facilityName,
+        },
+      });
+
+      const poUrl = client.getPoUrl(po.id);
+
+      // Mark order_tracking row as sent to Shipwell (if we have a tracked order)
+      if (trackedOrder) {
+        await markOrderSentToShipwell(trackedOrder.extensivOrderId, po.id, poUrl);
+        // Write unified shipment record
+        try {
+          const ltlShipmentId = await createShipment({
+            platform: "shipwell",
+            mode: "ltl",
+            extensivOrderId: trackedOrder.extensivOrderId,
+            orderNumber: session.referenceNumber ?? undefined,
+            customerId: trackedOrder.clientId ?? undefined,
+            customerName: customerName,
+            facilityName: facilityName,
+            shipToName: trackedOrder.shipToName ?? undefined,
+            shipToCity: trackedOrder.shipToCity ?? undefined,
+            shipwellOrderId: po.id,
+            status: "booked",
+            bookedByUserId: String(ctx.user.id),
+            bookedByName: ctx.user.name ?? undefined,
+          });
+          void pushShipmentToClearSight(ltlShipmentId, "shipment.created");
+        } catch (err) {
+          console.error("[QcShipwell] Failed to write unified shipment record:", err);
+        }
+      }
+
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "qcScanner.sendToShipwell",
+        entityType: "qc_scan_session",
+        entityId: String(session.id),
+        details: { shipwellOrderId: po.id, poUrl, palletCount, totalWeightLb, environment: config.environment },
+      });
+
+      return { success: true, shipwellOrderId: po.id, poUrl };
+    }),
 });
 // Pallet Scanner router (Shipping section))
 const palletScannerRouter = router({
@@ -7785,6 +7905,8 @@ const shippingDashboardRouter = router({
       facilityId: z.number().optional(),
       configId: z.number().optional(),
       palletCount: z.number().int().min(1).optional(),
+      /** Extensiv clientId of the order being assigned — lanes with a DIFFERENT client's pallets are excluded */
+      clientId: z.number().optional(),
     }))
     .query(async ({ input }) => {
       const LANES = Array.from({ length: 26 }, (_, i) => i + 1);
@@ -7808,15 +7930,23 @@ const shippingDashboardRouter = router({
         ? allOrders.filter((o) => o.facilityId === resolvedFacilityId)
         : allOrders;
       const occupied = new Set<string>();
+      // Track which clientId owns each lane (first occupied cell wins)
+      const laneClientId = new Map<number, number>();
       for (const o of facilityOrders) {
         const parsed = parseLoc(o.outboundLocation);
-        if (parsed) occupied.add(`${parsed.lane}-${parsed.position}`);
+        if (parsed) {
+          occupied.add(`${parsed.lane}-${parsed.position}`);
+          if (!laneClientId.has(parsed.lane)) laneClientId.set(parsed.lane, o.clientId);
+        }
       }
       // Find all lanes that have a contiguous block of >= palletCount free positions
       const palletCount = input.palletCount ?? 1;
       type DockBlock = { lane: number; position: string; positions: string[]; label: string };
       const qualifyingBlocks: DockBlock[] = [];
       for (const lane of LANES) {
+        // Skip lanes claimed by a different client (one order per lane rule)
+        const laneOwner = laneClientId.get(lane);
+        if (input.clientId && laneOwner !== undefined && laneOwner !== input.clientId) continue;
         let runStart = -1; let runLen = 0;
         for (let i = 0; i < POSITIONS.length; i++) {
           const pos = POSITIONS[i];

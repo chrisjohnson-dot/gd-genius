@@ -436,7 +436,7 @@ function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo }: {
   const [collapsed, setCollapsed] = useState(false);
   const totalPallets = orders.reduce((s, o) => s + (o.palletCount ?? 0), 0);
   const maxDays = Math.max(...orders.map((o) => daysInOutbound(o.shipReadyAt)));
-  const urgentCount = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 3 && o.displayStatus !== "shipped").length;
+  const urgentCount = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 4 && o.displayStatus !== "shipped").length;
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
@@ -454,7 +454,7 @@ function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo }: {
           {urgentCount > 0 && (
             <Badge variant="outline" className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-[10px] px-1.5 py-0">{urgentCount} aging</Badge>
           )}
-          {maxDays >= 5 && (
+          {maxDays >= 8 && (
             <Badge variant="outline" className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0">{maxDays}d max</Badge>
           )}
         </div>
@@ -681,8 +681,8 @@ export default function ShippingDashboard() {
 
   const totalOrders = orders.filter((o) => o.displayStatus !== "shipped").length;
   const totalPallets = orders.filter((o) => o.displayStatus !== "shipped").reduce((s, o) => s + (o.palletCount ?? 0), 0);
-  const agingOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 3 && o.displayStatus !== "shipped").length;
-  const criticalOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 5 && o.displayStatus !== "shipped").length;
+  const agingOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 4 && o.displayStatus !== "shipped").length;
+  const criticalOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 8 && o.displayStatus !== "shipped").length;
   const noLocation = orders.filter((o) => !o.outboundLocation && o.displayStatus !== "shipped").length;
 
   return (
@@ -756,8 +756,8 @@ export default function ShippingDashboard() {
         {([
           { label: "Orders Ready",       value: totalOrders,    Icon: Ship,          color: "text-blue-600 dark:text-blue-400" },
           { label: "Total Pallets",      value: totalPallets,   Icon: Package,       color: "text-purple-600 dark:text-purple-400" },
-          { label: "Aging (3+ days)",    value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-orange-600 dark:text-orange-400" : "text-emerald-600 dark:text-emerald-400" },
-          { label: "Critical (5+ days)", value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-600 dark:text-red-400"    : "text-emerald-600 dark:text-emerald-400" },
+          { label: "Aging (4+ days)",    value: agingOrders,    Icon: Timer,         color: agingOrders   > 0 ? "text-yellow-600 dark:text-yellow-400" : "text-emerald-600 dark:text-emerald-400" },
+          { label: "Critical (8+ days)", value: criticalOrders, Icon: AlertTriangle, color: criticalOrders > 0 ? "text-red-600 dark:text-red-400"    : "text-emerald-600 dark:text-emerald-400" },
         ] as const).map(({ label, value, Icon, color }) => (
           <div key={label} className={cn("rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-3", demoMode && "border-amber-500/20")}>
             <Icon className={cn("h-8 w-8 shrink-0 opacity-80", color)} />

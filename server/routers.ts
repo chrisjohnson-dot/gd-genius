@@ -253,7 +253,7 @@ import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap,
   fetchItemCaseAmountMap, fetchItemCartonWeightMap, fetchInventoryByMuLabel, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
-  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus } from "./extensiv/api";
+  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus, clearItemDimsCache } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -4582,23 +4582,42 @@ const qcScannerRouter = router({
       const skusNeedingDims = Array.from(new Set(
         items.filter(i => !cartonWeightBySkuFromDB.has(i.sku)).map(i => i.sku)
       ));
+      // dimsMap stores per-unit weight (lbs) for each SKU
       const dimsMap = new Map<string, number>();
       if (skusNeedingDims.length > 0) {
         const config = await getExtensivConfigById(session.warehouseId);
         if (config) {
+          // Clear the cache so we always get fresh weight data from Extensiv when Calculate is clicked
+          clearItemDimsCache(config.tplGuid, session.customerId ?? 0);
           const dims = await fetchItemDimsBySkus(config, session.customerId ?? 0, skusNeedingDims);
           for (const d of dims) {
-            if (d.weightLb) dimsMap.set(d.sku, d.weightLb);
+            // Priority 1: explicit per-unit weight from imperial.weight
+            if (d.weightLb) {
+              dimsMap.set(d.sku, d.weightLb);
+            // Priority 2: derive per-unit weight from carton weight / units per carton
+            } else if (d.cartonWeightLb && d.unitsPerCarton && d.unitsPerCarton > 0) {
+              dimsMap.set(d.sku, d.cartonWeightLb / d.unitsPerCarton);
+            }
           }
         }
       }
 
-      // Calculate total weight: sum(cartonWeightLb * qty) per SKU
+      // Calculate total weight: sum(perUnitWeightLb * qty) per SKU
       let totalLb = 0;
       for (const item of items) {
-        const w = cartonWeightBySkuFromDB.get(item.sku) ?? dimsMap.get(item.sku);
-        if (w) {
-          totalLb += w * item.qty;
+        // cartonWeightBySkuFromDB stores carton weight (from DB session items seeded during Extensiv load)
+        // For those, we need to divide by caseAmount — but since we don't have caseAmount here,
+        // prefer the per-unit weight from dimsMap which is already normalized to per-unit.
+        const perUnitW = dimsMap.get(item.sku);
+        if (perUnitW) {
+          totalLb += perUnitW * item.qty;
+        } else {
+          // Fallback: use cartonWeightLb from DB (stored as per-carton weight, not per-unit)
+          // This path is only hit if fetchItemDimsBySkus returned nothing for this SKU
+          const cartonW = cartonWeightBySkuFromDB.get(item.sku);
+          if (cartonW) {
+            totalLb += cartonW * item.qty;
+          }
         }
       }
 

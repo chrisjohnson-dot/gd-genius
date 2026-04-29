@@ -121,7 +121,12 @@ export interface ExtensivItemDims {
   lengthIn: number | null;
   widthIn: number | null;
   heightIn: number | null;
+  /** Per-unit weight from base item imperial.weight (lbs) */
   weightLb: number | null;
+  /** Carton/packaging unit weight in lbs (from packageUnit.weightLbs) */
+  cartonWeightLb: number | null;
+  /** Number of units per carton (from packageUnit.inventoryUnitsPerUnit) */
+  unitsPerCarton: number | null;
 }
 
 // Raw item shape from Extensiv /customers/{id}/items — includes options.imperial for dims
@@ -975,12 +980,22 @@ export async function fetchItemDimsBySkus(
       for (const item of items) {
         if (!item.sku) continue;
         const imp = item.options?.imperial;
+        const pkg = item.options?.packageUnit;
+        const cartonWeightLb = pkg?.weightLbs ?? null;
+        const unitsPerCarton = pkg?.inventoryUnitsPerUnit ?? pkg?.qty ?? null;
+        // Per-unit weight: prefer base imperial.weight; if missing, derive from carton weight / units per carton
+        let weightLb: number | null = imp?.weight ?? null;
+        if (!weightLb && cartonWeightLb && unitsPerCarton && unitsPerCarton > 0) {
+          weightLb = cartonWeightLb / unitsPerCarton;
+        }
         dimsMap.set(item.sku, {
           sku: item.sku,
           lengthIn: imp?.length ?? null,
           widthIn: imp?.width ?? null,
           heightIn: imp?.height ?? null,
-          weightLb: imp?.weight ?? null,
+          weightLb,
+          cartonWeightLb,
+          unitsPerCarton,
         });
       }
 
@@ -992,7 +1007,7 @@ export async function fetchItemDimsBySkus(
   }
 
   const dimsMap = _itemDimsCache.get(cacheKey)!.data;
-  return skus.map((sku) => dimsMap.get(sku) ?? { sku, lengthIn: null, widthIn: null, heightIn: null, weightLb: null });
+  return skus.map((sku) => dimsMap.get(sku) ?? { sku, lengthIn: null, widthIn: null, heightIn: null, weightLb: null, cartonWeightLb: null, unitsPerCarton: null });
 }
 
 /**

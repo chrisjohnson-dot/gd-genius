@@ -642,6 +642,8 @@ export default function ShippingDashboard() {
   const [tierFilter, setTierFilter] = useState<"green" | "yellow" | "red" | null>(null);
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
+  // Reset filters/selection whenever global warehouse changes
+  useEffect(() => { setSearch(""); setTierFilter(null); setSelectedOrder(null); setEditOrder(null); }, [globalFacilityId]);
 
   // In demo mode use synthetic data, otherwise use live data; apply global facility filter
   const orders: OutboundOrder[] = useMemo(() => {

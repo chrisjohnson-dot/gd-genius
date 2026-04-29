@@ -1103,7 +1103,8 @@ export default function SlaPerformance() {
   const { data: facilityThresholds = [] } = trpc.sla.listFacilityThresholds.useQuery();
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-
+  // Reset drill-down whenever global warehouse changes
+  useEffect(() => { setSelectedFacilityId(null); setSelectedOrderId(null); }, [globalFacilityId]);
   // Snapshot
   const [selectedDate, setSelectedDate] = useState<string>(todayStr());
   const [clientFilter, setClientFilter] = useState<string>("all");

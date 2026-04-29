@@ -622,7 +622,8 @@ export default function WorkloadPage() {
   const [shiftEnd, setShiftEnd] = useState<string>(defaultShiftEnd);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-
+  // Reset drill-down whenever global warehouse changes
+  useEffect(() => { setSelectedWarehouse(null); }, [globalFacilityName]);
   // Tick every minute to keep countdown live
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000);

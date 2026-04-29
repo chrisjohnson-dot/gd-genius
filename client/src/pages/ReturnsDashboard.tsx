@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 
 type ReturnsSession = {
   id: number;
@@ -82,6 +83,7 @@ function StatCard({
 
 export default function ReturnsDashboard() {
   const utils = trpc.useUtils();
+  const { selectedFacilityName: globalFacilityName } = useWarehouse();
   const { data: stats, isLoading } = trpc.returns.dashboardStats.useQuery();
 
   const pushToClearSight = trpc.returns.pushSessionToClearSight.useMutation({
@@ -117,6 +119,13 @@ export default function ReturnsDashboard() {
     recent: [],
   };
 
+  // Filter recent sessions by global warehouse if one is selected
+  const filteredRecent = globalFacilityName
+    ? (s.recent as ReturnsSession[]).filter((session) =>
+        session.warehouseName?.toLowerCase().includes(globalFacilityName.toLowerCase()) ||
+        globalFacilityName.toLowerCase().includes(session.warehouseName?.toLowerCase() ?? "")
+      )
+    : (s.recent as ReturnsSession[]);
   const conditionTotal = s.conditionBreakdown.new + s.conditionBreakdown.good + s.conditionBreakdown.damaged + s.conditionBreakdown.unsellable;
 
   return (
@@ -211,7 +220,7 @@ export default function ReturnsDashboard() {
             </Link>
           </div>
 
-          {(s.recent as ReturnsSession[]).length === 0 ? (
+          {filteredRecent.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <TrendingDown className="h-10 w-10 mb-3 opacity-20" />
               <p className="text-sm font-medium">No return sessions yet</p>
@@ -248,7 +257,7 @@ export default function ReturnsDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(s.recent as ReturnsSession[]).map((session) => {
+                  {filteredRecent.map((session) => {
                     const isSent = session.pushStatus === "sent";
                     const isFailed = session.pushStatus === "failed";
                     const isPushingThis = pushToClearSight.isPending && pushToClearSight.variables?.sessionId === session.id;

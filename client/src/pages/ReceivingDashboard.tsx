@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useWarehouse } from "@/contexts/WarehouseContext";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -1164,6 +1164,8 @@ export default function ReceivingDashboard() {
 
   const [selectedReceiver, setSelectedReceiver] = useState<Receiver | null>(null);
   const [globalSearch, setGlobalSearch] = useState("");
+  // Reset selection and search whenever global warehouse changes
+  useEffect(() => { setSelectedReceiver(null); setGlobalSearch(""); }, [globalFacilityId]);
 
   const allReceivers: Receiver[] = (listData?.receivers ?? []) as Receiver[];
 

@@ -497,6 +497,8 @@ export default function DockManager() {
   const [tierFilter, setTierFilter] = useState<"green" | "yellow" | "red" | null>(null);
   const [findSpaceOrder, setFindSpaceOrder] = useState<OutboundOrder | null>(null);
   const [assignDockOrder, setAssignDockOrder] = useState<OutboundOrder | null>(null);
+  // Reset local filters/selection whenever global warehouse changes
+  useEffect(() => { setSelectedFacility("__all__"); setSearch(""); setTierFilter(null); setFindSpaceOrder(null); setAssignDockOrder(null); }, [globalFacilityId]);
   const utils = trpc.useUtils();
 
   const { data: rawOrders = [], isLoading } = trpc.shippingDashboard.listOutbound.useQuery(undefined, {

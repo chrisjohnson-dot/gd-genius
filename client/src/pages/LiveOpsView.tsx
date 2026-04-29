@@ -60,6 +60,8 @@ export default function LiveOpsView() {
   const { selectedFacilityName: globalFacilityName } = useWarehouse();
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>("__all__");
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  // Reset local dropdown whenever global warehouse changes
+  useEffect(() => { setSelectedWarehouse("__all__"); }, [globalFacilityName]);
 
   // Global warehouse selector takes precedence over local dropdown
   const warehouseParam = globalFacilityName ?? (selectedWarehouse === "__all__" ? undefined : selectedWarehouse);

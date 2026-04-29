@@ -829,6 +829,25 @@ export default function ProcessReturns() {
       setConfigId(primaryConfigId);
     }
   }, [primaryConfigId, globalFacilityId, configId]);
+  // Full reset whenever global warehouse changes
+  useEffect(() => {
+    setConfigId(null);
+    setClientId(null);
+    setClientName("");
+    setSessionId(null);
+    setRefNumber("");
+    setShowRefDialog(false);
+    if (globalFacilityId && globalFacilityName) {
+      setFacilityId(globalFacilityId);
+      setWarehouseName(globalFacilityName);
+      setStep(2);
+    } else {
+      setFacilityId(null);
+      setWarehouseName("");
+      setStep(1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalFacilityId]);
   // Load existing session if we have one
   const { data: sessionData, refetch: refetchSession } = trpc.returns.getSession.useQuery(
     { id: sessionId! },

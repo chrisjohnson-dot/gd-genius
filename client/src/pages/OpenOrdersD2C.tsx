@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useWarehouse } from "@/contexts/WarehouseContext";
 import { Link } from "wouter";
 import { toast } from "sonner";
@@ -2085,10 +2085,9 @@ export default function OpenOrdersD2C() {
   const { selectedFacilityId: globalFacilityId } = useWarehouse();
   const { data, isLoading, refetch } =
     trpc.pickSchedule.listByChannel.useQuery({ channel: "d2c", facilityId: globalFacilityId ?? undefined });
-  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(
-    null
-  );
-
+  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
+  // Reset drill-down whenever global warehouse changes
+  useEffect(() => { setSelectedFacilityId(null); }, [globalFacilityId]);
   const syncNow = trpc.pickSchedule.syncNow.useMutation({
     onSuccess: (res) => {
       toast.success(res.message);

@@ -1563,6 +1563,8 @@ export default function SlaTracker() {
   });
   const { data: facilityThresholds = [] } = trpc.sla.listFacilityThresholds.useQuery();
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
+  // Reset drill-down whenever global warehouse changes
+  useEffect(() => { setSelectedFacilityId(null); }, [globalFacilityId]);
   // Group orders by facility — apply global warehouse filter
   const facilityGroups = useMemo(() => {
     const map = new Map<number, { facilityId: number; facilityName: string; orders: SlaOrder[] }>();

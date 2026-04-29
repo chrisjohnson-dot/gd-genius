@@ -857,6 +857,89 @@ const _appRouter = router({
         return results;
       }),
 
+    // ── DB-backed order queries (fast — reads from local order_tracking cache) ──────────────────
+    /**
+     * Returns open, unallocated orders for a customer+facility from the local DB cache.
+     * Instant response — no Extensiv API call. Data is at most ~1 hour stale (hourly sync).
+     */
+    openOrdersFromDb: protectedProcedure
+      .input(z.object({ customerId: z.number(), facilityId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const { orderTracking } = await import("../drizzle/schema.js");
+        const { and, eq, or, isNull } = await import("drizzle-orm");
+        const rows = await db
+          .select()
+          .from(orderTracking)
+          .where(
+            and(
+              eq(orderTracking.clientId, input.customerId),
+              eq(orderTracking.facilityId, input.facilityId),
+              or(
+                eq(orderTracking.lifecycleStatus, "unallocated"),
+                isNull(orderTracking.lifecycleStatus)
+              )
+            )
+          )
+          .orderBy(orderTracking.creationDate);
+        return rows
+          .filter((r) => (r.extensivStatus ?? 0) <= 2)
+          .map((r) => ({
+            readOnly: {
+              orderId: r.extensivOrderId,
+              status: r.extensivStatus ?? 0,
+              isClosed: false,
+              fullyAllocated: false,
+              creationDate: r.creationDate ?? null,
+              facilityIdentifier: { id: r.facilityId, name: r.facilityName ?? "" },
+            },
+            referenceNum: r.referenceNum ?? "",
+            poNum: r.poNum ?? null,
+            shipTo: {
+              companyName: r.shipToName ?? "",
+              city: r.shipToCity ?? "",
+              state: "",
+            },
+            // Use skuCount as line count proxy; totalPieces for piece count
+            orderItems: Array.from({ length: r.skuCount ?? 0 }, () => ({ qty: 0 })),
+            _fromDb: true as const,
+            _dbTotalPieces: r.totalPieces ?? 0,
+            _dbSkuCount: r.skuCount ?? 0,
+          }));
+      }),
+    /**
+     * Returns unallocated order counts per customer for a facility from the local DB cache.
+     * Instant response — no Extensiv API call.
+     */
+    openOrderCountsFromDb: protectedProcedure
+      .input(z.object({ customerIds: z.array(z.number()), facilityId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return input.customerIds.map((id) => ({ customerId: id, count: 0 }));
+        if (input.customerIds.length === 0) return [];
+        const { orderTracking } = await import("../drizzle/schema.js");
+        const { and, eq, inArray, or, isNull, sql: drizzleSql } = await import("drizzle-orm");
+        const rows = await db
+          .select({
+            clientId: orderTracking.clientId,
+            count: drizzleSql<number>`COUNT(*)`
+          })
+          .from(orderTracking)
+          .where(
+            and(
+              inArray(orderTracking.clientId, input.customerIds),
+              eq(orderTracking.facilityId, input.facilityId),
+              or(
+                eq(orderTracking.lifecycleStatus, "unallocated"),
+                isNull(orderTracking.lifecycleStatus)
+              )
+            )
+          )
+          .groupBy(orderTracking.clientId);
+        const countMap = new Map(rows.map((r) => [r.clientId, Number(r.count)]));
+        return input.customerIds.map((id) => ({ customerId: id, count: countMap.get(id) ?? 0 }));
+      }),
     // Debug: returns raw order data for a customer/facility so we can see what status/flags each order has
     debugOrders: protectedProcedure
       .input(z.object({ configId: z.number(), customerId: z.number(), facilityId: z.number() }))

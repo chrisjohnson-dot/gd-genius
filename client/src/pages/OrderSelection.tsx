@@ -16,6 +16,7 @@ import {
   Loader2,
   PackageSearch,
   Play,
+  RefreshCw,
   Search,
   User,
   Users,
@@ -73,8 +74,9 @@ function CustomerOrdersPanel({
 }) {
   const [open, setOpen] = useState(true);
 
-  const { data: orders, isLoading, error: ordersError } = trpc.extensiv.openOrders.useQuery(
-    { configId, customerId: customer.id, facilityId },
+  // Use DB-backed query for instant loading (data synced hourly in background)
+  const { data: orders, isLoading, error: ordersError } = trpc.extensiv.openOrdersFromDb.useQuery(
+    { customerId: customer.id, facilityId },
     { enabled: true, retry: 1 }
   );
 
@@ -241,8 +243,10 @@ function CustomerOrdersPanel({
                           const extensivOrderId = order.readOnly.orderId;
                           const customerRefNum = order.referenceNum;
                           const isSelected = selectedOrders.has(extensivOrderId);
-                          const lineCount = order.orderItems?.length ?? 0;
-                          const totalPieces = order.orderItems?.reduce((sum: number, item: { qty?: number }) => sum + (item.qty ?? 0), 0) ?? 0;
+                          // For DB-backed orders, use stored skuCount/totalPieces directly
+                          const dbOrder = order as unknown as { _fromDb?: boolean; _dbTotalPieces?: number; _dbSkuCount?: number };
+                          const lineCount = dbOrder._fromDb ? (dbOrder._dbSkuCount ?? 0) : (order.orderItems?.length ?? 0);
+                          const totalPieces = dbOrder._fromDb ? (dbOrder._dbTotalPieces ?? 0) : (order.orderItems?.reduce((sum: number, item: { qty?: number }) => sum + (item.qty ?? 0), 0) ?? 0);
                           const shipTo = (order as unknown as { shipTo?: { companyName?: string; name?: string; city?: string; state?: string } }).shipTo;
                           const shipToName = shipTo?.companyName ?? shipTo?.name ?? "";
                           const city = shipTo?.city ?? "";
@@ -524,11 +528,26 @@ export default function OrderSelection() {
   );
 
   // Fetch open order counts for all customers at the clients step (shown in brackets next to each name)
+  // Uses DB-backed query for instant loading — no Extensiv API call needed
   const customerIds = useMemo(() => (customers ?? []).map((c) => c.id), [customers]);
-  const { data: orderCountsRaw, isLoading: orderCountsLoading } = trpc.extensiv.openOrderCounts.useQuery(
-    { configId: configId!, customerIds, facilityId: selectedFacility?.id ?? 0 },
-    { enabled: !!configId && !!selectedFacility && step === "clients" && customerIds.length > 0 }
+  const { data: orderCountsRaw, isLoading: orderCountsLoading } = trpc.extensiv.openOrderCountsFromDb.useQuery(
+    { customerIds, facilityId: selectedFacility?.id ?? 0 },
+    { enabled: !!selectedFacility && step === "clients" && customerIds.length > 0 }
   );
+
+  // Sync mutation — triggers a live Extensiv pull when user wants fresh data
+  const utils = trpc.useUtils();
+  const syncMutation = trpc.pickSchedule.syncNow.useMutation({
+    onSuccess: () => {
+      toast.success("Sync started — orders will refresh in a moment");
+      // Invalidate DB-backed queries after a short delay to pick up new data
+      setTimeout(() => {
+        utils.extensiv.openOrdersFromDb.invalidate();
+        utils.extensiv.openOrderCountsFromDb.invalidate();
+      }, 5000);
+    },
+    onError: (e) => toast.error(`Sync failed: ${e.message}`),
+  });
   const orderCountMap = useMemo(() => {
     const m = new Map<number, number>();
     (orderCountsRaw ?? []).forEach(({ customerId, count }) => m.set(customerId, count));
@@ -744,17 +763,30 @@ export default function OrderSelection() {
             </p>
           </div>
           {step === "orders" && (
-            <Button
-              onClick={handleRunAllocation}
-              disabled={selectedOrders.size === 0 || proposeMutation.isPending}
-              className="flex items-center gap-2"
-            >
-              {proposeMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
-              ) : (
-                <><Play className="h-4 w-4" /> Run Allocation ({selectedOrders.size})</>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                className="flex items-center gap-1.5 text-xs"
+                title="Pull latest orders from Extensiv"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                {syncMutation.isPending ? "Syncing..." : "Refresh"}
+              </Button>
+              <Button
+                onClick={handleRunAllocation}
+                disabled={selectedOrders.size === 0 || proposeMutation.isPending}
+                className="flex items-center gap-2"
+              >
+                {proposeMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
+                ) : (
+                  <><Play className="h-4 w-4" /> Run Allocation ({selectedOrders.size})</>
+                )}
+              </Button>
+            </div>
           )}
         </div>
 
@@ -862,14 +894,27 @@ export default function OrderSelection() {
                   </span>
                 )}
               </h2>
-              <Button
-                onClick={handleProceedToOrders}
-                disabled={selectedClientIds.size === 0}
-                className="flex items-center gap-2"
-              >
-                Next: View Orders
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => syncMutation.mutate()}
+                  disabled={syncMutation.isPending}
+                  className="flex items-center gap-1.5 text-xs"
+                  title="Pull latest orders from Extensiv"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                  {syncMutation.isPending ? "Syncing..." : "Refresh"}
+                </Button>
+                <Button
+                  onClick={handleProceedToOrders}
+                  disabled={selectedClientIds.size === 0}
+                  className="flex items-center gap-2"
+                >
+                  Next: View Orders
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {customersLoading ? (

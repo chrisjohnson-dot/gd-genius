@@ -309,6 +309,11 @@ export default function CustomerShippingRules() {
                             Max {r.maxTransitDays}d transit
                           </Badge>
                         )}
+                        {r.defaultFreightClass && (
+                          <Badge variant="outline" className="text-xs gap-1 border-amber-400 text-amber-600">
+                            Class {r.defaultFreightClass}
+                          </Badge>
+                        )}
                       </div>
                       {excluded.length > 0 && (
                         <p className="text-xs text-muted-foreground">

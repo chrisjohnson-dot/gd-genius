@@ -683,6 +683,22 @@ export default function OrderSelection() {
     });
   };
 
+  // Reset wizard whenever the global warehouse selection changes
+  useEffect(() => {
+    if (globalFacilityId && globalFacilityName) {
+      setSelectedFacility({ id: globalFacilityId, name: globalFacilityName });
+      setSelectedClientIds(new Set());
+      setSelectedOrders(new Map());
+      setStep("clients");
+    } else if (!globalFacilityId) {
+      // Global warehouse was cleared — go back to warehouse picker
+      setSelectedFacility(null);
+      setSelectedClientIds(new Set());
+      setSelectedOrders(new Map());
+      setStep("warehouse");
+    }
+  }, [globalFacilityId, globalFacilityName]);
+
   const handleSelectFacility = (facility: { id: number; name: string }) => {
     // Restore last-used clients for this facility
     const last = loadLastUsed();

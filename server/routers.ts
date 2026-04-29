@@ -4838,7 +4838,12 @@ const qcScannerRouter = router({
       if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found" });
 
       // 2. Look up the MU in Extensiv
-      const muRecords = await fetchInventoryByMuLabel(config, input.muLabel);
+      // Pass customerId and facilityId so the function can fall back to client-side filtering
+      // if the Extensiv stockdetails endpoint doesn't support muLabel RQL filtering
+      const muRecords = await fetchInventoryByMuLabel(config, input.muLabel, {
+        customerId: session.customerId ?? undefined,
+        facilityId: session.facilityId ?? undefined,
+      });
       if (!muRecords.length) {
         return { notFound: true, muLabel: input.muLabel, palletId: input.palletId, palletNumber: null, muItems: [], nextPalletId: null, nextPalletNumber: null };
       }

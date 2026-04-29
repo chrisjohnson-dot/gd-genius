@@ -103,6 +103,7 @@ export interface ExtensivInventoryRecord {
     nameKey?: { name: string; facilityIdentifier?: { name: string; id: number } };
   };
   palletIdentifier?: { id: number; nameKey?: { name: string } };
+  muLabel?: string;
 }
 
 export interface ExtensivItemDescription {
@@ -593,6 +594,7 @@ function normalizeInventoryRecord(raw: Record<string, unknown>): ExtensivInvento
     receivedDate: get<string>(raw, "receivedDate"),
     locationIdentifier,
     palletIdentifier,
+    muLabel: get<string>(raw, "muLabel"),
   };
 }
 
@@ -713,19 +715,62 @@ export async function fetchInventory(
  */
 export async function fetchInventoryByMuLabel(
   config: ExtensivClientConfig,
-  muLabel: string
+  muLabel: string,
+  opts?: { customerId?: number; facilityId?: number }
 ): Promise<ExtensivInventoryRecord[]> {
   const client = createExtensivClient(config);
   try {
+    // Attempt 1: RQL filter by muLabel directly (most efficient — one record per MU)
     const records = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
       rql: `muLabel==${encodeURIComponent(muLabel)}`,
     });
-    if (records.length > 0) return records;
-    // Fallback: try without encoding in case the API expects raw value
+    if (records.length > 0) {
+      console.log(`[fetchInventoryByMuLabel] RQL match for muLabel=${muLabel}: ${records.length} records`);
+      return records;
+    }
+    // Attempt 2: RQL without encoding
     const records2 = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
       rql: `muLabel==${muLabel}`,
     });
-    return records2;
+    if (records2.length > 0) {
+      console.log(`[fetchInventoryByMuLabel] RQL (raw) match for muLabel=${muLabel}: ${records2.length} records`);
+      return records2;
+    }
+    // Attempt 3: The /inventory/stockdetails endpoint may not support muLabel RQL filtering.
+    // Fall back to fetching all inventory for the customer+facility and filtering client-side.
+    // This is slower but reliable.
+    if (opts?.customerId && opts?.facilityId) {
+      console.warn(`[fetchInventoryByMuLabel] RQL returned 0 records for muLabel=${muLabel}, falling back to client-side filter for customer=${opts.customerId} facility=${opts.facilityId}`);
+      // Try RQL first, then query params
+      let allRecords = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+        rql: `customerIdentifier.id==${opts.customerId};facilityIdentifier.id==${opts.facilityId}`,
+      });
+      if (allRecords.length === 0) {
+        allRecords = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+          customerid: opts.customerId,
+          facilityid: opts.facilityId,
+        });
+      }
+      if (allRecords.length > 0) {
+        // Filter client-side by muLabel (normalizeInventoryRecord now extracts muLabel from raw)
+        const filtered = allRecords.filter((r) => r.muLabel === muLabel);
+        if (filtered.length > 0) {
+          console.log(`[fetchInventoryByMuLabel] Client-side filter matched ${filtered.length} records for muLabel=${muLabel} out of ${allRecords.length} total`);
+          return filtered;
+        }
+        console.warn(`[fetchInventoryByMuLabel] Client-side filter found 0 matches for muLabel=${muLabel} out of ${allRecords.length} records`);
+      }
+    }
+    // Attempt 4: Use the muLabel as a pallet name — some Extensiv configs store MU numbers as pallet names
+    const records3 = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+      rql: `palletIdentifier.nameKey.name==${encodeURIComponent(muLabel)}`,
+    });
+    if (records3.length > 0) {
+      console.log(`[fetchInventoryByMuLabel] Pallet name match for muLabel=${muLabel}: ${records3.length} records`);
+      return records3;
+    }
+    console.warn(`[fetchInventoryByMuLabel] All attempts returned 0 records for muLabel=${muLabel}`);
+    return [];
   } catch (err) {
     console.warn(`[fetchInventoryByMuLabel] Failed for muLabel=${muLabel}:`, err);
     return [];

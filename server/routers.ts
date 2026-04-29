@@ -4569,55 +4569,24 @@ const qcScannerRouter = router({
       const session = await getQcSessionById(input.sessionId);
       if (!session?.warehouseId) return { weightLb: null };
 
-      // Build a map of SKU → cartonWeightLb from the session items (populated during Extensiv seeding)
-      const sessionItems = await getQcScanItems(input.sessionId);
-      const cartonWeightBySkuFromDB = new Map<string, number>();
-      for (const si of sessionItems) {
-        if (si.cartonWeightLb != null) {
-          cartonWeightBySkuFromDB.set(si.sku, parseFloat(String(si.cartonWeightLb)));
-        }
-      }
-
-      // For SKUs without a stored cartonWeightLb, fall back to fetchItemDimsBySkus
-      const skusNeedingDims = Array.from(new Set(
-        items.filter(i => !cartonWeightBySkuFromDB.has(i.sku)).map(i => i.sku)
-      ));
-      // dimsMap stores per-unit weight (lbs) for each SKU
-      const dimsMap = new Map<string, number>();
-      if (skusNeedingDims.length > 0) {
-        const config = await getExtensivConfigById(session.warehouseId);
-        if (config) {
-          // Clear the cache so we always get fresh weight data from Extensiv when Calculate is clicked
-          clearItemDimsCache(config.tplGuid, session.customerId ?? 0);
-          const dims = await fetchItemDimsBySkus(config, session.customerId ?? 0, skusNeedingDims);
-          for (const d of dims) {
-            // Priority 1: explicit per-unit weight from imperial.weight
-            if (d.weightLb) {
-              dimsMap.set(d.sku, d.weightLb);
-            // Priority 2: derive per-unit weight from carton weight / units per carton
-            } else if (d.cartonWeightLb && d.unitsPerCarton && d.unitsPerCarton > 0) {
-              dimsMap.set(d.sku, d.cartonWeightLb / d.unitsPerCarton);
-            }
-          }
-        }
-      }
+      // Fetch carton weight and case amount maps directly from Extensiv item master
+      const config = await getExtensivConfigById(session.warehouseId);
+      if (!config) return { weightLb: null };
+      const customerId = session.customerId ?? 0;
+      const [cartonWeightMap, caseAmountMap] = await Promise.all([
+        fetchItemCartonWeightMap(config, customerId),
+        fetchItemCaseAmountMap(config, customerId),
+      ]);
 
       // Calculate total weight: sum(perUnitWeightLb * qty) per SKU
+      // perUnitWeightLb = cartonWeightLb / unitsPerCarton
       let totalLb = 0;
       for (const item of items) {
-        // cartonWeightBySkuFromDB stores carton weight (from DB session items seeded during Extensiv load)
-        // For those, we need to divide by caseAmount — but since we don't have caseAmount here,
-        // prefer the per-unit weight from dimsMap which is already normalized to per-unit.
-        const perUnitW = dimsMap.get(item.sku);
-        if (perUnitW) {
+        const cartonW = cartonWeightMap.get(item.sku);
+        if (cartonW) {
+          const unitsPerCarton = caseAmountMap.get(item.sku) ?? 1;
+          const perUnitW = cartonW / unitsPerCarton;
           totalLb += perUnitW * item.qty;
-        } else {
-          // Fallback: use cartonWeightLb from DB (stored as per-carton weight, not per-unit)
-          // This path is only hit if fetchItemDimsBySkus returned nothing for this SKU
-          const cartonW = cartonWeightBySkuFromDB.get(item.sku);
-          if (cartonW) {
-            totalLb += cartonW * item.qty;
-          }
         }
       }
 

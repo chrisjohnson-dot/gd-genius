@@ -160,6 +160,7 @@ function ItemsTable({
   onAdjust,
   flashSku,
   onRowRef,
+  showCaseBadge,
 }: {
   items: ScanItem[];
   phase: Phase;
@@ -169,6 +170,7 @@ function ItemsTable({
   onAdjust?: (sku: string, delta: number) => void;
   flashSku?: string | null;
   onRowRef?: (sku: string, el: HTMLDivElement | null) => void;
+  showCaseBadge?: boolean;
 }) {
   if (isLoading) {
     return <ItemsTableSkeleton />;
@@ -183,8 +185,11 @@ function ItemsTable({
     );
   }
 
-  // Compact QC view: SKU | Description | Req | − Scanned +
-  const cols = phase === "scanning" ? "100px 1fr 44px 90px" : "100px 1fr 44px 56px";
+  // Compact QC view: SKU | Description | [Case] | Req | − Scanned +
+  const hasCaseAmounts = showCaseBadge && items.some((i) => (i.caseAmount ?? 1) > 1);
+  const cols = phase === "scanning"
+    ? hasCaseAmounts ? "100px 1fr 46px 44px 90px" : "100px 1fr 44px 90px"
+    : hasCaseAmounts ? "100px 1fr 46px 44px 56px" : "100px 1fr 44px 56px";
   return (
     <div className="rounded-lg overflow-hidden border border-border">
       {/* Header */}
@@ -194,6 +199,7 @@ function ItemsTable({
       >
         <span>SKU</span>
         <span>Description</span>
+        {hasCaseAmounts && <span className="text-right">Case</span>}
         <span className="text-right">Req</span>
         <span className="text-right">Scanned</span>
       </div>
@@ -225,7 +231,18 @@ function ItemsTable({
             <div className="text-[11px] text-[#333333] truncate pr-1">
               {item.description ?? "—"}
             </div>
-
+            {/* Case amount badge */}
+            {hasCaseAmounts && (
+              <div className="text-right">
+                {(item.caseAmount ?? 1) > 1 ? (
+                  <span className="inline-block text-[10px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700 tabular-nums">
+                    ×{item.caseAmount}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-gray-400">—</span>
+                )}
+              </div>
+            )}
             {/* Required qty */}
             <div className="text-right text-xs font-semibold text-[#333333]">
               {item.expectedQty}
@@ -1767,6 +1784,7 @@ export default function QcScanner() {
             sessionId={session!.id}
             adjustQty={adjustQty}
             isLoading={fetchFromExtensiv.isPending}
+            showCaseBadge={scanAsCase}
             onAdjust={(sku, delta) => {
               // Mirror + / - adjustments into the active pallet's item list,
               // capped at the item's expectedQty to match server-side enforcement
@@ -1879,6 +1897,19 @@ export default function QcScanner() {
                     </Button>
                   );
                 })()}
+                {/* Refresh Case Qty */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { if (session) refreshCaseAmounts.mutate({ sessionId: session.id }); }}
+                  disabled={refreshCaseAmounts.isPending}
+                  title="Re-fetch case pack quantities from Extensiv for all items in this session"
+                >
+                  {refreshCaseAmounts.isPending
+                    ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                    : <RefreshCw className="w-4 h-4 mr-1" />}
+                  Case Qty
+                </Button>
                 {/* Sound mute toggle */}
                 <Button
                   size="sm"
@@ -2163,6 +2194,13 @@ export default function QcScanner() {
                                   {scanAsMu ? "Import" : "Scan"}
                                 </Button>
                               </form>
+                              {/* Case mode active but no case qty warning */}
+                              {scanAsCase && !items.some((i) => (i.caseAmount ?? 1) > 1) && (
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-amber-50 border border-amber-300 text-amber-800 dark:bg-amber-950/30 dark:border-amber-700 dark:text-amber-400">
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Case mode is on but no case quantities are configured for this customer. Each scan will add ×1.</span>
+                                </div>
+                              )}
                               {/* Admin-only manual quantity entry button */}
                               {isAdmin && (
                                 <Button

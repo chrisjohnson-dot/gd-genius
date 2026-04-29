@@ -55,6 +55,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMemo, useState } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { FileDown, FileText } from "lucide-react";
@@ -2078,8 +2079,9 @@ function SlaBreachSummarySection({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function OpenOrdersD2C() {
+  const { selectedFacilityId: globalFacilityId } = useWarehouse();
   const { data, isLoading, refetch } =
-    trpc.pickSchedule.listByChannel.useQuery({ channel: "d2c" });
+    trpc.pickSchedule.listByChannel.useQuery({ channel: "d2c", facilityId: globalFacilityId ?? undefined });
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(
     null
   );

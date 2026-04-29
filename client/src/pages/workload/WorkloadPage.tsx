@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -616,6 +617,7 @@ function formatCountdown(timeStr: string): string {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function WorkloadPage() {
+  const { selectedFacilityName: globalFacilityName } = useWarehouse();
   const [window, setWindow] = useState<Window>("1h");
   const [shiftEnd, setShiftEnd] = useState<string>(defaultShiftEnd);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
@@ -643,9 +645,12 @@ export default function WorkloadPage() {
     toast.success("Workload data refreshed.");
   }, [refetch]);
 
-  const redCount = (summaries ?? []).filter((s: WarehouseSummary) => s.paceStatus === "red").length;
-  const amberCount = (summaries ?? []).filter((s: WarehouseSummary) => s.paceStatus === "amber").length;
-
+  // Apply global warehouse filter
+  const displaySummaries = (summaries as WarehouseSummary[] | undefined ?? []).filter(
+    (s) => globalFacilityName == null || s.warehouseId === globalFacilityName
+  );
+  const redCount = displaySummaries.filter((s) => s.paceStatus === "red").length;
+  const amberCount = displaySummaries.filter((s) => s.paceStatus === "amber").length;
   if (selectedWarehouse) {
     return (
       <div className="p-4 sm:p-6 max-w-6xl mx-auto">
@@ -722,14 +727,14 @@ export default function WorkloadPage() {
       )}
 
       {/* ── Summary pills ──────────────────────────────────────────────────── */}
-      {(summaries ?? []).length > 0 && (
+      {displaySummaries.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs text-muted-foreground">{(summaries ?? []).length} warehouses</span>
+          <span className="text-xs text-muted-foreground">{displaySummaries.length} warehouses</span>
           {[
-            { status: "green" as PaceStatus, count: (summaries ?? []).filter((s: WarehouseSummary) => s.paceStatus === "green").length, label: "On Track" },
+            { status: "green" as PaceStatus, count: displaySummaries.filter((s) => s.paceStatus === "green").length, label: "On Track" },
             { status: "amber" as PaceStatus, count: amberCount, label: "At Risk" },
             { status: "red" as PaceStatus, count: redCount, label: "Critical" },
-            { status: "no_data" as PaceStatus, count: (summaries ?? []).filter((s: WarehouseSummary) => s.paceStatus === "no_data").length, label: "No Data" },
+            { status: "no_data" as PaceStatus, count: displaySummaries.filter((s) => s.paceStatus === "no_data").length, label: "No Data" },
           ].filter(({ count }) => count > 0).map(({ status, count, label }) => (
             <span key={status} className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${PACE[status].badgeBg}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${PACE[status].dot}`} />
@@ -746,7 +751,7 @@ export default function WorkloadPage() {
             <div key={i} className="h-52 rounded-xl border-2 border-gray-200 bg-gray-50 animate-pulse" />
           ))}
         </div>
-      ) : (summaries ?? []).length === 0 ? (
+      ) : displaySummaries.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
           <Activity className="h-10 w-10 mb-3 opacity-30" />
           <p className="text-base font-medium">No warehouse data yet</p>
@@ -754,7 +759,7 @@ export default function WorkloadPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {(summaries as WarehouseSummary[]).map((summary) => (
+          {displaySummaries.map((summary) => (
             <WarehouseCard
               key={summary.warehouseId}
               summary={summary}

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { trpc } from "@/lib/trpc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -490,6 +491,7 @@ function FindSpaceDialog({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DockManager() {
+  const { selectedFacilityId: globalFacilityId } = useWarehouse();
   const [selectedFacility, setSelectedFacility] = useState<string>("__all__");
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<"green" | "yellow" | "red" | null>(null);
@@ -512,12 +514,17 @@ export default function DockManager() {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [rawOrders]);
 
-  // Filter by facility
+  // Filter by facility — global selector takes precedence, then local dropdown
   const facilityOrders: OutboundOrder[] = useMemo(() => {
-    if (selectedFacility === "__all__") return rawOrders;
-    const fid = parseInt(selectedFacility, 10);
-    return rawOrders.filter((o) => o.facilityId === fid);
-  }, [rawOrders, selectedFacility]);
+    let base = rawOrders;
+    if (globalFacilityId != null) {
+      base = base.filter((o) => o.facilityId === globalFacilityId);
+    } else if (selectedFacility !== "__all__") {
+      const fid = parseInt(selectedFacility, 10);
+      base = base.filter((o) => o.facilityId === fid);
+    }
+    return base;
+  }, [rawOrders, selectedFacility, globalFacilityId]);
 
   // IDs of orders that match the search query OR the tier filter (used for highlighting)
   const matchedIds = useMemo<Set<number>>(() => {

@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import "./index.css";
+import { WarehouseProvider } from "./contexts/WarehouseContext";
 
 // Prevent the browser from auto-scrolling the sidebar (or any overflow container)
 // back to the top when SPA navigation fires a pushState event.
@@ -48,7 +49,9 @@ const trpcClient = trpc.createClient({
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <WarehouseProvider>
+        <App />
+      </WarehouseProvider>
     </QueryClientProvider>
   </trpc.Provider>
 );

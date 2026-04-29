@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -1148,6 +1149,7 @@ function isoDateDaysAgo(days: number) {
 }
 
 export default function ReceivingDashboard() {
+  const { selectedFacilityId: globalFacilityId } = useWarehouse();
   const { data: configs } = trpc.config.list.useQuery();
   const [configId, setConfigId] = useState<number | null>(null);
   const activeConfigId = configId ?? (configs?.[0]?.id ?? null);
@@ -1185,10 +1187,11 @@ export default function ReceivingDashboard() {
     return list;
   }, [allReceivers, globalSearch]);
 
-  // Group by warehouse (facilityIdentifier)
+  // Group by warehouse (facilityIdentifier) — apply global facility filter
   const warehouseGroups = useMemo(() => {
     const map = new Map<string, { facilityId: number; facilityName: string; receivers: Receiver[] }>();
     for (const r of displayReceivers) {
+      if (globalFacilityId != null && r.readOnly.facilityIdentifier.id !== globalFacilityId) continue;
       const key = String(r.readOnly.facilityIdentifier.id);
       if (!map.has(key)) {
         map.set(key, {

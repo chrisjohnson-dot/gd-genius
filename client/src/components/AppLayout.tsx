@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import {
@@ -496,6 +497,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // ── Warehouse selector ───────────────────────────────────────────────────────
+  const { selectedFacilityId, setSelectedFacilityId, facilities, setFacilities } = useWarehouse();
+  const { data: knownFacilities } = trpc.pickSchedule.listKnownFacilities.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+  // Sync the fetched list into context so other pages can read it without re-fetching
+  useEffect(() => {
+    if (knownFacilities && knownFacilities.length > 0) {
+      setFacilities(knownFacilities);
+    }
+  }, [knownFacilities]);
+
   // Poll the attention count every 60 seconds so the badge stays fresh
   const { data: attentionData } = trpc.pickSchedule.attentionCount.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -555,10 +569,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         className="w-[260px] shrink-0 flex flex-col h-full"
         style={{ background: "#1b1c21", position: "relative", display: isKiosk ? "none" : undefined }}
       >
-        {/* Brand */}
-        <div className="pl-2 pr-4 pt-4 pb-3.5 border-b border-white/[0.06]">
-          <img src={GD_LOGO} alt="GD Genius" className="h-[115px] w-auto" />
-          <p className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#94a3b8]/50 mt-1 pl-1">Empowering Warehouse Operations</p>
+        {/* Brand + Warehouse Selector */}
+        <div className="pl-2 pr-3 pt-2 pb-2.5 border-b border-white/[0.06]">
+          <img src={GD_LOGO} alt="GD Genius" className="h-[90px] w-auto" />
+          {/* Warehouse selector buttons */}
+          {(knownFacilities ?? facilities).length > 0 && (
+            <div className="mt-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#94a3b8]/50 pl-1 mb-1.5">Warehouse</p>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  onClick={() => setSelectedFacilityId(null)}
+                  className={`text-[10px] font-medium px-2.5 py-0.5 rounded-full transition-colors ${
+                    selectedFacilityId === null
+                      ? "bg-[#22c55e] text-white"
+                      : "bg-white/[0.07] text-[#94a3b8] hover:bg-white/[0.12] hover:text-[#e2e8f0]"
+                  }`}
+                >
+                  All
+                </button>
+                {(knownFacilities ?? facilities).map((f) => (
+                  <button
+                    key={f.facilityId}
+                    onClick={() => setSelectedFacilityId(f.facilityId)}
+                    className={`text-[10px] font-medium px-2.5 py-0.5 rounded-full transition-colors ${
+                      selectedFacilityId === f.facilityId
+                        ? "bg-[#22c55e] text-white"
+                        : "bg-white/[0.07] text-[#94a3b8] hover:bg-white/[0.12] hover:text-[#e2e8f0]"
+                    }`}
+                  >
+                    {f.facilityName.split("-")[0].trim()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}

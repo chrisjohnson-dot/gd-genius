@@ -13,6 +13,7 @@
  * Tab 4 – Audit Trail: full history of Remove / Waive actions with user + timestamp.
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -1096,6 +1097,7 @@ function AuditTrailTab() {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SlaPerformance() {
+  const { selectedFacilityId: globalFacilityId } = useWarehouse();
   // Live tracker
   const { data: slaOrders = [], isLoading, refetch, isFetching } = trpc.sla.getStatus.useQuery(undefined, { refetchInterval: 5 * 60 * 1000 });
   const { data: facilityThresholds = [] } = trpc.sla.listFacilityThresholds.useQuery();
@@ -1143,16 +1145,18 @@ export default function SlaPerformance() {
   const facilityGroups = useMemo(() => {
     const map = new Map<number, { facilityId: number; facilityName: string; orders: SlaOrder[] }>();
     for (const order of slaOrders as SlaOrder[]) {
+      if (globalFacilityId != null && order.facilityId !== globalFacilityId) continue;
       const key = order.facilityId;
       if (!map.has(key)) map.set(key, { facilityId: key, facilityName: order.facilityName ?? `Facility ${key}`, orders: [] });
       map.get(key)!.orders.push(order);
     }
     return Array.from(map.values()).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
-  }, [slaOrders]);
+  }, [slaOrders, globalFacilityId]);
   const selectedGroup = selectedFacilityId !== null ? facilityGroups.find((g) => g.facilityId === selectedFacilityId) ?? null : null;
-
-  // Live KPIs (exclude removed)
-  const activeOrders = (slaOrders as SlaOrder[]).filter((o) => o.slaActionStatus !== "removed");
+  // Live KPIs (exclude removed) — scoped to global facility filter
+  const activeOrders = (slaOrders as SlaOrder[])
+    .filter((o) => o.slaActionStatus !== "removed")
+    .filter((o) => globalFacilityId == null || o.facilityId === globalFacilityId);;
   const totalInSla = activeOrders.filter((o) => o.slaStatus === "in_sla" || o.slaActionStatus === "waived").length;
   const totalOutOfSla = activeOrders.filter((o) => o.slaStatus === "out_of_sla" && o.slaActionStatus === "active").length;
   const totalWaived = (slaOrders as SlaOrder[]).filter((o) => o.slaActionStatus === "waived").length;

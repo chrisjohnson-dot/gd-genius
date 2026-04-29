@@ -2483,6 +2483,19 @@ const _appRouter = router({
 
   // ─── Order Lifecycle Tracking (Pick Schedule) ────────────────────────────────
   pickSchedule: router({
+    /** Return distinct facilities that have at least one order in order_tracking */
+    listKnownFacilities: protectedProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const { orderTracking } = await import("../drizzle/schema.js");
+      const rows = await db
+        .selectDistinct({ facilityId: orderTracking.facilityId, facilityName: orderTracking.facilityName })
+        .from(orderTracking)
+        .where(sql`${orderTracking.facilityId} IS NOT NULL AND ${orderTracking.facilityName} IS NOT NULL`);
+      return rows
+        .filter((r): r is { facilityId: number; facilityName: string } => r.facilityId != null && r.facilityName != null)
+        .sort((a, b) => a.facilityName.localeCompare(b.facilityName));
+    }),
     /** Return all tracked orders, optionally filtered by facilityId, with hidden clients excluded */
     list: protectedProcedure
       .input(z.object({ facilityId: z.number().optional() }))

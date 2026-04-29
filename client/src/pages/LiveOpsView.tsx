@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,10 +57,12 @@ function formatRelative(date: Date) {
 }
 
 export default function LiveOpsView() {
+  const { selectedFacilityName: globalFacilityName } = useWarehouse();
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>("__all__");
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  const warehouseParam = selectedWarehouse === "__all__" ? undefined : selectedWarehouse;
+  // Global warehouse selector takes precedence over local dropdown
+  const warehouseParam = globalFacilityName ?? (selectedWarehouse === "__all__" ? undefined : selectedWarehouse);
 
   const { data: warehouseList } = trpc.liveOps.warehouses.useQuery(undefined, { staleTime: 60_000 });
   const { data: snapshot,         refetch: refetchSnapshot  } = trpc.liveOps.snapshot.useQuery(        { warehouseId: warehouseParam }, { staleTime: REFRESH_INTERVAL_MS });

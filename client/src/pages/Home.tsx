@@ -50,6 +50,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMemo, useState } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { FileDown, FileText } from "lucide-react";
@@ -1499,7 +1500,8 @@ function WarehouseCard({
 }
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const { data, isLoading, refetch, isFetching } = trpc.pickSchedule.listByChannel.useQuery({ channel: "b2b" });
+  const { selectedFacilityId: globalFacilityId } = useWarehouse();
+  const { data, isLoading, refetch, isFetching } = trpc.pickSchedule.listByChannel.useQuery({ channel: "b2b", facilityId: globalFacilityId ?? undefined });
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
 
   const syncNow = trpc.pickSchedule.syncNow.useMutation({

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -625,8 +626,8 @@ function DemoB2BSection() {
 
 export default function ShippingDashboard() {
   const [, navigate] = useLocation();
+  const { selectedFacilityId: globalFacilityId } = useWarehouse();
   const [demoMode, setDemoMode] = useState(false);
-
   const { data: liveOrders = [], isLoading, refetch, isFetching } = trpc.shippingDashboard.listOutbound.useQuery(
     undefined, { refetchInterval: demoMode ? false : 300_000 }
   );
@@ -642,8 +643,12 @@ export default function ShippingDashboard() {
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
 
-  // In demo mode use synthetic data, otherwise use live data
-  const orders: OutboundOrder[] = demoMode ? DEMO_ORDERS : liveOrders;
+  // In demo mode use synthetic data, otherwise use live data; apply global facility filter
+  const orders: OutboundOrder[] = useMemo(() => {
+    const base = demoMode ? DEMO_ORDERS : liveOrders;
+    if (!globalFacilityId) return base;
+    return base.filter((o) => o.facilityId === globalFacilityId);
+  }, [demoMode, liveOrders, globalFacilityId]);
 
   const grouped = useMemo(() => {
     const q = search.toLowerCase().trim();

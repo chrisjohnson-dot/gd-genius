@@ -42,6 +42,7 @@ import {
   CalendarX,
 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { toast } from "sonner";
 import { FileDown, FileText } from "lucide-react";
 import jsPDF from "jspdf";
@@ -1556,16 +1557,17 @@ function FacilityThresholdsSection() {
 
 // ─── Main SLA Tracker page ────────────────────────────────────────────────────
 export default function SlaTracker() {
+  const { selectedFacilityId: globalFacilityId } = useWarehouse();
   const { data: slaOrders = [], isLoading, refetch, isFetching } = trpc.sla.getStatus.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000, // refresh every 5 minutes
   });
   const { data: facilityThresholds = [] } = trpc.sla.listFacilityThresholds.useQuery();
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
-
-  // Group orders by facility
+  // Group orders by facility — apply global warehouse filter
   const facilityGroups = useMemo(() => {
     const map = new Map<number, { facilityId: number; facilityName: string; orders: SlaOrder[] }>();
     for (const order of slaOrders as SlaOrder[]) {
+      if (globalFacilityId != null && order.facilityId !== globalFacilityId) continue;
       const key = order.facilityId;
       if (!map.has(key)) {
         map.set(key, { facilityId: key, facilityName: order.facilityName ?? `Facility ${key}`, orders: [] });

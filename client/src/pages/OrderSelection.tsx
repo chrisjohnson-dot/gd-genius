@@ -26,6 +26,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 
 type OrderMeta = {
   orderId: number;
@@ -479,12 +480,15 @@ function saveLastUsed(facilityId: number, facilityName: string, clientIds: numbe
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function OrderSelection() {
   const [, navigate] = useLocation();
+  const { selectedFacilityId: globalFacilityId, selectedFacilityName: globalFacilityName } = useWarehouse();
 
   const { data: configs, isLoading: configsLoading } = trpc.config.list.useQuery();
   const configId = configs && configs.length > 0 ? configs[0]!.id : null;
 
-  const [step, setStep] = useState<Step>("warehouse");
-  const [selectedFacility, setSelectedFacility] = useState<{ id: number; name: string } | null>(null);
+  const [step, setStep] = useState<Step>(globalFacilityId ? "clients" : "warehouse");
+  const [selectedFacility, setSelectedFacility] = useState<{ id: number; name: string } | null>(
+    globalFacilityId && globalFacilityName ? { id: globalFacilityId, name: globalFacilityName } : null
+  );
   const [selectedClientIds, setSelectedClientIds] = useState<Set<number>>(new Set());
   // Map of orderId → OrderMeta
   const [selectedOrders, setSelectedOrders] = useState<Map<number, OrderMeta>>(new Map());
@@ -682,10 +686,17 @@ export default function OrderSelection() {
   };
 
   const handleBackToWarehouse = () => {
-    setSelectedFacility(null);
-    setSelectedClientIds(new Set());
-    setSelectedOrders(new Map());
-    setStep("warehouse");
+    if (globalFacilityId) {
+      // Global warehouse is set — can't change warehouse, just reset client/order selection
+      setSelectedClientIds(new Set());
+      setSelectedOrders(new Map());
+      setStep("clients");
+    } else {
+      setSelectedFacility(null);
+      setSelectedClientIds(new Set());
+      setSelectedOrders(new Map());
+      setStep("warehouse");
+    }
   };
 
   const handleBackToClients = () => {
@@ -751,9 +762,12 @@ export default function OrderSelection() {
         <div className="flex items-center gap-2 text-sm">
           <button
             onClick={handleBackToWarehouse}
+            disabled={!!globalFacilityId && step === "clients"}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors ${
               step === "warehouse"
                 ? "bg-primary text-primary-foreground font-medium"
+                : globalFacilityId
+                ? "text-foreground font-medium cursor-default"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
             }`}
           >

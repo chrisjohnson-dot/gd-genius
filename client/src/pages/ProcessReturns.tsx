@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Condition = "new" | "good" | "damaged" | "unsellable";
@@ -806,20 +807,28 @@ function StepScanItems({
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function ProcessReturns() {
   const [, navigate] = useLocation();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const { selectedFacilityId: globalFacilityId, selectedFacilityName: globalFacilityName } = useWarehouse();
+  // Fetch config list so we can auto-skip warehouse step when global warehouse is set
+  const { data: configs = [] } = trpc.config.list.useQuery();
+  const primaryConfigId = configs[0]?.id ?? null;
+  const [step, setStep] = useState<1 | 2 | 3>(globalFacilityId ? 2 : 1);
   const [configId, setConfigId] = useState<number | null>(null);
-  const [warehouseName, setWarehouseName] = useState("");
-  const [facilityId, setFacilityId] = useState<number | null>(null);
+  const [warehouseName, setWarehouseName] = useState(globalFacilityName ?? "");
+  const [facilityId, setFacilityId] = useState<number | null>(globalFacilityId ?? null);
   const [clientId, setClientId] = useState<number | null>(null);
   const [clientName, setClientName] = useState("");
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [refNumber, setRefNumber] = useState("");
   const [showRefDialog, setShowRefDialog] = useState(false);
-  const [pendingClientId, setPendingClientId] = useState<number | null>(null);
+   const [pendingClientId, setPendingClientId] = useState<number | null>(null);
   const [pendingClientName, setPendingClientName] = useState("");
-
   const utils = trpc.useUtils();
-
+  // Auto-populate configId from the primary config when global warehouse is pre-selected
+  useEffect(() => {
+    if (primaryConfigId && globalFacilityId && configId === null) {
+      setConfigId(primaryConfigId);
+    }
+  }, [primaryConfigId, globalFacilityId, configId]);
   // Load existing session if we have one
   const { data: sessionData, refetch: refetchSession } = trpc.returns.getSession.useQuery(
     { id: sessionId! },
@@ -888,7 +897,7 @@ export default function ProcessReturns() {
               facilityId={facilityId ?? 0}
               warehouseName={warehouseName}
               onSelect={handleCustomerSelect}
-              onBack={() => setStep(1)}
+              onBack={() => { if (!globalFacilityId) setStep(1); }}
             />
           )}
           {step === 3 && sessionId !== null && sessionData && (

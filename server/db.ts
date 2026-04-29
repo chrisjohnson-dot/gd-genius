@@ -1261,7 +1261,7 @@ export async function getAllClientsWithSlaRequirements(): Promise<
  *   - worstDaysOverdue: the highest overdue day count among their breached orders
  *   - orders: the individual breached orders (for drill-down)
  */
-export async function getClientSlaBreachSummary(): Promise<
+export async function getClientSlaBreachSummary(facilityId?: number): Promise<
   Array<{
     clientId: number;
     clientName: string;
@@ -1280,7 +1280,7 @@ export async function getClientSlaBreachSummary(): Promise<
   }>
 > {
   const all = await getOrderSlaStatuses();
-  const breached = all.filter((o) => o.slaStatus === "out_of_sla");
+  const breached = all.filter((o) => o.slaStatus === "out_of_sla" && (facilityId == null || o.facilityId === facilityId));
 
   // Group by clientId
   const map = new Map<

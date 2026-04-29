@@ -2942,9 +2942,11 @@ const _appRouter = router({
      * Returns a per-client summary of orders currently out of SLA,
      * sorted by worst breach first. Used on the Open Orders dashboard.
      */
-    clientBreachSummary: protectedProcedure.query(async () => {
-      return getClientSlaBreachSummary();
-    }),
+    clientBreachSummary: protectedProcedure
+      .input(z.object({ facilityId: z.number().optional() }).optional())
+      .query(async ({ input }) => {
+        return getClientSlaBreachSummary(input?.facilityId);
+      }),
 
     /**
      * Returns every known client merged with their SLA requirement.

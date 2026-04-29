@@ -1681,6 +1681,7 @@ export default function Home() {
         {/* SLA Breach Summary (only on grid view) */}
         {!isLoading && !selectedFacility && (
           <SlaBreachSummarySection
+            facilityId={globalFacilityId ?? undefined}
             onClientClick={(clientId, facilityId) => {
               if (facilityId) setSelectedFacilityId(facilityId);
               setPendingClientFilter(String(clientId));
@@ -1692,10 +1693,13 @@ export default function Home() {
   );
 }
 // ─── SLA Breach Summaryry ───────────────────────────────────────────────────────
-function SlaBreachSummarySection({ onClientClick }: {
+function SlaBreachSummarySection({ onClientClick, facilityId }: {
   onClientClick: (clientId: number, facilityId: number | null) => void;
+  facilityId?: number;
 }) {
-  const { data: breachGroups, isLoading } = trpc.sla.clientBreachSummary.useQuery();
+  const { data: breachGroups, isLoading } = trpc.sla.clientBreachSummary.useQuery(
+    facilityId ? { facilityId } : undefined
+  );
   // Start with all warehouses collapsed; user can expand individually
   const [collapsedWarehouses, setCollapsedWarehouses] = useState<Set<string>>(new Set());
   const [initializedCollapse, setInitializedCollapse] = useState(false);

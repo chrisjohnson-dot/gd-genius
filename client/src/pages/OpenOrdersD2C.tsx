@@ -1865,11 +1865,14 @@ function WarehouseCard({
 // ─── SLA Breach Summary ───────────────────────────────────────────────────────
 function SlaBreachSummarySection({
   onClientClick,
+  facilityId,
 }: {
   onClientClick: (clientId: number, facilityId: number | null) => void;
+  facilityId?: number;
 }) {
-  const { data: breachGroups, isLoading } =
-    trpc.sla.clientBreachSummary.useQuery();
+  const { data: breachGroups, isLoading } = trpc.sla.clientBreachSummary.useQuery(
+    facilityId ? { facilityId } : undefined
+  );
   const [collapsedWarehouses, setCollapsedWarehouses] = useState<Set<string>>(
     new Set()
   );
@@ -2301,6 +2304,7 @@ export default function OpenOrdersD2C() {
       {/* SLA Breach Summary */}
       {!isLoading && !selectedFacility && (
         <SlaBreachSummarySection
+          facilityId={globalFacilityId ?? undefined}
           onClientClick={(clientId, facilityId) => {
             if (facilityId) setSelectedFacilityId(facilityId);
             setPendingClientFilter(String(clientId));

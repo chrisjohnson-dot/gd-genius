@@ -1313,7 +1313,7 @@ export default function QcScanner() {
               <div
                 className="grid text-white text-xs font-bold uppercase tracking-wide"
                 style={{
-                  gridTemplateColumns: "1fr 160px 90px 90px 90px 80px",
+                  gridTemplateColumns: "1fr 160px 90px 90px 90px 60px 80px",
                   background: "#15527f",
                   padding: "0 12px",
                   height: 32,
@@ -1325,6 +1325,7 @@ export default function QcScanner() {
                 <span className="text-right">Items</span>
                 <span className="text-right">Expected</span>
                 <span className="text-right">Scanned</span>
+                <span className="text-right">Case</span>
                 <span className="text-right">Extensiv</span>
               </div>
               {filteredRecent.map((s, idx) => {
@@ -1336,17 +1337,20 @@ export default function QcScanner() {
                   ? isAlt ? "#FEF3C7" : "#FFFBEB"
                   : isAlt ? "#EEF4FB" : "#ffffff";
                 return (
-                  <button
+                  <div
                     key={s.id}
-                    className="grid w-full text-left text-sm border-b border-[#CDD4DC] last:border-0 hover:brightness-95 transition-all"
+                    role="button"
+                    tabIndex={0}
+                    className="grid w-full text-left text-sm border-b border-[#CDD4DC] last:border-0 hover:brightness-95 transition-all cursor-pointer"
                     style={{
-                      gridTemplateColumns: "1fr 160px 90px 90px 90px 80px",
+                      gridTemplateColumns: "1fr 160px 90px 90px 90px 60px 80px",
                       background: rowBg,
                       minHeight: 44,
                       padding: "6px 12px",
                       alignItems: "center",
                     }}
                     onClick={() => setSelectedSessionId(s.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedSessionId(s.id); }}
                     title="Click to view session summary"
                   >
                     <div className="flex flex-col min-w-0 pr-2">
@@ -1364,6 +1368,19 @@ export default function QcScanner() {
                     <div className={`text-right text-xs font-semibold font-mono ${
                       allScanned ? "text-green-600" : "text-amber-600"
                     }`}>{s.totalScanned}</div>
+                    {/* Case configured badge */}
+                    <div className="flex justify-end">
+                      {s.allCaseConfigured ? (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold"
+                          title="All items have case quantities configured in Extensiv"
+                        >
+                          ✓ Case
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">—</span>
+                      )}
+                    </div>
                     {/* Extensiv pack sync status badge */}
                     <div className="flex justify-end">
                       {!s.foundInExtensiv ? (
@@ -1389,7 +1406,7 @@ export default function QcScanner() {
                         </button>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

@@ -2224,6 +2224,8 @@ export type RecentQcSession = {
   packedInExtensiv: boolean | null;
   /** false = manual label session (no Extensiv order), so pack sync is N/A */
   foundInExtensiv: boolean;
+  /** true = every item in the session has a case amount > 1 configured */
+  allCaseConfigured: boolean;
 };
 
 export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcSession[]> {
@@ -2250,6 +2252,16 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
         .from(qcScanItems)
         .where(eq(qcScanItems.sessionId, s.id));
       const agg = items[0] ?? { itemCount: 0, totalExpected: 0, totalScanned: 0 };
+      // Check if all items have case amounts configured (caseAmount > 1)
+      const caseCheck = await db
+        .select({
+          totalItems: sql<number>`count(*)`,
+          caseItems: sql<number>`coalesce(sum(case when ${qcScanItems.caseAmount} > 1 then 1 else 0 end), 0)`,
+        })
+        .from(qcScanItems)
+        .where(eq(qcScanItems.sessionId, s.id));
+      const cc = caseCheck[0] ?? { totalItems: 0, caseItems: 0 };
+      const allCaseConfigured = Number(cc.totalItems) > 0 && Number(cc.totalItems) === Number(cc.caseItems);
       return {
         id: s.id,
         referenceNumber: s.referenceNumber,
@@ -2263,6 +2275,7 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
         totalScanned: Number(agg.totalScanned),
         packedInExtensiv: s.packedInExtensiv ?? null,
         foundInExtensiv: s.foundInExtensiv,
+        allCaseConfigured,
       };
     })
   );

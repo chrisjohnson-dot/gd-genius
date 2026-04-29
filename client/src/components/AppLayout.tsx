@@ -571,11 +571,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {/* Brand + Warehouse Selector */}
         <div className="pl-2 pr-3 pt-2 pb-2.5 border-b border-white/[0.06]">
-          <img src={GD_LOGO} alt="GD Genius" className="h-[90px] w-auto" />
+          <img src={GD_LOGO} alt="GD Genius" className="h-[117px] w-auto" />
+          <p className="text-[9px] font-medium tracking-[1px] text-[#94a3b8]/50 pl-1 -mt-1 mb-1.5">Empowering Warehouse Operations</p>
           {/* Warehouse selector buttons */}
           {(knownFacilities ?? facilities).length > 0 && (
-            <div className="mt-1.5">
-              <p className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#94a3b8]/50 pl-1 mb-1.5">Warehouse</p>
+            <div className="mt-0.5">
               <div className="flex flex-wrap gap-1">
                 <button
                   onClick={() => setSelectedFacilityId(null)}

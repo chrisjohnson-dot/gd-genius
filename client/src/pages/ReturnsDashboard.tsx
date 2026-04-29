@@ -13,6 +13,7 @@ import {
   Send,
   AlertCircle,
   CheckCircle,
+  Warehouse,
 } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
@@ -146,6 +147,17 @@ export default function ReturnsDashboard() {
           </Button>
         </Link>
       </div>
+
+      {/* Warehouse filter badge */}
+      {globalFacilityName && (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <Warehouse className="h-3.5 w-3.5" />
+            Showing: {globalFacilityName}
+          </span>
+          <span className="text-xs text-muted-foreground">Stats and sessions filtered to this warehouse</span>
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

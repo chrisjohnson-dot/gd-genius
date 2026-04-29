@@ -60,6 +60,7 @@ export interface ShipwellLineItem {
   weight_unit?: string | null;
   package_type?: string | null;
   total_packages?: number | null;
+  freight_class?: string | null;
 }
 
 export interface CreatePurchaseOrderInput {

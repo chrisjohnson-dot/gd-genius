@@ -3093,16 +3093,31 @@ function ShipwellConfirmDialog({
 }) {
   const [palletCount, setPalletCount] = useState<number>(sessionInfo?.palletCount ?? 1);
   const [totalWeightLb, setTotalWeightLb] = useState<string>("");
+  const [freightClass, setFreightClass] = useState<string>("");
   const [confirmed, setConfirmed] = useState(false);
+
+  // Auto-fetch default freight class for this customer
+  const { data: freightClassData } = trpc.rateWizard.getFreightClassForCustomer.useQuery(
+    { customerId: sessionInfo?.customerId ?? 0 },
+    { enabled: open && !!sessionInfo?.customerId }
+  );
 
   // Reset state when dialog opens
   useEffect(() => {
     if (open && sessionInfo) {
       setPalletCount(sessionInfo.palletCount > 0 ? sessionInfo.palletCount : 1);
       setTotalWeightLb("");
+      setFreightClass("");
       setConfirmed(false);
     }
   }, [open, sessionInfo?.sessionId]);
+
+  // Pre-populate freight class from customer rule when it loads
+  useEffect(() => {
+    if (freightClassData?.freightClass) {
+      setFreightClass(freightClassData.freightClass);
+    }
+  }, [freightClassData?.freightClass]);
 
   // Check if Shipwell is configured
   const { data: shipwellConfig, isLoading: configLoading } = trpc.shipwell.getConfig.useQuery(
@@ -3127,6 +3142,7 @@ function ShipwellConfirmDialog({
       sessionId: sessionInfo.sessionId,
       palletCountOverride: palletCount,
       totalWeightLbOverride: totalWeightLb ? parseFloat(totalWeightLb) : undefined,
+      freightClass: freightClass || undefined,
     });
   }
 
@@ -3217,6 +3233,27 @@ function ShipwellConfirmDialog({
               />
             </div>
 
+            {/* Freight Class */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-muted-foreground" />
+                Freight Class
+                {freightClassData?.freightClass && (
+                  <span className="text-xs text-green-600 font-normal">— from customer rules</span>
+                )}
+              </label>
+              <select
+                value={freightClass}
+                onChange={(e) => setFreightClass(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Select freight class…</option>
+                {["50","55","60","65","70","77.5","85","92.5","100","110","125","150","175","200","250","300","400","500"].map((fc) => (
+                  <option key={fc} value={fc}>Class {fc}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Summary */}
             <div className="rounded-xl bg-muted/40 border px-4 py-3 space-y-1.5 text-sm">
               <div className="flex justify-between">
@@ -3231,6 +3268,12 @@ function ShipwellConfirmDialog({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Weight</span>
                   <span className="font-medium">{parseFloat(totalWeightLb).toLocaleString()} lbs</span>
+                </div>
+              )}
+              {freightClass && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Freight Class</span>
+                  <span className="font-medium">Class {freightClass}</span>
                 </div>
               )}
               <div className="flex justify-between">

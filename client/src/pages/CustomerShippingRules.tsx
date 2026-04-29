@@ -32,6 +32,7 @@ type Rule = {
   preferredCarrier: string | null;
   maxTransitDays: number | null;
   excludedCarriers: string | null;
+  defaultFreightClass: string | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -44,6 +45,7 @@ type RuleForm = {
   preferredCarrier: string;
   maxTransitDays: string;
   excludedCarriers: string;
+  defaultFreightClass: string;
   notes: string;
 };
 
@@ -54,6 +56,7 @@ const EMPTY_FORM: RuleForm = {
   preferredCarrier: "",
   maxTransitDays: "",
   excludedCarriers: "",
+  defaultFreightClass: "",
   notes: "",
 };
 
@@ -141,6 +144,7 @@ export default function CustomerShippingRules() {
       preferredCarrier: r.preferredCarrier ?? "",
       maxTransitDays: r.maxTransitDays ? String(r.maxTransitDays) : "",
       excludedCarriers: r.excludedCarriers ? JSON.parse(r.excludedCarriers).join(", ") : "",
+      defaultFreightClass: r.defaultFreightClass ?? "",
       notes: r.notes ?? "",
     });
     setDialogOpen(true);
@@ -169,6 +173,7 @@ export default function CustomerShippingRules() {
       preferredCarrier: form.preferredCarrier || undefined,
       maxTransitDays: form.maxTransitDays ? parseInt(form.maxTransitDays) : undefined,
       excludedCarriers: excludedArr.length > 0 ? JSON.stringify(excludedArr) : undefined,
+      defaultFreightClass: form.defaultFreightClass || undefined,
       notes: form.notes || undefined,
     });
   };
@@ -422,6 +427,21 @@ export default function CustomerShippingRules() {
                 </div>
               </>
             )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Default LTL Freight Class (optional)</Label>
+              <select
+                value={form.defaultFreightClass}
+                onChange={(e) => setForm((f) => ({ ...f, defaultFreightClass: e.target.value }))}
+                className="w-full px-3 py-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Not set</option>
+                {["50","55","60","65","70","77.5","85","92.5","100","110","125","150","175","200","250","300","400","500"].map((fc) => (
+                  <option key={fc} value={fc}>Class {fc}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">Auto-populated in the Shipwell LTL dialog after QC scan completion.</p>
+            </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs">Notes (optional)</Label>

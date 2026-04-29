@@ -1544,6 +1544,8 @@ export const customerShippingRules = mysqlTable("customer_shipping_rules", {
   maxTransitDays: int("max_transit_days"),
   /** Optional: carriers explicitly excluded for this customer (JSON array of codes) */
   excludedCarriers: text("excluded_carriers").default("[]"),
+  /** Optional: default LTL freight class for this customer (e.g. '70', '92.5', '125') */
+  defaultFreightClass: varchar("default_freight_class", { length: 10 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),

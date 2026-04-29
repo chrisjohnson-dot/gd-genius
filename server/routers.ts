@@ -205,6 +205,7 @@ import {
   deleteCarrierAccount,
   listCustomerShippingRules,
   getCustomerShippingRule,
+  getCustomerShippingRuleByCustomerId,
   upsertCustomerShippingRule,
   deleteCustomerShippingRule,
   listRateWizardShipments,
@@ -4979,6 +4980,8 @@ const qcScannerRouter = router({
       /** Optional operator overrides */
       palletCountOverride: z.number().int().min(1).optional(),
       totalWeightLbOverride: z.number().optional(),
+      /** LTL freight class (e.g. '70', '92.5', '125') — auto-populated from customer shipping rules */
+      freightClass: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const config = await getShipwellConfig();
@@ -5035,6 +5038,18 @@ const qcScannerRouter = router({
       const orderNumber = session.referenceNumber ?? String(session.transactionId ?? session.id);
       const customerName = session.customerName ?? trackedOrder?.clientName ?? undefined;
 
+      // Build line items — include freight class if provided
+      const lineItems = palletCount > 0 ? [{
+        description: `LTL Freight — ${palletCount} pallet${palletCount !== 1 ? "s" : ""}`,
+        quantity: palletCount,
+        unit_of_measure: "PLT",
+        weight: totalWeightLb ? Math.round(totalWeightLb) : undefined,
+        weight_unit: totalWeightLb ? "LB" : undefined,
+        package_type: "PLT",
+        total_packages: palletCount,
+        freight_class: input.freightClass ?? null,
+      }] : undefined;
+
       const po = await client.createPurchaseOrder({
         order_number: orderNumber,
         purchase_order_number: session.poNumber ?? trackedOrder?.poNum ?? undefined,
@@ -5042,12 +5057,14 @@ const qcScannerRouter = router({
         destination_address: destinationAddress,
         customer_name: customerName,
         source: "SHIPWELL_WEB",
+        line_items: lineItems,
         custom_data: {
           gd_qc_session_id: session.id,
           gd_reference_num: session.referenceNumber,
           gd_pallet_count: palletCount,
           gd_total_weight_lb: totalWeightLb,
           gd_facility: facilityName,
+          gd_freight_class: input.freightClass ?? null,
         },
       });
 
@@ -10017,10 +10034,19 @@ const rateWizardRouter = router({
         preferredCarrier: z.string().optional(),
         maxTransitDays: z.number().optional(),
         excludedCarriers: z.string().optional(), // JSON array string
+        defaultFreightClass: z.string().optional(),
         notes: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => upsertCustomerShippingRule(input)),
+
+  /** Return the default freight class for a customer (by Extensiv customerId), or null if not set. */
+  getFreightClassForCustomer: protectedProcedure
+    .input(z.object({ customerId: z.number() }))
+    .query(async ({ input }) => {
+      const rule = await getCustomerShippingRuleByCustomerId(input.customerId);
+      return { freightClass: rule?.defaultFreightClass ?? null };
+    }),
 
   deleteCustomerShippingRule: protectedProcedure
     .input(z.object({ id: z.number() }))

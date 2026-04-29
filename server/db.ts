@@ -4347,6 +4347,18 @@ export async function getCustomerShippingRule(
   return row;
 }
 
+/** Look up a customer shipping rule by customerId alone (first match across all configs). */
+export async function getCustomerShippingRuleByCustomerId(
+  customerId: number
+): Promise<CustomerShippingRule | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(customerShippingRules)
+    .where(eq(customerShippingRules.customerId, customerId))
+    .limit(1);
+  return row;
+}
+
 export async function listCustomerShippingRules(configId: number): Promise<CustomerShippingRule[]> {
   const db = await getDb();
   if (!db) return [];

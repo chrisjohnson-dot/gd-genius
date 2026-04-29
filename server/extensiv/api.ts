@@ -134,6 +134,9 @@ interface RawExtensivItem {
       weight?: number;
     };
     packageUnit?: {
+      /** Primary Units Per Package — actual Extensiv field name (Units of Measure → Packaging Unit) */
+      inventoryUnitsPerUnit?: number;
+      /** Legacy alias — kept for backward compatibility */
       qty?: number;
       upc?: string;
       /** Carton weight in lbs (Weight (lbs) field in Extensiv Packaging Unit section) */
@@ -821,7 +824,9 @@ export async function fetchItemCaseAmountMap(
   interface RawItemWithPackage {
     sku?: string;
     options?: {
-      packageUnit?: { qty?: number; upc?: string };
+      // Extensiv API returns the case pack quantity as `inventoryUnitsPerUnit` (not `qty`)
+      // This maps to: Units of Measure tab → Packaging Unit → Primary Units Per Package
+      packageUnit?: { inventoryUnitsPerUnit?: number; qty?: number; upc?: string };
     };
   }
   while (true) {
@@ -834,7 +839,8 @@ export async function fetchItemCaseAmountMap(
     const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
     for (const item of items) {
       if (!item.sku) continue;
-      const qty = item.options?.packageUnit?.qty;
+      // Prefer inventoryUnitsPerUnit (actual Extensiv field name), fall back to qty (legacy)
+      const qty = item.options?.packageUnit?.inventoryUnitsPerUnit ?? item.options?.packageUnit?.qty;
       if (qty && qty > 1) caseMap.set(item.sku, qty);
     }
     if (items.length < pgsiz) break;

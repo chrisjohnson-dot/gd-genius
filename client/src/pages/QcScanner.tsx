@@ -477,6 +477,11 @@ export default function QcScanner() {
       toast.success(`Loaded ${data.seededCount} item${data.seededCount !== 1 ? "s" : ""} from Extensiv`, {
         description: data.customerName ? `Customer: ${data.customerName}` : undefined,
       });
+      // Silently refresh case amounts — ensures correct inventoryUnitsPerUnit is stored
+      // (fixes sessions seeded before the Extensiv field-name fix)
+      if (session?.id) {
+        refreshCaseAmounts.mutate({ sessionId: session.id });
+      }
 
       // Auto-apply pallet type if confidence ≥90%, otherwise show dialog
       if (data.customerName) {

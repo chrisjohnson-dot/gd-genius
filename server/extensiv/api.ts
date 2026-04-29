@@ -738,18 +738,30 @@ export async function fetchInventoryByMuLabel(
     }
     // Attempt 3: The /inventory/stockdetails endpoint may not support muLabel RQL filtering.
     // Fall back to fetching all inventory for the customer+facility and filtering client-side.
-    // This is slower but reliable.
+    // Results are cached for 5 minutes to avoid repeated full-catalog fetches.
     if (opts?.customerId && opts?.facilityId) {
       console.warn(`[fetchInventoryByMuLabel] RQL returned 0 records for muLabel=${muLabel}, falling back to client-side filter for customer=${opts.customerId} facility=${opts.facilityId}`);
-      // Try RQL first, then query params
-      let allRecords = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
-        rql: `customerIdentifier.id==${opts.customerId};facilityIdentifier.id==${opts.facilityId}`,
-      });
-      if (allRecords.length === 0) {
+      const cacheKey = `inv:${opts.customerId}:${opts.facilityId}`;
+      // Lazy import to avoid circular dependency
+      const { inventoryCache } = await import("../cache");
+      let allRecords = inventoryCache.get(cacheKey);
+      if (allRecords) {
+        console.log(`[fetchInventoryByMuLabel] Cache hit for ${cacheKey}: ${allRecords.length} records`);
+      } else {
+        // Try RQL first, then query params
         allRecords = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
-          customerid: opts.customerId,
-          facilityid: opts.facilityId,
+          rql: `customerIdentifier.id==${opts.customerId};facilityIdentifier.id==${opts.facilityId}`,
         });
+        if (allRecords.length === 0) {
+          allRecords = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+            customerid: opts.customerId,
+            facilityid: opts.facilityId,
+          });
+        }
+        if (allRecords.length > 0) {
+          inventoryCache.set(cacheKey, allRecords);
+          console.log(`[fetchInventoryByMuLabel] Cached ${allRecords.length} records for ${cacheKey}`);
+        }
       }
       if (allRecords.length > 0) {
         // Filter client-side by muLabel (normalizeInventoryRecord now extracts muLabel from raw)

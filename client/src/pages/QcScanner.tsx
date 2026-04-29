@@ -15,7 +15,7 @@ import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
   Barcode, Wand2, Pencil, Copy, Printer, FileText, FlaskConical, ChevronDown, Scale, PackagePlus,
-  Lock, LockOpen, ChevronsUpDown, Volume2, VolumeX
+  Lock, LockOpen, ChevronsUpDown, Volume2, VolumeX, Loader2
 } from "lucide-react";
 
 type ScanItem = {
@@ -2243,8 +2243,15 @@ export default function QcScanner() {
                                 </Button>
                               )}
                               {/* Demo Cheat Sheet removed — operators scan using the barcode input directly */}
+                              {/* MU lookup in-progress indicator */}
+                              {scanMu.isPending && (
+                                <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
+                                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                                  <span>Looking up MU in Extensiv… this may take a few seconds</span>
+                                </div>
+                              )}
                               {/* Last scan feedback */}
-                              {lastScan && (
+                              {!scanMu.isPending && lastScan && (
                                 <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
                                   lastScan.found
                                     ? "bg-green-500/10 text-green-700 dark:text-green-400"

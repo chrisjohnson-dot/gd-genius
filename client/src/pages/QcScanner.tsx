@@ -342,6 +342,7 @@ export default function QcScanner() {
   const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
   const [missingShipToWarning, setMissingShipToWarning] = useState<{ pendingUrl: string } | null>(null);
   const [shipwellDialog, setShipwellDialog] = useState(false);
+  const [assignedStagingLane, setAssignedStagingLane] = useState<string | null>(null);
   const [completedSessionInfo, setCompletedSessionInfo] = useState<{ sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null; customerId: number | null } | null>(null);
   // Multi-expand: track a Set of expanded pallet IDs — all pallets start expanded
   const [expandedPallets, setExpandedPallets] = useState<Set<number>>(new Set());
@@ -2979,14 +2980,15 @@ export default function QcScanner() {
       <DockRecommendDialog
         open={dockRecommendDialog}
         onClose={() => { setDockRecommendDialog(false); setCompletedSessionInfo(null); }}
-        onConfirm={() => { setDockRecommendDialog(false); setShipwellDialog(true); }}
+        onConfirm={(lane) => { setAssignedStagingLane(lane); setDockRecommendDialog(false); setShipwellDialog(true); }}
         sessionInfo={completedSessionInfo}
       />
       {/* ─── Shipwell LTL Confirmation Dialog ────────────────────────────── */}
       <ShipwellConfirmDialog
         open={shipwellDialog}
-        onClose={() => { setShipwellDialog(false); setCompletedSessionInfo(null); }}
+        onClose={() => { setShipwellDialog(false); setCompletedSessionInfo(null); setAssignedStagingLane(null); }}
         sessionInfo={completedSessionInfo}
+        assignedLane={assignedStagingLane}
       />
     </>
   );
@@ -3001,7 +3003,7 @@ function DockRecommendDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (lane: string | null) => void;
   sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null; customerId: number | null } | null;
 }) {
   const palletCount = sessionInfo?.palletCount ?? 1;
@@ -3032,7 +3034,7 @@ function DockRecommendDialog({
   const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
     onSuccess: () => {
       toast.success(`Staged at: ${selectedLocation ?? "Overflow"}`);
-      onConfirm();
+      onConfirm(selectedLocation ?? null);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -3181,7 +3183,7 @@ function DockRecommendDialog({
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>Skip All</Button>
-          <Button variant="ghost" onClick={onConfirm} className="text-muted-foreground">
+          <Button variant="ghost" onClick={() => onConfirm(null)} className="text-muted-foreground">
             Skip to Shipwell →
           </Button>
           {matchedOrder && selectedLocation && (
@@ -3197,7 +3199,7 @@ function DockRecommendDialog({
           {!matchedOrder && !isLoading && (
             <div className="flex items-center gap-2 w-full justify-between">
               <p className="text-xs text-muted-foreground">Order not found in outbound tracking.</p>
-              <Button onClick={onConfirm}><Truck className="w-4 h-4 mr-1" />Continue to Shipwell →</Button>
+              <Button onClick={() => onConfirm(null)}><Truck className="w-4 h-4 mr-1" />Continue to Shipwell →</Button>
             </div>
           )}
         </DialogFooter>
@@ -3211,10 +3213,12 @@ function ShipwellConfirmDialog({
   open,
   onClose,
   sessionInfo,
+  assignedLane,
 }: {
   open: boolean;
   onClose: () => void;
   sessionInfo: { sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null; customerId: number | null } | null;
+  assignedLane?: string | null;
 }) {
   const [palletCount, setPalletCount] = useState<number>(sessionInfo?.palletCount ?? 1);
   const [totalWeightLb, setTotalWeightLb] = useState<string>("");
@@ -3313,6 +3317,12 @@ function ShipwellConfirmDialog({
           </div>
         ) : (
           <div className="space-y-4 py-1">
+            {assignedLane && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800">
+                <MapPin className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span className="text-sm font-semibold text-teal-800 dark:text-teal-200">Staged at Lane {assignedLane}</span>
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">
               Review the shipment details below. All fields are auto-populated from the order — adjust if needed before sending.
             </p>

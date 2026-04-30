@@ -554,6 +554,25 @@ export default function OrderSelection() {
     return m;
   }, [orderCountsRaw]);
 
+  // When order counts finish loading, silently remove any restored clients that now
+  // have zero open orders so the list stays clean without manual intervention.
+  useEffect(() => {
+    if (!orderCountsRaw || orderCountsRaw.length === 0 || !selectedFacility) return;
+    setSelectedClientIds((prev) => {
+      const cleaned = new Set<number>();
+      prev.forEach((id) => {
+        const count = orderCountMap.get(id);
+        // Keep if count is unknown (not yet in map) or > 0; drop if explicitly 0
+        if (count === undefined || count > 0) cleaned.add(id);
+      });
+      if (cleaned.size === prev.size) return prev; // nothing changed — skip re-render & save
+      // Persist the cleaned selection immediately
+      saveLastUsed(selectedFacility.id, selectedFacility.name, Array.from(cleaned));
+      return cleaned;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderCountsRaw]);
+
   // Fetch all location configs
   const { data: locationConfigs } = trpc.locations.list.useQuery(
     { configId: configId! },

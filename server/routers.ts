@@ -4052,6 +4052,16 @@ const qcScannerRouter = router({
       // Capture the Extensiv facility (physical warehouse location) from the order
       const facilityId = order.readOnly?.facilityIdentifier?.id ?? undefined;
       const facilityName = order.readOnly?.facilityIdentifier?.name ?? undefined;
+      // Capture ship-to address from Extensiv order (retailer / sub-client destination)
+      const shipTo = order.shipTo;
+      const destinationAddress = shipTo ? JSON.stringify({
+        companyName: shipTo.companyName ?? null,
+        name: shipTo.companyName ?? null,
+        address1: shipTo.address1 ?? null,
+        city: shipTo.city ?? null,
+        state: shipTo.state ?? null,
+        zip: shipTo.zip ?? null,
+      }) : undefined;
       await updateQcSession(input.sessionId, {
         referenceNumber: referenceNum ?? String(input.transactionId),
         customerName: customerName ?? undefined,
@@ -4060,6 +4070,7 @@ const qcScannerRouter = router({
         facilityId: facilityId ?? undefined,
         facilityName: facilityName ?? undefined,
         poNumber: poNumber ?? undefined,
+        ...(destinationAddress ? { destinationAddress } : {}),
       } as any);
 
       // Return the freshly seeded items

@@ -735,30 +735,63 @@ export async function fetchInventoryByMuLabel(
         const db = await getDb();
         if (db) {
           const rows = await db.execute(
-            sql`SELECT receiver_item_id FROM mu_labels
+            sql`SELECT receiver_item_id, sku FROM mu_labels
                 WHERE config_id = ${opts.configId} AND mu_label = ${muLabel}
                 LIMIT 10`
-          ) as unknown as Array<{ receiver_item_id: number }>;
-          const receiveItemIds: number[] = (Array.isArray(rows[0]) ? rows[0] : rows)
-            .map((r: Record<string, unknown>) => Number(r.receiver_item_id ?? r["receiver_item_id"]))
-            .filter((id: number) => id > 0);
-          if (receiveItemIds.length > 0) {
-            console.log(`[fetchInventoryByMuLabel] DB cache hit for muLabel=${muLabel}: receiveItemIds=[${receiveItemIds.join(",")}]`);
+          ) as unknown as Array<{ receiver_item_id: number | null; sku: string }>;
+          const rawRows: Array<{ receiver_item_id: number | null; sku: string }> =
+            (Array.isArray(rows[0]) ? rows[0] : rows) as Array<{ receiver_item_id: number | null; sku: string }>;
+
+          // Split into rows with and without a receiveItemId
+          const rowsWithId = rawRows.filter((r) => r.receiver_item_id != null && Number(r.receiver_item_id) > 0);
+          const rowsSkuOnly = rawRows.filter((r) => r.receiver_item_id == null || Number(r.receiver_item_id) === 0);
+
+          if (rawRows.length > 0) {
+            console.log(`[fetchInventoryByMuLabel] DB cache hit for muLabel=${muLabel}: ${rowsWithId.length} with receiveItemId, ${rowsSkuOnly.length} sku-only`);
             const stockRecords: ExtensivInventoryRecord[] = [];
-            for (const receiveItemId of receiveItemIds) {
+
+            // Path A: use receiveItemId to fetch stockdetails (most precise)
+            for (const row of rowsWithId) {
+              const receiveItemId = Number(row.receiver_item_id);
               const recs = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
                 rql: `receiveItemId==${receiveItemId}`,
               });
               if (recs.length > 0) {
                 stockRecords.push(...recs.map((r) => ({ ...r, muLabel })));
+              } else {
+                // receiveItemId RQL not supported — fall back to SKU filter
+                const sku = row.sku;
+                if (sku && opts?.customerId) {
+                  const skuRecs = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+                    customerId: opts.customerId,
+                    rql: `itemIdentifier.sku==${encodeURIComponent(sku)}`,
+                  });
+                  const matched = skuRecs.filter((r) => r.receiveItemId === receiveItemId);
+                  const toAdd = matched.length > 0 ? matched : skuRecs;
+                  stockRecords.push(...toAdd.map((r) => ({ ...r, muLabel })));
+                }
               }
             }
+
+            // Path B: Excel-seeded rows — only have SKU, no receiveItemId
+            for (const row of rowsSkuOnly) {
+              const sku = row.sku;
+              if (sku && opts?.customerId) {
+                const skuRecs = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+                  customerId: opts.customerId,
+                  rql: `itemIdentifier.sku==${encodeURIComponent(sku)}`,
+                });
+                if (skuRecs.length > 0) {
+                  stockRecords.push(...skuRecs.map((r) => ({ ...r, muLabel })));
+                }
+              }
+            }
+
             if (stockRecords.length > 0) {
               console.log(`[fetchInventoryByMuLabel] DB-first lookup returned ${stockRecords.length} records for muLabel=${muLabel}`);
               return stockRecords;
             }
-            // receiveItemIds found in DB but stockdetails returned 0 — MU may be fully consumed
-            console.warn(`[fetchInventoryByMuLabel] DB cache found receiveItemIds but stockdetails returned 0 for muLabel=${muLabel}`);
+            console.warn(`[fetchInventoryByMuLabel] DB cache found rows but stockdetails returned 0 for muLabel=${muLabel}`);
           }
         }
       } catch (dbErr) {

@@ -4036,7 +4036,7 @@ export async function listPutAwayList(params: {
 
   // Fetch MU labels for all transactionIds present in the scans
   const txIds = Array.from(new Set(scans.map((s) => s.transactionId).filter((id): id is number => id != null)));
-  let muRows: Array<{ transactionId: number; receiverItemId: number; sku: string; muLabel: string; muType: string; qty: number }> = [];
+  let muRows: Array<{ transactionId: number | null; receiverItemId: number | null; sku: string; muLabel: string; muType: string; qty: number }> = [];
   if (txIds.length > 0) {
     muRows = await db
       .select({

@@ -793,8 +793,8 @@ export const muLabels = mysqlTable("mu_labels", {
   id: int("id").primaryKey().autoincrement(),
   configId: int("config_id").notNull(),
   facilityId: int("facility_id"),  // Extensiv facility (warehouse) id — set by nightly MU sync
-  transactionId: int("transaction_id").notNull(), // Extensiv receiver transactionId
-  receiverItemId: int("receiver_item_id").notNull(), // Extensiv receiverItemId
+  transactionId: int("transaction_id"), // Extensiv receiver transactionId (null for Excel-seeded records)
+  receiverItemId: int("receiver_item_id"), // Extensiv receiverItemId (null for Excel-seeded records)
   sku: varchar("sku", { length: 100 }).notNull(),
   muLabel: varchar("mu_label", { length: 100 }).notNull(), // e.g. MU-WH1-20260329-001
   muType: varchar("mu_type", { length: 50 }).notNull().default("Pallet"),

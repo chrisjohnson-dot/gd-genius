@@ -5010,6 +5010,47 @@ const qcScannerRouter = router({
       };
     }),
   /**
+   * Debug: dump raw Extensiv /inventory/stockdetails response for a given muLabel.
+   * Returns the first 5 raw records (before normalization) so we can inspect the actual field names.
+   */
+  debugMuLookup: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      muLabel: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const configs = await getExtensivConfigs();
+      let config = session.warehouseId ? await getExtensivConfigById(session.warehouseId) : null;
+      if (!config) config = configs.find((c) => c.isActive) ?? configs[0] ?? null;
+      if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Extensiv configuration found" });
+      const { createExtensivClient } = await import("./extensiv/client");
+      const client = createExtensivClient(config);
+      const attempts: Array<{ label: string; params: Record<string, unknown>; rawRecords: unknown[]; keys: string[] }> = [];
+      const tryFetch = async (label: string, params: Record<string, unknown>) => {
+        try {
+          const data = await client.get("/inventory/stockdetails", { ...params, pgsiz: 5, pgnum: 1 }) as Record<string, unknown>;
+          const resourceList = data["ResourceList"] ?? data["resourceList"];
+          const rawRecords = Array.isArray(resourceList) ? (resourceList as Record<string, unknown>[]).slice(0, 5) : [];
+          const keys = rawRecords.length > 0 ? Object.keys(rawRecords[0] as Record<string, unknown>) : [];
+          attempts.push({ label, params, rawRecords, keys });
+        } catch (err: unknown) {
+          attempts.push({ label, params, rawRecords: [], keys: [(err as Error).message ?? "error"] });
+        }
+      };
+      await tryFetch("RQL muLabel encoded", { rql: `muLabel==${encodeURIComponent(input.muLabel)}` });
+      await tryFetch("RQL muLabel raw", { rql: `muLabel==${input.muLabel}` });
+      await tryFetch("RQL MuLabel PascalCase", { rql: `MuLabel==${input.muLabel}` });
+      await tryFetch("RQL palletIdentifier.nameKey.name", { rql: `palletIdentifier.nameKey.name==${encodeURIComponent(input.muLabel)}` });
+      if (session.customerId && session.facilityId) {
+        await tryFetch("All inventory for customer (sample 5)", {
+          rql: `customerIdentifier.id==${session.customerId};facilityIdentifier.id==${session.facilityId}`,
+        });
+      }
+      return { muLabel: input.muLabel, customerId: session.customerId, facilityId: session.facilityId, attempts };
+    }),
+  /**
    * Send a completed QC session's order to Shipwell as a purchase order (LTL shipment).
    * Auto-populates from session + order_tracking data. Returns the Shipwell PO id and URL.
    */

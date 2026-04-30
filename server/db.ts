@@ -4926,3 +4926,48 @@ export async function dismissEdiEscalation(id: number, resolvedBy: string): Prom
     .set({ status: 'dismissed', resolvedAt: Date.now(), resolvedBy })
     .where(eq(ediEscalations.id, id));
 }
+
+// ─── SKU Weight Overrides ────────────────────────────────────────────────────
+import { skuWeightOverrides, type SkuWeightOverride, type InsertSkuWeightOverride } from "../drizzle/schema";
+
+export async function getSkuWeightOverrides(configId: number, customerId: number): Promise<SkuWeightOverride[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(skuWeightOverrides)
+    .where(and(eq(skuWeightOverrides.configId, configId), eq(skuWeightOverrides.customerId, customerId)))
+    .orderBy(skuWeightOverrides.sku);
+}
+
+export async function getSkuWeightOverrideMap(configId: number, customerId: number): Promise<Map<string, number>> {
+  const rows = await getSkuWeightOverrides(configId, customerId);
+  const map = new Map<string, number>();
+  for (const r of rows) map.set(r.sku, Number(r.cartonWeightLb));
+  return map;
+}
+
+export async function upsertSkuWeightOverride(
+  configId: number,
+  customerId: number,
+  sku: string,
+  cartonWeightLb: number,
+  unitsPerCarton?: number | null,
+  note?: string | null,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(skuWeightOverrides)
+    .values({ configId, customerId, sku, cartonWeightLb: String(cartonWeightLb), unitsPerCarton: unitsPerCarton ?? null, note: note ?? null })
+    .onDuplicateKeyUpdate({
+      set: {
+        cartonWeightLb: String(cartonWeightLb),
+        unitsPerCarton: unitsPerCarton ?? null,
+        note: note ?? null,
+      },
+    });
+}
+
+export async function deleteSkuWeightOverride(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(skuWeightOverrides).where(eq(skuWeightOverrides.id, id));
+}

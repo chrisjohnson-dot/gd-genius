@@ -246,6 +246,10 @@ import {
   getEdiEscalations,
   resolveEdiEscalation,
   dismissEdiEscalation,
+  getSkuWeightOverrides,
+  getSkuWeightOverrideMap,
+  upsertSkuWeightOverride,
+  deleteSkuWeightOverride,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
 import { getCarrierMarkups, getMarkupPct, applyMarkup, testOpFiConnection } from "./opfiRateSheets";
@@ -4776,8 +4780,20 @@ const qcScannerRouter = router({
         });
       }
 
+      // ── 4. Apply manual SKU weight overrides for any SKU still missing ──────
+      try {
+        const overrideMap = await getSkuWeightOverrideMap(config.id, customerId);
+        for (const [sku, overrideCartonW] of overrideMap) {
+          if (!cartonWeightMap.has(sku)) {
+            cartonWeightMap.set(sku, overrideCartonW);
+          }
+        }
+      } catch (e) {
+        console.warn('[calculatePalletWeight] Failed to load SKU weight overrides:', e);
+      }
+
       // Calculate total weight: sum(perUnitWeightLb * qty) per SKU
-      // Priority: (cartonWeightLb / unitsPerCarton) → unit_weight_lb (imperial.weight) → skip
+      // Priority: override/carton → (cartonWeightLb / unitsPerCarton) → unit_weight_lb (imperial.weight) → skip
       let totalLb = 0;
       type SkuWeightBreakdown = {
         sku: string;
@@ -5523,11 +5539,45 @@ const palletScannerRouter = router({
       if (pallet) {
         await updateQcPallet(pallet.id, { photoUrl: url });
       }
-      return { url };
+       return { url };
+    }),
+
+ });
+// ─── SKU Weight Override Router ───────────────────────────────────────────────
+const skuWeightRouter = router({
+  list: protectedProcedure
+    .input(z.object({ configId: z.number(), customerId: z.number() }))
+    .query(async ({ input }) => {
+      return getSkuWeightOverrides(input.configId, input.customerId);
+    }),
+  upsert: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      customerId: z.number(),
+      sku: z.string().min(1),
+      cartonWeightLb: z.number().positive(),
+      unitsPerCarton: z.number().int().positive().optional().nullable(),
+      note: z.string().max(256).optional().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      await upsertSkuWeightOverride(
+        input.configId,
+        input.customerId,
+        input.sku,
+        input.cartonWeightLb,
+        input.unitsPerCarton,
+        input.note,
+      );
+      return { success: true };
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteSkuWeightOverride(input.id);
+      return { success: true };
     }),
 });
-
-// ─── Receiving Router ───────────────────────────────────────────────────────
+// ─── Receiving Router ────────────────────────────────────────────────────────
 const receivingRouter = router({
   /**
    * List inbound receivers (ASN/PO receipts) from Extensiv.
@@ -7463,6 +7513,7 @@ export const appRouter = router({
   returns: returnsRouter,
   cortex: cortexRouter,
   qcScanner: qcScannerRouter,
+  skuWeight: skuWeightRouter,
   palletScanner: palletScannerRouter,
   receiving: receivingRouter,
   palletCapture: palletCaptureRouter,

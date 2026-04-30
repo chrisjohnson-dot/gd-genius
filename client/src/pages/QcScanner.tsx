@@ -347,6 +347,7 @@ export default function QcScanner() {
   type SkuBreakdownEntry = { sku: string; qty: number; perUnitWeightLb: number | null; totalWeightLb: number | null; source: 'carton' | 'imperial' | 'none' };
   const [palletWeightBreakdown, setPalletWeightBreakdown] = useState<Record<number, SkuBreakdownEntry[]>>({});
   const [zeroWeightAlert, setZeroWeightAlert] = useState<{ palletId: number; skus: string[] } | null>(null);
+  const [skuWeightInputs, setSkuWeightInputs] = useState<Record<string, string>>({});
   // Dock location recommendation shown after session completes
   const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
   const [missingShipToWarning, setMissingShipToWarning] = useState<{ pendingUrl: string } | null>(null);
@@ -1088,6 +1089,17 @@ export default function QcScanner() {
       }
     },
     onError: (e) => toast.error(e.message, { duration: Infinity }),
+  });
+
+  const upsertWeightOverride = trpc.skuWeight.upsert.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(`Weight override saved for ${vars.sku}: ${vars.cartonWeightLb} lbs/carton`);
+      // Reset the input for this SKU
+      setSkuWeightInputs((prev) => { const n = { ...prev }; delete n[vars.sku]; return n; });
+      // Dismiss the alert so operator can recalculate
+      setZeroWeightAlert(null);
+    },
+    onError: (e) => toast.error(`Failed to save weight override: ${e.message}`),
   });
 
   // Helper: auto-assign UPCs to any pallets missing one, then update local state
@@ -3143,15 +3155,44 @@ export default function QcScanner() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              The following SKUs had no weight data in Extensiv. The calculated total may be understated.
+              The following SKUs had no weight data in Extensiv. Enter carton weights below to save overrides and recalculate.
             </p>
-            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 space-y-1">
+            <div className="space-y-2">
               {zeroWeightAlert?.skus.map((sku) => (
-                <p key={sku} className="font-mono text-xs text-amber-800">{sku}</p>
+                <div key={sku} className="rounded-md bg-amber-50 border border-amber-200 p-2 flex items-center gap-2">
+                  <span className="font-mono text-xs text-amber-800 flex-1">{sku}</span>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="lbs/carton"
+                    className="w-24 text-xs border border-amber-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    value={skuWeightInputs[sku] ?? ""}
+                    onChange={(e) => setSkuWeightInputs((prev) => ({ ...prev, [sku]: e.target.value }))}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7 px-2 border-amber-400 text-amber-700 hover:bg-amber-100"
+                    disabled={!skuWeightInputs[sku] || isNaN(parseFloat(skuWeightInputs[sku])) || upsertWeightOverride.isPending}
+                    onClick={() => {
+                      const lb = parseFloat(skuWeightInputs[sku]);
+                      if (!lb || lb <= 0 || !session) return;
+                      upsertWeightOverride.mutate({
+                        configId: session.warehouseId ?? 0,
+                        customerId: (session as any).customerId ?? 0,
+                        sku,
+                        cartonWeightLb: lb,
+                      });
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              To fix: add carton weight or item weight in Extensiv, then click Calculate again.
+              After saving, click <strong>Calculate</strong> again to apply the new weights.
             </p>
           </div>
           <DialogFooter>

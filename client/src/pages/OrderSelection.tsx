@@ -596,16 +596,24 @@ export default function OrderSelection() {
       } else {
         next.add(clientId);
       }
+      // Persist immediately so deselections survive page reloads
+      if (selectedFacility) {
+        saveLastUsed(selectedFacility.id, selectedFacility.name, Array.from(next));
+      }
       return next;
     });
   };
 
   const handleSelectAllClients = () => {
     if (!customers) return;
-    if (selectedClientIds.size === customers.length) {
-      setSelectedClientIds(new Set());
-    } else {
-      setSelectedClientIds(new Set(customers.map((c) => c.id)));
+    const next =
+      selectedClientIds.size === customers.length
+        ? new Set<number>()
+        : new Set<number>(customers.map((c) => c.id));
+    setSelectedClientIds(next);
+    // Persist immediately
+    if (selectedFacility) {
+      saveLastUsed(selectedFacility.id, selectedFacility.name, Array.from(next));
     }
   };
 

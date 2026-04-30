@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import {
-  AlertCircle, CheckCircle2, Copy, Loader2, Pencil, Plus,
+  AlertCircle, CheckCircle2, Copy, Database, Loader2, Pencil, Plus,
   RefreshCw, Settings2, Stethoscope, Trash2, Webhook, XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -627,6 +627,112 @@ function ApiDiagnosticsTab() {
   );
 }
 
+// ─── MU Cache Sync Tab ───────────────────────────────────────────────────────
+function MuCacheSyncTab() {
+  const [isTriggering, setIsTriggering] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { data: status, refetch } = trpc.muSync.getStatus.useQuery(undefined, {
+    refetchInterval: false,
+  });
+
+  const triggerMutation = trpc.muSync.triggerNow.useMutation({
+    onSuccess: (res) => {
+      toast.success(res.fullBackfill ? "Full backfill started" : "Incremental sync started");
+      setIsTriggering(true);
+    },
+    onError: (e) => {
+      toast.error(e.message);
+      setIsTriggering(false);
+    },
+  });
+
+  // Poll every 3 s while sync is running
+  useEffect(() => {
+    if (status?.syncRunning || isTriggering) {
+      pollRef.current = setInterval(() => refetch(), 3000);
+    } else {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      setIsTriggering(false);
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [status?.syncRunning, isTriggering, refetch]);
+
+  const running = status?.syncRunning || isTriggering;
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        The MU on-file cache stores MU label → SKU mappings from Extensiv receiver items so the QC scanner can resolve MU barcodes instantly without live API calls. The cache is refreshed automatically every night at 2:30 AM Eastern.
+      </p>
+
+      {/* Status card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            Sync Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            {running ? (
+              <><Loader2 className="h-4 w-4 animate-spin text-blue-500" /><span className="text-sm font-medium text-blue-600">Sync in progress…</span></>
+            ) : status?.lastSyncAt ? (
+              <><CheckCircle2 className="h-4 w-4 text-green-500" /><span className="text-sm font-medium text-green-700">Last sync completed</span></>
+            ) : (
+              <><AlertCircle className="h-4 w-4 text-amber-500" /><span className="text-sm font-medium text-amber-700">Never synced</span></>
+            )}
+          </div>
+          {status?.lastSyncAt && (
+            <p className="text-xs text-muted-foreground">
+              Completed: {new Date(status.lastSyncAt).toLocaleString()}
+            </p>
+          )}
+          {status?.lastSyncSummary && (
+            <p className="text-xs text-muted-foreground">{status.lastSyncSummary}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Action buttons */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Button
+          onClick={() => triggerMutation.mutate({ fullBackfill: false })}
+          disabled={running || triggerMutation.isPending}
+          className="gap-2"
+        >
+          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {running ? "Syncing…" : "Sync New Receivers"}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            if (confirm("This will reset the sync state and re-scan ALL receivers from Extensiv. This may take several minutes. Continue?")) {
+              triggerMutation.mutate({ fullBackfill: true });
+            }
+          }}
+          disabled={running || triggerMutation.isPending}
+          className="gap-2"
+        >
+          <Database className="h-4 w-4" />
+          Full Backfill (Reset Cache)
+        </Button>
+      </div>
+
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 space-y-1">
+        <p className="text-sm font-semibold text-blue-800">How it works</p>
+        <p className="text-xs text-blue-700 leading-relaxed">
+          <strong>Sync New Receivers</strong> fetches only receivers created since the last successful sync (incremental). Use this after a receiving day to pick up new MU labels quickly.
+        </p>
+        <p className="text-xs text-blue-700 leading-relaxed mt-1">
+          <strong>Full Backfill</strong> resets the sync state and re-scans all receivers in Extensiv. Use this if MU labels are missing after a data migration or if the cache appears stale.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ApiSettingsDiagnostics() {
   return (
@@ -648,6 +754,10 @@ export default function ApiSettingsDiagnostics() {
             <Stethoscope className="h-3.5 w-3.5" />
             Diagnostics
           </TabsTrigger>
+          <TabsTrigger value="mu-sync" className="gap-1.5">
+            <Database className="h-3.5 w-3.5" />
+            MU Cache Sync
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings" className="pt-4">
@@ -656,6 +766,10 @@ export default function ApiSettingsDiagnostics() {
 
         <TabsContent value="diagnostics" className="pt-4">
           <ApiDiagnosticsTab />
+        </TabsContent>
+
+        <TabsContent value="mu-sync" className="pt-4">
+          <MuCacheSyncTab />
         </TabsContent>
       </Tabs>
     </div>

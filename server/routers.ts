@@ -10851,6 +10851,7 @@ import { pullTrackerRouter } from "./routers/pullTracker";
 import { associatesRouter } from "./routers/associates";
 import { pullAlertsRouter } from "./routers/pullAlerts";
 import { itemsRouter } from "./routers/items";
+import { syncMuOnFileNow, getMuOnFileSyncInfo } from "./scheduler/muOnFileSync";
 
 // ─── EDI 945 Monitor ──────────────────────────────────────────────────────────
 const ediMonitorRouter = router({
@@ -11555,6 +11556,40 @@ const carrierAppointmentsRouter = router({
     }),
 });
 
+// ─── MU Cache Sync Router ───────────────────────────────────────────────────
+const muSyncRouter = router({
+  /** Get current MU sync status (running, last sync time, summary) */
+  getStatus: protectedProcedure.query(() => {
+    const info = getMuOnFileSyncInfo();
+    return {
+      syncRunning: info.syncRunning,
+      lastSyncAt: info.lastSyncAt ? info.lastSyncAt.toISOString() : null,
+      lastSyncSummary: info.lastSyncSummary,
+    };
+  }),
+  /** Manually trigger a full MU on-file sync (resets sync_state to force full backfill) */
+  triggerNow: protectedProcedure
+    .input(z.object({
+      fullBackfill: z.boolean().default(false),
+    }))
+    .mutation(async ({ input }) => {
+      const info = getMuOnFileSyncInfo();
+      if (info.syncRunning) {
+        throw new TRPCError({ code: "CONFLICT", message: "A sync is already running. Please wait for it to complete." });
+      }
+      if (input.fullBackfill) {
+        // Reset sync_state so the run performs a full backfill instead of incremental
+        const db = getDb();
+        await db.execute(sql`DELETE FROM sync_state WHERE sync_type = 'mu_on_file'`);
+      }
+      // Fire and forget — the mutation returns immediately; client polls getStatus
+      syncMuOnFileNow().catch((err) =>
+        console.error("[muSyncRouter] Manual sync error:", err?.message)
+      );
+      return { started: true, fullBackfill: input.fullBackfill };
+    }),
+});
+
 // ──────────────────────────────────────────────────────────────────────────────
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
@@ -11585,5 +11620,6 @@ export const appRouterV4 = router({
   ediEscalations: ediEscalationsRouter,
   carrierPickup: carrierPickupRouter,
   carrierAppointments: carrierAppointmentsRouter,
+  muSync: muSyncRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

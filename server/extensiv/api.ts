@@ -631,6 +631,8 @@ async function fetchInventoryFromPath(
       const halRecords =
         (embedded["item"] as Record<string, unknown>[] | undefined) ??
         (embedded["http://api.3plCentral.com/rels/inventory/stockdetail"] as Record<string, unknown>[] | undefined) ??
+        // /inventory endpoint uses this HAL rel key
+        (embedded["http://api.3plCentral.com/rels/inventory/inventory"] as Record<string, unknown>[] | undefined) ??
         (embedded["http://api.3plCentral.com/rels/customers/itemsummary"] as Record<string, unknown>[] | undefined) ??
         [];
       rawRecords = halRecords;
@@ -851,13 +853,31 @@ export async function fetchInventoryByMuLabel(
         console.warn(`[fetchInventoryByMuLabel] Client-side filter found 0 matches for muLabel=${muLabel} out of ${allRecords.length} records`);
       }
     }
-    // Attempt 4: Use the muLabel as a pallet name — some Extensiv configs store MU numbers as pallet names
-    const records3 = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
-      rql: `palletIdentifier.nameKey.name==${encodeURIComponent(muLabel)}`,
-    });
-    if (records3.length > 0) {
-      console.log(`[fetchInventoryByMuLabel] Pallet name match for muLabel=${muLabel}: ${records3.length} records`);
-      return records3;
+    // Attempt 4: Use the muLabel as a pallet name.
+    // The old GD Scanner app (GDSystemScanner) confirmed that MU barcodes are stored as the
+    // pallet name in Extensiv: it called GET /inventory?rql=PalletIdentifier.namekey.name=={id}
+    // We try 4 variants: both /inventory and /inventory/stockdetails, both casing forms.
+    const attempt4Variants: Array<{ path: string; rql: string; label: string }> = [
+      // 4a: /inventory with lowercase namekey — EXACT match of old GD Scanner app
+      { path: "/inventory", rql: `PalletIdentifier.namekey.name==${encodeURIComponent(muLabel)}`, label: "4a" },
+      // 4b: /inventory/stockdetails with camelCase nameKey
+      { path: "/inventory/stockdetails", rql: `palletIdentifier.nameKey.name==${encodeURIComponent(muLabel)}`, label: "4b" },
+      // 4c: /inventory with camelCase nameKey
+      { path: "/inventory", rql: `palletIdentifier.nameKey.name==${encodeURIComponent(muLabel)}`, label: "4c" },
+      // 4d: /inventory/stockdetails with lowercase namekey
+      { path: "/inventory/stockdetails", rql: `PalletIdentifier.namekey.name==${encodeURIComponent(muLabel)}`, label: "4d" },
+    ];
+    for (const v of attempt4Variants) {
+      try {
+        const records3 = await fetchInventoryFromPath(client, v.path, { rql: v.rql });
+        if (records3.length > 0) {
+          console.log(`[fetchInventoryByMuLabel] Attempt ${v.label} pallet name match (${v.path}) for muLabel=${muLabel}: ${records3.length} records`);
+          return records3;
+        }
+        console.log(`[fetchInventoryByMuLabel] Attempt ${v.label} (${v.path} rql=${v.rql}): 0 records`);
+      } catch (e4) {
+        console.warn(`[fetchInventoryByMuLabel] Attempt ${v.label} error:`, (e4 as Error).message);
+      }
     }
     // Attempt 5: Look up the MU via /inventory/receivers with detail=ReceiveItems.
     // The muLabel is stored on the receiver item (set during receiving). We search receivers

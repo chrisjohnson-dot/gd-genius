@@ -840,7 +840,9 @@ export async function fetchInventoryByMuLabel(
           ? `ReadOnly.CustomerIdentifier.id==${opts.customerId};ReadOnly.FacilityIdentifier.id==${opts.facilityId}`
           : `ReadOnly.CustomerIdentifier.id==${opts.customerId}`;
         const MAX_PAGES = 10;
-        const matchingReceiveItemIds: number[] = [];
+        // Map receiveItemId → SKU so we can query stockdetails by customer+SKU and filter client-side
+        // (Extensiv does not support RQL filtering by receiveItemId on /inventory/stockdetails)
+        const matchingItems: Array<{ receiveItemId: number; sku: string }> = [];
         for (let pgnum = 1; pgnum <= MAX_PAGES; pgnum++) {
           const receiversData = await client.get("/inventory/receivers", {
             rql: receiversRql,
@@ -863,8 +865,6 @@ export async function fetchInventoryByMuLabel(
           console.log(`[fetchInventoryByMuLabel] Receiver scan page ${pgnum}: got ${receiverList.length} receivers for customer=${opts.customerId}`);
           if (receiverList.length === 0) break; // no more pages
           for (const receiver of receiverList) {
-            const transactionId = (receiver["transactionId"] ?? receiver["TransactionId"]) as number | undefined;
-            if (!transactionId) continue;
             // Items may be embedded in the receiver or in a nested _embedded
             let items: Record<string, unknown>[] = [];
             const embR = (receiver["_embedded"] ?? {}) as Record<string, unknown>;
@@ -879,23 +879,45 @@ export async function fetchInventoryByMuLabel(
               const itemMuLabel = (item["muLabel"] ?? item["MuLabel"]) as string | undefined;
               if (itemMuLabel === muLabel) {
                 const rid = (item["receiverItemId"] ?? item["ReceiverItemId"] ?? item["id"] ?? item["Id"]) as number | undefined;
-                if (rid) matchingReceiveItemIds.push(rid);
+                // Extract SKU from itemIdentifier or direct sku field on the receiver item
+                const itemIdObj = (item["itemIdentifier"] ?? item["ItemIdentifier"]) as Record<string, unknown> | undefined;
+                const sku = ((itemIdObj?.["sku"] ?? itemIdObj?.["Sku"] ?? item["sku"] ?? item["Sku"] ?? "") as string);
+                if (rid) matchingItems.push({ receiveItemId: rid, sku });
               }
             }
           }
-          if (matchingReceiveItemIds.length > 0) break; // found — stop paginating
+          if (matchingItems.length > 0) break; // found — stop paginating
         } // end pagination loop
-        if (matchingReceiveItemIds.length > 0) {
-          console.log(`[fetchInventoryByMuLabel] Receiver scan found ${matchingReceiveItemIds.length} receiveItemId(s) for muLabel=${muLabel}: [${matchingReceiveItemIds.join(",")}]`);
-          // Fetch stockdetails for each matching receiveItemId
+        if (matchingItems.length > 0) {
+          console.log(`[fetchInventoryByMuLabel] Receiver scan found ${matchingItems.length} item(s) for muLabel=${muLabel}: ${matchingItems.map(m => `receiveItemId=${m.receiveItemId} sku=${m.sku}`).join(", ")}`);
+          // Query stockdetails by customer+SKU (supported RQL), then filter client-side by receiveItemId.
+          // Extensiv does not support RQL filtering by receiveItemId on /inventory/stockdetails.
           const stockRecords: ExtensivInventoryRecord[] = [];
-          for (const receiveItemId of matchingReceiveItemIds) {
-            const recs = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
-              rql: `receiveItemId==${receiveItemId}`,
+          // Group by SKU to avoid duplicate queries for the same SKU
+          const skuToReceiveItemIds = new Map<string, Set<number>>();
+          for (const { receiveItemId, sku } of matchingItems) {
+            if (!sku) continue;
+            if (!skuToReceiveItemIds.has(sku)) skuToReceiveItemIds.set(sku, new Set());
+            skuToReceiveItemIds.get(sku)!.add(receiveItemId);
+          }
+          for (const [sku, receiveItemIds] of skuToReceiveItemIds.entries()) {
+            // Build RQL: filter by customer + SKU (+ optional facility)
+            let rql = `customerIdentifier.id==${opts.customerId};itemIdentifier.sku==${encodeURIComponent(sku)}`;
+            if (opts.facilityId) rql += `;facilityIdentifier.id==${opts.facilityId}`;
+            const skuRecords = await fetchInventoryFromPath(client, "/inventory/stockdetails", { rql });
+            console.log(`[fetchInventoryByMuLabel] SKU=${sku} stockdetails: ${skuRecords.length} records; filtering by receiveItemIds=[${[...receiveItemIds].join(",")}]`);
+            // Filter client-side by receiveItemId — keep records that match
+            // If receiveItemId is 0/missing on the stockdetail, include all (field not populated)
+            const matched = skuRecords.filter((r) => {
+              if (!r.receiveItemId || r.receiveItemId === 0) return true;
+              return receiveItemIds.has(r.receiveItemId);
             });
-            if (recs.length > 0) {
-              // Tag each record with the muLabel so downstream code can use it
-              stockRecords.push(...recs.map((r) => ({ ...r, muLabel })));
+            if (matched.length > 0) {
+              stockRecords.push(...matched.map((r) => ({ ...r, muLabel })));
+            } else if (skuRecords.length > 0) {
+              // receiveItemId not set on any stockdetail record — return all records for this SKU
+              console.warn(`[fetchInventoryByMuLabel] receiveItemId not present on stockdetails for SKU=${sku}; returning all ${skuRecords.length} records`);
+              stockRecords.push(...skuRecords.map((r) => ({ ...r, muLabel })));
             }
           }
           if (stockRecords.length > 0) {

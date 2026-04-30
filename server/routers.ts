@@ -4464,21 +4464,39 @@ const qcScannerRouter = router({
       }
       return { success: true, oldQty, newQty: input.newQty };
     }),
-  // Move qty of a SKU from one pallet to another (partial or full)
+  // Move qty of a SKU from one pallet to another (partial or full), optionally creating a new pallet
   movePalletItem: protectedProcedure
     .input(z.object({
       sessionId: z.number(),
       fromPalletId: z.number(),
-      toPalletId: z.number(),
+      toPalletId: z.number().optional(),   // omit when createNewPallet=true
       sku: z.string(),
       qty: z.number().int().min(1),
+      createNewPallet: z.boolean().optional(),
+      newPalletType: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      if (input.fromPalletId === input.toPalletId) throw new TRPCError({ code: "BAD_REQUEST", message: "Source and destination pallets must be different" });
+      // Resolve destination pallet — create one if requested
+      let resolvedToPalletId: number;
+      let newPalletNumber: number | undefined;
+      if (input.createNewPallet) {
+        const existing = await getQcPallets(input.sessionId);
+        newPalletNumber = existing.length + 1;
+        resolvedToPalletId = await createQcPallet({
+          sessionId: input.sessionId,
+          palletNumber: newPalletNumber,
+          palletType: input.newPalletType ?? null,
+          items: [],
+        });
+      } else {
+        if (!input.toPalletId) throw new TRPCError({ code: "BAD_REQUEST", message: "toPalletId required when createNewPallet is false" });
+        resolvedToPalletId = input.toPalletId;
+      }
+      if (resolvedToPalletId === input.fromPalletId) throw new TRPCError({ code: "BAD_REQUEST", message: "Source and destination pallets must be different" });
       // Load both pallets
       const [fromPallets, toPallets] = await Promise.all([
         getQcPallets(input.fromPalletId),
-        getQcPallets(input.toPalletId),
+        getQcPallets(resolvedToPalletId),
       ]);
       const fromPallet = fromPallets[0] ?? null;
       const toPallet = toPallets[0] ?? null;
@@ -4508,7 +4526,7 @@ const qcScannerRouter = router({
       }
       await updateQcPallet(toPallet.id, { items: newToItems as unknown as null });
       // Session-level scannedQty is unchanged — the total scanned count doesn't change when moving between pallets
-      return { success: true, movedQty: input.qty };
+      return { success: true, movedQty: input.qty, newPalletId: input.createNewPallet ? resolvedToPalletId : undefined, newPalletNumber };
     }),
   // Flag an unrecognised scan
   flagScan: protectedProcedure

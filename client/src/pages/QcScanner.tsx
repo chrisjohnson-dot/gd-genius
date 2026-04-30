@@ -340,6 +340,7 @@ export default function QcScanner() {
   const [moveMaxQty, setMoveMaxQty] = useState(0);
   const [moveToPalletId, setMoveToPalletId] = useState<number | null>(null);
   const [moveQty, setMoveQty] = useState(1);
+  const [moveCreateNew, setMoveCreateNew] = useState(false);
   const [completeDialog, setCompleteDialog] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   // Per-pallet weight breakdown (palletId → skuBreakdown) stored after Calculate
@@ -1119,8 +1120,12 @@ export default function QcScanner() {
   });
   const movePalletItem = trpc.qcScanner.movePalletItem.useMutation({
     onSuccess: (data, vars) => {
-      const destPallet = pallets.find((p) => p.id === vars.toPalletId);
-      toast.success(`Moved ${data.movedQty} × ${vars.sku} to Pallet ${destPallet?.palletNumber ?? '?'}`);
+      if (vars.createNewPallet) {
+        toast.success(`Moved ${data.movedQty} × ${vars.sku} to new Pallet ${data.newPalletNumber ?? '?'}`);
+      } else {
+        const destPallet = pallets.find((p) => p.id === vars.toPalletId);
+        toast.success(`Moved ${data.movedQty} × ${vars.sku} to Pallet ${destPallet?.palletNumber ?? '?'}`);
+      }
       setMoveDialog(false);
       trpcUtils.qcScanner.getSession.invalidate();
     },
@@ -2404,6 +2409,7 @@ export default function QcScanner() {
                                         setMoveQty(item.qty);
                                         const otherPallet = pallets.find((p) => p.id !== pallet.id);
                                         setMoveToPalletId(otherPallet?.id ?? null);
+                                        setMoveCreateNew(false);
                                         setMoveDialog(true);
                                       }}
                                     >→</button>
@@ -2789,15 +2795,27 @@ export default function QcScanner() {
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Destination Pallet</label>
               <select
                 className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background"
-                value={moveToPalletId ?? ""}
-                onChange={(e) => setMoveToPalletId(Number(e.target.value))}
+                value={moveCreateNew ? "__new__" : (moveToPalletId ?? "")}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    setMoveCreateNew(true);
+                    setMoveToPalletId(null);
+                  } else {
+                    setMoveCreateNew(false);
+                    setMoveToPalletId(Number(e.target.value));
+                  }
+                }}
               >
                 {pallets
                   .filter((p) => p.id !== moveFromPalletId)
                   .map((p) => (
                     <option key={p.id} value={p.id}>Pallet {p.palletNumber}{p.muLabel ? ` (MU ${p.muLabel})` : ""}</option>
                   ))}
+                <option value="__new__">➕ New Pallet (Pallet {pallets.length + 1})</option>
               </select>
+              {moveCreateNew && (
+                <p className="text-xs text-blue-600 mt-1">ℹ️ A new Pallet {pallets.length + 1} will be created and the SKU moved to it.</p>
+              )}
             </div>
             <div>
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Quantity to Move</label>
@@ -2831,19 +2849,30 @@ export default function QcScanner() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoveDialog(false)}>Cancel</Button>
             <Button
-              disabled={!moveToPalletId || !session || movePalletItem.isPending}
+              disabled={(!moveToPalletId && !moveCreateNew) || !session || movePalletItem.isPending}
               onClick={() => {
-                if (!session || !moveToPalletId || !moveFromPalletId) return;
-                movePalletItem.mutate({
-                  sessionId: session.id,
-                  fromPalletId: moveFromPalletId,
-                  toPalletId: moveToPalletId,
-                  sku: moveSku,
-                  qty: moveQty,
-                });
+                if (!session || !moveFromPalletId) return;
+                if (moveCreateNew) {
+                  movePalletItem.mutate({
+                    sessionId: session.id,
+                    fromPalletId: moveFromPalletId,
+                    sku: moveSku,
+                    qty: moveQty,
+                    createNewPallet: true,
+                  });
+                } else {
+                  if (!moveToPalletId) return;
+                  movePalletItem.mutate({
+                    sessionId: session.id,
+                    fromPalletId: moveFromPalletId,
+                    toPalletId: moveToPalletId,
+                    sku: moveSku,
+                    qty: moveQty,
+                  });
+                }
               }}
             >
-              {movePalletItem.isPending ? "Moving…" : `Move ×${moveQty}`}
+              {movePalletItem.isPending ? "Moving…" : moveCreateNew ? `Move ×${moveQty} to New Pallet` : `Move ×${moveQty}`}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1096,6 +1096,19 @@ export default function QcScanner() {
     }
   };
 
+  const removeFromPallet = trpc.qcScanner.removeFromPallet.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Removed ${data.removedQty} unit(s) from pallet`);
+      trpcUtils.qcScanner.getSession.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const adjustPalletItemQty = trpc.qcScanner.adjustPalletItemQty.useMutation({
+    onSuccess: () => {
+      trpcUtils.qcScanner.getSession.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const flagScan = trpc.qcScanner.flagScan.useMutation({
     onSuccess: () => {
       toast.success("Scan flagged for review");
@@ -2343,9 +2356,34 @@ export default function QcScanner() {
                               <div
                                 key={i}
                                 className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
-                                style={{ gridTemplateColumns: "1fr 80px 80px", background: i % 2 === 1 ? "#EEF4FB" : "#ffffff", padding: "6px 8px" }}
+                                style={{ gridTemplateColumns: "1fr auto 80px 80px", background: i % 2 === 1 ? "#EEF4FB" : "#ffffff", padding: "6px 8px" }}
                               >
                                 <span className="font-mono text-xs">{item.sku}</span>
+                                {/* Remove / adjust controls — only shown during active scanning */}
+                                {phase === "scanning" && (
+                                  <div className="flex items-center gap-1 mr-2">
+                                    <button
+                                      type="button"
+                                      title={`Decrease qty for ${item.sku}`}
+                                      className="w-6 h-6 rounded text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center"
+                                      onClick={() => {
+                                        if (!session) return;
+                                        adjustPalletItemQty.mutate({ sessionId: session.id, palletId: pallet.id, sku: item.sku, newQty: Math.max(0, item.qty - 1) });
+                                      }}
+                                    >−</button>
+                                    <button
+                                      type="button"
+                                      title={`Remove ${item.sku} from pallet`}
+                                      className="w-6 h-6 rounded text-xs font-bold bg-red-100 hover:bg-red-200 text-red-700 flex items-center justify-center"
+                                      onClick={() => {
+                                        if (!session) return;
+                                        if (!window.confirm(`Remove all ${item.qty} × ${item.sku} from Pallet ${pallet.palletNumber}?`)) return;
+                                        removeFromPallet.mutate({ sessionId: session.id, palletId: pallet.id, sku: item.sku });
+                                      }}
+                                    >✕</button>
+                                  </div>
+                                )}
+                                {phase !== "scanning" && <span />}
                                 <span className="text-right font-semibold text-sm">×{item.qty}</span>
                                 {skuEntry ? (
                                   <TooltipProvider delayDuration={200}>

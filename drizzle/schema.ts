@@ -2419,3 +2419,26 @@ export const itemDims = mysqlTable("item_dims", {
 });
 export type ItemDims = typeof itemDims.$inferSelect;
 export type InsertItemDims = typeof itemDims.$inferInsert;
+
+// ─── SKU Weight Overrides ────────────────────────────────────────────────────
+// Manual carton weight entries for SKUs that have no weight data in Extensiv.
+// Used as fallback in pallet weight calculations when Extensiv returns null.
+export const skuWeightOverrides = mysqlTable("sku_weight_overrides", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Extensiv config ID this override belongs to */
+  configId: int("config_id").notNull(),
+  /** Extensiv customer ID */
+  customerId: int("customer_id").notNull(),
+  /** SKU identifier */
+  sku: varchar("sku", { length: 100 }).notNull(),
+  /** Carton weight in lbs (manually entered) */
+  cartonWeightLb: decimal("carton_weight_lb", { precision: 10, scale: 4 }).notNull(),
+  /** Units per carton (optional — used to derive per-unit weight) */
+  unitsPerCarton: int("units_per_carton"),
+  /** Free-text note explaining why this override exists */
+  note: varchar("note", { length: 256 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type SkuWeightOverride = typeof skuWeightOverrides.$inferSelect;
+export type InsertSkuWeightOverride = typeof skuWeightOverrides.$inferInsert;

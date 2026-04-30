@@ -4403,6 +4403,67 @@ const qcScannerRouter = router({
       return { success: true };
     }),
 
+  // Remove a SKU entirely from a pallet and decrement the session-level scannedQty
+  removeFromPallet: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      palletId: z.number(),
+      sku: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const pallets = await getQcPallets(input.palletId);
+      const pallet = pallets[0] ?? null;
+      if (!pallet) throw new TRPCError({ code: "NOT_FOUND", message: "Pallet not found" });
+      const items = (pallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+      const removed = items.find((i) => i.sku === input.sku);
+      if (!removed) throw new TRPCError({ code: "NOT_FOUND", message: "SKU not found on pallet" });
+      const newItems = items.filter((i) => i.sku !== input.sku);
+      await updateQcPallet(pallet.id, { items: newItems as unknown as null });
+      // Decrement session-level scannedQty
+      const sessionItems = await getQcScanItems(input.sessionId);
+      const sessionItem = sessionItems.find((i) => i.sku === input.sku);
+      if (sessionItem) {
+        const newQty = Math.max(0, (sessionItem.scannedQty ?? 0) - removed.qty);
+        await upsertQcScanItem(input.sessionId, input.sku, sessionItem.upc ?? null, { scannedQty: newQty });
+      }
+      return { success: true, removedQty: removed.qty };
+    }),
+  // Adjust the quantity of a SKU on a pallet (set to a specific value)
+  adjustPalletItemQty: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      palletId: z.number(),
+      sku: z.string(),
+      newQty: z.number().int().min(0),
+    }))
+    .mutation(async ({ input }) => {
+      const pallets = await getQcPallets(input.palletId);
+      const pallet = pallets[0] ?? null;
+      if (!pallet) throw new TRPCError({ code: "NOT_FOUND", message: "Pallet not found" });
+      const items = (pallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+      const existing = items.find((i) => i.sku === input.sku);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "SKU not found on pallet" });
+      const oldQty = existing.qty;
+      const delta = input.newQty - oldQty;
+      if (input.newQty === 0) {
+        // Remove entirely
+        const newItems = items.filter((i) => i.sku !== input.sku);
+        await updateQcPallet(pallet.id, { items: newItems as unknown as null });
+      } else {
+        existing.qty = input.newQty;
+        await updateQcPallet(pallet.id, { items: items as unknown as null });
+      }
+      // Update session-level scannedQty by delta
+      if (delta !== 0) {
+        const sessionItems = await getQcScanItems(input.sessionId);
+        const sessionItem = sessionItems.find((i) => i.sku === input.sku);
+        if (sessionItem) {
+          const newSessionQty = Math.max(0, (sessionItem.scannedQty ?? 0) + delta);
+          await upsertQcScanItem(input.sessionId, input.sku, sessionItem.upc ?? null, { scannedQty: newSessionQty });
+        }
+      }
+      return { success: true, oldQty, newQty: input.newQty };
+    }),
   // Flag an unrecognised scan
   flagScan: protectedProcedure
     .input(z.object({

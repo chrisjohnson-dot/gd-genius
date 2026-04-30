@@ -1091,13 +1091,41 @@ export default function QcScanner() {
     onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
 
+  // Track per-SKU saved weights so we know when all missing weights for a pallet are covered
+  const [savedWeightSkus, setSavedWeightSkus] = useState<Set<string>>(new Set());
+
+  // Helper: after saving a weight for `sku`, check if all missing SKUs for the pallet are now
+  // covered. If so, auto-trigger recalculate and close the dialog.
+  const handleWeightSavedForSku = (sku: string, palletId: number, remainingSkus: string[]) => {
+    setSavedWeightSkus((prev) => {
+      const next = new Set(prev);
+      next.add(sku);
+      // Check if every SKU in the alert is now saved
+      const allCovered = remainingSkus.every((s) => s === sku || next.has(s));
+      if (allCovered && session) {
+        // Small delay so the toast for the last save is visible first
+        setTimeout(() => {
+          setZeroWeightAlert(null);
+          setSavedWeightSkus(new Set());
+          toast.info('All missing weights saved — recalculating pallet weight…');
+          calculatePalletWeight.mutate({ sessionId: session.id, palletId });
+        }, 400);
+      }
+      return next;
+    });
+  };
+
   const upsertWeightOverride = trpc.skuWeight.upsert.useMutation({
     onSuccess: (_, vars) => {
       toast.success(`Weight override saved for ${vars.sku}: ${vars.cartonWeightLb} lbs/carton`);
       // Reset the input for this SKU
       setSkuWeightInputs((prev) => { const n = { ...prev }; delete n[vars.sku]; return n; });
-      // Dismiss the alert so operator can recalculate
-      setZeroWeightAlert(null);
+      // Auto-recalculate if all missing SKUs are now covered
+      if (zeroWeightAlert) {
+        handleWeightSavedForSku(vars.sku, zeroWeightAlert.palletId, zeroWeightAlert.skus);
+      } else {
+        setZeroWeightAlert(null);
+      }
     },
     onError: (e) => toast.error(`Failed to save weight override: ${e.message}`),
   });
@@ -1112,8 +1140,13 @@ export default function QcScanner() {
         toast(`Saved locally for ${vars.sku} — Extensiv update failed: ${result.error ?? 'unknown error'}`, { icon: '⚠️', duration: 8000 });
       }
       setSkuWeightInputs((prev) => { const n = { ...prev }; delete n[vars.sku]; return n; });
-      setZeroWeightAlert(null);
       setPushingSkus((prev) => { const n = new Set(prev); n.delete(vars.sku); return n; });
+      // Auto-recalculate if all missing SKUs are now covered
+      if (zeroWeightAlert) {
+        handleWeightSavedForSku(vars.sku, zeroWeightAlert.palletId, zeroWeightAlert.skus);
+      } else {
+        setZeroWeightAlert(null);
+      }
     },
     onError: (e, vars) => {
       toast.error(`Failed to push weight to Extensiv for ${vars.sku}: ${e.message}`);

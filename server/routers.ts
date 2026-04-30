@@ -3901,9 +3901,10 @@ const qcScannerRouter = router({
       batchMode: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      // Try to find an existing open session for this transaction ID
+      // Try to find an existing session for this transaction ID (scanning OR complete).
+      // Always resume — never create a duplicate session for the same transaction.
       const existing = await getQcSessionByTransactionId(input.transactionId);
-      if (existing && existing.status === "scanning") {
+      if (existing) {
         const items = await getQcScanItems(existing.id);
         const pallets = await getQcPallets(existing.id);
         return { session: existing, items, pallets, resumed: true };

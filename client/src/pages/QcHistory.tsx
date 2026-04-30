@@ -382,7 +382,15 @@ function SessionCard({ session }: { session: SessionRow }) {
                 size="sm"
                 variant="ghost"
                 className="h-7 text-xs gap-1 ml-auto"
-                onClick={() => window.open(`/qc/scanner?sessionId=${session.id}`, "_blank")}
+                onClick={() => {
+                  // Prefer transactionId so the scanner's startSession resume logic handles it
+                  // (prevents duplicates when re-opening a completed session).
+                  // Fall back to sessionId for sessions without a transactionId.
+                  const url = session.transactionId
+                    ? `/qc/scanner?txId=${session.transactionId}`
+                    : `/qc/scanner?sessionId=${session.id}`;
+                  window.open(url, "_blank");
+                }}
               >
                 <ExternalLink className="w-3 h-3" /> Open in Scanner
               </Button>

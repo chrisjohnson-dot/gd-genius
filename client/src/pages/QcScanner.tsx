@@ -357,6 +357,21 @@ export default function QcScanner() {
   const [extensivLoadError, setExtensivLoadError] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
 
+  // On mount: read ?txId= or ?sessionId= URL params.
+  // pendingTxId is consumed after startSession is defined (see useEffect below).
+  const [pendingUrlTxId, setPendingUrlTxId] = useState<number | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get("txId");
+    if (v) { const n = parseInt(v, 10); return (!isNaN(n) && n > 0) ? n : null; }
+    return null;
+  });
+  const [pendingUrlSessionId] = useState<number | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get("sessionId");
+    if (v) { const n = parseInt(v, 10); return (!isNaN(n) && n > 0) ? n : null; }
+    return null;
+  });
+
   // Weight limit threshold (lbs) — configurable per session, default 2000
   const [weightLimitLb, setWeightLimitLb] = useState<number>(2000);
   const [weightLimitInput, setWeightLimitInput] = useState<string>("2000");
@@ -549,10 +564,13 @@ export default function QcScanner() {
       setPallets(loadedPallets);
       // Auto-expand the last (active) pallet
       if (loadedPallets.length > 0) setExpandedPallets(new Set(loadedPallets.map((p: Pallet) => p.id)));
-      setPhase("scanning");
+      // Set the correct phase based on session status — a completed session should open in "complete" view
+      const resumedPhase = (data.resumed && (sess as any).status === "complete") ? "complete" : "scanning";
+      setPhase(resumedPhase);
       if (data.resumed) {
-        toast.info(`Resumed session for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
-        setTimeout(() => barcodeRef.current?.focus(), 100);
+        const statusLabel = (sess as any).status === "complete" ? "Viewing completed session" : "Resumed session";
+        toast.info(`${statusLabel} for TX ${sess?.transactionId ?? sess?.referenceNumber}`);
+        if (resumedPhase === "scanning") setTimeout(() => barcodeRef.current?.focus(), 100);
         // Silently refresh case amounts and carton weights in the background for sessions seeded before the fix
         const loadedItems = (data.items as ScanItem[]) ?? [];
         const needsCaseRefresh = loadedItems.some((i) => (i.caseAmount ?? 1) <= 1);
@@ -580,6 +598,19 @@ export default function QcScanner() {
     },
     onError: (e) => toast.error(e.message, { duration: Infinity }),
   });
+
+  // Consume URL params now that startSession is defined.
+  // ?txId= → resume/open via startSession (handles both scanning and complete sessions)
+  // ?sessionId= → open the session detail dialog (legacy fallback)
+  useEffect(() => {
+    if (pendingUrlTxId) {
+      setPendingUrlTxId(null);
+      startSession.mutate({ transactionId: pendingUrlTxId });
+    } else if (pendingUrlSessionId) {
+      setSelectedSessionId(pendingUrlSessionId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const scanBarcode = trpc.qcScanner.scanBarcode.useMutation({
     onSuccess: (data) => {

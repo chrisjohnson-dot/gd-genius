@@ -4464,6 +4464,52 @@ const qcScannerRouter = router({
       }
       return { success: true, oldQty, newQty: input.newQty };
     }),
+  // Move qty of a SKU from one pallet to another (partial or full)
+  movePalletItem: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      fromPalletId: z.number(),
+      toPalletId: z.number(),
+      sku: z.string(),
+      qty: z.number().int().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      if (input.fromPalletId === input.toPalletId) throw new TRPCError({ code: "BAD_REQUEST", message: "Source and destination pallets must be different" });
+      // Load both pallets
+      const [fromPallets, toPallets] = await Promise.all([
+        getQcPallets(input.fromPalletId),
+        getQcPallets(input.toPalletId),
+      ]);
+      const fromPallet = fromPallets[0] ?? null;
+      const toPallet = toPallets[0] ?? null;
+      if (!fromPallet) throw new TRPCError({ code: "NOT_FOUND", message: "Source pallet not found" });
+      if (!toPallet) throw new TRPCError({ code: "NOT_FOUND", message: "Destination pallet not found" });
+      // Validate source has the SKU with enough qty
+      const fromItems = (fromPallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+      const fromItem = fromItems.find((i) => i.sku === input.sku);
+      if (!fromItem) throw new TRPCError({ code: "NOT_FOUND", message: `SKU ${input.sku} not found on source pallet` });
+      if (fromItem.qty < input.qty) throw new TRPCError({ code: "BAD_REQUEST", message: `Only ${fromItem.qty} units available on source pallet` });
+      // Update source pallet: reduce or remove
+      let newFromItems: Array<{ sku: string; upc?: string; qty: number }>;
+      if (fromItem.qty === input.qty) {
+        newFromItems = fromItems.filter((i) => i.sku !== input.sku);
+      } else {
+        newFromItems = fromItems.map((i) => i.sku === input.sku ? { ...i, qty: i.qty - input.qty } : i);
+      }
+      await updateQcPallet(fromPallet.id, { items: newFromItems as unknown as null });
+      // Update destination pallet: add or merge
+      const toItems = (toPallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+      const toExisting = toItems.find((i) => i.sku === input.sku);
+      let newToItems: Array<{ sku: string; upc?: string; qty: number }>;
+      if (toExisting) {
+        newToItems = toItems.map((i) => i.sku === input.sku ? { ...i, qty: i.qty + input.qty } : i);
+      } else {
+        newToItems = [...toItems, { sku: input.sku, upc: fromItem.upc, qty: input.qty }];
+      }
+      await updateQcPallet(toPallet.id, { items: newToItems as unknown as null });
+      // Session-level scannedQty is unchanged — the total scanned count doesn't change when moving between pallets
+      return { success: true, movedQty: input.qty };
+    }),
   // Flag an unrecognised scan
   flagScan: protectedProcedure
     .input(z.object({

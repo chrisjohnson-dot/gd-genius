@@ -332,6 +332,14 @@ export default function QcScanner() {
   const [flagDialog, setFlagDialog] = useState(false);
   const [flagBarcode, setFlagBarcode] = useState("");
   const [flagDesc, setFlagDesc] = useState("");
+  // Move to Pallet dialog state
+  const [moveDialog, setMoveDialog] = useState(false);
+  const [moveSku, setMoveSku] = useState("");
+  const [moveFromPalletId, setMoveFromPalletId] = useState<number | null>(null);
+  const [moveFromPalletNumber, setMoveFromPalletNumber] = useState<number>(1);
+  const [moveMaxQty, setMoveMaxQty] = useState(0);
+  const [moveToPalletId, setMoveToPalletId] = useState<number | null>(null);
+  const [moveQty, setMoveQty] = useState(1);
   const [completeDialog, setCompleteDialog] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   // Per-pallet weight breakdown (palletId → skuBreakdown) stored after Calculate
@@ -1105,6 +1113,15 @@ export default function QcScanner() {
   });
   const adjustPalletItemQty = trpc.qcScanner.adjustPalletItemQty.useMutation({
     onSuccess: () => {
+      trpcUtils.qcScanner.getSession.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const movePalletItem = trpc.qcScanner.movePalletItem.useMutation({
+    onSuccess: (data, vars) => {
+      const destPallet = pallets.find((p) => p.id === vars.toPalletId);
+      toast.success(`Moved ${data.movedQty} × ${vars.sku} to Pallet ${destPallet?.palletNumber ?? '?'}`);
+      setMoveDialog(false);
       trpcUtils.qcScanner.getSession.invalidate();
     },
     onError: (e) => toast.error(e.message),
@@ -2373,6 +2390,25 @@ export default function QcScanner() {
                                     >−</button>
                                     <button
                                       type="button"
+                                      title={`Move ${item.sku} to another pallet`}
+                                      className="w-6 h-6 rounded text-xs font-bold bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center justify-center"
+                                      onClick={() => {
+                                        if (!session || pallets.length < 2) {
+                                          toast.error("Need at least 2 pallets to move items");
+                                          return;
+                                        }
+                                        setMoveSku(item.sku);
+                                        setMoveFromPalletId(pallet.id);
+                                        setMoveFromPalletNumber(pallet.palletNumber);
+                                        setMoveMaxQty(item.qty);
+                                        setMoveQty(item.qty);
+                                        const otherPallet = pallets.find((p) => p.id !== pallet.id);
+                                        setMoveToPalletId(otherPallet?.id ?? null);
+                                        setMoveDialog(true);
+                                      }}
+                                    >→</button>
+                                    <button
+                                      type="button"
                                       title={`Remove ${item.sku} from pallet`}
                                       className="w-6 h-6 rounded text-xs font-bold bg-red-100 hover:bg-red-200 text-red-700 flex items-center justify-center"
                                       onClick={() => {
@@ -2736,6 +2772,82 @@ export default function QcScanner() {
           </DialogContent>
         </Dialog>
       )}
+      {/* Move to Pallet Dialog */}
+      <Dialog open={moveDialog} onOpenChange={setMoveDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-blue-600 font-bold text-lg">→</span> Move SKU to Another Pallet
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm">
+              <span className="font-mono font-semibold text-[#15527f]">{moveSku}</span>
+              <span className="text-muted-foreground ml-2">from Pallet {moveFromPalletNumber}</span>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Destination Pallet</label>
+              <select
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background"
+                value={moveToPalletId ?? ""}
+                onChange={(e) => setMoveToPalletId(Number(e.target.value))}
+              >
+                {pallets
+                  .filter((p) => p.id !== moveFromPalletId)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>Pallet {p.palletNumber}{p.muLabel ? ` (MU ${p.muLabel})` : ""}</option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Quantity to Move</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded bg-slate-200 hover:bg-slate-300 font-bold text-lg flex items-center justify-center"
+                  onClick={() => setMoveQty((q) => Math.max(1, q - 1))}
+                >−</button>
+                <input
+                  type="number"
+                  min={1}
+                  max={moveMaxQty}
+                  value={moveQty}
+                  onChange={(e) => setMoveQty(Math.min(moveMaxQty, Math.max(1, Number(e.target.value))))}
+                  className="w-20 text-center border border-input rounded-md px-2 py-1 text-sm"
+                />
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded bg-slate-200 hover:bg-slate-300 font-bold text-lg flex items-center justify-center"
+                  onClick={() => setMoveQty((q) => Math.min(moveMaxQty, q + 1))}
+                >+</button>
+                <button
+                  type="button"
+                  className="ml-2 text-xs text-blue-600 hover:underline"
+                  onClick={() => setMoveQty(moveMaxQty)}
+                >All ({moveMaxQty})</button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveDialog(false)}>Cancel</Button>
+            <Button
+              disabled={!moveToPalletId || !session || movePalletItem.isPending}
+              onClick={() => {
+                if (!session || !moveToPalletId || !moveFromPalletId) return;
+                movePalletItem.mutate({
+                  sessionId: session.id,
+                  fromPalletId: moveFromPalletId,
+                  toPalletId: moveToPalletId,
+                  sku: moveSku,
+                  qty: moveQty,
+                });
+              }}
+            >
+              {movePalletItem.isPending ? "Moving…" : `Move ×${moveQty}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Flag Dialog */}
       <Dialog open={flagDialog} onOpenChange={setFlagDialog}>
         <DialogContent>

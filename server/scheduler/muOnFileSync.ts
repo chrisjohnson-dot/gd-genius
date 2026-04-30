@@ -192,7 +192,7 @@ export async function syncMuOnFileNow(): Promise<{ success: boolean; message: st
 
               for (const item of items) {
                 const muLabel =
-                  (item["muLabel"] ?? item["MuLabel"]) as string | undefined;
+                  (item["muLabel"] ?? item["MuLabel"] ?? item["MULabel"]) as string | undefined;
                 if (!muLabel) continue; // skip items with no MU label
 
                 const receiverItemId =

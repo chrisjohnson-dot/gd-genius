@@ -599,7 +599,7 @@ function normalizeInventoryRecord(raw: Record<string, unknown>): ExtensivInvento
     receivedDate: get<string>(raw, "receivedDate"),
     locationIdentifier,
     palletIdentifier,
-    muLabel: get<string>(raw, "muLabel"),
+    muLabel: (get<string>(raw, "muLabel") ?? raw["MULabel"] as string | undefined),
   };
 }
 
@@ -876,7 +876,7 @@ export async function fetchInventoryByMuLabel(
             const topItems = receiver["receiveItems"] ?? receiver["ReceiveItems"];
             if (Array.isArray(topItems)) items = [...items, ...(topItems as Record<string, unknown>[])]; 
             for (const item of items) {
-              const itemMuLabel = (item["muLabel"] ?? item["MuLabel"]) as string | undefined;
+              const itemMuLabel = (item["muLabel"] ?? item["MuLabel"] ?? item["MULabel"]) as string | undefined;
               if (itemMuLabel === muLabel) {
                 const rid = (item["receiverItemId"] ?? item["ReceiverItemId"] ?? item["id"] ?? item["Id"]) as number | undefined;
                 // Extract SKU from itemIdentifier or direct sku field on the receiver item

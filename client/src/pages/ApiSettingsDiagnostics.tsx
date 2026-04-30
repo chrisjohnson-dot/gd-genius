@@ -632,12 +632,16 @@ function MuCacheSyncTab() {
   const [isTriggering, setIsTriggering] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [debugMu, setDebugMu] = useState("");
-  const [debugResult, setDebugResult] = useState<unknown>(null);
-  const [debugLoading, setDebugLoading] = useState(false);
-  const debugMutation = trpc.qcScanner.debugMuLookup.useMutation({
-    onSuccess: (data) => { setDebugResult(data); setDebugLoading(false); },
-    onError: (e) => { setDebugResult({ error: e.message }); setDebugLoading(false); },
-  });
+  const [debugInput, setDebugInput] = useState<{ sessionId: number; muLabel: string } | null>(null);
+  const { data: debugData, isFetching: debugLoading, error: debugError } = trpc.qcScanner.debugMuLookup.useQuery(
+    debugInput ?? { sessionId: 0, muLabel: "" },
+    { enabled: !!debugInput, refetchOnMount: false, refetchOnWindowFocus: false }
+  );
+  const debugResult = debugData ?? (debugError ? { error: debugError.message } : null);
+  const runDebug = () => {
+    if (!debugMu.trim()) return;
+    setDebugInput({ sessionId: 0, muLabel: debugMu.trim() });
+  };
 
   const { data: status, refetch } = trpc.muSync.getStatus.useQuery(undefined, {
     refetchInterval: false,
@@ -747,20 +751,14 @@ function MuCacheSyncTab() {
               className="max-w-xs font-mono text-sm"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && debugMu.trim()) {
-                  setDebugLoading(true);
-                  setDebugResult(null);
-                  debugMutation.mutate({ muLabel: debugMu.trim() });
+                  runDebug();
                 }
               }}
             />
             <Button
               size="sm"
               disabled={!debugMu.trim() || debugLoading}
-              onClick={() => {
-                setDebugLoading(true);
-                setDebugResult(null);
-                debugMutation.mutate({ muLabel: debugMu.trim() });
-              }}
+              onClick={runDebug}
             >
               {debugLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Inspect"}
             </Button>

@@ -5050,61 +5050,74 @@ const qcScannerRouter = router({
         });
       }
       // Also dump raw receiver items to identify the actual muLabel field name
+      // Paginate up to 20 pages (2000 receivers) to find the specific MU label value
       let rawReceiverDump: unknown[] = [];
       let rawReceiverItemSample: unknown = null;
+      let firstItemFieldNames: string[] = [];
       try {
         const receiversRql = session.customerId && session.facilityId
           ? `ReadOnly.CustomerIdentifier.id==${session.customerId};ReadOnly.FacilityIdentifier.id==${session.facilityId}`
           : session.customerId ? `ReadOnly.CustomerIdentifier.id==${session.customerId}` : "";
-        const receiversData = await client.get("/inventory/receivers", {
-          rql: receiversRql,
-          detail: "ReceiveItems",
-          pgsiz: 5,
-          pgnum: 1,
-        }) as Record<string, unknown>;
-        const rl = receiversData["ResourceList"] ?? receiversData["resourceList"];
-        const receiverList: Record<string, unknown>[] = Array.isArray(rl) ? rl as Record<string, unknown>[] : [];
-        rawReceiverDump = receiverList.slice(0, 2).map(r => ({
-          topLevelKeys: Object.keys(r),
-          embeddedKeys: Object.keys((r["_embedded"] ?? {}) as Record<string, unknown>),
-          receiveItemsRaw: r["receiveItems"] ?? r["ReceiveItems"] ?? "(not at top level)",
-          embeddedFirstArray: (() => {
+        let pgnum = 1;
+        const pgsiz = 100;
+        const MAX_PAGES = 20;
+        let firstReceiverCaptured = false;
+        while (pgnum <= MAX_PAGES && !rawReceiverItemSample) {
+          const receiversData = await client.get("/inventory/receivers", {
+            rql: receiversRql,
+            detail: "ReceiveItems",
+            pgsiz,
+            pgnum,
+          }) as Record<string, unknown>;
+          const rl = receiversData["ResourceList"] ?? receiversData["resourceList"];
+          const receiverList: Record<string, unknown>[] = Array.isArray(rl) ? rl as Record<string, unknown>[] : [];
+          if (receiverList.length === 0) break;
+          // Capture the first receiver's structure for diagnostics (once)
+          if (!firstReceiverCaptured && receiverList.length > 0) {
+            firstReceiverCaptured = true;
+            const r = receiverList[0];
             const emb = (r["_embedded"] ?? {}) as Record<string, unknown>;
+            let firstItem: Record<string, unknown> | null = null;
             for (const k of Object.keys(emb)) {
               const arr = emb[k];
-              if (Array.isArray(arr) && arr.length > 0) return { key: k, firstItem: arr[0] };
+              if (Array.isArray(arr) && arr.length > 0) { firstItem = arr[0] as Record<string, unknown>; break; }
             }
-            return null;
-          })(),
-        }));
-        // Try to find any item with a field containing the muLabel value
-        for (const receiver of receiverList) {
-          const emb = (receiver["_embedded"] ?? {}) as Record<string, unknown>;
-          for (const k of Object.keys(emb)) {
-            const arr = emb[k];
-            if (!Array.isArray(arr)) continue;
-            for (const item of arr as Record<string, unknown>[]) {
-              const vals = Object.values(item);
-              if (vals.some(v => String(v) === input.muLabel)) {
-                rawReceiverItemSample = { matchedInKey: k, item };
-                break;
+            if (!firstItem) {
+              const topItems = r["receiveItems"] ?? r["ReceiveItems"];
+              if (Array.isArray(topItems) && topItems.length > 0) firstItem = topItems[0] as Record<string, unknown>;
+            }
+            if (firstItem) firstItemFieldNames = Object.keys(firstItem);
+            rawReceiverDump = [{
+              topLevelKeys: Object.keys(r),
+              embeddedKeys: Object.keys(emb),
+              firstItemFieldNames,
+              firstItemSample: firstItem,
+            }];
+          }
+          // Search all items on this page for the muLabel value in any field
+          for (const receiver of receiverList) {
+            const allItems: Record<string, unknown>[] = [];
+            const emb = (receiver["_embedded"] ?? {}) as Record<string, unknown>;
+            for (const k of Object.keys(emb)) {
+              const arr = emb[k];
+              if (Array.isArray(arr)) allItems.push(...(arr as Record<string, unknown>[]));
+            }
+            const topItems = receiver["receiveItems"] ?? receiver["ReceiveItems"];
+            if (Array.isArray(topItems)) allItems.push(...(topItems as Record<string, unknown>[]));
+            for (const item of allItems) {
+              // Check every field value — find which field holds the MU label
+              for (const [k, v] of Object.entries(item)) {
+                if (String(v) === input.muLabel) {
+                  rawReceiverItemSample = { matchedFieldName: k, matchedValue: v, fullItem: item };
+                  break;
+                }
               }
+              if (rawReceiverItemSample) break;
             }
             if (rawReceiverItemSample) break;
           }
-          if (rawReceiverItemSample) break;
-          // Also check top-level receiveItems
-          const topItems = receiver["receiveItems"] ?? receiver["ReceiveItems"];
-          if (Array.isArray(topItems)) {
-            for (const item of topItems as Record<string, unknown>[]) {
-              const vals = Object.values(item);
-              if (vals.some(v => String(v) === input.muLabel)) {
-                rawReceiverItemSample = { matchedInTopLevel: true, item };
-                break;
-              }
-            }
-          }
-          if (rawReceiverItemSample) break;
+          if (receiverList.length < pgsiz) break;
+          pgnum++;
         }
       } catch (err: unknown) {
         rawReceiverDump = [{ error: (err as Error).message }];

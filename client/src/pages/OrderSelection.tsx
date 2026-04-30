@@ -952,22 +952,25 @@ export default function OrderSelection() {
                       const count = orderCountMap.get(customer.id);
                       const hasCount = orderCountMap.has(customer.id);
                       const isZero = hasCount && count === 0;
+                      // Allow deselection of already-selected zero-order clients;
+                      // only block *selecting* new clients that have no orders.
+                      const isBlocked = isZero && !isSelected;
                       return (
                         <div
                           key={customer.id}
                           className={`flex items-center gap-3 p-3 rounded-md transition-colors ${
-                            isZero
+                            isBlocked
                               ? "opacity-40 cursor-not-allowed border border-transparent"
                               : isSelected
                               ? "bg-primary/8 border border-primary/20 cursor-pointer"
                               : "hover:bg-muted/50 border border-transparent cursor-pointer"
                           }`}
-                          onClick={() => !isZero && handleToggleClient(customer.id)}
+                          onClick={() => !isBlocked && handleToggleClient(customer.id)}
                         >
                           <Checkbox
                             checked={isSelected}
-                            disabled={isZero}
-                            onCheckedChange={() => !isZero && handleToggleClient(customer.id)}
+                            disabled={isBlocked}
+                            onCheckedChange={() => !isBlocked && handleToggleClient(customer.id)}
                             onClick={(e) => e.stopPropagation()}
                           />
                           <div className="flex items-center gap-2 min-w-0">

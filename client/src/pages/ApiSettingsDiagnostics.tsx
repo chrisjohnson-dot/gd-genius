@@ -631,6 +631,13 @@ function ApiDiagnosticsTab() {
 function MuCacheSyncTab() {
   const [isTriggering, setIsTriggering] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [debugMu, setDebugMu] = useState("");
+  const [debugResult, setDebugResult] = useState<unknown>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
+  const debugMutation = trpc.qcScanner.debugMuLookup.useMutation({
+    onSuccess: (data) => { setDebugResult(data); setDebugLoading(false); },
+    onError: (e) => { setDebugResult({ error: e.message }); setDebugLoading(false); },
+  });
 
   const { data: status, refetch } = trpc.muSync.getStatus.useQuery(undefined, {
     refetchInterval: false,
@@ -719,6 +726,52 @@ function MuCacheSyncTab() {
           Full Backfill (Reset Cache)
         </Button>
       </div>
+
+      {/* MU Label Field Inspector */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Stethoscope className="h-4 w-4 text-muted-foreground" />
+            MU Label Field Inspector
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Enter an MU barcode to inspect the raw Extensiv API response and identify the exact field name used for MU labels in your tenant.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g. 199806"
+              value={debugMu}
+              onChange={(e) => setDebugMu(e.target.value)}
+              className="max-w-xs font-mono text-sm"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && debugMu.trim()) {
+                  setDebugLoading(true);
+                  setDebugResult(null);
+                  debugMutation.mutate({ muLabel: debugMu.trim() });
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              disabled={!debugMu.trim() || debugLoading}
+              onClick={() => {
+                setDebugLoading(true);
+                setDebugResult(null);
+                debugMutation.mutate({ muLabel: debugMu.trim() });
+              }}
+            >
+              {debugLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Inspect"}
+            </Button>
+          </div>
+          {debugResult !== null && (
+            <div className="rounded border bg-slate-950 text-green-300 p-3 text-xs font-mono overflow-auto max-h-96 whitespace-pre-wrap">
+              {JSON.stringify(debugResult, null, 2)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 space-y-1">
         <p className="text-sm font-semibold text-blue-800">How it works</p>

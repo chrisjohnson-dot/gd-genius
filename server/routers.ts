@@ -4653,24 +4653,41 @@ const qcScannerRouter = router({
       // Calculate total weight: sum(perUnitWeightLb * qty) per SKU
       // Priority: (cartonWeightLb / unitsPerCarton) → unit_weight_lb (imperial.weight) → skip
       let totalLb = 0;
+      type SkuWeightBreakdown = {
+        sku: string;
+        qty: number;
+        perUnitWeightLb: number | null;
+        totalWeightLb: number | null;
+        source: 'carton' | 'imperial' | 'none';
+      };
+      const skuBreakdown: SkuWeightBreakdown[] = [];
+      const zeroWeightSkus: string[] = [];
       for (const item of items) {
         const cartonW = cartonWeightMap.get(item.sku);
         if (cartonW) {
           const unitsPerCarton = caseAmountMap.get(item.sku) ?? 1;
-          const perUnitW = cartonW / unitsPerCarton;
-          totalLb += perUnitW * item.qty;
+          const perUnitW = Math.round((cartonW / unitsPerCarton) * 10000) / 10000;
+          const contrib = perUnitW * item.qty;
+          totalLb += contrib;
+          skuBreakdown.push({ sku: item.sku, qty: item.qty, perUnitWeightLb: perUnitW, totalWeightLb: Math.round(contrib * 100) / 100, source: 'carton' });
         } else {
           // Fallback: use item-level imperial.weight directly
           const unitW = unitWeightMap.get(item.sku);
-          if (unitW) totalLb += unitW * item.qty;
+          if (unitW) {
+            const contrib = unitW * item.qty;
+            totalLb += contrib;
+            skuBreakdown.push({ sku: item.sku, qty: item.qty, perUnitWeightLb: unitW, totalWeightLb: Math.round(contrib * 100) / 100, source: 'imperial' });
+          } else {
+            skuBreakdown.push({ sku: item.sku, qty: item.qty, perUnitWeightLb: null, totalWeightLb: null, source: 'none' });
+            zeroWeightSkus.push(item.sku);
+          }
         }
       }
-
       // Add pallet tare weight (default 30 lbs if not set)
       const tareLb = pallet.palletTareWeightLb ? parseFloat(String(pallet.palletTareWeightLb)) : 30;
       const weightLb = Math.round((totalLb + tareLb) * 100) / 100;
       await updateQcPallet(input.palletId, { calculatedWeightLb: String(weightLb) });
-      return { weightLb };
+      return { weightLb, skuBreakdown, zeroWeightSkus };
     }),
   // Set or clear operator weight override (takes precedence over calculated weight on labels)
   updatePalletWeightOverride: protectedProcedure

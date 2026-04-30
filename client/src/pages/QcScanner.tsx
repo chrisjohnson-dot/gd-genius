@@ -11,6 +11,7 @@ import { PhotoGallery } from "@/components/photos/PhotoGallery";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ScanBarcode, CheckCircle2, AlertTriangle, Flag, Plus, Minus,
   Package, Layers, ClipboardList, ChevronRight, RefreshCw, Download, X,
@@ -333,6 +334,10 @@ export default function QcScanner() {
   const [flagDesc, setFlagDesc] = useState("");
   const [completeDialog, setCompleteDialog] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  // Per-pallet weight breakdown (palletId → skuBreakdown) stored after Calculate
+  type SkuBreakdownEntry = { sku: string; qty: number; perUnitWeightLb: number | null; totalWeightLb: number | null; source: 'carton' | 'imperial' | 'none' };
+  const [palletWeightBreakdown, setPalletWeightBreakdown] = useState<Record<number, SkuBreakdownEntry[]>>({});
+  const [zeroWeightAlert, setZeroWeightAlert] = useState<{ palletId: number; skus: string[] } | null>(null);
   // Dock location recommendation shown after session completes
   const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
   const [missingShipToWarning, setMissingShipToWarning] = useState<{ pendingUrl: string } | null>(null);
@@ -1014,6 +1019,14 @@ export default function QcScanner() {
         setPallets((prev) =>
           prev.map((p) => p.id === vars.palletId ? { ...p, calculatedWeightLb: String(data.weightLb) } : p)
         );
+        // Store per-SKU breakdown for tooltip display
+        if (data.skuBreakdown?.length) {
+          setPalletWeightBreakdown((prev) => ({ ...prev, [vars.palletId]: data.skuBreakdown }));
+        }
+        // Show zero-weight alert if any SKUs had no weight data
+        if (data.zeroWeightSkus?.length) {
+          setZeroWeightAlert({ palletId: vars.palletId, skus: data.zeroWeightSkus });
+        }
         toast.success(`Calculated weight: ${data.weightLb} lbs`);
       } else {
         toast.info("Weight could not be calculated — item dims may be missing in Extensiv");
@@ -2282,16 +2295,49 @@ export default function QcScanner() {
                         {(!pallet.items || pallet.items.length === 0) ? (
                           <div className="px-3 py-4 text-xs text-muted-foreground italic text-center">Scan items to populate this pallet…</div>
                         ) : (
-                          (pallet.items as Array<{ sku: string; upc?: string; qty: number }>).map((item, i) => (
-                            <div
-                              key={i}
-                              className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
-                              style={{ gridTemplateColumns: "1fr 80px", background: i % 2 === 1 ? "#EEF4FB" : "#ffffff", padding: "6px 8px" }}
-                            >
-                              <span className="font-mono text-xs">{item.sku}</span>
-                              <span className="text-right font-semibold text-sm">×{item.qty}</span>
-                            </div>
-                          ))
+                          (pallet.items as Array<{ sku: string; upc?: string; qty: number }>).map((item, i) => {
+                            const breakdown = palletWeightBreakdown[pallet.id];
+                            const skuEntry = breakdown?.find((b) => b.sku === item.sku);
+                            return (
+                              <div
+                                key={i}
+                                className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
+                                style={{ gridTemplateColumns: "1fr 80px 80px", background: i % 2 === 1 ? "#EEF4FB" : "#ffffff", padding: "6px 8px" }}
+                              >
+                                <span className="font-mono text-xs">{item.sku}</span>
+                                <span className="text-right font-semibold text-sm">×{item.qty}</span>
+                                {skuEntry ? (
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className={`text-right text-xs cursor-help ${
+                                          skuEntry.source === 'none' ? 'text-amber-600 font-semibold' :
+                                          skuEntry.source === 'imperial' ? 'text-blue-600' : 'text-green-700'
+                                        }`}>
+                                          {skuEntry.totalWeightLb !== null ? `${skuEntry.totalWeightLb} lb` : '—'}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left" className="max-w-[200px]">
+                                        <p className="text-xs font-semibold mb-1">{item.sku} weight</p>
+                                        {skuEntry.source === 'none' ? (
+                                          <p className="text-xs text-amber-600">No weight data in Extensiv</p>
+                                        ) : (
+                                          <>
+                                            <p className="text-xs">{skuEntry.perUnitWeightLb} lb/unit × {item.qty} units</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                              Source: {skuEntry.source === 'carton' ? 'carton weight' : 'imperial weight'}
+                                            </p>
+                                          </>
+                                        )}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (
+                                  <span />
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                         {/* Live weight footer row */}
                         {(pallet.calculatedWeightLb || pallet.weightOverrideLb) && (
@@ -2866,6 +2912,33 @@ export default function QcScanner() {
         </DialogContent>
       </Dialog>
 
+      {/* ─── Zero-Weight SKU Alert Dialog ─────────────────────────────── */}
+      <Dialog open={!!zeroWeightAlert} onOpenChange={(o) => { if (!o) setZeroWeightAlert(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="w-5 h-5" />
+              Missing Weight Data
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              The following SKUs had no weight data in Extensiv. The calculated total may be understated.
+            </p>
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 space-y-1">
+              {zeroWeightAlert?.skus.map((sku) => (
+                <p key={sku} className="font-mono text-xs text-amber-800">{sku}</p>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              To fix: add carton weight or item weight in Extensiv, then click Calculate again.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setZeroWeightAlert(null)}>Dismiss</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* ─── Missing Ship-To Warning Dialog ───────────────────────────── */}
       <Dialog open={!!missingShipToWarning} onOpenChange={(o) => { if (!o) setMissingShipToWarning(null); }}>
         <DialogContent className="max-w-sm">

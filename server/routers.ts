@@ -4924,6 +4924,7 @@ const qcScannerRouter = router({
       const muRecords = await fetchInventoryByMuLabel(config, input.muLabel, {
         customerId: session.customerId ?? undefined,
         facilityId: session.facilityId ?? undefined,
+        configId: config.id,
       });
       if (!muRecords.length) {
         return { notFound: true, muLabel: input.muLabel, palletId: input.palletId, palletNumber: null, muItems: [], nextPalletId: null, nextPalletNumber: null };

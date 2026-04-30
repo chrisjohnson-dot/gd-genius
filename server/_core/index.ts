@@ -25,6 +25,7 @@ import { startOpFiHealthCheckScheduler } from "../scheduler/opfiHealthCheck";
 import { startClearSightRulesSyncScheduler } from "../scheduler/clearsightRulesSync";
 import { startPackRetryScheduler } from "../scheduler/packRetry";
 import { startItemDimsSyncScheduler } from "../scheduler/itemDimsSync";
+import { startMuOnFileSyncScheduler } from "../scheduler/muOnFileSync";
 import { checkOverdueSessions } from "../routers/pullAlerts";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -116,6 +117,8 @@ async function startServer() {
     startPackRetryScheduler();
     // Nightly SKU dims sync at 07:00 UTC (2:00 AM Eastern) — caches carton weights and case amounts
     startItemDimsSyncScheduler();
+    // Nightly MU on-file re-sync at 07:30 UTC (2:30 AM Eastern) — rebuilds mu_labels for all warehouses
+    startMuOnFileSyncScheduler();
     // Pull session overdue alert check every 5 minutes
     const runPullAlertCheck = () => {
       checkOverdueSessions()

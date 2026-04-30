@@ -792,6 +792,7 @@ export type InsertPutAwayScan = typeof putAwayScans.$inferInsert;
 export const muLabels = mysqlTable("mu_labels", {
   id: int("id").primaryKey().autoincrement(),
   configId: int("config_id").notNull(),
+  facilityId: int("facility_id"),  // Extensiv facility (warehouse) id — set by nightly MU sync
   transactionId: int("transaction_id").notNull(), // Extensiv receiver transactionId
   receiverItemId: int("receiver_item_id").notNull(), // Extensiv receiverItemId
   sku: varchar("sku", { length: 100 }).notNull(),
@@ -800,7 +801,9 @@ export const muLabels = mysqlTable("mu_labels", {
   qty: int("qty").notNull().default(1),
   syncedToExtensiv: boolean("synced_to_extensiv").notNull().default(false),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
-});
+}, (t) => ({
+  uniqueAssignment: uniqueIndex("mu_labels_unique_assignment").on(t.configId, t.receiverItemId, t.muLabel),
+}));
 export type MuLabel = typeof muLabels.$inferSelect;
 export type InsertMuLabel = typeof muLabels.$inferInsert;
 

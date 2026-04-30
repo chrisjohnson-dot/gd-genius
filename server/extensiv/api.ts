@@ -721,10 +721,50 @@ export async function fetchInventory(
 export async function fetchInventoryByMuLabel(
   config: ExtensivClientConfig,
   muLabel: string,
-  opts?: { customerId?: number; facilityId?: number }
+  opts?: { customerId?: number; facilityId?: number; configId?: number }
 ): Promise<ExtensivInventoryRecord[]> {
   const client = createExtensivClient(config);
   try {
+    // Attempt 0: Fast DB lookup from nightly-synced mu_labels table.
+    // The nightly MU on-file sync populates mu_labels with receiveItemId for every MU label
+    // across all warehouses. If we find a match here, we can skip all live API calls.
+    if (opts?.configId) {
+      try {
+        const { getDb } = await import("../db");
+        const { sql } = await import("drizzle-orm");
+        const db = await getDb();
+        if (db) {
+          const rows = await db.execute(
+            sql`SELECT receiver_item_id FROM mu_labels
+                WHERE config_id = ${opts.configId} AND mu_label = ${muLabel}
+                LIMIT 10`
+          ) as unknown as Array<{ receiver_item_id: number }>;
+          const receiveItemIds: number[] = (Array.isArray(rows[0]) ? rows[0] : rows)
+            .map((r: Record<string, unknown>) => Number(r.receiver_item_id ?? r["receiver_item_id"]))
+            .filter((id: number) => id > 0);
+          if (receiveItemIds.length > 0) {
+            console.log(`[fetchInventoryByMuLabel] DB cache hit for muLabel=${muLabel}: receiveItemIds=[${receiveItemIds.join(",")}]`);
+            const stockRecords: ExtensivInventoryRecord[] = [];
+            for (const receiveItemId of receiveItemIds) {
+              const recs = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
+                rql: `receiveItemId==${receiveItemId}`,
+              });
+              if (recs.length > 0) {
+                stockRecords.push(...recs.map((r) => ({ ...r, muLabel })));
+              }
+            }
+            if (stockRecords.length > 0) {
+              console.log(`[fetchInventoryByMuLabel] DB-first lookup returned ${stockRecords.length} records for muLabel=${muLabel}`);
+              return stockRecords;
+            }
+            // receiveItemIds found in DB but stockdetails returned 0 — MU may be fully consumed
+            console.warn(`[fetchInventoryByMuLabel] DB cache found receiveItemIds but stockdetails returned 0 for muLabel=${muLabel}`);
+          }
+        }
+      } catch (dbErr) {
+        console.warn(`[fetchInventoryByMuLabel] DB cache lookup failed for muLabel=${muLabel}:`, dbErr);
+      }
+    }
     // Attempt 1: RQL filter by muLabel directly (most efficient — one record per MU)
     const records = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
       rql: `muLabel==${encodeURIComponent(muLabel)}`,

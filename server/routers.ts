@@ -5049,7 +5049,67 @@ const qcScannerRouter = router({
           rql: `customerIdentifier.id==${session.customerId};facilityIdentifier.id==${session.facilityId}`,
         });
       }
-      return { muLabel: input.muLabel, customerId: session.customerId, facilityId: session.facilityId, attempts };
+      // Also dump raw receiver items to identify the actual muLabel field name
+      let rawReceiverDump: unknown[] = [];
+      let rawReceiverItemSample: unknown = null;
+      try {
+        const receiversRql = session.customerId && session.facilityId
+          ? `ReadOnly.CustomerIdentifier.id==${session.customerId};ReadOnly.FacilityIdentifier.id==${session.facilityId}`
+          : session.customerId ? `ReadOnly.CustomerIdentifier.id==${session.customerId}` : "";
+        const receiversData = await client.get("/inventory/receivers", {
+          rql: receiversRql,
+          detail: "ReceiveItems",
+          pgsiz: 5,
+          pgnum: 1,
+        }) as Record<string, unknown>;
+        const rl = receiversData["ResourceList"] ?? receiversData["resourceList"];
+        const receiverList: Record<string, unknown>[] = Array.isArray(rl) ? rl as Record<string, unknown>[] : [];
+        rawReceiverDump = receiverList.slice(0, 2).map(r => ({
+          topLevelKeys: Object.keys(r),
+          embeddedKeys: Object.keys((r["_embedded"] ?? {}) as Record<string, unknown>),
+          receiveItemsRaw: r["receiveItems"] ?? r["ReceiveItems"] ?? "(not at top level)",
+          embeddedFirstArray: (() => {
+            const emb = (r["_embedded"] ?? {}) as Record<string, unknown>;
+            for (const k of Object.keys(emb)) {
+              const arr = emb[k];
+              if (Array.isArray(arr) && arr.length > 0) return { key: k, firstItem: arr[0] };
+            }
+            return null;
+          })(),
+        }));
+        // Try to find any item with a field containing the muLabel value
+        for (const receiver of receiverList) {
+          const emb = (receiver["_embedded"] ?? {}) as Record<string, unknown>;
+          for (const k of Object.keys(emb)) {
+            const arr = emb[k];
+            if (!Array.isArray(arr)) continue;
+            for (const item of arr as Record<string, unknown>[]) {
+              const vals = Object.values(item);
+              if (vals.some(v => String(v) === input.muLabel)) {
+                rawReceiverItemSample = { matchedInKey: k, item };
+                break;
+              }
+            }
+            if (rawReceiverItemSample) break;
+          }
+          if (rawReceiverItemSample) break;
+          // Also check top-level receiveItems
+          const topItems = receiver["receiveItems"] ?? receiver["ReceiveItems"];
+          if (Array.isArray(topItems)) {
+            for (const item of topItems as Record<string, unknown>[]) {
+              const vals = Object.values(item);
+              if (vals.some(v => String(v) === input.muLabel)) {
+                rawReceiverItemSample = { matchedInTopLevel: true, item };
+                break;
+              }
+            }
+          }
+          if (rawReceiverItemSample) break;
+        }
+      } catch (err: unknown) {
+        rawReceiverDump = [{ error: (err as Error).message }];
+      }
+      return { muLabel: input.muLabel, customerId: session.customerId, facilityId: session.facilityId, attempts, rawReceiverDump, rawReceiverItemSample };
     }),
   /**
    * Send a completed QC session's order to Shipwell as a purchase order (LTL shipment).

@@ -834,52 +834,57 @@ export async function fetchInventoryByMuLabel(
     if (opts?.customerId) {
       console.warn(`[fetchInventoryByMuLabel] Falling back to receiver-item scan for muLabel=${muLabel}, customer=${opts.customerId}`);
       try {
-        // Fetch recent receivers for this customer (last 500, newest first)
+        // Paginate through receivers for this customer (up to 10 pages of 100 = 1000 receivers)
+        // Stop as soon as a matching muLabel is found to minimise API calls
         const receiversRql = opts.facilityId
           ? `ReadOnly.CustomerIdentifier.id==${opts.customerId};ReadOnly.FacilityIdentifier.id==${opts.facilityId}`
           : `ReadOnly.CustomerIdentifier.id==${opts.customerId}`;
-        const receiversData = await client.get("/inventory/receivers", {
-          rql: receiversRql,
-          detail: "ReceiveItems",
-          pgsiz: 100,
-          pgnum: 1,
-        }) as Record<string, unknown>;
-        // Extract receiver list from HAL or ResourceList format
-        let receiverList: Record<string, unknown>[] = [];
-        const rl = receiversData["ResourceList"] ?? receiversData["resourceList"];
-        if (Array.isArray(rl)) {
-          receiverList = rl as Record<string, unknown>[];
-        } else {
-          const emb = (receiversData["_embedded"] ?? {}) as Record<string, unknown>;
-          for (const key of Object.keys(emb)) {
-            const arr = emb[key];
-            if (Array.isArray(arr)) { receiverList = arr as Record<string, unknown>[]; break; }
-          }
-        }
-        console.log(`[fetchInventoryByMuLabel] Receiver scan: got ${receiverList.length} receivers for customer=${opts.customerId}`);
-        // Find receiver items whose muLabel matches
+        const MAX_PAGES = 10;
         const matchingReceiveItemIds: number[] = [];
-        for (const receiver of receiverList) {
-          const transactionId = (receiver["transactionId"] ?? receiver["TransactionId"]) as number | undefined;
-          if (!transactionId) continue;
-          // Items may be embedded in the receiver or in a nested _embedded
-          let items: Record<string, unknown>[] = [];
-          const embR = (receiver["_embedded"] ?? {}) as Record<string, unknown>;
-          for (const key of Object.keys(embR)) {
-            const arr = embR[key];
-            if (Array.isArray(arr)) { items = arr as Record<string, unknown>[]; break; }
-          }
-          // Also check top-level receiveItems array
-          const topItems = receiver["receiveItems"] ?? receiver["ReceiveItems"];
-          if (Array.isArray(topItems)) items = [...items, ...(topItems as Record<string, unknown>[])]; 
-          for (const item of items) {
-            const itemMuLabel = (item["muLabel"] ?? item["MuLabel"]) as string | undefined;
-            if (itemMuLabel === muLabel) {
-              const rid = (item["receiverItemId"] ?? item["ReceiverItemId"] ?? item["id"] ?? item["Id"]) as number | undefined;
-              if (rid) matchingReceiveItemIds.push(rid);
+        for (let pgnum = 1; pgnum <= MAX_PAGES; pgnum++) {
+          const receiversData = await client.get("/inventory/receivers", {
+            rql: receiversRql,
+            detail: "ReceiveItems",
+            pgsiz: 100,
+            pgnum,
+          }) as Record<string, unknown>;
+          // Extract receiver list from HAL or ResourceList format
+          let receiverList: Record<string, unknown>[] = [];
+          const rl = receiversData["ResourceList"] ?? receiversData["resourceList"];
+          if (Array.isArray(rl)) {
+            receiverList = rl as Record<string, unknown>[];
+          } else {
+            const emb = (receiversData["_embedded"] ?? {}) as Record<string, unknown>;
+            for (const key of Object.keys(emb)) {
+              const arr = emb[key];
+              if (Array.isArray(arr)) { receiverList = arr as Record<string, unknown>[]; break; }
             }
           }
-        }
+          console.log(`[fetchInventoryByMuLabel] Receiver scan page ${pgnum}: got ${receiverList.length} receivers for customer=${opts.customerId}`);
+          if (receiverList.length === 0) break; // no more pages
+          for (const receiver of receiverList) {
+            const transactionId = (receiver["transactionId"] ?? receiver["TransactionId"]) as number | undefined;
+            if (!transactionId) continue;
+            // Items may be embedded in the receiver or in a nested _embedded
+            let items: Record<string, unknown>[] = [];
+            const embR = (receiver["_embedded"] ?? {}) as Record<string, unknown>;
+            for (const key of Object.keys(embR)) {
+              const arr = embR[key];
+              if (Array.isArray(arr)) { items = arr as Record<string, unknown>[]; break; }
+            }
+            // Also check top-level receiveItems array
+            const topItems = receiver["receiveItems"] ?? receiver["ReceiveItems"];
+            if (Array.isArray(topItems)) items = [...items, ...(topItems as Record<string, unknown>[])]; 
+            for (const item of items) {
+              const itemMuLabel = (item["muLabel"] ?? item["MuLabel"]) as string | undefined;
+              if (itemMuLabel === muLabel) {
+                const rid = (item["receiverItemId"] ?? item["ReceiverItemId"] ?? item["id"] ?? item["Id"]) as number | undefined;
+                if (rid) matchingReceiveItemIds.push(rid);
+              }
+            }
+          }
+          if (matchingReceiveItemIds.length > 0) break; // found — stop paginating
+        } // end pagination loop
         if (matchingReceiveItemIds.length > 0) {
           console.log(`[fetchInventoryByMuLabel] Receiver scan found ${matchingReceiveItemIds.length} receiveItemId(s) for muLabel=${muLabel}: [${matchingReceiveItemIds.join(",")}]`);
           // Fetch stockdetails for each matching receiveItemId
@@ -900,7 +905,7 @@ export async function fetchInventoryByMuLabel(
           // receiveItemIds found but no stockdetails — MU may be fully consumed or not yet confirmed
           console.warn(`[fetchInventoryByMuLabel] receiveItemIds found but stockdetails returned 0 records for muLabel=${muLabel}`);
         } else {
-          console.warn(`[fetchInventoryByMuLabel] Receiver scan found no items with muLabel=${muLabel} across ${receiverList.length} receivers`);
+          console.warn(`[fetchInventoryByMuLabel] Receiver scan found no items with muLabel=${muLabel} after paginated scan`);
         }
       } catch (receiverErr) {
         console.warn(`[fetchInventoryByMuLabel] Receiver scan failed for muLabel=${muLabel}:`, receiverErr);

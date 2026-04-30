@@ -11579,8 +11579,8 @@ const muSyncRouter = router({
       }
       if (input.fullBackfill) {
         // Reset sync_state so the run performs a full backfill instead of incremental
-        const db = getDb();
-        await db.execute(sql`DELETE FROM sync_state WHERE sync_type = 'mu_on_file'`);
+        const db = await getDb();
+        await db!.execute(sql`DELETE FROM sync_state WHERE sync_type = 'mu_on_file'`);
       }
       // Fire and forget — the mutation returns immediately; client polls getStatus
       syncMuOnFileNow().catch((err) =>

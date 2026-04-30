@@ -616,6 +616,20 @@ export default function QcScanner() {
     onSuccess: (data) => {
       console.log("[QcScanner] scanBarcode result:", JSON.stringify({ found: data.found, overScan: (data as any).overScan, sessionComplete: data.sessionComplete }));
       if (!data.found) {
+        // Auto-fallback: try the barcode as an MU label before showing an error.
+        // The active pallet at the time of scan is captured in activeScanPalletIdRef.
+        const muPalletId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
+        const sessionRef = session;
+        if (muPalletId && sessionRef) {
+          console.log(`[QcScanner] UPC not found — auto-trying as MU label: ${barcodeInput}`);
+          scanMu.mutate({
+            sessionId: sessionRef.id,
+            muLabel: barcodeInput.trim(),
+            palletId: muPalletId,
+            palletType: palletsRef.current.find((p) => p.id === muPalletId)?.palletType ?? undefined,
+          });
+          return; // scanMu.onSuccess/onError will handle feedback
+        }
         playBeep("error");
         setLastScan({ sku: barcodeInput, found: false });
         toast.warning("SKU/UPC not found in this order", { description: "Use the Flag button to log it.", duration: Infinity });
@@ -2245,25 +2259,14 @@ export default function QcScanner() {
                                     activeScanPalletIdRef.current = pallet.id;
                                     void preloadSounds();
                                   }}
-                                  placeholder={scanAsMu ? `Scan MU barcode into Pallet ${pallet.palletNumber}…` : `Scan into Pallet ${pallet.palletNumber}…`}
-                                  className={`text-lg h-12 font-mono ${isActivePallet ? "ring-2 ring-primary" : ""} ${scanAsMu ? "ring-2 ring-orange-500" : ""}`}
+                                  placeholder={`Scan into Pallet ${pallet.palletNumber}…`}
+                                  className={`text-lg h-12 font-mono ${isActivePallet ? "ring-2 ring-primary" : ""}`}
                                 />
-                                {/* MU (Movable Unit) toggle — scan a Louisville MU barcode to import the full pallet */}
-                                <Button
-                                  type="button"
-                                  variant={scanAsMu ? "default" : "outline"}
-                                  className={`h-12 px-4 shrink-0 ${scanAsMu ? "bg-orange-500 hover:bg-orange-600 text-white border-orange-500" : ""}`}
-                                  onClick={() => { setScanAsMu((v) => !v); if (scanAsCase) setScanAsCase(false); }}
-                                  title="Toggle MU mode: scan a Louisville MU barcode to import the entire pallet at once"
-                                >
-                                  <Package className="w-4 h-4 mr-1" />
-                                  MU
-                                </Button>
                                 <Button
                                   type="button"
                                   variant={scanAsCase ? "default" : "outline"}
                                   className="h-12 px-4 shrink-0"
-                                  onClick={() => { setScanAsCase((v) => !v); if (scanAsMu) setScanAsMu(false); }}
+                                  onClick={() => setScanAsCase((v) => !v)}
                                   title={(() => {
                                     const caseItems = items.filter((i) => (i.caseAmount ?? 1) > 1);
                                     if (caseItems.length === 0) return "Toggle case scan — no case quantities configured for this customer";
@@ -2278,7 +2281,7 @@ export default function QcScanner() {
                                   )}
                                 </Button>
                                 <Button type="submit" className="h-12 px-6 shrink-0" disabled={scanBarcode.isPending || scanMu.isPending}>
-                                  {scanAsMu ? "Import" : "Scan"}
+                                  Scan
                                 </Button>
                               </form>
                               {/* Case mode active but no case qty warning */}

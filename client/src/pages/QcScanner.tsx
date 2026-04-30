@@ -66,6 +66,7 @@ type Session = {
   warehouseId: number | null;
   poNumber: string | null;
   completedAt: Date | null;
+  destinationAddress: string | null;
 };
 
 type Phase = "start" | "scanning" | "complete";
@@ -334,6 +335,7 @@ export default function QcScanner() {
   const [confirmText, setConfirmText] = useState("");
   // Dock location recommendation shown after session completes
   const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
+  const [missingShipToWarning, setMissingShipToWarning] = useState<{ pendingUrl: string } | null>(null);
   const [shipwellDialog, setShipwellDialog] = useState(false);
   const [completedSessionInfo, setCompletedSessionInfo] = useState<{ sessionId: number; configId: number | null; palletCount: number; customerName: string | null; transactionId: number | null; customerId: number | null } | null>(null);
   // Multi-expand: track a Set of expanded pallet IDs — all pallets start expanded
@@ -2724,8 +2726,13 @@ export default function QcScanner() {
                         disabled={bulkGeneratePalletUpcs.isPending}
                         onClick={async () => {
                           if (!session) return;
+                          const url = `/api/pdf/qc-gd-labels/${session.id}?type=gd`;
+                          if (!session.destinationAddress) {
+                            setMissingShipToWarning({ pendingUrl: url });
+                            return;
+                          }
                           await ensurePalletUpcs();
-                          window.open(`/api/pdf/qc-gd-labels/${session.id}?type=gd`, '_blank');
+                          window.open(url, '_blank');
                         }}
                       >
                         {bulkGeneratePalletUpcs.isPending
@@ -2740,8 +2747,13 @@ export default function QcScanner() {
                         disabled={bulkGeneratePalletUpcs.isPending}
                         onClick={async () => {
                           if (!session) return;
+                          const url = `/api/pdf/qc-gd-labels/${session.id}?type=sscc`;
+                          if (!session.destinationAddress) {
+                            setMissingShipToWarning({ pendingUrl: url });
+                            return;
+                          }
                           await ensurePalletUpcs();
-                          window.open(`/api/pdf/qc-gd-labels/${session.id}?type=sscc`, '_blank');
+                          window.open(url, '_blank');
                         }}
                       >
                         <FileText className="w-3 h-3 mr-1" /> SSCC Labels
@@ -2768,6 +2780,10 @@ export default function QcScanner() {
                       variant="outline"
                       className="h-7 text-xs"
                       onClick={() => {
+                        if (!session?.destinationAddress) {
+                          setMissingShipToWarning({ pendingUrl: '' });
+                          return;
+                        }
                         const labelHtml = `<!DOCTYPE html><html><head><title>Pallet Label</title><style>body{font-family:Arial,sans-serif;margin:0;padding:16px;width:4in;} .header{background:#1e3a5f;color:white;padding:8px 12px;border-radius:4px;margin-bottom:8px;} .title{font-size:18px;font-weight:bold;} .sub{font-size:12px;opacity:0.8;} .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee;font-size:13px;} .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;background:${p.palletType==='chep'?'#f59e0b':p.palletType==='gd_owned'?'#8b5cf6':'#3b82f6'};color:white;} .upc{font-family:monospace;font-size:14px;font-weight:bold;margin-top:8px;text-align:center;} @media print{button{display:none}}</style></head><body><div class='header'><div class='title'>GD Pallet Label</div><div class='sub'>${session?.referenceNumber ?? ''} &bull; ${session?.customerName ?? ''}</div></div><div class='row'><span>Pallet</span><span><b>#${p.palletNumber}</b></span></div><div class='row'><span>Type</span><span><span class='badge'>${palletTypeLabel(p.palletType)}</span></span></div>${p.palletUpc?`<div class='upc'>${p.palletUpc}</div>`:''}<div class='row' style='margin-top:8px'><span>Items</span><span>${p.items?.length ?? 0} SKU(s)</span></div>${(p.items??[]).map(i=>`<div class='row'><span style='font-size:11px'>${i.sku}</span><span>&times;${i.qty}</span></div>`).join('')}</body></html>`;
                         const w = window.open('', '_blank', 'width=500,height=700');
                         if (w) { w.document.write(labelHtml); w.document.close(); w.print(); }
@@ -2850,6 +2866,42 @@ export default function QcScanner() {
         </DialogContent>
       </Dialog>
 
+      {/* ─── Missing Ship-To Warning Dialog ───────────────────────────── */}
+      <Dialog open={!!missingShipToWarning} onOpenChange={(o) => { if (!o) setMissingShipToWarning(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="w-5 h-5" />
+              Ship-To Address Missing
+            </DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground space-y-2 py-1">
+            <p>This session does not have a ship-to address on file. The label will show only the customer name without a delivery address or sub-client (retailer).</p>
+            <p>To fix this, use the <strong>Fetch from Extensiv</strong> button to reload the order data, then try printing again.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setMissingShipToWarning(null)}>Cancel</Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={async () => {
+                const url = missingShipToWarning?.pendingUrl;
+                setMissingShipToWarning(null);
+                if (url) {
+                  await ensurePalletUpcs();
+                  window.open(url, '_blank');
+                } else if (session) {
+                  const w = window.open('', '_blank', 'width=500,height=700');
+                  if (w) { w.document.write('<p>Label printed without ship-to address.</p>'); w.document.close(); w.print(); }
+                }
+              }}
+            >
+              Print Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* ─── Dock Location Recommendation Dialog ─────────────────────────── */}
       <DockRecommendDialog
         open={dockRecommendDialog}

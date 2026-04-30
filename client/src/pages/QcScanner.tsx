@@ -3288,6 +3288,13 @@ function ShipwellConfirmDialog({
               </div>
             </div>
 
+            {!freightClass && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>No freight class selected. Shipwell needs a freight class for accurate LTL rate shopping. Select one above or set a default in Customer Shipping Rules.</span>
+              </div>
+            )}
+
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={onClose}>Skip</Button>
               <Button

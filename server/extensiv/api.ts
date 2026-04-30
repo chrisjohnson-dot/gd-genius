@@ -2066,3 +2066,107 @@ export async function fetchShippedOrders(
   console.log(`[Extensiv] fetchShippedOrders: fetched ${allOrders.length} closed orders from ${fromDate} to ${toDate}`);
   return allOrders;
 }
+
+/**
+ * Update the packageUnit.weightLbs field for an item in Extensiv.
+ *
+ * Flow:
+ *   1. GET /customers/{customerId}/items?rql=sku=={sku} to find the item and capture its ETag
+ *   2. Patch options.packageUnit.weightLbs in the response body
+ *   3. PUT /customers/{customerId}/items/{itemId} with If-Match: {etag}
+ *
+ * Returns { success, itemId, previousWeight } on success, or { success: false, error } on failure.
+ */
+export async function updateItemPackageUnitWeight(
+  config: ExtensivClientConfig,
+  customerId: number,
+  sku: string,
+  newWeightLbs: number
+): Promise<{ success: boolean; itemId?: number; previousWeight?: number | null; error?: string }> {
+  const client = createExtensivClient(config);
+
+  // Step 1: Find the item by SKU
+  let itemsRaw: unknown;
+  try {
+    itemsRaw = await client.get(`/customers/${customerId}/items`, {
+      rql: `sku==${encodeURIComponent(sku)}`,
+      detail: "All",
+      pgsiz: 1,
+      pgnum: 1,
+    });
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string };
+    return { success: false, error: `GET items failed: HTTP ${e.status ?? "?"} – ${e.message ?? String(err)}` };
+  }
+
+  // Parse HAL+JSON response — items live under _embedded
+  const rawObj = itemsRaw as Record<string, unknown>;
+  const embedded = (rawObj._embedded ?? {}) as Record<string, unknown>;
+  let itemList: Record<string, unknown>[] = [];
+  for (const key of Object.keys(embedded)) {
+    const val = embedded[key];
+    if (Array.isArray(val) && val.length > 0) {
+      itemList = val as Record<string, unknown>[];
+      break;
+    }
+  }
+
+  if (itemList.length === 0) {
+    return { success: false, error: `No item found in Extensiv for SKU "${sku}" under customer ${customerId}` };
+  }
+
+  const item = itemList[0];
+  const itemId =
+    (item.itemId as number | undefined) ??
+    (item.id as number | undefined) ??
+    ((item.itemIdentifier as Record<string, unknown> | undefined)?.id as number | undefined);
+
+  if (!itemId) {
+    return { success: false, error: `Could not determine itemId for SKU "${sku}"` };
+  }
+
+  // Step 2: GET the individual item to capture ETag (list endpoint may not return ETag)
+  let singleRaw: unknown;
+  let etag = "";
+  try {
+    const { data, headers } = await client.getWithHeaders(`/customers/${customerId}/items/${itemId}`, { detail: "All" });
+    singleRaw = data;
+    etag = (headers["etag"] ?? headers["ETag"] ?? "").replace(/"/g, "");
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string };
+    return { success: false, error: `GET item/${itemId} failed: HTTP ${e.status ?? "?"} – ${e.message ?? String(err)}` };
+  }
+
+  const body = singleRaw as Record<string, unknown>;
+
+  // Capture previous weight for reporting
+  const opts = (body.options ?? {}) as Record<string, unknown>;
+  const pkg = (opts.packageUnit ?? {}) as Record<string, unknown>;
+  const previousWeight =
+    (pkg.weightLbs as number | undefined) ??
+    (pkg.weight as number | undefined) ??
+    null;
+
+  // Step 3: Patch the weight field
+  if (!body.options) body.options = {};
+  const optsObj = body.options as Record<string, unknown>;
+  if (!optsObj.packageUnit) optsObj.packageUnit = {};
+  const pkgObj = optsObj.packageUnit as Record<string, unknown>;
+  pkgObj.weightLbs = newWeightLbs;
+
+  // Step 4: PUT back with ETag
+  const result = await client.put(
+    `/customers/${customerId}/items/${itemId}`,
+    body,
+    etag || undefined
+  );
+
+  if (result.status === 200 || result.status === 204) {
+    return { success: true, itemId, previousWeight };
+  }
+
+  return {
+    success: false,
+    error: `PUT item/${itemId} returned HTTP ${result.status}: ${JSON.stringify(result.data)}`,
+  };
+}

@@ -258,7 +258,7 @@ import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap,
   fetchItemCaseAmountMap, fetchItemCartonWeightMap, fetchItemUnitWeightMap, fetchInventoryByMuLabel, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
-  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus, clearItemDimsCache } from "./extensiv/api";
+  completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus, clearItemDimsCache, updateItemPackageUnitWeight } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
 import { createShipwellClient } from "./shipwell/api";
@@ -5575,6 +5575,52 @@ const skuWeightRouter = router({
     .mutation(async ({ input }) => {
       await deleteSkuWeightOverride(input.id);
       return { success: true };
+    }),
+
+  /**
+   * Push a carton weight to Extensiv (updates options.packageUnit.weightLbs on the item).
+   * Also saves the override locally as a fallback.
+   *
+   * Returns { success, savedLocally, pushedToExtensiv, previousWeight, error? }
+   */
+  pushWeightToExtensiv: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      customerId: z.number(),
+      sku: z.string().min(1),
+      cartonWeightLb: z.number().positive(),
+      note: z.string().max(256).optional().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Extensiv config not found" });
+
+      // Always save locally first as a fallback
+      await upsertSkuWeightOverride(
+        input.configId,
+        input.customerId,
+        input.sku,
+        input.cartonWeightLb,
+        null,
+        input.note ?? null,
+      );
+
+      // Attempt to push to Extensiv
+      const result = await updateItemPackageUnitWeight(
+        config,
+        input.customerId,
+        input.sku,
+        input.cartonWeightLb,
+      );
+
+      return {
+        success: result.success,
+        savedLocally: true,
+        pushedToExtensiv: result.success,
+        previousWeight: result.previousWeight ?? null,
+        itemId: result.itemId ?? null,
+        error: result.error ?? null,
+      };
     }),
 });
 // ─── Receiving Router ────────────────────────────────────────────────────────

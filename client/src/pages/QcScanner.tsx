@@ -1102,6 +1102,25 @@ export default function QcScanner() {
     onError: (e) => toast.error(`Failed to save weight override: ${e.message}`),
   });
 
+  // Track per-SKU push-to-Extensiv loading state
+  const [pushingSkus, setPushingSkus] = useState<Set<string>>(new Set());
+  const pushWeightToExtensiv = trpc.skuWeight.pushWeightToExtensiv.useMutation({
+    onSuccess: (result, vars) => {
+      if (result.pushedToExtensiv) {
+        toast.success(`✓ Weight written to Extensiv for ${vars.sku}: ${vars.cartonWeightLb} lbs/carton${result.previousWeight != null ? ` (was ${result.previousWeight} lbs)` : ''}`);
+      } else {
+        toast(`Saved locally for ${vars.sku} — Extensiv update failed: ${result.error ?? 'unknown error'}`, { icon: '⚠️', duration: 8000 });
+      }
+      setSkuWeightInputs((prev) => { const n = { ...prev }; delete n[vars.sku]; return n; });
+      setZeroWeightAlert(null);
+      setPushingSkus((prev) => { const n = new Set(prev); n.delete(vars.sku); return n; });
+    },
+    onError: (e, vars) => {
+      toast.error(`Failed to push weight to Extensiv for ${vars.sku}: ${e.message}`);
+      setPushingSkus((prev) => { const n = new Set(prev); n.delete(vars.sku); return n; });
+    },
+  });
+
   // Helper: auto-assign UPCs to any pallets missing one, then update local state
   const ensurePalletUpcs = async () => {
     if (!session) return;
@@ -3155,39 +3174,57 @@ export default function QcScanner() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              The following SKUs had no weight data in Extensiv. Enter carton weights below to save overrides and recalculate.
+              The following SKUs had no weight data in Extensiv. Enter carton weights below.
+              <span className="text-blue-600 font-medium"> "Save to Extensiv" writes the weight directly to the item catalog</span> so it won't be missing next time.
             </p>
             <div className="space-y-2">
               {zeroWeightAlert?.skus.map((sku) => (
-                <div key={sku} className="rounded-md bg-amber-50 border border-amber-200 p-2 flex items-center gap-2">
-                  <span className="font-mono text-xs text-amber-800 flex-1">{sku}</span>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    placeholder="lbs/carton"
-                    className="w-24 text-xs border border-amber-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
-                    value={skuWeightInputs[sku] ?? ""}
-                    onChange={(e) => setSkuWeightInputs((prev) => ({ ...prev, [sku]: e.target.value }))}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs h-7 px-2 border-amber-400 text-amber-700 hover:bg-amber-100"
-                    disabled={!skuWeightInputs[sku] || isNaN(parseFloat(skuWeightInputs[sku])) || upsertWeightOverride.isPending}
-                    onClick={() => {
-                      const lb = parseFloat(skuWeightInputs[sku]);
-                      if (!lb || lb <= 0 || !session) return;
-                      upsertWeightOverride.mutate({
-                        configId: session.warehouseId ?? 0,
-                        customerId: (session as any).customerId ?? 0,
-                        sku,
-                        cartonWeightLb: lb,
-                      });
-                    }}
-                  >
-                    Save
-                  </Button>
+                <div key={sku} className="rounded-md bg-amber-50 border border-amber-200 p-2 space-y-1.5">
+                  <span className="font-mono text-xs text-amber-800 font-semibold">{sku}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="lbs/carton"
+                      className="w-24 text-xs border border-amber-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      value={skuWeightInputs[sku] ?? ""}
+                      onChange={(e) => setSkuWeightInputs((prev) => ({ ...prev, [sku]: e.target.value }))}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs h-7 px-2 border-amber-400 text-amber-700 hover:bg-amber-100"
+                      disabled={!skuWeightInputs[sku] || isNaN(parseFloat(skuWeightInputs[sku])) || upsertWeightOverride.isPending || pushingSkus.has(sku)}
+                      onClick={() => {
+                        const lb = parseFloat(skuWeightInputs[sku]);
+                        if (!lb || lb <= 0 || !session) return;
+                        upsertWeightOverride.mutate({
+                          configId: session.warehouseId ?? 0,
+                          customerId: (session as any).customerId ?? 0,
+                          sku,
+                          cartonWeightLb: lb,
+                        });
+                      }}
+                    >
+                      Save locally
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="text-xs h-7 px-2 bg-blue-600 hover:bg-blue-700 text-white"
+                      disabled={!skuWeightInputs[sku] || isNaN(parseFloat(skuWeightInputs[sku])) || pushingSkus.has(sku) || upsertWeightOverride.isPending}
+                      onClick={() => {
+                        const lb = parseFloat(skuWeightInputs[sku]);
+                        if (!lb || lb <= 0 || !session) return;
+                        const configId = session.warehouseId ?? 0;
+                        const customerId = (session as any).customerId ?? 0;
+                        setPushingSkus((prev) => new Set(prev).add(sku));
+                        pushWeightToExtensiv.mutate({ configId, customerId, sku, cartonWeightLb: lb });
+                      }}
+                    >
+                      {pushingSkus.has(sku) ? 'Saving…' : 'Save to Extensiv'}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

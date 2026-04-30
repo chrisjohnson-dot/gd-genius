@@ -253,7 +253,7 @@ import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdue
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
 import { recordSlaNightlySnapshot } from "./scheduler/slaNightlySnapshot";
 import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions, fetchItemUpcMap,
-  fetchItemCaseAmountMap, fetchItemCartonWeightMap, fetchInventoryByMuLabel, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
+  fetchItemCaseAmountMap, fetchItemCartonWeightMap, fetchItemUnitWeightMap, fetchInventoryByMuLabel, fetchOrderWithDetail, moveInventory, allocateOrder, deallocateOrder, updateOrderProposedAllocations, fetchAllFacilities, fetchCustomersForFacility, fetchExtensivLocations, fetchOrdersByReferenceNum, fetchReceivers, fetchReceiverDetail, startReceipt,
   completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus, clearItemDimsCache } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
@@ -263,6 +263,7 @@ import { createShipwellClient } from "./shipwell/api";
 const _palletWeightCache = new Map<string, {
   cartonWeightMap: Map<string, number>;
   caseAmountMap: Map<string, number>;
+  unitWeightMap: Map<string, number>;
   expiresAt: number;
 }>();
 
@@ -4588,9 +4589,11 @@ const qcScannerRouter = router({
       const cached = _palletWeightCache.get(cacheKey);
       let cartonWeightMap: Map<string, number> = new Map();
       let caseAmountMap: Map<string, number> = new Map();
+      let unitWeightMap: Map<string, number> = new Map();
       if (cached && cached.expiresAt > now) {
         cartonWeightMap = cached.cartonWeightMap;
         caseAmountMap = cached.caseAmountMap;
+        unitWeightMap = cached.unitWeightMap ?? new Map();
       } else {
         // ── 2. Try DB item_dims table (populated by nightly sync) ──────────
         const db = await getDb();
@@ -4598,16 +4601,18 @@ const qcScannerRouter = router({
         if (db) {
           try {
             const rows = await db.execute(
-              sql`SELECT sku, carton_weight_lb, units_per_carton FROM item_dims WHERE config_id = ${config.id} AND customer_id = ${customerId}`
+              sql`SELECT sku, carton_weight_lb, units_per_carton, unit_weight_lb FROM item_dims WHERE config_id = ${config.id} AND customer_id = ${customerId}`
             ) as any;
-            const rowArr: Array<{ sku: string; carton_weight_lb: number | null; units_per_carton: number | null }> =
+            const rowArr: Array<{ sku: string; carton_weight_lb: number | null; units_per_carton: number | null; unit_weight_lb: number | null }> =
               Array.isArray(rows) ? rows : (rows?.rows ?? []);
             if (rowArr.length > 0) {
               cartonWeightMap = new Map();
               caseAmountMap = new Map();
+              unitWeightMap = new Map();
               for (const row of rowArr) {
                 if (row.sku && row.carton_weight_lb != null) cartonWeightMap.set(row.sku, row.carton_weight_lb);
                 if (row.sku && row.units_per_carton != null) caseAmountMap.set(row.sku, row.units_per_carton);
+                if (row.sku && row.unit_weight_lb != null) unitWeightMap.set(row.sku, row.unit_weight_lb);
               }
               loadedFromDb = true;
               console.log(`[calculatePalletWeight] Loaded ${rowArr.length} SKU dims from DB cache`);
@@ -4619,21 +4624,23 @@ const qcScannerRouter = router({
         if (!loadedFromDb) {
           // ── 3. Fall back to live Extensiv API calls ─────────────────────
           console.log(`[calculatePalletWeight] Fetching dims from Extensiv for config ${config.id} / customer ${customerId}`);
-          [cartonWeightMap, caseAmountMap] = await Promise.all([
+          [cartonWeightMap, caseAmountMap, unitWeightMap] = await Promise.all([
             fetchItemCartonWeightMap(config, customerId),
             fetchItemCaseAmountMap(config, customerId),
+            fetchItemUnitWeightMap(config, customerId),
           ]);
         }
         // Store in 10-minute in-memory cache
         _palletWeightCache.set(cacheKey, {
           cartonWeightMap: cartonWeightMap!,
           caseAmountMap: caseAmountMap!,
+          unitWeightMap: unitWeightMap!,
           expiresAt: now + 10 * 60 * 1000,
         });
       }
 
       // Calculate total weight: sum(perUnitWeightLb * qty) per SKU
-      // perUnitWeightLb = cartonWeightLb / unitsPerCarton
+      // Priority: (cartonWeightLb / unitsPerCarton) → unit_weight_lb (imperial.weight) → skip
       let totalLb = 0;
       for (const item of items) {
         const cartonW = cartonWeightMap.get(item.sku);
@@ -4641,6 +4648,10 @@ const qcScannerRouter = router({
           const unitsPerCarton = caseAmountMap.get(item.sku) ?? 1;
           const perUnitW = cartonW / unitsPerCarton;
           totalLb += perUnitW * item.qty;
+        } else {
+          // Fallback: use item-level imperial.weight directly
+          const unitW = unitWeightMap.get(item.sku);
+          if (unitW) totalLb += unitW * item.qty;
         }
       }
 

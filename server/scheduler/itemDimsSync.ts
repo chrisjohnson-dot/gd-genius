@@ -10,7 +10,7 @@
 import cron from "node-cron";
 import { getDb, getExtensivConfigs } from "../db";
 import { sql } from "drizzle-orm";
-import { fetchItemCartonWeightMap, fetchItemCaseAmountMap, fetchCustomers } from "../extensiv/api";
+import { fetchItemCartonWeightMap, fetchItemCaseAmountMap, fetchItemUnitWeightMap, fetchCustomers } from "../extensiv/api";
 import type { ExtensivClientConfig } from "../extensiv/client";
 
 let syncRunning = false;
@@ -47,24 +47,26 @@ export async function syncItemDimsNow(): Promise<{ success: boolean; message: st
         for (const customer of customers) {
           if (!customer.id) continue;
           try {
-            // Fetch carton weights and case amounts in parallel
-            const [cartonWeightMap, caseAmountMap] = await Promise.all([
+            // Fetch carton weights, case amounts, and per-unit weights in parallel
+            const [cartonWeightMap, caseAmountMap, unitWeightMap] = await Promise.all([
               fetchItemCartonWeightMap(clientConfig, customer.id),
               fetchItemCaseAmountMap(clientConfig, customer.id),
+              fetchItemUnitWeightMap(clientConfig, customer.id),
             ]);
 
-            // Merge all SKUs from both maps
-            const allSkus = new Set([...cartonWeightMap.keys(), ...caseAmountMap.keys()]);
+            // Merge all SKUs from all maps
+            const allSkus = new Set([...cartonWeightMap.keys(), ...caseAmountMap.keys(), ...unitWeightMap.keys()]);
             if (allSkus.size === 0) continue;
 
             // Upsert each SKU into item_dims
             for (const sku of allSkus) {
               const cartonWeightLb = cartonWeightMap.get(sku) ?? null;
               const unitsPerCarton = caseAmountMap.get(sku) ?? null;
+              // unit_weight_lb: prefer carton/units calculation, fall back to item-level imperial.weight
               const unitWeightLb =
                 cartonWeightLb != null && unitsPerCarton != null && unitsPerCarton > 0
                   ? cartonWeightLb / unitsPerCarton
-                  : null;
+                  : (unitWeightMap.get(sku) ?? null);
 
               const db = await getDb();
               if (!db) continue;

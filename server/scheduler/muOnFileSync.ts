@@ -3,24 +3,73 @@
  *
  * Runs at 07:30 UTC (2:30 AM Eastern) every night — 30 minutes after the SKU dims sync.
  *
- * For each active Extensiv config, for each facility (warehouse), fetches all receivers
+ * INCREMENTAL SYNC:
+ * The first run fetches all receivers for each facility (full backfill).
+ * Subsequent runs only fetch receivers created on or after the last successful sync
+ * timestamp, drastically reducing Extensiv API calls.
+ *
+ * State is persisted in the `sync_state` table keyed by (config_id, facility_id, 'mu_on_file').
+ *
+ * For each active Extensiv config, for each facility (warehouse), fetches receivers
  * with detail=ReceiveItems and upserts every receiver item that has a muLabel into the
  * mu_labels table. This ensures the QC scanner can resolve MU barcodes instantly via a
  * fast DB lookup (Attempt 0) before falling back to live Extensiv API calls.
- *
- * The sync uses INSERT … ON DUPLICATE KEY UPDATE so it is safe to re-run at any time.
- * The unique key is (config_id, receiver_item_id, mu_label).
  */
 import cron from "node-cron";
 import { getDb, getExtensivConfigs } from "../db";
 import { sql } from "drizzle-orm";
-import { fetchAllFacilities, fetchCustomers } from "../extensiv/api";
+import { fetchAllFacilities } from "../extensiv/api";
 import { createExtensivClient } from "../extensiv/client";
 import type { ExtensivClientConfig } from "../extensiv/client";
+
+const SYNC_TYPE = "mu_on_file";
 
 let syncRunning = false;
 let lastSyncAt: Date | null = null;
 let lastSyncSummary: string | null = null;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Read the last successful sync timestamp for a given config+facility from sync_state. */
+async function getLastSyncedAt(configId: number, facilityId: number): Promise<Date | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    const rows = await db.execute(
+      sql`SELECT last_synced_at FROM sync_state
+          WHERE config_id = ${configId} AND facility_id = ${facilityId} AND sync_type = ${SYNC_TYPE}
+          LIMIT 1`
+    );
+    const data = (rows as any)?.[0] as Array<{ last_synced_at: number }> | undefined;
+    if (data && data.length > 0 && data[0].last_synced_at) {
+      return new Date(Number(data[0].last_synced_at));
+    }
+  } catch {
+    // If sync_state doesn't exist yet or query fails, treat as first run
+  }
+  return null;
+}
+
+/** Persist the sync completion timestamp for a given config+facility. */
+async function setLastSyncedAt(configId: number, facilityId: number, syncedAt: Date): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(
+      sql`INSERT INTO sync_state (config_id, facility_id, sync_type, last_synced_at)
+          VALUES (${configId}, ${facilityId}, ${SYNC_TYPE}, ${syncedAt.getTime()})
+          ON DUPLICATE KEY UPDATE last_synced_at = VALUES(last_synced_at)`
+    );
+  } catch (err: any) {
+    console.warn(`[MuOnFileSync] Failed to update sync_state for config=${configId} facility=${facilityId}:`, err?.message);
+  }
+}
+
+/** Format a Date as an ISO-8601 string accepted by Extensiv RQL date filters. */
+function toExtensivDate(d: Date): string {
+  // Extensiv accepts ISO 8601 — use UTC to avoid timezone ambiguity
+  return d.toISOString().replace("T", " ").slice(0, 19);
+}
 
 // ─── Core sync function ───────────────────────────────────────────────────────
 export async function syncMuOnFileNow(): Promise<{ success: boolean; message: string; muCount: number }> {
@@ -49,7 +98,6 @@ export async function syncMuOnFileNow(): Promise<{ success: boolean; message: st
       const client = createExtensivClient(clientConfig);
 
       try {
-        // Get all facilities for this config
         const facilities = await fetchAllFacilities(clientConfig);
         if (facilities.length === 0) {
           console.warn(`[MuOnFileSync] Config ${config.id}: no facilities found, skipping`);
@@ -57,7 +105,29 @@ export async function syncMuOnFileNow(): Promise<{ success: boolean; message: st
         }
 
         for (const facility of facilities) {
-          console.log(`[MuOnFileSync] Config ${config.id} / Facility ${facility.id} (${facility.name}): starting receiver scan`);
+          // ── Determine incremental window ───────────────────────────────────
+          const lastSynced = await getLastSyncedAt(config.id, facility.id);
+          const syncStartedAt = new Date(); // capture before API calls begin
+
+          let baseRql = `ReadOnly.FacilityIdentifier.id==${facility.id}`;
+          if (lastSynced) {
+            // Only fetch receivers created on or after the last sync.
+            // Subtract 5 minutes as a safety buffer to catch any records that
+            // may have been committed slightly after the previous sync completed.
+            const windowStart = new Date(lastSynced.getTime() - 5 * 60 * 1000);
+            const dateStr = toExtensivDate(windowStart);
+            baseRql += `;ReadOnly.CreationDate>=${dateStr}`;
+            console.log(
+              `[MuOnFileSync] Config ${config.id} / Facility ${facility.id} (${facility.name}): ` +
+              `incremental sync from ${dateStr} (last synced: ${lastSynced.toISOString()})`
+            );
+          } else {
+            console.log(
+              `[MuOnFileSync] Config ${config.id} / Facility ${facility.id} (${facility.name}): ` +
+              `first run — full backfill`
+            );
+          }
+
           let facilityMus = 0;
           let pgnum = 1;
           const pgsiz = 100;
@@ -66,13 +136,16 @@ export async function syncMuOnFileNow(): Promise<{ success: boolean; message: st
             let receiversData: Record<string, unknown>;
             try {
               receiversData = (await client.get("/inventory/receivers", {
-                rql: `ReadOnly.FacilityIdentifier.id==${facility.id}`,
+                rql: baseRql,
                 detail: "ReceiveItems",
                 pgsiz,
                 pgnum,
               })) as Record<string, unknown>;
             } catch (err: any) {
-              console.error(`[MuOnFileSync] Config ${config.id} / Facility ${facility.id}: receivers fetch page ${pgnum} failed:`, err?.message);
+              console.error(
+                `[MuOnFileSync] Config ${config.id} / Facility ${facility.id}: receivers fetch page ${pgnum} failed:`,
+                err?.message
+              );
               break;
             }
 
@@ -170,7 +243,13 @@ export async function syncMuOnFileNow(): Promise<{ success: boolean; message: st
             pgnum++;
           }
 
-          console.log(`[MuOnFileSync] Config ${config.id} / Facility ${facility.id} (${facility.name}): upserted ${facilityMus} MU records`);
+          console.log(
+            `[MuOnFileSync] Config ${config.id} / Facility ${facility.id} (${facility.name}): ` +
+            `upserted ${facilityMus} MU records (${lastSynced ? "incremental" : "full backfill"})`
+          );
+
+          // ── Persist sync completion time so next run is incremental ────────
+          await setLastSyncedAt(config.id, facility.id, syncStartedAt);
         }
       } catch (err: any) {
         console.error(`[MuOnFileSync] Config ${config.id} failed:`, err?.message);

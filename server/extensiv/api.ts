@@ -147,6 +147,12 @@ interface RawExtensivItem {
       upc?: string;
       /** Carton weight in lbs (Weight (lbs) field in Extensiv Packaging Unit section) */
       weightLbs?: number;
+      /** Some Extensiv tenants return weight as 'weight' instead of 'weightLbs' */
+      weight?: number;
+      /** Some Extensiv tenants return weight as 'netWeight' */
+      netWeight?: number;
+      /** Some Extensiv tenants return weight as 'grossWeight' */
+      grossWeight?: number;
     };
   };
 }
@@ -1188,7 +1194,8 @@ export async function fetchItemCartonWeightMap(
     const items = data?._embedded?.["http://api.3plCentral.com/rels/customers/item"] ?? [];
     for (const item of items) {
       if (!item.sku) continue;
-      const w = item.options?.packageUnit?.weightLbs;
+      const pkg = item.options?.packageUnit;
+      const w = pkg?.weightLbs ?? pkg?.weight ?? pkg?.netWeight ?? pkg?.grossWeight ?? null;
       if (w != null && w > 0) weightMap.set(item.sku, w);
     }
     if (items.length < pgsiz) break;
@@ -1234,7 +1241,7 @@ export async function fetchItemDimsBySkus(
         if (!item.sku) continue;
         const imp = item.options?.imperial;
         const pkg = item.options?.packageUnit;
-        const cartonWeightLb = pkg?.weightLbs ?? null;
+        const cartonWeightLb = pkg?.weightLbs ?? pkg?.weight ?? pkg?.netWeight ?? pkg?.grossWeight ?? null;
         const unitsPerCarton = pkg?.inventoryUnitsPerUnit ?? pkg?.qty ?? null;
         // Per-unit weight: prefer base imperial.weight; if missing, derive from carton weight / units per carton
         let weightLb: number | null = imp?.weight ?? null;

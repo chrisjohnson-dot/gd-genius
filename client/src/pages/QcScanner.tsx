@@ -2239,12 +2239,8 @@ export default function QcScanner() {
                                 // Always route to THIS pallet's form
                                 setActiveScanPalletId(pallet.id);
                                 activeScanPalletIdRef.current = pallet.id;
-                                if (scanAsMu) {
-                                  // MU mode: look up the MU in Extensiv and import as full pallet
-                                  scanMu.mutate({ sessionId: session.id, muLabel: barcodeInput.trim(), palletId: pallet.id, palletType: pallet.palletType ?? undefined });
-                                } else {
-                                  scanBarcode.mutate({ sessionId: session.id, barcode: barcodeInput.trim(), scanAsCase });
-                                }
+                                // Always scan as barcode first; auto-fallback to MU is handled in scanBarcode.onSuccess
+                                scanBarcode.mutate({ sessionId: session.id, barcode: barcodeInput.trim(), scanAsCase });
                               }} className="flex gap-2">
                                 <Input
                                   ref={(el) => {

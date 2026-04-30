@@ -9049,7 +9049,32 @@ const smallParcelRouter = router({
         plainData,
       };
     }),
-
+  /** Dump raw packageUnit options for a specific SKU to diagnose weight field names */
+  debugItemWeight: protectedProcedure
+    .input(z.object({ configId: z.number(), customerId: z.number(), sku: z.string() }))
+    .query(async ({ input }) => {
+      const config = await getExtensivConfigById(input.configId);
+      if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+      const token = await getExtensivToken(config);
+      const baseUrl = config.baseUrl || "https://secure-wms.com";
+      const res = await fetch(
+        `${baseUrl}/customers/${input.customerId}/items?sku=${encodeURIComponent(input.sku)}&pgsiz=5`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: "application/hal+json" } }
+      );
+      const data = await res.json() as any;
+      const embedded = data?._embedded ?? {};
+      const items: any[] = Object.values(embedded).flat();
+      return {
+        status: res.status,
+        itemCount: items.length,
+        items: items.map((item: any) => ({
+          sku: item.sku,
+          optionsKeys: Object.keys(item.options ?? {}),
+          packageUnit: item.options?.packageUnit ?? null,
+          imperial: item.options?.imperial ?? null,
+        })),
+      };
+    }),
   /** Create a new package size */
   createPackageSize: protectedProcedure
     .input(z.object({

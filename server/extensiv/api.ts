@@ -737,12 +737,12 @@ export async function fetchInventoryByMuLabel(
         const db = await getDb();
         if (db) {
           const rows = await db.execute(
-            sql`SELECT receiver_item_id, sku FROM mu_labels
+            sql`SELECT receiver_item_id, sku, qty FROM mu_labels
                 WHERE config_id = ${opts.configId} AND mu_label = ${muLabel}
                 LIMIT 10`
-          ) as unknown as Array<{ receiver_item_id: number | null; sku: string }>;
-          const rawRows: Array<{ receiver_item_id: number | null; sku: string }> =
-            (Array.isArray(rows[0]) ? rows[0] : rows) as Array<{ receiver_item_id: number | null; sku: string }>;
+          ) as unknown as Array<{ receiver_item_id: number | null; sku: string; qty: number | null }>;
+          const rawRows: Array<{ receiver_item_id: number | null; sku: string; qty: number | null }> =
+            (Array.isArray(rows[0]) ? rows[0] : rows) as Array<{ receiver_item_id: number | null; sku: string; qty: number | null }>;
 
           // Split into rows with and without a receiveItemId
           const rowsWithId = rawRows.filter((r) => r.receiver_item_id != null && Number(r.receiver_item_id) > 0);
@@ -775,18 +775,27 @@ export async function fetchInventoryByMuLabel(
               }
             }
 
-            // Path B: Excel-seeded rows — only have SKU, no receiveItemId
+            // Path B: Excel-seeded rows — only have SKU + qty, no receiveItemId.
+            // Build a synthetic ExtensivInventoryRecord directly from the DB data.
+            // We do NOT call /inventory/stockdetails here because:
+            //   1. The endpoint returns HTTP 404 for RQL filters in this Extensiv tenant.
+            //   2. Available qty may be 0 (fully allocated) but on-hand qty is what matters for QC.
+            //   3. QC scanning is physical verification — we need what's on the pallet, not what's free.
             for (const row of rowsSkuOnly) {
               const sku = row.sku;
-              if (sku && opts?.customerId) {
-                const skuRecs = await fetchInventoryFromPath(client, "/inventory/stockdetails", {
-                  customerId: opts.customerId,
-                  rql: `itemIdentifier.sku==${encodeURIComponent(sku)}`,
-                });
-                if (skuRecs.length > 0) {
-                  stockRecords.push(...skuRecs.map((r) => ({ ...r, muLabel })));
-                }
-              }
+              if (!sku) continue;
+              const qty = Number(row.qty ?? 0);
+              const syntheticRecord: ExtensivInventoryRecord = {
+                receiveItemId: 0,
+                itemIdentifier: { sku, id: 0 },
+                available: qty,   // use DB qty as available for QC purposes (on-hand)
+                onHand: qty,
+                isOnHold: false,
+                quarantined: false,
+                muLabel,
+              };
+              stockRecords.push(syntheticRecord);
+              console.log(`[fetchInventoryByMuLabel] Path B synthetic record: sku=${sku} qty=${qty} muLabel=${muLabel}`);
             }
 
             if (stockRecords.length > 0) {

@@ -8507,6 +8507,43 @@ const shippingDashboardRouter = router({
         note: input.note ?? null,
         uploadedBy: ctx.user?.name ?? null,
       });
+      // If a customs document was uploaded, fire a Clearsight webhook to clear the pending alert
+      if (input.docType === "customs") {
+        try {
+          const db2 = await getDb();
+          if (db2) {
+            const { eq: eqC, and: andC, or: orC } = await import("drizzle-orm");
+            const { orderTracking: otTable, carrierAppointments: caTable } = await import("../drizzle/schema.js");
+            // Look up the order to get extensivOrderId and reference
+            const orderRows = await db2.select().from(otTable).where(eqC(otTable.id, input.orderTrackingId)).limit(1);
+            const order = orderRows[0];
+            if (order) {
+              // Check for an active appointment
+              const apptRows = await db2.select().from(caTable)
+                .where(andC(
+                  eqC(caTable.extensivOrderId, order.extensivOrderId),
+                  orC(eqC(caTable.status, "scheduled"), eqC(caTable.status, "confirmed"))
+                ))
+                .limit(1);
+              const appt = apptRows[0];
+              if (appt) {
+                await fireCortexWebhook("clearsight", "shipment.customs_docs_uploaded", {
+                  appointmentId: appt.id,
+                  extensivOrderId: order.extensivOrderId,
+                  referenceNum: appt.referenceNum ?? order.referenceNum,
+                  clientName: appt.clientName,
+                  scheduledDate: appt.scheduledDate,
+                  appointmentStatus: appt.status,
+                  fileUrl: url,
+                  fileName: input.fileName,
+                  uploadedBy: ctx.user?.name ?? null,
+                  message: `Customs documents have been uploaded for ${appt.clientName} (order ${appt.referenceNum ?? order.extensivOrderId}). Pickup is ${appt.status} for ${appt.scheduledDate}${appt.scheduledTimeStart ? " at " + appt.scheduledTimeStart : ""}.`,
+                });
+              }
+            }
+          }
+        } catch (err) { console.warn("[Customs Uploaded] webhook failed:", err); }
+      }
       return { success: true, id, url };
     }),
 

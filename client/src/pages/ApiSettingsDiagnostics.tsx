@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle, CheckCircle2, Copy, Database, Loader2, Pencil, Plus,
-  RefreshCw, Save, Scale, Settings2, Stethoscope, Trash2, Webhook, X, XCircle,
+  RefreshCw, Save, Scale, Settings2, Stethoscope, Trash2, Upload, Webhook, X, XCircle,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -810,6 +810,23 @@ function WeightOverridesTab() {
     onError: (e) => toast.error(`Delete failed: ${e.message}`),
   });
 
+  // Track per-row push-to-Extensiv loading state
+  const [pushingIds, setPushingIds] = useState<Set<number>>(new Set());
+  const pushMutation = trpc.skuWeight.pushWeightToExtensiv.useMutation({
+    onSuccess: (result, vars) => {
+      if (result.pushedToExtensiv) {
+        toast.success(`✓ Extensiv updated for ${vars.sku}: ${vars.cartonWeightLb} lbs${result.previousWeight != null ? ` (was ${result.previousWeight} lbs)` : ''}`);
+      } else {
+        toast(`Saved locally for ${vars.sku} — Extensiv update failed: ${result.error ?? 'unknown error'}`, { icon: '⚠️', duration: 8000 });
+      }
+      setPushingIds((prev) => { const n = new Set(prev); n.delete((vars as { _rowId?: number })._rowId ?? -1); return n; });
+    },
+    onError: (e, vars) => {
+      toast.error(`Push failed for ${vars.sku}: ${e.message}`);
+      setPushingIds((prev) => { const n = new Set(prev); n.delete((vars as { _rowId?: number })._rowId ?? -1); return n; });
+    },
+  });
+
   const startEdit = (row: { id: number; cartonWeightLb: string; unitsPerCarton: number | null; note: string | null }) => {
     setEditing((prev) => ({
       ...prev,
@@ -947,6 +964,27 @@ function WeightOverridesTab() {
                           </>
                         ) : (
                           <>
+                            <Button
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                              disabled={pushingIds.has(row.id) || pushMutation.isPending}
+                              title="Push this weight to Extensiv item catalog"
+                              onClick={() => {
+                                setPushingIds((prev) => new Set(prev).add(row.id));
+                                pushMutation.mutate({
+                                  configId: row.configId,
+                                  customerId: row.customerId,
+                                  sku: row.sku,
+                                  cartonWeightLb: Number(row.cartonWeightLb),
+                                  _rowId: row.id,
+                                } as Parameters<typeof pushMutation.mutate>[0] & { _rowId: number });
+                              }}
+                            >
+                              {pushingIds.has(row.id)
+                                ? <><Loader2 className="h-3 w-3 animate-spin" /> Pushing…</>
+                                : <><Upload className="h-3 w-3" /> Push to Extensiv</>
+                              }
+                            </Button>
                             <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={() => startEdit(row)}>
                               <Pencil className="h-3 w-3" /> Edit
                             </Button>

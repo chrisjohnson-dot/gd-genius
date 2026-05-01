@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useWarehouse } from "@/contexts/WarehouseContext";
 import { trpc } from "@/lib/trpc";
@@ -16,8 +16,9 @@ import {
   Ship, RefreshCw, MapPin, Package, Clock, Search,
   ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer, Truck,
   FlaskConical, ArrowRight, ClipboardList, Calendar, Hash, Building2, ExternalLink,
-  Plus, X,
+  Plus, X, FileText, Upload, Trash2, XCircle, Globe, Tag, Loader2,
 } from "lucide-react";
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -315,6 +316,9 @@ function ShipmentDetailDrawer({
             </div>
           )}
 
+          {/* Shipping Documents */}
+          <ShippingDocumentsPanel order={order} isDemo={isDemo} />
+
           {/* Timestamps */}
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 pt-4 border-t border-border">
             <div>
@@ -425,19 +429,240 @@ function EditOutboundDialog({ order, onClose }: { order: OutboundOrder; onClose:
   );
 }
 
+// ─── Shipping Documents ─────────────────────────────────────────────────────
+
+type ShippingDoc = {
+  id: number;
+  orderTrackingId: number;
+  docType: "bol" | "customs" | "pallet_label" | "other";
+  fileName: string;
+  fileUrl: string;
+  fileKey: string;
+  mimeType: string;
+  fileSizeBytes: number | null;
+  note: string | null;
+  uploadedBy: string | null;
+  createdAt: Date | string;
+};
+
+const DOC_TYPE_LABELS: Record<ShippingDoc["docType"], string> = {
+  bol: "BOL",
+  customs: "Customs",
+  pallet_label: "Pallet Labels",
+  other: "Other",
+};
+
+const DOC_TYPE_ICONS: Record<ShippingDoc["docType"], React.ReactNode> = {
+  bol: <FileText className="h-3.5 w-3.5" />,
+  customs: <Globe className="h-3.5 w-3.5" />,
+  pallet_label: <Tag className="h-3.5 w-3.5" />,
+  other: <FileText className="h-3.5 w-3.5" />,
+};
+
+/**
+ * Compact green/red status pill for the dashboard table column.
+ * hasBol + hasPalletLabel = green. Missing either = red.
+ * Customs is only required if isCustomsOrder is true (future: detect from order).
+ */
+function DocStatusPill({ docs, onClick }: { docs: ShippingDoc[]; onClick?: () => void }) {
+  const hasBol = docs.some((d) => d.docType === "bol");
+  const hasPalletLabel = docs.some((d) => d.docType === "pallet_label");
+  const complete = hasBol && hasPalletLabel;
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors",
+        complete
+          ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900/60"
+          : "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-400 dark:border-red-700 hover:bg-red-200 dark:hover:bg-red-900/60"
+      )}
+    >
+      {complete ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+      {complete ? "Docs OK" : "Missing"}
+    </button>
+  );
+}
+
+/**
+ * Full shipping documents panel shown inside the ShipmentDetailDrawer.
+ * Allows upload and deletion of BOL, customs, and pallet label files.
+ */
+function ShippingDocumentsPanel({ order, isDemo }: { order: OutboundOrder; isDemo: boolean }) {
+  const utils = trpc.useUtils();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadType, setUploadType] = useState<ShippingDoc["docType"]>("bol");
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const { data: docs = [], isLoading } = trpc.shippingDashboard.listDocuments.useQuery(
+    { orderTrackingId: order.id },
+    { enabled: !isDemo }
+  );
+
+  const uploadMutation = trpc.shippingDashboard.uploadDocument.useMutation({
+    onSuccess: () => utils.shippingDashboard.listDocuments.invalidate({ orderTrackingId: order.id }),
+    onSettled: () => setUploading(false),
+  });
+
+  const deleteMutation = trpc.shippingDashboard.deleteDocument.useMutation({
+    onSuccess: () => utils.shippingDashboard.listDocuments.invalidate({ orderTrackingId: order.id }),
+    onSettled: () => setDeletingId(null),
+  });
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      uploadMutation.mutate({
+        orderTrackingId: order.id,
+        docType: uploadType,
+        fileName: file.name,
+        dataUrl: reader.result as string,
+        mimeType: file.type || "application/pdf",
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
+  const hasBol = docs.some((d) => d.docType === "bol");
+  const hasPalletLabel = docs.some((d) => d.docType === "pallet_label");
+  const complete = hasBol && hasPalletLabel;
+
+  return (
+    <div className={cn(
+      "rounded-xl border px-6 py-5 space-y-4",
+      complete
+        ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800"
+        : "border-red-300 bg-red-50 dark:bg-red-950/20 dark:border-red-800"
+    )}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className={cn("h-4 w-4", complete ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")} />
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Shipping Documents</p>
+        </div>
+        <span className={cn(
+          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border",
+          complete
+            ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-700"
+            : "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-400 dark:border-red-700"
+        )}>
+          {complete ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+          {complete ? "Complete" : "Incomplete"}
+        </span>
+      </div>
+
+      {/* Required checklist */}
+      <div className="flex gap-4 text-[12px]">
+        {(["bol", "pallet_label"] as const).map((type) => {
+          const present = docs.some((d) => d.docType === type);
+          return (
+            <span key={type} className={cn(
+              "flex items-center gap-1 font-medium",
+              present ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+            )}>
+              {present ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+              {DOC_TYPE_LABELS[type]}
+            </span>
+          );
+        })}
+        {docs.some((d) => d.docType === "customs") && (
+          <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="h-3.5 w-3.5" />Customs
+          </span>
+        )}
+      </div>
+
+      {/* Document list */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-xs"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading…</div>
+      ) : docs.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No documents uploaded yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {docs.map((doc) => (
+            <div key={doc.id} className="flex items-center gap-2 bg-white/60 dark:bg-black/20 rounded-lg px-3 py-2">
+              <span className="text-muted-foreground">{DOC_TYPE_ICONS[doc.docType]}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-foreground truncate">{doc.fileName}</p>
+                <p className="text-[10px] text-muted-foreground">{DOC_TYPE_LABELS[doc.docType]}{doc.fileSizeBytes ? ` · ${(doc.fileSizeBytes / 1024).toFixed(0)} KB` : ""}</p>
+              </div>
+              <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-medium shrink-0">View</a>
+              {!isDemo && (
+                <button
+                  onClick={() => { setDeletingId(doc.id); deleteMutation.mutate({ id: doc.id }); }}
+                  disabled={deletingId === doc.id}
+                  className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+                >
+                  {deletingId === doc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload control */}
+      {!isDemo && (
+        <div className="flex items-center gap-2 pt-1">
+          <select
+            value={uploadType}
+            onChange={(e) => setUploadType(e.target.value as ShippingDoc["docType"])}
+            className="text-xs border border-border rounded-md px-2 py-1.5 bg-background text-foreground h-8"
+          >
+            <option value="bol">BOL</option>
+            <option value="customs">Customs</option>
+            <option value="pallet_label">Pallet Labels</option>
+            <option value="other">Other</option>
+          </select>
+          <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" className="hidden" onChange={handleFileChange} />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60 transition-colors h-8"
+          >
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {uploading ? "Uploading…" : "Upload"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Warehouse Section ────────────────────────────────────────────────────────
 
-function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo }: {
+function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo, onSelectForDocs }: {
   facilityName: string;
   orders: OutboundOrder[];
   onEdit: (o: OutboundOrder) => void;
   onSelect: (o: OutboundOrder) => void;
   isDemo?: boolean;
+  onSelectForDocs?: (o: OutboundOrder) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const totalPallets = orders.reduce((s, o) => s + (o.palletCount ?? 0), 0);
   const maxDays = Math.max(...orders.map((o) => daysInOutbound(o.shipReadyAt)));
   const urgentCount = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 4 && o.displayStatus !== "shipped").length;
+
+  // Bulk-fetch document presence for all orders in this section
+  const orderIds = useMemo(() => orders.map((o) => o.id), [orders]);
+  const { data: allDocs = [] } = trpc.shippingDashboard.listDocumentsByOrders.useQuery(
+    { orderTrackingIds: orderIds },
+    { enabled: !isDemo && orderIds.length > 0 }
+  );
+  const docsByOrder = useMemo(() => {
+    const map = new Map<number, ShippingDoc[]>();
+    for (const doc of allDocs) {
+      if (!map.has(doc.orderTrackingId)) map.set(doc.orderTrackingId, []);
+      map.get(doc.orderTrackingId)!.push(doc as ShippingDoc);
+    }
+    return map;
+  }, [allDocs]);
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden mb-4">
@@ -474,6 +699,9 @@ function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo }: {
                 </th>
                 <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <span className="flex items-center justify-center gap-1"><Package className="h-3 w-3" />Pallets</span>
+                </th>
+                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span className="flex items-center justify-center gap-1"><FileText className="h-3 w-3" />Docs</span>
                 </th>
                 <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <span className="flex items-center justify-center gap-1"><Clock className="h-3 w-3" />Status</span>
@@ -519,6 +747,16 @@ function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo }: {
                       {(order.palletCount ?? 0) > 0
                         ? <span className="inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-foreground"><Package className="h-3.5 w-3.5 text-muted-foreground" />{order.palletCount}</span>
                         : <span className="text-[12px] text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {isDemo ? (
+                        <span className="text-[11px] text-muted-foreground italic">Demo</span>
+                      ) : (
+                        <DocStatusPill
+                          docs={docsByOrder.get(order.id) ?? []}
+                          onClick={() => onSelectForDocs ? onSelectForDocs(order) : onSelect(order)}
+                        />
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {isShipped ? (
@@ -851,6 +1089,7 @@ export default function ShippingDashboard() {
             orders={facilityOrders}
             onEdit={setEditOrder}
             onSelect={setSelectedOrder}
+            onSelectForDocs={setSelectedOrder}
             isDemo={demoMode}
           />
         ))

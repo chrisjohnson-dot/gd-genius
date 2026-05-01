@@ -4978,3 +4978,37 @@ export async function listAllSkuWeightOverrides(): Promise<SkuWeightOverride[]> 
   return db.select().from(skuWeightOverrides)
     .orderBy(skuWeightOverrides.configId, skuWeightOverrides.customerId, skuWeightOverrides.sku);
 }
+
+// ─── Shipping Documents ───────────────────────────────────────────────────────
+import { shippingDocuments, type ShippingDocument, type InsertShippingDocument } from "../drizzle/schema";
+
+export async function getShippingDocuments(orderTrackingId: number): Promise<ShippingDocument[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(shippingDocuments)
+    .where(eq(shippingDocuments.orderTrackingId, orderTrackingId))
+    .orderBy(shippingDocuments.createdAt);
+}
+
+export async function getShippingDocumentsByOrders(orderTrackingIds: number[]): Promise<ShippingDocument[]> {
+  if (orderTrackingIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  const { inArray } = await import('drizzle-orm');
+  return db.select().from(shippingDocuments)
+    .where(inArray(shippingDocuments.orderTrackingId, orderTrackingIds))
+    .orderBy(shippingDocuments.orderTrackingId, shippingDocuments.createdAt);
+}
+
+export async function insertShippingDocument(doc: InsertShippingDocument): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error('DB unavailable');
+  const [result] = await db.insert(shippingDocuments).values(doc);
+  return (result as { insertId: number }).insertId;
+}
+
+export async function deleteShippingDocument(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(shippingDocuments).where(eq(shippingDocuments.id, id));
+}

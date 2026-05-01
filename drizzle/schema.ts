@@ -2442,3 +2442,30 @@ export const skuWeightOverrides = mysqlTable("sku_weight_overrides", {
 });
 export type SkuWeightOverride = typeof skuWeightOverrides.$inferSelect;
 export type InsertSkuWeightOverride = typeof skuWeightOverrides.$inferInsert;
+
+// ─── Shipping Documents ───────────────────────────────────────────────────────
+// Tracks BOL, customs documents, and pallet labels attached to outbound orders.
+// orderTrackingId references orderTracking.id.
+export const shippingDocuments = mysqlTable("shipping_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK → order_tracking.id */
+  orderTrackingId: int("order_tracking_id").notNull(),
+  /** Document type: bol | customs | pallet_label | other */
+  docType: mysqlEnum("doc_type", ["bol", "customs", "pallet_label", "other"]).notNull(),
+  /** Original file name */
+  fileName: varchar("file_name", { length: 512 }).notNull(),
+  /** S3 public URL */
+  fileUrl: varchar("file_url", { length: 1024 }).notNull(),
+  /** S3 key (for deletion) */
+  fileKey: varchar("file_key", { length: 512 }).notNull(),
+  /** MIME type e.g. application/pdf, image/png */
+  mimeType: varchar("mime_type", { length: 128 }).notNull().default("application/pdf"),
+  /** File size in bytes */
+  fileSizeBytes: int("file_size_bytes"),
+  /** Optional note */
+  note: varchar("note", { length: 256 }),
+  uploadedBy: varchar("uploaded_by", { length: 256 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ShippingDocument = typeof shippingDocuments.$inferSelect;
+export type InsertShippingDocument = typeof shippingDocuments.$inferInsert;

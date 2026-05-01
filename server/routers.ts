@@ -8068,6 +8068,10 @@ import {
 import {
   getShipReadyOrders,
   updateOutboundDetails,
+  getShippingDocuments,
+  getShippingDocumentsByOrders,
+  insertShippingDocument,
+  deleteShippingDocument,
 } from "./db";
 // ─── Audit Images Routerr ──────────────────────────────────────────────────────
 import {
@@ -8458,6 +8462,61 @@ const shippingDashboardRouter = router({
     }
     return result;
   }),
+
+  // ─── Shipping Documents ───────────────────────────────────────────────────────
+  /** List all shipping documents for a single order */
+  listDocuments: protectedProcedure
+    .input(z.object({ orderTrackingId: z.number() }))
+    .query(async ({ input }) => {
+      return getShippingDocuments(input.orderTrackingId);
+    }),
+
+  /** Bulk fetch document presence for a list of orders (for dashboard column) */
+  listDocumentsByOrders: protectedProcedure
+    .input(z.object({ orderTrackingIds: z.array(z.number()) }))
+    .query(async ({ input }) => {
+      return getShippingDocumentsByOrders(input.orderTrackingIds);
+    }),
+
+  /** Upload a shipping document (base64 data URL → S3) */
+  uploadDocument: protectedProcedure
+    .input(z.object({
+      orderTrackingId: z.number(),
+      docType: z.enum(['bol', 'customs', 'pallet_label', 'other']),
+      fileName: z.string().min(1).max(512),
+      dataUrl: z.string().min(1),   // base64 data URL
+      mimeType: z.string().default('application/pdf'),
+      note: z.string().max(256).optional().nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const base64 = input.dataUrl.replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(base64, 'base64');
+      const suffix = Date.now();
+      const safeFileName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = `shipping-docs/${input.orderTrackingId}/${input.docType}-${suffix}-${safeFileName}`;
+      const { storagePut } = await import('./storage');
+      const { url } = await storagePut(key, buffer, input.mimeType);
+      const id = await insertShippingDocument({
+        orderTrackingId: input.orderTrackingId,
+        docType: input.docType,
+        fileName: input.fileName,
+        fileUrl: url,
+        fileKey: key,
+        mimeType: input.mimeType,
+        fileSizeBytes: buffer.length,
+        note: input.note ?? null,
+        uploadedBy: ctx.user?.name ?? null,
+      });
+      return { success: true, id, url };
+    }),
+
+  /** Delete a shipping document by id */
+  deleteDocument: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteShippingDocument(input.id);
+      return { success: true };
+    }),
 });
 
 const slaPerformanceRouter = router({

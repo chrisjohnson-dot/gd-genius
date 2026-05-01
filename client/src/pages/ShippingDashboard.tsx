@@ -1250,20 +1250,35 @@ export default function ShippingDashboard() {
             </button>
           )}
         </div>
-        {/* Sort by Docs toggle */}
-        <button
-          onClick={() => setSortBy((s) => s === "docs" ? "age" : "docs")}
-          className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs transition-all",
-            sortBy === "docs"
-              ? "bg-red-100 dark:bg-red-950/40 border-red-400 text-red-700 dark:text-red-300 font-semibold"
-              : "border-border text-muted-foreground hover:border-foreground/40"
-          )}
-          title={sortBy === "docs" ? "Sorting: missing docs first — click to sort by age" : "Click to sort by missing docs first"}
-        >
-          <ArrowUpDown className="h-3 w-3" />
-          {sortBy === "docs" ? "Sorted: missing docs first" : "Sort by docs"}
-        </button>
+        {/* Sort buttons */}
+        <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-muted/30">
+          <button
+            onClick={() => setSortBy("age")}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-all",
+              sortBy === "age"
+                ? "bg-background shadow-sm border border-border text-foreground font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Sort by age — oldest orders first"
+          >
+            <Clock className="h-3 w-3" />
+            Sort by age
+          </button>
+          <button
+            onClick={() => setSortBy("docs")}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-all",
+              sortBy === "docs"
+                ? "bg-background shadow-sm border border-red-400 text-red-700 dark:text-red-300 font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Sort by docs — orders missing documents first"
+          >
+            <FileText className="h-3 w-3" />
+            Sort by docs
+          </button>
+        </div>
       </div>
 
       {/* Demo B2B section — only visible in demo mode */}

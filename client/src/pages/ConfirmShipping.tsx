@@ -620,8 +620,7 @@ export default function ConfirmShipping() {
                       {/* Bids — shows "$N" pill */}
                       <td className="px-4 py-3 text-center">
                         {order.shipwellBidCount != null && order.shipwellBidCount > 0 ? (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
-                            <DollarSign className="h-3 w-3" />
+                          <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
                             {order.shipwellBidCount}
                           </span>
                         ) : (

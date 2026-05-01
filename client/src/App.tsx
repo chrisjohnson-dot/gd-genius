@@ -36,6 +36,7 @@ import ReturnsScanStation from "@/pages/ReturnsScanStation";
 import CortexSettings from "@/pages/CortexSettings";
 import QcScanner from "@/pages/QcScanner";
 import CarrierPickupScanner from "@/pages/CarrierPickupScanner";
+import CarrierPickupHistory from "@/pages/CarrierPickupHistory";
 import CarrierAppointments from "@/pages/CarrierAppointments";
 import DockManager from "@/pages/DockManager";
 import QcHistory from "@/pages/QcHistory";
@@ -132,6 +133,7 @@ function AppRoutes() {
         <Route path="/qc/flagged" component={FlaggedScans} />
         <Route path="/shipping/pallet-scan" component={PalletScanner} />
         <Route path="/shipping/carrier-pickup" component={CarrierPickupScanner} />
+        <Route path="/shipping/carrier-pickup/history" component={CarrierPickupHistory} />
         <Route path="/shipping/appointments" component={CarrierAppointments} />
         <Route path="/shipping/dock-manager" component={DockManager} />
         <Route path="/receiving" component={ReceivingDashboard} />

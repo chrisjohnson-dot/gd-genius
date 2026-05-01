@@ -10,8 +10,9 @@ import {
   User, Hash, PenLine, Printer, Download, FileCheck, Save, CloudUpload,
 } from "lucide-react";
 import { SignaturePad } from "@/components/SignaturePad";
+import { useScanAudio } from "@/hooks/useScanAudio";
 
-// ─── Demo data ────────────────────────────────────────────────────────────────
+// ─── Demo data ────────────────────────────────────────────────────────────────────
 const DEMO_ORDER = {
   id: 0,
   extensivOrderId: 9999001,
@@ -54,21 +55,18 @@ interface SelectedOrder {
 }
 
 // ─── Audio ────────────────────────────────────────────────────────────────────
-let soundMuted = false;
-function playBeep(type: "success" | "duplicate" | "complete") {
-  if (soundMuted) return;
+function playCompleteBeep() {
   try {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    if (type === "success") { osc.frequency.value = 880; gain.gain.value = 0.15; }
-    else if (type === "duplicate") { osc.frequency.value = 220; gain.gain.value = 0.2; }
-    else { osc.frequency.value = 1047; gain.gain.value = 0.15; }
+    osc.frequency.value = 1047;
+    gain.gain.value = 0.15;
     osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (type === "complete" ? 0.6 : 0.18));
-    osc.stop(ctx.currentTime + (type === "complete" ? 0.6 : 0.18));
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+    osc.stop(ctx.currentTime + 0.6);
   } catch { /* ignore */ }
 }
 
@@ -104,6 +102,8 @@ export default function CarrierPickupScanner() {
   const [scanInput, setScanInput] = useState("");
   const [scannedPallets, setScannedPallets] = useState<ScannedPallet[]>([]);
   const [flashState, setFlashState] = useState<"idle" | "success" | "duplicate">("idle");
+  // Full-screen error blocker — must be manually cleared before scanning resumes
+  const [scanError, setScanError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
@@ -151,10 +151,10 @@ export default function CarrierPickupScanner() {
   });
 
   // Sound
+  const { playSuccess, playError } = useScanAudio();
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem("carrierPickup_soundMuted") === "true"; } catch { return false; }
   });
-  useEffect(() => { soundMuted = muted; }, [muted]);
   const toggleMute = () => {
     const next = !muted;
     setMuted(next);
@@ -242,26 +242,26 @@ export default function CarrierPickupScanner() {
   const scanPalletMutation = trpc.carrierPickup.scanPallet.useMutation({
     onSuccess: (data) => {
       if (data.duplicate) {
-        playBeep("duplicate");
+        if (!muted) playError();
+        setScanError(data.message ?? "Duplicate scan — this pallet was already scanned.");
         setFlashState("duplicate");
-        toast.error(data.message ?? "Duplicate scan");
       } else {
-        playBeep("success");
+        if (!muted) playSuccess();
         setFlashState("success");
         setScannedPallets(prev => [{ labelValue: scanInput.trim(), scannedAt: new Date() }, ...prev]);
+        setScanInput("");
+        setTimeout(() => setFlashState("idle"), 500);
       }
-      setScanInput("");
-      setTimeout(() => setFlashState("idle"), 500);
     },
     onError: (err) => {
-      toast.error(err.message);
-      setScanInput("");
+      if (!muted) playError();
+      setScanError(err.message);
     },
   });
 
   const completeSessionMutation = trpc.carrierPickup.completeSession.useMutation({
     onSuccess: (data) => {
-      playBeep("complete");
+      if (!muted) playCompleteBeep();
       setShippedInExtensiv(data.shippedInExtensiv);
       setPhase("complete");
       setShowConfirmDialog(false);
@@ -277,14 +277,12 @@ export default function CarrierPickupScanner() {
     const trimmed = label.trim();
     if (!trimmed) return;
     if (scannedPallets.find(p => p.labelValue === trimmed)) {
-      playBeep("duplicate");
+      if (!muted) playError();
+      setScanError(`"${trimmed}" has already been scanned. Clear this error before continuing.`);
       setFlashState("duplicate");
-      toast.error(`${trimmed} already scanned.`);
-      setTimeout(() => setFlashState("idle"), 500);
-      setScanInput("");
       return;
     }
-    playBeep("success");
+    if (!muted) playSuccess();
     setFlashState("success");
     setScannedPallets(prev => [{ labelValue: trimmed, scannedAt: new Date() }, ...prev]);
     setScanInput("");
@@ -294,6 +292,7 @@ export default function CarrierPickupScanner() {
   const handleScan = useCallback(() => {
     const trimmed = scanInput.trim();
     if (!trimmed) return;
+    if (scanError) return; // blocked until error overlay is dismissed
     if (isDemo) {
       handleDemoScan(trimmed);
     } else if (sessionId !== null) {
@@ -344,7 +343,7 @@ export default function CarrierPickupScanner() {
   const handleComplete = () => {
     if (confirmText !== "CONFIRMED") return;
     if (isDemo) {
-      playBeep("complete");
+      if (!muted) playCompleteBeep();
       setShippedInExtensiv(false);
       setPhase("complete");
       setShowConfirmDialog(false);
@@ -370,6 +369,7 @@ export default function CarrierPickupScanner() {
     setScanInput("");
     setScannedPallets([]);
     setFlashState("idle");
+    setScanError(null);
     setConfirmText("");
     setShowConfirmDialog(false);
     setShippedInExtensiv(null);
@@ -586,7 +586,31 @@ export default function CarrierPickupScanner() {
 
       {/* ── Phase 3 (quickstart) + Phase 3 (scanning): Split-panel layout ── */}
       {(phase === "quickstart" || phase === "scanning") && selectedOrder && (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden relative">
+
+          {/* ─── FULL-SCREEN SCAN ERROR BLOCKER ────────────────────────────────────── */}
+          {scanError && (
+            <div className="absolute inset-0 z-50 bg-red-600 flex flex-col items-center justify-center gap-8 p-8">
+              <div className="flex flex-col items-center gap-4 text-white text-center">
+                <XCircle className="h-24 w-24 text-white opacity-90" />
+                <h2 className="text-4xl font-black tracking-tight">SCAN ERROR</h2>
+                <p className="text-xl font-semibold max-w-lg leading-snug">{scanError}</p>
+                <p className="text-red-200 text-sm">Scanning is paused. Review the error above and clear it before continuing.</p>
+              </div>
+              <Button
+                size="lg"
+                className="bg-white text-red-700 hover:bg-red-50 font-bold text-lg px-10 py-6 shadow-xl"
+                onClick={() => {
+                  setScanError(null);
+                  setScanInput("");
+                  setFlashState("idle");
+                  setTimeout(() => scanInputRef.current?.focus(), 100);
+                }}
+              >
+                Clear Error & Resume Scanning
+              </Button>
+            </div>
+          )}
 
           {/* LEFT PANEL: Outbound pallets */}
           <div className="w-72 shrink-0 border-r bg-card flex flex-col overflow-hidden">
@@ -870,7 +894,7 @@ export default function CarrierPickupScanner() {
                   {savePickupBolMutation.isPending ? (
                     <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Saving BOL…</>
                   ) : (
-                    <><Save className="h-4 w-4 mr-2" /> Save BOL &amp; Push to History</>
+                    <><Save className="h-4 w-4 mr-2" /> Save BOL & Push to History</>
                   )}
                 </Button>
               )}
@@ -904,7 +928,7 @@ export default function CarrierPickupScanner() {
 
               {signedBolUrl && (
                 <div className="text-xs text-muted-foreground text-center">
-                  Signed BOL saved to Shipment History &amp; ClearSight
+                  Signed BOL saved to Shipment History & ClearSight
                 </div>
               )}
             </div>

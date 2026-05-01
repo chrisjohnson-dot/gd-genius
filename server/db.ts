@@ -930,7 +930,7 @@ export async function updateShipwellBidCount(
   if (!db) return;
   await db
     .update(orderTracking)
-    .set({ shipwellBidCount: bidCount })
+    .set({ shipwellBidCount: bidCount, shipwellStatusUpdatedAt: new Date() })
     .where(eq(orderTracking.extensivOrderId, extensivOrderId));
 }
 

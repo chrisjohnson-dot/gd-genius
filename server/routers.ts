@@ -3007,6 +3007,7 @@ const _appRouter = router({
         palletCount: r.palletCount,
         outboundLocation: r.outboundLocation,
         facilityName: r.facilityName,
+        shipwellStatusUpdatedAt: r.shipwellStatusUpdatedAt,
       }));
     }),
     /**

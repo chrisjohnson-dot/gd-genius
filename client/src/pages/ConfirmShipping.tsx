@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   CheckSquare, RefreshCw, Search, AlertTriangle, Timer, CheckCircle2,
-  ExternalLink, Send, Package, MapPin, Calendar, Clock, Loader2,
-  TrendingUp, Gavel, Truck, Filter, RotateCw,
+  Send, Package, MapPin, Calendar, Loader2,
+  TrendingUp, Gavel, Truck, Filter, RotateCw, Clock,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -52,6 +52,31 @@ function fmtDate(d: string | null | undefined) {
   return isNaN(dt.getTime()) ? d : dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/**
+ * Format a timestamp as a relative "last refreshed" label.
+ * e.g. "just now", "2 min ago", "1 hr ago", "3 days ago", or an absolute date if very old.
+ */
+function fmtLastRefreshed(ts: Date | string | null | undefined): { label: string; stale: boolean } {
+  if (!ts) return { label: "Never", stale: true };
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return { label: "Never", stale: true };
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  const diffHr = Math.floor(diffMs / 3_600_000);
+  const diffDay = Math.floor(diffMs / 86_400_000);
+
+  let label: string;
+  if (diffMin < 1) label = "Just now";
+  else if (diffMin < 60) label = `${diffMin} min ago`;
+  else if (diffHr < 24) label = `${diffHr} hr ago`;
+  else if (diffDay < 7) label = `${diffDay} day${diffDay !== 1 ? "s" : ""} ago`;
+  else label = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+  // Mark as stale if not refreshed in the last 2 hours
+  const stale = diffMs > 2 * 3_600_000;
+  return { label, stale };
+}
+
 function shipwellStatusLabel(status: string | null | undefined): { label: string; cls: string } {
   switch (status) {
     case "quoting":
@@ -85,6 +110,7 @@ type UnconfirmedOrder = {
   palletCount: number | null;
   outboundLocation: string | null;
   facilityName: string | null;
+  shipwellStatusUpdatedAt: Date | string | null;
 };
 
 type FilterStatus = "all" | "overdue" | "quoting" | "tendered" | "not_sent";
@@ -133,10 +159,7 @@ export default function ConfirmShipping() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [sendingIds, setSendingIds] = useState<Set<number>>(new Set());
-  // Track which rows are currently refreshing their Shipwell status
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
-
-  const utils = trpc.useUtils();
 
   const { data: orders = [], isLoading, refetch, isFetching } = trpc.shipwell.listUnconfirmed.useQuery(
     undefined,
@@ -198,7 +221,6 @@ export default function ConfirmShipping() {
       );
     }
 
-    // Sort: overdue first, then by days in outbound descending
     list.sort((a, b) => {
       const aOver = isOverdue(a) ? 1 : 0;
       const bOver = isOverdue(b) ? 1 : 0;
@@ -374,6 +396,7 @@ export default function ConfirmShipping() {
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Days Out</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Shipwell Status</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Bids / Rates</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Last Refreshed</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Pallets</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Location</th>
                   <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Actions</th>
@@ -387,8 +410,8 @@ export default function ConfirmShipping() {
                   const isSending = sendingIds.has(order.extensivOrderId);
                   const isRefreshing = refreshingIds.has(order.extensivOrderId);
                   const hasBids = (order.shipwellBidCount ?? 0) > 0;
-                  // Show refresh button only for orders already in Shipwell
                   const canRefresh = !!order.shipwellOrderId;
+                  const { label: refreshLabel, stale: isStale } = fmtLastRefreshed(order.shipwellStatusUpdatedAt);
 
                   return (
                     <tr
@@ -451,19 +474,15 @@ export default function ConfirmShipping() {
                         </span>
                       </td>
 
-                      {/* Shipwell Status — with inline refresh spinner when refreshing */}
+                      {/* Shipwell Status */}
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn(
-                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border",
-                            swCls
-                          )}>
-                            {isRefreshing ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : null}
-                            {swLabel}
-                          </span>
-                        </div>
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border",
+                          swCls
+                        )}>
+                          {isRefreshing && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {swLabel}
+                        </span>
                       </td>
 
                       {/* Bids / Rates */}
@@ -475,6 +494,35 @@ export default function ConfirmShipping() {
                           )}>
                             <Gavel className="h-3.5 w-3.5" />
                             {hasBids ? `${order.shipwellBidCount} bid${(order.shipwellBidCount ?? 0) > 1 ? "s" : ""}` : "No bids yet"}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* Last Refreshed */}
+                      <td className="px-4 py-3">
+                        {isRefreshing ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Refreshing…
+                          </span>
+                        ) : order.shipwellOrderId ? (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 text-xs",
+                              isStale
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-emerald-600 dark:text-emerald-400"
+                            )}
+                            title={
+                              order.shipwellStatusUpdatedAt
+                                ? new Date(order.shipwellStatusUpdatedAt).toLocaleString()
+                                : "Never refreshed"
+                            }
+                          >
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {refreshLabel}
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-xs">—</span>
@@ -511,7 +559,7 @@ export default function ConfirmShipping() {
                             </a>
                           )}
 
-                          {/* Refresh Shipwell Status — only if order has been sent to Shipwell */}
+                          {/* Refresh Shipwell Status */}
                           {canRefresh && (
                             <Button
                               variant="outline"
@@ -526,11 +574,11 @@ export default function ConfirmShipping() {
                               ) : (
                                 <RotateCw className="h-3.5 w-3.5" />
                               )}
-                              {isRefreshing ? "Refreshing…" : "Refresh Status"}
+                              {isRefreshing ? "Refreshing…" : "Refresh"}
                             </Button>
                           )}
 
-                          {/* Send to Shipwell — only if not yet sent */}
+                          {/* Send to Shipwell */}
                           {!order.shipwellOrderId && (
                             <Button
                               variant="outline"
@@ -582,12 +630,19 @@ export default function ConfirmShipping() {
         </div>
       )}
 
-      {/* ── Placeholder note ── */}
-      <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground bg-muted/20">
-        <strong className="text-foreground">Notes:</strong>{" "}
-        <em>Refresh Status</em> polls the Shipwell API in real-time to update the status and bid count for that order — it is available for any order already sent to Shipwell.
-        The <em>Confirm</em> button is a placeholder — it will update the order's Shipwell status to{" "}
-        <code>carrier_confirmed</code> once the workflow is finalised.
+      {/* ── Legend / notes ── */}
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <Clock className="h-3.5 w-3.5 text-emerald-500" />
+          <span>Last Refreshed &lt; 2 hrs — fresh</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <Clock className="h-3.5 w-3.5 text-amber-500" />
+          <span>Last Refreshed &gt; 2 hrs — stale, consider refreshing</span>
+        </span>
+        <span className="flex items-center gap-1 ml-auto italic">
+          Hover the timestamp for the exact date/time
+        </span>
       </div>
     </div>
   );

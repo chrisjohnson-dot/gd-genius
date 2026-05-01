@@ -225,6 +225,23 @@ export default function CarrierPickupScanner() {
     return () => document.removeEventListener("click", handleClick);
   }, [phase, scanError]);
 
+  // Inactivity focus recovery: every 5 s, silently return focus to the scan
+  // input if it has drifted away (e.g. OS notification, tooltip, browser UI)
+  useEffect(() => {
+    if (phase !== "scanning") return;
+    const id = setInterval(() => {
+      // Only re-focus if no error overlay, no dialog, no other input is active
+      const active = document.activeElement as HTMLElement | null;
+      const isModalOpen = !!document.querySelector("[role='dialog']");
+      const isOtherInputActive = active && active !== scanInputRef.current &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT");
+      if (!scanError && !isModalOpen && !isOtherInputActive) {
+        scanInputRef.current?.focus();
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [phase, scanError]);
+
   // Ctrl+Enter to open confirm dialog
   useEffect(() => {
     if (phase !== "scanning") return;

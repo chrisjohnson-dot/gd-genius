@@ -22,17 +22,21 @@ function getAgeColor(shipReadyAt: Date | string | null): { bg: string; text: str
 
 function formatDockAge(shipReadyAt: Date | string | null): string {
   if (!shipReadyAt) return "";
+  const days = daysOnDock(shipReadyAt);
+  if (days >= 1) return `${days}D`;
   const ms = Math.max(0, Date.now() - new Date(shipReadyAt).getTime());
   const hrs = Math.floor(ms / 3_600_000);
-  const days = Math.floor(ms / 86_400_000);
-  if (days >= 1) return `${days}D`;
   if (hrs < 1) return "< 1h";
   return `${hrs}h`;
 }
 
 function daysOnDock(shipReadyAt: Date | string | null): number {
   if (!shipReadyAt) return 0;
-  return Math.floor(Math.max(0, Date.now() - new Date(shipReadyAt).getTime()) / 86_400_000);
+  const start = new Date(shipReadyAt);
+  const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((todayMidnight.getTime() - startMidnight.getTime()) / 86_400_000));
 }
 
 

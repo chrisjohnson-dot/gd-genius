@@ -254,6 +254,7 @@ export const orderTracking = mysqlTable("order_tracking", {
   shipwellStatus: varchar("shipwellStatus", { length: 64 }),      // Live status from Shipwell: quoting, tendered, carrier_confirmed, in_transit, delivered
   shipwellBidCount: int("shipwellBidCount"),                       // Number of carrier bids when in Quoting status
   shipwellQuotingStartedAt: timestamp("shipwellQuotingStartedAt"),  // When order first entered Quoting status
+  shipwellLastBidAt: timestamp("shipwellLastBidAt"),                 // When the most recent carrier bid was received
   shipwellZeroBidNotifiedAt: timestamp("shipwellZeroBidNotifiedAt"), // When zero-bid alert was last sent (prevents duplicates)
   lastOverdueAlertSentAt: timestamp("lastOverdueAlertSentAt"),       // When overdue morning alert was last sent for this order
   // Per-order SLA extension (customer-requested later date)

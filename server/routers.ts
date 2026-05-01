@@ -3008,6 +3008,8 @@ const _appRouter = router({
         outboundLocation: r.outboundLocation,
         facilityName: r.facilityName,
         shipwellStatusUpdatedAt: r.shipwellStatusUpdatedAt,
+        shipwellQuotingStartedAt: r.shipwellQuotingStartedAt,
+        shipwellLastBidAt: r.shipwellLastBidAt,
       }));
     }),
     /**

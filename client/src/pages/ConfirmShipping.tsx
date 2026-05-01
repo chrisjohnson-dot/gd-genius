@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   RefreshCw, Search, AlertTriangle, Timer, CheckCircle2,
-  Package, MapPin, Calendar, Clock,
+  Package, MapPin, Calendar, Clock, Flame,
   TrendingUp, Gavel, Truck, ChevronDown, ChevronUp,
   DollarSign,
 } from "lucide-react";
@@ -49,21 +49,35 @@ function daysUntil(dateStr: string | null | undefined): number | null {
   return Math.floor((d.getTime() - now.getTime()) / 86400000);
 }
 
-function fmtLastRefreshed(ts: Date | string | null | undefined): { label: string; stale: boolean } {
-  if (!ts) return { label: "Never", stale: true };
+/** Returns a human-readable elapsed time string and a stale flag (>2h) */
+function fmtElapsed(ts: Date | string | null | undefined): { label: string; stale: boolean; ms: number } {
+  if (!ts) return { label: "—", stale: false, ms: 0 };
   const date = new Date(ts);
-  if (isNaN(date.getTime())) return { label: "Never", stale: true };
+  if (isNaN(date.getTime())) return { label: "—", stale: false, ms: 0 };
   const diffMs = Date.now() - date.getTime();
   const diffMin = Math.floor(diffMs / 60_000);
   const diffHr = Math.floor(diffMs / 3_600_000);
   const diffDay = Math.floor(diffMs / 86_400_000);
   let label: string;
   if (diffMin < 1) label = "Just now";
-  else if (diffMin < 60) label = `${diffMin} min ago`;
-  else if (diffHr < 24) label = `${diffHr} hr ago`;
-  else if (diffDay < 7) label = `${diffDay} day${diffDay !== 1 ? "s" : ""} ago`;
-  else label = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return { label, stale: diffMs > 2 * 3_600_000 };
+  else if (diffMin < 60) label = `${diffMin}m ago`;
+  else if (diffHr < 24) label = `${diffHr}h ${diffMin % 60}m ago`;
+  else label = `${diffDay}d ago`;
+  return { label, stale: diffMs > 2 * 3_600_000, ms: diffMs };
+}
+
+/** Running clock string for quote age (hh:mm:ss) */
+function fmtRunningClock(ts: Date | string | null | undefined, now: number): string {
+  if (!ts) return "—";
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return "—";
+  const diffMs = Math.max(0, now - date.getTime());
+  const totalSec = Math.floor(diffMs / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
 }
 
 function shipwellStatusLabel(status: string | null | undefined): { label: string; cls: string } {
@@ -101,9 +115,11 @@ type UnconfirmedOrder = {
   outboundLocation: string | null;
   facilityName: string | null;
   shipwellStatusUpdatedAt: Date | string | null;
+  shipwellQuotingStartedAt: Date | string | null;
+  shipwellLastBidAt: Date | string | null;
 };
 
-type FilterStatus = "all" | "overdue" | "quoting" | "tendered" | "not_sent";
+type FilterStatus = "all" | "overdue" | "quoting" | "tendered" | "not_sent" | "stale";
 
 // ─── Rates Panel ──────────────────────────────────────────────────────────────
 
@@ -118,7 +134,7 @@ function RatesPanel({ order }: { order: UnconfirmedOrder }) {
   const [selectingId, setSelectingId] = useState<number | null>(null);
 
   const selectMutation = trpc.shipwell.selectRate.useMutation({
-    onSuccess: (_data, vars) => {
+    onSuccess: () => {
       utils.shipwell.getRates.invalidate({ extensivOrderId: order.extensivOrderId });
       utils.shipwell.listUnconfirmed.invalidate();
       toast.success("Carrier rate selected successfully.");
@@ -290,7 +306,7 @@ function RatesPanel({ order }: { order: UnconfirmedOrder }) {
 
       {selectedRate?.selectedAt && (
         <div className="mt-1.5 text-[11px] text-muted-foreground">
-          Selected by {selectedRate.selectedBy ?? "unknown"} · {fmtLastRefreshed(selectedRate.selectedAt).label}
+          Selected by {selectedRate.selectedBy ?? "unknown"} · {fmtElapsed(selectedRate.selectedAt).label}
         </div>
       )}
     </div>
@@ -304,6 +320,12 @@ export default function ConfirmShipping() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  // Live clock tick (every second for running quote age)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const { data: orders = [], isLoading, refetch } = trpc.shipwell.listUnconfirmed.useQuery(
     undefined,
@@ -326,12 +348,20 @@ export default function ConfirmShipping() {
     },
   });
 
+  // Stale = quoting for >2h without a confirmed rate
+  const isStaleQuote = useCallback((order: UnconfirmedOrder): boolean => {
+    if (order.shipwellStatus !== "quoting") return false;
+    if (!order.shipwellQuotingStartedAt) return false;
+    return (now - new Date(order.shipwellQuotingStartedAt).getTime()) > 2 * 3_600_000;
+  }, [now]);
+
   // KPI counts
   const totalCount = orders.length;
   const overdueCount = useMemo(() => orders.filter(isOverdue).length, [orders]);
   const quotingCount = useMemo(() => orders.filter((o) => o.shipwellStatus === "quoting").length, [orders]);
   const notSentCount = useMemo(() => orders.filter((o) => !o.shipwellStatus).length, [orders]);
   const tenderedCount = useMemo(() => orders.filter((o) => o.shipwellStatus === "tendered").length, [orders]);
+  const staleCount = useMemo(() => orders.filter(isStaleQuote).length, [orders, isStaleQuote]);
 
   // Filtered + sorted list
   const filtered = useMemo(() => {
@@ -340,6 +370,7 @@ export default function ConfirmShipping() {
     else if (filterStatus === "quoting") list = list.filter((o) => o.shipwellStatus === "quoting");
     else if (filterStatus === "tendered") list = list.filter((o) => o.shipwellStatus === "tendered");
     else if (filterStatus === "not_sent") list = list.filter((o) => !o.shipwellStatus);
+    else if (filterStatus === "stale") list = list.filter(isStaleQuote);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -351,47 +382,59 @@ export default function ConfirmShipping() {
       );
     }
     list.sort((a, b) => {
-      const aOver = isOverdue(a) ? 1 : 0;
-      const bOver = isOverdue(b) ? 1 : 0;
+      const aOver = isOverdue(a) ? 2 : isStaleQuote(a) ? 1 : 0;
+      const bOver = isOverdue(b) ? 2 : isStaleQuote(b) ? 1 : 0;
       if (bOver !== aOver) return bOver - aOver;
       return daysInOutbound(b.shipReadyAt) - daysInOutbound(a.shipReadyAt);
     });
     return list;
-  }, [orders, filterStatus, search]);
+  }, [orders, filterStatus, search, isStaleQuote]);
 
-  const filterButtons: { key: FilterStatus; label: string; count: number }[] = [
+  const filterButtons: { key: FilterStatus; label: string; count: number; urgent?: boolean }[] = [
     { key: "all", label: "All", count: totalCount },
     { key: "overdue", label: "Overdue", count: overdueCount },
+    { key: "stale", label: "Needs Attention", count: staleCount, urgent: true },
     { key: "quoting", label: "Quoting", count: quotingCount },
     { key: "tendered", label: "Tendered", count: tenderedCount },
     { key: "not_sent", label: "Not Sent", count: notSentCount },
   ];
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
+    <div className="p-6 max-w-[1500px] mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Shipping Quotes</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Review outstanding Shipwell rates and select a carrier for each order.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Shipping Quotes</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Review outstanding Shipwell rates and select a carrier for each order.
+          </p>
+        </div>
+        {staleCount > 0 && (
+          <div className="flex items-center gap-2 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30 px-4 py-2.5 text-sm text-red-700 dark:text-red-400">
+            <Flame className="h-4 w-4 shrink-0" />
+            <span className="font-semibold">{staleCount} order{staleCount !== 1 ? "s" : ""}</span>
+            <span>waiting on quotes for over 2 hours — action required</span>
+          </div>
+        )}
       </div>
 
       {/* KPI tiles */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-6 gap-3 mb-6">
         {[
           { key: "all" as FilterStatus, label: "Unconfirmed", value: totalCount, icon: TrendingUp, color: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
           { key: "overdue" as FilterStatus, label: "Overdue", value: overdueCount, icon: AlertTriangle, color: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" },
+          { key: "stale" as FilterStatus, label: "Needs Attention", value: staleCount, icon: Flame, color: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" },
           { key: "quoting" as FilterStatus, label: "Quoting", value: quotingCount, icon: Gavel, color: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" },
           { key: "tendered" as FilterStatus, label: "Tendered", value: tenderedCount, icon: Timer, color: "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" },
-          { key: "not_sent" as FilterStatus, label: "Not Sent", value: notSentCount, icon: Package, color: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" },
+          { key: "not_sent" as FilterStatus, label: "Not Sent", value: notSentCount, icon: Package, color: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
         ].map(({ key, label, value, icon: Icon, color }) => (
           <button
             key={key}
             onClick={() => setFilterStatus(filterStatus === key ? "all" : key)}
             className={cn(
               "flex flex-col gap-1 rounded-lg border p-4 text-left transition-all bg-card hover:bg-accent/50",
-              filterStatus === key && "ring-2 ring-primary"
+              filterStatus === key && "ring-2 ring-primary",
+              key === "stale" && value > 0 && "border-orange-300 dark:border-orange-700"
             )}
           >
             <div className="flex items-center gap-2">
@@ -400,7 +443,7 @@ export default function ConfirmShipping() {
               </div>
               <span className="text-xs text-muted-foreground">{label}</span>
             </div>
-            <span className="text-2xl font-bold">{value}</span>
+            <span className={cn("text-2xl font-bold", key === "stale" && value > 0 ? "text-orange-600 dark:text-orange-400" : "")}>{value}</span>
           </button>
         ))}
       </div>
@@ -416,7 +459,7 @@ export default function ConfirmShipping() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {filterButtons.map((fb) => (
             <button
               key={fb.key}
@@ -425,6 +468,8 @@ export default function ConfirmShipping() {
                 "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors border",
                 filterStatus === fb.key
                   ? "bg-primary text-primary-foreground border-primary"
+                  : fb.urgent && fb.count > 0
+                  ? "bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-100"
                   : "bg-background text-muted-foreground border-border hover:bg-muted"
               )}
             >
@@ -467,18 +512,24 @@ export default function ConfirmShipping() {
                 <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Pallets</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Status</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Bids</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Last Refreshed</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Quote Age</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Last Bid</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((order: UnconfirmedOrder, idx: number) => {
                 const overdue = isOverdue(order);
+                const stale = isStaleQuote(order);
                 const daysLeft = daysUntil(order.requiredShipDate);
                 const isExpanded = expandedId === order.id;
                 const isRefreshing = refreshingIds.has(order.extensivOrderId);
-                const { label: refreshLabel, stale } = fmtLastRefreshed(order.shipwellStatusUpdatedAt);
                 const { label: statusLabel, cls: statusCls } = shipwellStatusLabel(order.shipwellStatus);
+                const quoteAge = fmtRunningClock(order.shipwellQuotingStartedAt, now);
+                const quoteAgeMs = order.shipwellQuotingStartedAt
+                  ? now - new Date(order.shipwellQuotingStartedAt).getTime()
+                  : 0;
+                const { label: lastBidLabel } = fmtElapsed(order.shipwellLastBidAt);
 
                 return (
                   <>
@@ -488,6 +539,8 @@ export default function ConfirmShipping() {
                         "border-b border-border transition-colors cursor-pointer",
                         isExpanded
                           ? "bg-primary/5"
+                          : stale
+                          ? "bg-orange-50/50 dark:bg-orange-950/10 hover:bg-orange-50 dark:hover:bg-orange-950/20"
                           : idx % 2 === 0
                           ? "bg-background hover:bg-muted/30"
                           : "bg-muted/10 hover:bg-muted/30",
@@ -498,9 +551,10 @@ export default function ConfirmShipping() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           {overdue && <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                          {!overdue && stale && <Flame className="h-3.5 w-3.5 text-orange-500 shrink-0" />}
                           <span className={cn(
                             "font-mono font-semibold text-xs",
-                            overdue ? "text-red-600 dark:text-red-400" : "text-foreground"
+                            overdue ? "text-red-600 dark:text-red-400" : stale ? "text-orange-600 dark:text-orange-400" : "text-foreground"
                           )}>
                             {order.referenceNum ?? `#${order.extensivOrderId}`}
                           </span>
@@ -563,10 +617,10 @@ export default function ConfirmShipping() {
                         </span>
                       </td>
 
-                      {/* Bids */}
+                      {/* Bids — shows "$N" pill */}
                       <td className="px-4 py-3 text-center">
                         {order.shipwellBidCount != null && order.shipwellBidCount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
                             <DollarSign className="h-3 w-3" />
                             {order.shipwellBidCount}
                           </span>
@@ -575,18 +629,39 @@ export default function ConfirmShipping() {
                         )}
                       </td>
 
-                      {/* Last Refreshed */}
+                      {/* Quote Age — running clock since quoting started */}
                       <td className="px-4 py-3">
-                        <div
-                          className={cn(
-                            "flex items-center gap-1 text-xs",
-                            stale ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
-                          )}
-                          title={order.shipwellStatusUpdatedAt ? new Date(order.shipwellStatusUpdatedAt).toLocaleString() : "Never refreshed"}
-                        >
-                          <Clock className="h-3 w-3 shrink-0" />
-                          {refreshLabel}
-                        </div>
+                        {order.shipwellQuotingStartedAt ? (
+                          <div
+                            className={cn(
+                              "flex items-center gap-1 text-xs font-mono",
+                              quoteAgeMs > 2 * 3_600_000
+                                ? "text-orange-600 dark:text-orange-400 font-semibold"
+                                : "text-foreground"
+                            )}
+                            title={`Quoting started: ${new Date(order.shipwellQuotingStartedAt).toLocaleString()}`}
+                          >
+                            {quoteAgeMs > 2 * 3_600_000 && <Flame className="h-3 w-3 shrink-0" />}
+                            {quoteAge}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+
+                      {/* Last Bid Received */}
+                      <td className="px-4 py-3">
+                        {order.shipwellLastBidAt ? (
+                          <div
+                            className="flex items-center gap-1 text-xs text-muted-foreground"
+                            title={`Last bid: ${new Date(order.shipwellLastBidAt).toLocaleString()}`}
+                          >
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {lastBidLabel}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </td>
 
                       {/* Actions */}
@@ -623,7 +698,7 @@ export default function ConfirmShipping() {
                     {/* Expanded rates panel */}
                     {isExpanded && (
                       <tr key={`rates-${order.id}`} className="border-b border-border">
-                        <td colSpan={9} className="p-0">
+                        <td colSpan={10} className="p-0">
                           <RatesPanel order={order} />
                         </td>
                       </tr>

@@ -108,7 +108,7 @@ const ltlItems = [
 
 const shippingItems = [
   { href: "/shipping",                label: "Shipping Dashboard",   icon: Ship },
-  { href: "/shipping/confirm",        label: "Confirm Shipping",     icon: CheckSquare },
+  { href: "/shipping/confirm",        label: "Shipping Quotes",     icon: CheckSquare },
   { href: "/shipping/history",        label: "Shipping History",     icon: ScrollText },
   { href: "/shipping/appointments",   label: "Appointments",         icon: CalendarDays },
   { href: "/shipping/carrier-pickup", label: "Carrier Pickup",       icon: Truck },

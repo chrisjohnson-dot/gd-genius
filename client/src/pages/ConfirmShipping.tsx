@@ -267,10 +267,10 @@ export default function ConfirmShipping() {
           </p>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <CheckSquare className="h-6 w-6 text-primary" />
-            Confirm Shipping
+            Shipping Quotes
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Ship-ready orders awaiting carrier confirmation in Shipwell
+            Review outstanding Shipwell rates and select a carrier for each order
           </p>
         </div>
         <Button

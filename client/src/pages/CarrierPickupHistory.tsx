@@ -29,6 +29,7 @@ interface PickupSession {
   bolUrl: string | null;
   signedBolUrl: string | null;
   expectedPallets: number | null;
+  scannedCount: number;
   completedAt: Date | string | null;
   createdAt: Date | string;
 }
@@ -100,7 +101,7 @@ export default function CarrierPickupHistory() {
     { refetchOnWindowFocus: false }
   );
 
-  const sessions: PickupSession[] = data ?? [];
+  const sessions: PickupSession[] = (data ?? []) as PickupSession[];
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -202,7 +203,7 @@ export default function CarrierPickupHistory() {
                 <TableHead>Driver</TableHead>
                 <TableHead>Trailer</TableHead>
                 <TableHead>Carrier</TableHead>
-                <TableHead className="w-[80px] text-center">Pallets</TableHead>
+                <TableHead className="w-[110px] text-center">Scanned / Expected</TableHead>
                 <TableHead className="w-[110px]">Status</TableHead>
                 <TableHead className="w-[180px]">BOL</TableHead>
               </TableRow>
@@ -228,7 +229,25 @@ export default function CarrierPickupHistory() {
                   <TableCell>{s.driverName ?? "—"}</TableCell>
                   <TableCell>{s.trailerNumber ?? "—"}</TableCell>
                   <TableCell className="text-xs">{s.carrierName ?? "—"}</TableCell>
-                  <TableCell className="text-center">{s.expectedPallets ?? "—"}</TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const scanned = s.scannedCount ?? 0;
+                      const expected = s.expectedPallets ?? 0;
+                      const isMatch = expected > 0 && scanned === expected;
+                      const isShort = expected > 0 && scanned < expected;
+                      const isOver = expected > 0 && scanned > expected;
+                      return (
+                        <span className={`font-medium text-xs ${
+                          isMatch ? "text-green-700 dark:text-green-400" :
+                          isShort ? "text-amber-600 dark:text-amber-400" :
+                          isOver  ? "text-red-600 dark:text-red-400" :
+                          "text-foreground"
+                        }`}>
+                          {scanned}{expected > 0 ? ` / ${expected}` : ""}
+                        </span>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell>
                     {s.isDemo ? (
                       <Badge variant="outline" className="text-xs">Demo</Badge>

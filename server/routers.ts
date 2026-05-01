@@ -12134,8 +12134,20 @@ const carrierPickupRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
-      const { desc } = await import("drizzle-orm");
-      return db.select().from(pickupSessions).orderBy(desc(pickupSessions.createdAt)).limit(input.limit);
+      const { desc, count, inArray } = await import("drizzle-orm");
+      const sessions = await db
+        .select().from(pickupSessions)
+        .orderBy(desc(pickupSessions.createdAt))
+        .limit(input.limit);
+      if (sessions.length === 0) return [];
+      const sessionIds = sessions.map(s => s.id);
+      const scanCounts = await db
+        .select({ sessionId: pickupScans.sessionId, scannedCount: count(pickupScans.id) })
+        .from(pickupScans)
+        .where(inArray(pickupScans.sessionId, sessionIds))
+        .groupBy(pickupScans.sessionId);
+      const countMap = new Map(scanCounts.map(r => [r.sessionId, Number(r.scannedCount)]));
+      return sessions.map(s => ({ ...s, scannedCount: countMap.get(s.id) ?? 0 }));
     }),
 
   /** Retry marking a completed session as Shipped in Extensiv */

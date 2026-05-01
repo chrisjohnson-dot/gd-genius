@@ -1205,41 +1205,6 @@ export default function ShippingDashboard() {
         </div>
       )}
 
-      {/* Missing docs warning banner */}
-      {missingDocs > 0 && !demoMode && (
-        <div className="mb-4 rounded-lg border border-red-400 bg-red-50 dark:bg-red-950/20 dark:border-red-700">
-          <button
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-800 dark:text-red-300"
-            onClick={() => setMissingDocsBannerExpanded((v) => !v)}
-          >
-            <FileText className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-            <span className="flex-1 text-left">
-              <strong>{missingDocs}</strong> order{missingDocs !== 1 ? "s are" : " is"} missing required shipping documents (BOL or Pallet Labels).
-            </span>
-            <ChevronDown className={cn("h-4 w-4 text-red-500 dark:text-red-400 transition-transform", missingDocsBannerExpanded && "rotate-180")} />
-          </button>
-          {missingDocsBannerExpanded && (
-            <div className="border-t border-red-300 dark:border-red-700 px-4 pb-3 pt-2">
-              <div className="flex flex-wrap gap-2">
-                {missingDocsOrders.map((o) => (
-                  <button
-                    key={o.id}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-red-300 dark:border-red-700 bg-white dark:bg-red-950/30 px-2.5 py-1 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-                    onClick={() => setSelectedOrder(orders.find((x) => x.id === o.id) ?? null)}
-                    title={`Missing: ${o.missingTypes.join(", ")}`}
-                  >
-                    <span className="font-mono">{o.label}</span>
-                    <span className="text-red-400 dark:text-red-500">·</span>
-                    <span className="text-red-500 dark:text-red-400">{o.client}</span>
-                    <span className="ml-1 rounded bg-red-200 dark:bg-red-800 px-1 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-300">{o.missingTypes.join(", ")}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Search + Tier Filter */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="relative max-w-sm flex-1 min-w-[200px]">

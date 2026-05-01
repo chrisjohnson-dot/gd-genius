@@ -5012,3 +5012,43 @@ export async function deleteShippingDocument(id: number): Promise<void> {
   if (!db) return;
   await db.delete(shippingDocuments).where(eq(shippingDocuments.id, id));
 }
+
+// ─── Shipwell Rates helpers ───────────────────────────────────────────────────
+import { shipwellRates, type ShipwellRate, type InsertShipwellRate } from "../drizzle/schema";
+
+/** Return all rates for a given extensivOrderId, cheapest first. */
+export async function getShipwellRates(extensivOrderId: number): Promise<ShipwellRate[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const { asc } = await import('drizzle-orm');
+  return db.select().from(shipwellRates)
+    .where(eq(shipwellRates.extensivOrderId, extensivOrderId))
+    .orderBy(asc(shipwellRates.totalRateCents));
+}
+
+/** Mark a rate as selected and clear any previously selected rate for the same order. */
+export async function selectShipwellRate(
+  extensivOrderId: number,
+  rateId: number,
+  selectedBy: string,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Clear previous selection for this order
+  await db.update(shipwellRates)
+    .set({ isSelected: false, selectedAt: null, selectedBy: null })
+    .where(eq(shipwellRates.extensivOrderId, extensivOrderId));
+  // Mark the chosen rate
+  await db.update(shipwellRates)
+    .set({ isSelected: true, selectedAt: new Date(), selectedBy })
+    .where(eq(shipwellRates.id, rateId));
+}
+
+/** Upsert a batch of rates for an order (used by background sync). */
+export async function upsertShipwellRates(rates: InsertShipwellRate[]): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  for (const r of rates) {
+    await db.insert(shipwellRates).values(r);
+  }
+}

@@ -3063,6 +3063,49 @@ const _appRouter = router({
           return { extensivOrderId: order.extensivOrderId, shipwellStatus: order.shipwellStatus, shipwellBidCount: order.shipwellBidCount };
         }
       }),
+
+    /**
+     * Return all carrier rates for a given order, sorted cheapest first.
+     */
+    getRates: protectedProcedure
+      .input(z.object({ extensivOrderId: z.number() }))
+      .query(async ({ input }) => {
+        const { getShipwellRates } = await import('./db');
+        const rates = await getShipwellRates(input.extensivOrderId);
+        return rates.map((r) => ({
+          id: r.id,
+          extensivOrderId: r.extensivOrderId,
+          carrierName: r.carrierName,
+          carrierScac: r.carrierScac,
+          serviceLevel: r.serviceLevel,
+          transitDays: r.transitDays,
+          totalRateCents: r.totalRateCents,
+          currency: r.currency,
+          estimatedDelivery: r.estimatedDelivery,
+          isSelected: r.isSelected,
+          selectedAt: r.selectedAt,
+          selectedBy: r.selectedBy,
+          isMock: r.isMock,
+        }));
+      }),
+
+    /**
+     * Select a carrier rate for an order. Clears any previous selection for the same order.
+     */
+    selectRate: protectedProcedure
+      .input(z.object({
+        extensivOrderId: z.number(),
+        rateId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { selectShipwellRate } = await import('./db');
+        await selectShipwellRate(
+          input.extensivOrderId,
+          input.rateId,
+          ctx.user.name ?? ctx.user.openId,
+        );
+        return { success: true };
+      }),
   }),
 
   // ─── SLA Tracker ──────────────────────────────────────────────────────────────

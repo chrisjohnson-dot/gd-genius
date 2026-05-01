@@ -16,7 +16,7 @@ import {
   Ship, RefreshCw, MapPin, Package, Clock, Search,
   ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer, Truck,
   FlaskConical, ArrowRight, ClipboardList, Calendar, Hash, Building2, ExternalLink,
-  Plus, X, FileText, Upload, Trash2, XCircle, Globe, Tag, Loader2,
+  Plus, X, FileText, Upload, Trash2, XCircle, Globe, Tag, Loader2, ArrowUpDown,
 } from "lucide-react";
 
 
@@ -934,6 +934,7 @@ export default function ShippingDashboard() {
 
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<"green" | "yellow" | "red" | null>(null);
+  const [sortBy, setSortBy] = useState<"age" | "docs">("age");  // default: age (existing behaviour)
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
   // Reset filters/selection whenever global warehouse changes
@@ -945,6 +946,14 @@ export default function ShippingDashboard() {
     if (!globalFacilityId) return base;
     return base.filter((o) => o.facilityId === globalFacilityId);
   }, [demoMode, liveOrders, globalFacilityId]);
+
+  // Bulk-fetch all docs for the KPI tile and sort (only active ship-ready orders, not demo)
+  // NOTE: declared before `grouped` so the sort can reference it
+  const activeOrderIds = useMemo(() => orders.filter((o) => o.displayStatus !== "shipped").map((o) => o.id), [orders]);
+  const { data: allDocsForKpi = [] } = trpc.shippingDashboard.listDocumentsByOrders.useQuery(
+    { orderTrackingIds: activeOrderIds },
+    { enabled: !demoMode && activeOrderIds.length > 0, refetchInterval: 300_000 }
+  );
 
   const grouped = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -970,27 +979,36 @@ export default function ShippingDashboard() {
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(o);
     }
+    // Build a Set of order IDs that have complete docs (for sort)
+    const docsByOrderIdForSort = new Map<number, Set<string>>();
+    for (const doc of allDocsForKpi) {
+      if (!docsByOrderIdForSort.has(doc.orderTrackingId)) docsByOrderIdForSort.set(doc.orderTrackingId, new Set());
+      docsByOrderIdForSort.get(doc.orderTrackingId)!.add(doc.docType);
+    }
+    const hasCompleteDocs = (id: number) => {
+      const types = docsByOrderIdForSort.get(id);
+      return types?.has("bol") && types?.has("pallet_label");
+    };
     for (const list of Array.from(map.values())) list.sort((a: OutboundOrder, b: OutboundOrder) => {
       const aShipped = a.displayStatus === "shipped" ? 1 : 0;
       const bShipped = b.displayStatus === "shipped" ? 1 : 0;
       if (aShipped !== bShipped) return aShipped - bShipped;
+      if (sortBy === "docs") {
+        // Missing docs first, then complete docs; within each group sort by age
+        const aMissing = hasCompleteDocs(a.id) ? 1 : 0;
+        const bMissing = hasCompleteDocs(b.id) ? 1 : 0;
+        if (aMissing !== bMissing) return aMissing - bMissing;
+      }
       return daysInOutbound(b.shipReadyAt) - daysInOutbound(a.shipReadyAt);
     });
     return map;
-  }, [orders, search]);
+  }, [orders, search, tierFilter, sortBy, allDocsForKpi]);
 
   const totalOrders = orders.filter((o) => o.displayStatus !== "shipped").length;
   const totalPallets = orders.filter((o) => o.displayStatus !== "shipped").reduce((s, o) => s + (o.palletCount ?? 0), 0);
   const agingOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 4 && o.displayStatus !== "shipped").length;
   const criticalOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 8 && o.displayStatus !== "shipped").length;
-  const noLocation = orders.filter((o) => !o.outboundLocation && o.displayStatus !== "shipped").length;
-
-  // Bulk-fetch all docs for the KPI tile (only active ship-ready orders, not demo)
-  const activeOrderIds = useMemo(() => orders.filter((o) => o.displayStatus !== "shipped").map((o) => o.id), [orders]);
-  const { data: allDocsForKpi = [] } = trpc.shippingDashboard.listDocumentsByOrders.useQuery(
-    { orderTrackingIds: activeOrderIds },
-    { enabled: !demoMode && activeOrderIds.length > 0, refetchInterval: 300_000 }
-  );
+  const noLocation = orders.filter((o) => !o.outboundLocation && o.displayStatus !== "shipped").length;;
   const missingDocsOrders = useMemo(() => {
     if (demoMode) return [];
     const docsByOrderId = new Map<number, Set<string>>();
@@ -1206,6 +1224,20 @@ export default function ShippingDashboard() {
             </button>
           )}
         </div>
+        {/* Sort by Docs toggle */}
+        <button
+          onClick={() => setSortBy((s) => s === "docs" ? "age" : "docs")}
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs transition-all",
+            sortBy === "docs"
+              ? "bg-red-100 dark:bg-red-950/40 border-red-400 text-red-700 dark:text-red-300 font-semibold"
+              : "border-border text-muted-foreground hover:border-foreground/40"
+          )}
+          title={sortBy === "docs" ? "Sorting: missing docs first — click to sort by age" : "Click to sort by missing docs first"}
+        >
+          <ArrowUpDown className="h-3 w-3" />
+          {sortBy === "docs" ? "Sorted: missing docs first" : "Sort by docs"}
+        </button>
       </div>
 
       {/* Demo B2B section — only visible in demo mode */}

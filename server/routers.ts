@@ -11867,10 +11867,42 @@ const carrierAppointmentsRouter = router({
           updatedAt: now,
         })
         .where(eq(carrierAppointments.id, input.id));
+       // ── Auto-attach BOL to shipping_documents ────────────────────────────────
+      try {
+        const { orderTracking: ot, shippingDocuments: sdTable } = await import("../drizzle/schema.js");
+        const { and, like } = await import("drizzle-orm");
+        const otRows = await db
+          .select({ id: ot.id })
+          .from(ot)
+          .where(eq(ot.extensivOrderId, appt.extensivOrderId))
+          .limit(1);
+        if (otRows[0]) {
+          // Remove any previous auto-generated (unsigned) BOL for this order
+          await db.delete(sdTable)
+            .where(
+              and(
+                eq(sdTable.orderTrackingId, otRows[0].id),
+                eq(sdTable.docType, "bol"),
+                like(sdTable.note, "Auto-generated%")
+              )
+            );
+          await db.insert(sdTable).values({
+            orderTrackingId: otRows[0].id,
+            docType: "bol",
+            fileName: `BOL-${appt.extensivOrderId}-${appt.bolNumber ?? appt.id}.pdf`,
+            fileUrl: bolUrl,
+            fileKey: `bol/appt-${appt.id}-order-${appt.extensivOrderId}.pdf`,
+            mimeType: "application/pdf",
+            note: `Auto-generated from appointment #${appt.id}`,
+            uploadedBy: "system",
+          });
+        }
+      } catch (e) {
+        console.warn("[generateDocuments] Auto-attach BOL failed:", (e as Error).message);
+      }
       const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
       return { appointment: rows[0], bolUrl };
     }),
-
   // Submit driver signature — overlays it on the BOL PDF and saves the signed URL
   submitSignature: protectedProcedure
     .input(z.object({
@@ -11900,11 +11932,56 @@ const carrierAppointmentsRouter = router({
           updatedAt: now,
         })
         .where(eq(carrierAppointments.id, input.id));
+       // ── Update shipping_documents with signed BOL ─────────────────────────
+      try {
+        const { orderTracking: ot, shippingDocuments: sdTable } = await import("../drizzle/schema.js");
+        const { and, like } = await import("drizzle-orm");
+        const otRows = await db
+          .select({ id: ot.id })
+          .from(ot)
+          .where(eq(ot.extensivOrderId, appt.extensivOrderId))
+          .limit(1);
+        if (otRows[0]) {
+          // Replace auto-generated BOL with the signed version
+          await db.delete(sdTable)
+            .where(
+              and(
+                eq(sdTable.orderTrackingId, otRows[0].id),
+                eq(sdTable.docType, "bol")
+              )
+            );
+          await db.insert(sdTable).values({
+            orderTrackingId: otRows[0].id,
+            docType: "bol",
+            fileName: `BOL-${appt.extensivOrderId}-SIGNED.pdf`,
+            fileUrl: signedBolUrl,
+            fileKey: `bol/signed/appt-${appt.id}-order-${appt.extensivOrderId}-signed.pdf`,
+            mimeType: "application/pdf",
+            note: `Signed by driver — appointment #${appt.id}`,
+            uploadedBy: "system",
+          });
+        }
+      } catch (e) {
+        console.warn("[submitSignature] Update shipping_documents failed:", (e as Error).message);
+      }
+      // ── Send signed BOL to Clearsight via Cortex webhook ─────────────────
+      try {
+        await fireCortexWebhook("clearsight", "shipment.bol_signed", {
+          extensivOrderId: appt.extensivOrderId,
+          appointmentId: appt.id,
+          bolNumber: appt.bolNumber,
+          referenceNum: appt.referenceNum,
+          clientName: appt.clientName,
+          signedBolUrl,
+          driverSignedAt: now.toISOString(),
+        });
+      } catch (e) {
+        console.warn("[submitSignature] Clearsight webhook failed:", (e as Error).message);
+      }
       const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
       return { appointment: rows[0], signedBolUrl };
     }),
 });
-
 // ─── MU Cache Sync Router ───────────────────────────────────────────────────
 const muSyncRouter = router({
   /** Get current MU sync status (running, last sync time, summary) */

@@ -11773,7 +11773,39 @@ const carrierAppointmentsRouter = router({
       });
       const id = (result as any).insertId;
       const rows = await db.select().from(carrierAppointments).where((await import("drizzle-orm")).eq(carrierAppointments.id, id)).limit(1);
-      return rows[0];
+      const appt = rows[0];
+      // Fire Clearsight webhook if client requires customs docs but none are uploaded
+      try {
+        const { eq: eqInner, and: andInner } = await import("drizzle-orm");
+        const { orderTracking, clientProfiles, shippingDocuments } = await import("../drizzle/schema.js");
+        const orderRows = await db.select().from(orderTracking).where(eqInner(orderTracking.extensivOrderId, input.extensivOrderId)).limit(1);
+        const order = orderRows[0];
+        if (order) {
+          const profileRows = await db.select().from(clientProfiles)
+            .where(andInner(eqInner(clientProfiles.customerId, order.clientId), eqInner(clientProfiles.configId, order.configId)))
+            .limit(1);
+          const profile = profileRows[0];
+          if (profile?.requiresCustomsDocs) {
+            const docRows = await db.select().from(shippingDocuments)
+              .where(andInner(eqInner(shippingDocuments.orderTrackingId, order.id), eqInner(shippingDocuments.docType, "customs")));
+            const hasCustoms = docRows.length > 0;
+            if (!hasCustoms) {
+              await fireCortexWebhook("clearsight", "shipment.customs_docs_missing", {
+                trigger: "appointment_scheduled",
+                appointmentId: appt?.id,
+                extensivOrderId: input.extensivOrderId,
+                referenceNum: input.referenceNum ?? order.referenceNum,
+                clientName: input.clientName,
+                scheduledDate: input.scheduledDate,
+                scheduledTimeStart: input.scheduledTimeStart,
+                facilityName: input.facilityName,
+                message: `Customs documents are required for ${input.clientName} (order ${input.referenceNum ?? input.extensivOrderId}) but have not been uploaded. Pickup is scheduled for ${input.scheduledDate}${input.scheduledTimeStart ? " at " + input.scheduledTimeStart : ""}.`,
+              });
+            }
+          }
+        }
+      } catch (err) { console.warn("[Customs Notify] create check failed:", err); }
+      return appt;
     }),
 
   update: protectedProcedure
@@ -11814,7 +11846,48 @@ const carrierAppointmentsRouter = router({
         .set({ status: "confirmed", confirmedAt: now, updatedAt: now })
         .where(eq(carrierAppointments.id, input.id));
       const rows = await db.select().from(carrierAppointments).where(eq(carrierAppointments.id, input.id)).limit(1);
-      return rows[0];
+      const appt = rows[0];
+      // Fire Clearsight webhook if client requires customs docs but none are uploaded
+      try {
+        const { eq: eqInner, and: andInner } = await import("drizzle-orm");
+        const { orderTracking, clientProfiles, shippingDocuments } = await import("../drizzle/schema.js");
+        const orderRows = await db.select().from(orderTracking).where(eqInner(orderTracking.extensivOrderId, appt.extensivOrderId)).limit(1);
+        const order = orderRows[0];
+        if (order) {
+          const profileRows = await db.select().from(clientProfiles)
+            .where(andInner(eqInner(clientProfiles.customerId, order.clientId), eqInner(clientProfiles.configId, order.configId)))
+            .limit(1);
+          const profile = profileRows[0];
+          if (profile?.requiresCustomsDocs) {
+            const docRows = await db.select().from(shippingDocuments)
+              .where(andInner(eqInner(shippingDocuments.orderTrackingId, order.id), eqInner(shippingDocuments.docType, "customs")));
+            const hasCustoms = docRows.length > 0;
+            if (!hasCustoms) {
+              await fireCortexWebhook("clearsight", "shipment.customs_docs_missing", {
+                trigger: "appointment_confirmed",
+                appointmentId: appt.id,
+                extensivOrderId: appt.extensivOrderId,
+                referenceNum: appt.referenceNum ?? order.referenceNum,
+                clientName: appt.clientName,
+                scheduledDate: appt.scheduledDate,
+                scheduledTimeStart: appt.scheduledTimeStart,
+                facilityName: appt.facilityName,
+                bolNumber: appt.bolNumber,
+                message: `URGENT: Customs documents are required for ${appt.clientName} (order ${appt.referenceNum ?? appt.extensivOrderId}) but have not been uploaded. Pickup is CONFIRMED for ${appt.scheduledDate}${appt.scheduledTimeStart ? " at " + appt.scheduledTimeStart : ""}.`,
+              });
+              // Also notify owner
+              try {
+                const { notifyOwner } = await import("./_core/notification.js");
+                await notifyOwner({
+                  title: `⚠️ Missing Customs Docs — ${appt.clientName}`,
+                  content: `Order ${appt.referenceNum ?? appt.extensivOrderId} (${appt.clientName}) has a confirmed pickup on ${appt.scheduledDate}${appt.scheduledTimeStart ? " at " + appt.scheduledTimeStart : ""} but customs documents have not been uploaded. Please upload before the carrier arrives.`,
+                });
+              } catch { /* non-blocking */ }
+            }
+          }
+        }
+      } catch (err) { console.warn("[Customs Notify] confirm check failed:", err); }
+      return appt;
     }),
 
   cancel: protectedProcedure

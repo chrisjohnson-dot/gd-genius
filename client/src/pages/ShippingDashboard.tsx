@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { useWarehouse } from "@/contexts/WarehouseContext";
 import { trpc } from "@/lib/trpc";
@@ -565,6 +566,17 @@ function ShippingDocumentsPanel({ order, isDemo }: { order: OutboundOrder; isDem
     onSuccess: () => utils.shippingDashboard.listDocuments.invalidate({ orderTrackingId: order.id }),
     onSettled: () => setDeletingId(null),
   });
+  const [resending, setResending] = useState(false);
+  const resendMutation = trpc.shippingDashboard.resendToClearsight.useMutation({
+    onSuccess: (data) => {
+      setResending(false);
+      toast.success(`BOL resent to Clearsight — ${data.fileName}`);
+    },
+    onError: (err) => {
+      setResending(false);
+      toast.error("Resend failed: " + err.message);
+    },
+  });
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -685,6 +697,28 @@ function ShippingDocumentsPanel({ order, isDemo }: { order: OutboundOrder; isDem
             {uploading ? "Uploading…" : "Upload"}
           </button>
         </div>
+      )}
+      {/* Resend to Clearsight */}
+      {!isDemo && hasBol && (
+        <button
+          onClick={() => {
+            setResending(true);
+            resendMutation.mutate({
+              orderTrackingId: order.id,
+              extensivOrderId: order.extensivOrderId,
+              referenceNum: order.referenceNum ?? null,
+              clientName: order.clientName,
+            });
+          }}
+          disabled={resending || resendMutation.isPending}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border border-violet-400 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-60 transition-colors h-8 w-full justify-center mt-1"
+          title="Manually resend the BOL to Clearsight via Cortex webhook"
+        >
+          {resending || resendMutation.isPending
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending to Clearsight…</>
+            : <><Globe className="h-3.5 w-3.5" /> Resend BOL to Clearsight</>
+          }
+        </button>
       )}
     </div>
   );

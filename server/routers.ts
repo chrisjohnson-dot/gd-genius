@@ -8517,6 +8517,55 @@ const shippingDashboardRouter = router({
       await deleteShippingDocument(input.id);
       return { success: true };
     }),
+  /** Manually resend the signed BOL for an order to Clearsight via Cortex webhook */
+  resendToClearsight: protectedProcedure
+    .input(z.object({
+      orderTrackingId: z.number(),
+      extensivOrderId: z.number(),
+      referenceNum: z.string().nullable().optional(),
+      clientName: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { eq } = await import("drizzle-orm");
+      // Find the most recent BOL document for this order
+      const { shippingDocuments: sdTable } = await import("../drizzle/schema.js");
+      const bolDocs = await db
+        .select()
+        .from(sdTable)
+        .where(
+          eq(sdTable.orderTrackingId, input.orderTrackingId)
+        )
+        .orderBy(sdTable.createdAt);
+      const signedBol = bolDocs.filter((d) => d.docType === "bol" && d.note?.includes("Signed")).pop();
+      const anyBol = bolDocs.filter((d) => d.docType === "bol").pop();
+      const bolDoc = signedBol ?? anyBol;
+      if (!bolDoc) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'No BOL document found for this order. Please generate or upload a BOL first.' });
+      }
+      // Find the matching carrier appointment for additional metadata
+      const apptRows = await db
+        .select()
+        .from(carrierAppointments)
+        .where(eq(carrierAppointments.extensivOrderId, input.extensivOrderId))
+        .orderBy(carrierAppointments.createdAt);
+      const appt = apptRows.filter((a) => a.status !== "cancelled").pop() ?? apptRows[apptRows.length - 1];
+      const sent = await fireCortexWebhook("clearsight", "shipment.bol_signed", {
+        extensivOrderId: input.extensivOrderId,
+        appointmentId: appt?.id ?? null,
+        bolNumber: appt?.bolNumber ?? null,
+        referenceNum: input.referenceNum ?? appt?.referenceNum ?? null,
+        clientName: input.clientName,
+        signedBolUrl: bolDoc.fileUrl,
+        driverSignedAt: appt?.driverSignedAt?.toISOString() ?? new Date().toISOString(),
+        resent: true,
+      });
+      if (!sent) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Clearsight is not configured or the webhook request failed. Check the Cortex Hub settings.' });
+      }
+      return { success: true, bolUrl: bolDoc.fileUrl, fileName: bolDoc.fileName };
+    }),
 });
 
 const slaPerformanceRouter = router({

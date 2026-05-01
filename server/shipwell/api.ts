@@ -301,6 +301,22 @@ export class ShipwellClient {
     }
     return results;
   }
+
+  /**
+   * Tender a shipment to a specific carrier bid.
+   * POST /v2/shipments/{shipmentId}/tender/
+   */
+  async tenderShipment(shipmentId: string, carrierBidId: string): Promise<void> {
+    const token = await this.authenticate();
+    const res = await this.http.post(
+      `/v2/shipments/${shipmentId}/tender/`,
+      { carrier_bid_id: carrierBidId },
+      { headers: { Authorization: `Token ${token}` } }
+    );
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`Shipwell tender failed (${res.status})`);
+    }
+  }
 }
 
 // ─── Factory: build client from stored config ─────────────────────────────────

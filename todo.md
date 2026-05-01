@@ -1554,3 +1554,8 @@
 - [ ] Add "Picked Up" status to Shipping Dashboard rows
 - [ ] Add Carrier Pickup nav item to sidebar
 - [ ] Register route in App.tsx
+
+## Shipping Quotes & Dock Manager (In Progress)
+- [ ] Shipping Quotes: Refresh All Stale bulk button — re-polls Shipwell for all orders quoting >2h in one click
+- [ ] Shipping Quotes: Select Rate wired to Shipwell tender API — selecting a carrier bid triggers Shipwell tender call, moves order from quoting to tendered
+- [ ] Dock Manager: lane/position map (26 lanes × A-E positions + overflow), search by customer/transaction/BOL, auto dock assignment after QC pack-out, link from Shipping Dashboard

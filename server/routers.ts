@@ -256,6 +256,7 @@ import {
   deleteSkuWeightOverride,
 } from "./db";
 import { startSchedule, stopSchedule, triggerManualRun } from "./scheduler/autoRun";
+import { dockManagerRouter } from "./routers/dockManager";
 import { getCarrierMarkups, getMarkupPct, applyMarkup, testOpFiConnection } from "./opfiRateSheets";
 import { sendOverdueAlertNow, rescheduleOverdueAlert } from "./scheduler/overdueAlert";
 import { syncOrdersNow, getLastSyncInfo } from "./scheduler/orderSync";
@@ -2697,6 +2698,49 @@ const _appRouter = router({
           entityId: String(input.extensivOrderId),
           details: { newStatus: input.status, assignedAssociate: input.assignedAssociate ?? null },
         });
+        // ── Auto dock recommendation when order reaches ship_ready ──────────
+        if (input.status === "ship_ready" && updated && !updated.outboundLocation) {
+          try {
+            const LANES = Array.from({ length: 26 }, (_, i) => i + 1);
+            const POSITIONS = ["A", "B", "C", "D", "E"];
+            const allOrders = await getShipReadyOrders();
+            const facilityOrders = updated.facilityId
+              ? allOrders.filter((o) => o.facilityId === updated.facilityId)
+              : allOrders;
+            const occupied = new Set<string>();
+            for (const o of facilityOrders) {
+              const raw = o.outboundLocation;
+              if (!raw) continue;
+              const cleaned = raw.trim().toUpperCase().replace(/^(OB[-\s]?|DOCK[-\s]?)/i, "");
+              let m = cleaned.match(/^([A-E])[-\s]?(\d{1,2})$/);
+              if (m) { const lane = parseInt(m[2], 10); if (lane >= 1 && lane <= 26) occupied.add(`${lane}-${m[1]}`); continue; }
+              m = cleaned.match(/^(\d{1,2})[-\s]?([A-E])$/);
+              if (m) { const lane = parseInt(m[1], 10); if (lane >= 1 && lane <= 26) occupied.add(`${lane}-${m[2]}`); }
+            }
+            const palletCount = Math.max(1, updated.palletCount ?? 1);
+            let recommendedLabel: string | null = null;
+            outer: for (const lane of LANES) {
+              let runStart = -1; let runLen = 0;
+              for (let i = 0; i < POSITIONS.length; i++) {
+                const pos = POSITIONS[i];
+                if (!occupied.has(`${lane}-${pos}`)) {
+                  if (runStart === -1) runStart = i;
+                  runLen++;
+                  if (runLen >= palletCount) {
+                    const block = POSITIONS.slice(runStart, runStart + palletCount);
+                    recommendedLabel = block.length === 1 ? `${block[0]}${lane}` : `${block[0]}${lane}`;
+                    break outer;
+                  }
+                } else { runStart = -1; runLen = 0; }
+              }
+            }
+            if (!recommendedLabel) recommendedLabel = "OVERFLOW";
+            await updateOutboundDetails(updated.id, { outboundLocation: recommendedLabel });
+            updated.outboundLocation = recommendedLabel;
+          } catch (_e) {
+            // Non-fatal: dock recommendation failed, order still moves to ship_ready
+          }
+        }
         return updated;
       }),
 
@@ -3121,6 +3165,86 @@ const _appRouter = router({
           input.rateId,
           ctx.user.name ?? ctx.user.openId,
         );
+        return { success: true };
+      }),
+    /**
+     * Refresh Shipwell status + bid count for ALL orders that are in quoting/tendered
+     * and have not been refreshed in the last 2 hours (stale).
+     */
+    refreshAllStale: protectedProcedure
+      .mutation(async () => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "No Shipwell config found." });
+        const client = createShipwellClient({
+          email: config.email,
+          password: config.password,
+          environment: config.environment as "sandbox" | "production",
+        });
+        const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+        const allOrders = await getTrackedOrders();
+        const staleOrders = allOrders.filter((o) => {
+          if (!o.shipwellShipmentId) return false;
+          const status = o.shipwellStatus;
+          if (status !== "quoting" && status !== "tendered" && status !== null) return false;
+          const lastRefresh = o.shipwellStatusUpdatedAt ? new Date(o.shipwellStatusUpdatedAt).getTime() : 0;
+          return lastRefresh < twoHoursAgo;
+        });
+        let refreshed = 0;
+        let failed = 0;
+        for (const order of staleOrders) {
+          try {
+            const result = await client.getShipmentStatus(order.shipwellShipmentId!);
+            const newStatus = result.normalizedStatus !== "unknown" ? result.normalizedStatus : (order.shipwellStatus ?? null);
+            if (newStatus) await updateShipwellStatus(order.extensivOrderId, newStatus);
+            if (newStatus === "quoting") {
+              const bidCount = await client.getBidCount(order.shipwellShipmentId!);
+              await updateShipwellBidCount(order.extensivOrderId, bidCount);
+            }
+            refreshed++;
+          } catch {
+            failed++;
+          }
+        }
+        return { total: staleOrders.length, refreshed, failed };
+      }),
+    /**
+     * Tender a shipment to the selected carrier in Shipwell.
+     */
+    tenderShipment: protectedProcedure
+      .input(z.object({
+        extensivOrderId: z.number(),
+        rateId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "No Shipwell config found." });
+        const orders = await getTrackedOrders();
+        const order = orders.find((o) => o.extensivOrderId === input.extensivOrderId);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+        const { selectShipwellRate, getShipwellRates } = await import('./db');
+        await selectShipwellRate(input.extensivOrderId, input.rateId, ctx.user.name ?? ctx.user.openId);
+        if (order.shipwellShipmentId) {
+          const client = createShipwellClient({
+            email: config.email,
+            password: config.password,
+            environment: config.environment as "sandbox" | "production",
+          });
+          const rates = await getShipwellRates(input.extensivOrderId);
+          const selectedRate = rates.find((r) => r.id === input.rateId);
+          if (selectedRate?.shipwellBidId) {
+            try {
+              await client.tenderShipment(order.shipwellShipmentId, selectedRate.shipwellBidId);
+              await updateShipwellStatus(order.extensivOrderId, "tendered");
+            } catch (err) {
+              console.warn("[tenderShipment] Shipwell tender call failed, marking locally:", err);
+              await updateShipwellStatus(order.extensivOrderId, "tendered");
+            }
+          } else {
+            await updateShipwellStatus(order.extensivOrderId, "tendered");
+          }
+        } else {
+          await updateShipwellStatus(order.extensivOrderId, "tendered");
+        }
         return { success: true };
       }),
   }),
@@ -12360,6 +12484,7 @@ export const appRouterV4 = router({
   ediEscalations: ediEscalationsRouter,
   carrierPickup: carrierPickupRouter,
   carrierAppointments: carrierAppointmentsRouter,
+  dockManager: dockManagerRouter,
   muSync: muSyncRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

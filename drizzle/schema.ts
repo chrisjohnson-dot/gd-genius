@@ -2491,6 +2491,7 @@ export const shipwellRates = mysqlTable("shipwell_rates", {
   selectedAt: timestamp("selected_at"),
   selectedBy: varchar("selected_by", { length: 256 }),
   shipwellRateId: varchar("shipwell_rate_id", { length: 128 }),
+  shipwellBidId: varchar("shipwell_bid_id", { length: 128 }),
   isMock: boolean("is_mock").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -2498,3 +2499,38 @@ export const shipwellRates = mysqlTable("shipwell_rates", {
 export type ShipwellRate = typeof shipwellRates.$inferSelect;
 export type InsertShipwellRate = typeof shipwellRates.$inferInsert;
 
+
+// ─── Dock Manager ─────────────────────────────────────────────────────────────
+// Represents a physical dock position: lane 1-26 × position A-E, plus overflow.
+// Lane 15 (Door 15) is excluded per business rules.
+export const dockPositions = mysqlTable("dock_positions", {
+  id: int("id").autoincrement().primaryKey(),
+  facilityName: varchar("facility_name", { length: 256 }).notNull().default("COL-Columbus"),
+  lane: int("lane").notNull(),                     // 1-26 (15 excluded)
+  position: varchar("position", { length: 4 }).notNull(), // A | B | C | D | E | OVF (overflow)
+  label: varchar("label", { length: 32 }).notNull(),      // e.g. "01-A", "02-B", "OVERFLOW"
+  maxPallets: int("max_pallets").notNull().default(5),     // capacity per slot
+  isOverflow: boolean("is_overflow").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type DockPosition = typeof dockPositions.$inferSelect;
+export type InsertDockPosition = typeof dockPositions.$inferInsert;
+
+// Links an order (via extensivOrderId) to a dock position.
+// An order can only have one active assignment at a time.
+export const dockAssignments = mysqlTable("dock_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  extensivOrderId: int("extensiv_order_id").notNull(),
+  dockPositionId: int("dock_position_id").notNull(),
+  palletCount: int("pallet_count").notNull().default(1),
+  assignedBy: varchar("assigned_by", { length: 256 }),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  clearedAt: timestamp("cleared_at"),                      // null = still on dock
+  bolNumber: varchar("bol_number", { length: 128 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type DockAssignment = typeof dockAssignments.$inferSelect;
+export type InsertDockAssignment = typeof dockAssignments.$inferInsert;

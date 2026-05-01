@@ -8,7 +8,7 @@ import {
   RefreshCw, Search, AlertTriangle, Timer, CheckCircle2,
   Package, MapPin, Calendar, Clock, Flame,
   TrendingUp, Gavel, Truck, ChevronDown, ChevronUp,
-  DollarSign,
+  DollarSign, Zap,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,15 +133,15 @@ function RatesPanel({ order }: { order: UnconfirmedOrder }) {
 
   const [selectingId, setSelectingId] = useState<number | null>(null);
 
-  const selectMutation = trpc.shipwell.selectRate.useMutation({
+  const tenderMutation = trpc.shipwell.tenderShipment.useMutation({
     onSuccess: () => {
       utils.shipwell.getRates.invalidate({ extensivOrderId: order.extensivOrderId });
       utils.shipwell.listUnconfirmed.invalidate();
-      toast.success("Carrier rate selected successfully.");
+      toast.success("Carrier rate selected and shipment tendered.");
       setSelectingId(null);
     },
     onError: (err) => {
-      toast.error(`Failed to select rate: ${err.message}`);
+      toast.error(`Failed to tender shipment: ${err.message}`);
       setSelectingId(null);
     },
   });
@@ -280,10 +280,10 @@ function RatesPanel({ order }: { order: UnconfirmedOrder }) {
                         size="sm"
                         variant="outline"
                         className="h-7 px-3 text-xs"
-                        disabled={isPending || selectMutation.isPending}
+                        disabled={isPending || tenderMutation.isPending}
                         onClick={() => {
                           setSelectingId(rate.id);
-                          selectMutation.mutate({
+                          tenderMutation.mutate({
                             extensivOrderId: order.extensivOrderId,
                             rateId: rate.id,
                           });
@@ -320,6 +320,7 @@ export default function ConfirmShipping() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   // Live clock tick (every second for running quote age)
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -331,6 +332,18 @@ export default function ConfirmShipping() {
     undefined,
     { refetchInterval: 60_000 }
   );
+
+  const refreshAllStaleMutation = trpc.shipwell.refreshAllStale.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Refreshed ${data.refreshed} stale order${data.refreshed !== 1 ? 's' : ''}${data.failed > 0 ? ` (${data.failed} failed)` : ''}.`);
+      setIsRefreshingAll(false);
+      void refetch();
+    },
+    onError: (err) => {
+      toast.error(`Bulk refresh failed: ${err.message}`);
+      setIsRefreshingAll(false);
+    },
+  });
 
   const refreshStatusMutation = trpc.shipwell.refreshOrderStatus.useMutation({
     onSuccess: (data, variables) => {
@@ -412,8 +425,25 @@ export default function ConfirmShipping() {
         {staleCount > 0 && (
           <div className="flex items-center gap-2 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30 px-4 py-2.5 text-sm text-red-700 dark:text-red-400">
             <Flame className="h-4 w-4 shrink-0" />
-            <span className="font-semibold">{staleCount} order{staleCount !== 1 ? "s" : ""}</span>
+            <span className="font-semibold">{staleCount} order{staleCount !== 1 ? 's' : ''}</span>
             <span>waiting on quotes for over 2 hours — action required</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-2 h-7 px-3 text-xs border-red-400 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 bg-transparent"
+              disabled={isRefreshingAll}
+              onClick={() => {
+                setIsRefreshingAll(true);
+                refreshAllStaleMutation.mutate();
+              }}
+            >
+              {isRefreshingAll ? (
+                <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Zap className="h-3 w-3 mr-1" />
+              )}
+              Refresh All Stale
+            </Button>
           </div>
         )}
       </div>

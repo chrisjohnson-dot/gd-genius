@@ -37,6 +37,7 @@ export const clientProfilesRouter = router({
           cp.slaStandardHours,
           cp.specialInstructions,
           cp.qcScanType,
+          cp.requiresCustomsDocs,
           COALESCE(open_orders.cnt, 0) AS openOrderCount,
           COALESCE(unalloc_orders.cnt, 0) AS unallocatedCount,
           COALESCE(exc.cnt, 0) AS activeExceptions
@@ -79,6 +80,7 @@ export const clientProfilesRouter = router({
         slaStandardHours: number | null;
         specialInstructions: string | null;
         qcScanType: string | null;
+        requiresCustomsDocs: number | null;
         openOrderCount: number;
         unallocatedCount: number;
         activeExceptions: number;

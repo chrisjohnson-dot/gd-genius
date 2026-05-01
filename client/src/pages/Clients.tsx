@@ -113,13 +113,16 @@ export default function Clients() {
 
                 {/* Client info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-foreground truncate">{client.clientName}</span>
                     <Badge variant="outline" className="text-xs capitalize shrink-0">
                       {client.orderChannel ?? "b2b"}
                     </Badge>
                     {client.profileId ? null : (
                       <Badge variant="secondary" className="text-xs shrink-0">No Profile</Badge>
+                    )}
+                    {Number(client.requiresCustomsDocs) === 1 && (
+                      <Badge className="text-xs shrink-0 bg-violet-600 hover:bg-violet-600 text-white border-0">Customs Required</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">

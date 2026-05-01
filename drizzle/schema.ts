@@ -2471,3 +2471,29 @@ export const shippingDocuments = mysqlTable("shipping_documents", {
 });
 export type ShippingDocument = typeof shippingDocuments.$inferSelect;
 export type InsertShippingDocument = typeof shippingDocuments.$inferInsert;
+
+// ─── Shipwell Carrier Rates ───────────────────────────────────────────────────
+// Stores carrier bids/rates returned by Shipwell for a given order.
+// Populated by the background sync or a manual refresh. One row per carrier bid.
+export const shipwellRates = mysqlTable("shipwell_rates", {
+  id: int("id").autoincrement().primaryKey(),
+  extensivOrderId: int("extensiv_order_id").notNull(),
+  shipwellShipmentId: varchar("shipwell_shipment_id", { length: 64 }),
+  carrierName: varchar("carrier_name", { length: 256 }).notNull(),
+  carrierScac: varchar("carrier_scac", { length: 16 }),
+  serviceLevel: varchar("service_level", { length: 128 }),
+  transitDays: int("transit_days"),
+  totalRateCents: int("total_rate_cents").notNull(),
+  currency: varchar("currency", { length: 8 }).default("USD"),
+  estimatedDelivery: varchar("estimated_delivery", { length: 32 }),
+  isSelected: boolean("is_selected").default(false).notNull(),
+  selectedAt: timestamp("selected_at"),
+  selectedBy: varchar("selected_by", { length: 256 }),
+  shipwellRateId: varchar("shipwell_rate_id", { length: 128 }),
+  isMock: boolean("is_mock").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type ShipwellRate = typeof shipwellRates.$inferSelect;
+export type InsertShipwellRate = typeof shipwellRates.$inferInsert;
+

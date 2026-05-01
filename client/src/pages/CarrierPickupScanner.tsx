@@ -216,6 +216,19 @@ export default function CarrierPickupScanner() {
         e.preventDefault();
         setShowConfirmDialog(true);
       }
+      // Escape clears the full-screen error blocker
+      if (e.key === "Escape") {
+        setScanError(prev => {
+          if (prev !== null) {
+            e.preventDefault();
+            setScanInput("");
+            setFlashState("idle");
+            setTimeout(() => scanInputRef.current?.focus(), 100);
+            return null;
+          }
+          return prev;
+        });
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -609,6 +622,7 @@ export default function CarrierPickupScanner() {
               >
                 Clear Error & Resume Scanning
               </Button>
+              <p className="text-red-200 text-xs">or press <kbd className="bg-red-700 text-white px-1.5 py-0.5 rounded text-xs font-mono">Esc</kbd> to dismiss</p>
             </div>
           )}
 

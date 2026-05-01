@@ -208,6 +208,23 @@ export default function CarrierPickupScanner() {
     }
   }, [phase, showQuickstartForm]);
 
+  // Re-focus scan input whenever the user clicks anywhere on the page
+  // (except interactive elements) so the scanner is always ready
+  useEffect(() => {
+    if (phase !== "scanning") return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const isInteractive = target.closest(
+        "button, a, input, textarea, select, [role='button'], [role='dialog'], [data-radix-popper-content-wrapper]"
+      );
+      if (!isInteractive && !scanError) {
+        scanInputRef.current?.focus();
+      }
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [phase, scanError]);
+
   // Ctrl+Enter to open confirm dialog
   useEffect(() => {
     if (phase !== "scanning") return;
@@ -731,6 +748,7 @@ export default function CarrierPickupScanner() {
                     placeholder="Scan or type pallet label…"
                     className="text-lg font-mono"
                     disabled={scanPalletMutation.isPending || phase === "quickstart"}
+                    autoFocus
                   />
                   <Button
                     onClick={handleScan}

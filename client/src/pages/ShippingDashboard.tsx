@@ -194,10 +194,30 @@ function ShipmentDetailDrawer({
   const [dockInput, setDockInput] = useState(order.outboundLocation ?? "");
   const [dockSaving, setDockSaving] = useState(false);
 
-  const updateLocation = trpc.shippingDashboard.updateOutbound.useMutation({
+   const updateLocation = trpc.shippingDashboard.updateOutbound.useMutation({
     onSuccess: () => { utils.shippingDashboard.listOutbound.invalidate(); setAssigningDock(false); },
     onSettled: () => setDockSaving(false),
   });
+
+  // Docs completeness gate
+  const { data: drawerDocs = [] } = trpc.shippingDashboard.listDocuments.useQuery(
+    { orderTrackingId: order.id },
+    { enabled: !isDemo && !isShipped }
+  );
+  const drawerHasBol = drawerDocs.some((d) => d.docType === "bol");
+  const drawerHasPalletLabel = drawerDocs.some((d) => d.docType === "pallet_label");
+  const docsComplete = isDemo || (drawerHasBol && drawerHasPalletLabel);
+  const missingDocTypes: string[] = [
+    ...(!drawerHasBol ? ["BOL"] : []),
+    ...(!drawerHasPalletLabel ? ["Pallet Labels"] : []),
+  ];
+
+  // Appointment check — warn if a scheduled/confirmed appointment exists but docs are incomplete
+  const { data: appointment } = trpc.carrierAppointments.getByOrder.useQuery(
+    { extensivOrderId: order.extensivOrderId },
+    { enabled: !isDemo && !isShipped }
+  );
+  const hasActiveAppointment = !!appointment && appointment.status !== "cancelled" && appointment.status !== "completed";
 
   function startCarrierPickup() {
     onClose();
@@ -335,16 +355,52 @@ function ShipmentDetailDrawer({
         {/* Action buttons */}
         {!isShipped && (
           <div className="border-t border-border pt-6 space-y-3">
+            {/* Appointment + missing docs warning */}
+            {!isDemo && hasActiveAppointment && !docsComplete && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-400 bg-red-50 dark:bg-red-950/20 dark:border-red-700 px-4 py-3">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-semibold text-red-700 dark:text-red-400">
+                    Pickup appointment scheduled — documents missing
+                  </p>
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-0.5">
+                    {appointment?.scheduledDate && `Appointment: ${fmtDate(appointment.scheduledDate)}${appointment.scheduledTimeStart ? ` at ${appointment.scheduledTimeStart}` : ""}. `}
+                    Upload {missingDocTypes.join(" and ")} before the carrier arrives.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Missing docs warning (no appointment yet) */}
+            {!isDemo && !docsComplete && !hasActiveAppointment && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 px-4 py-3">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  <span className="font-semibold">Missing: {missingDocTypes.join(", ")}.</span>{" "}
+                  Upload required documents before starting carrier pickup.
+                </p>
+              </div>
+            )}
+
             <Button
               size="lg"
-              className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white h-14 text-base"
-              onClick={isDemo ? undefined : startCarrierPickup}
-              disabled={isDemo}
-              title={isDemo ? "Carrier pickup is disabled in demo mode" : undefined}
+              className={cn(
+                "w-full gap-2 h-14 text-base",
+                docsComplete
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-muted text-muted-foreground cursor-not-allowed opacity-60"
+              )}
+              onClick={isDemo || !docsComplete ? undefined : startCarrierPickup}
+              disabled={isDemo || !docsComplete}
+              title={
+                isDemo ? "Carrier pickup is disabled in demo mode"
+                  : !docsComplete ? `Upload ${missingDocTypes.join(" and ")} before starting carrier pickup`
+                  : undefined
+              }
             >
               <Truck className="h-5 w-5" />
               Start Carrier Pickup
-              <ArrowRight className="h-5 w-5 ml-auto" />
+              {docsComplete && <ArrowRight className="h-5 w-5 ml-auto" />}
             </Button>
             {!isDemo && (
               <Button

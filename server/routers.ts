@@ -218,6 +218,9 @@ import {
   listShipmentsUnified,
   countShipmentsUnified,
   getShipmentById,
+  updateShipwellStatus,
+  updateShipwellBidCount,
+  findShipmentByShipwellId,
 } from "./db";
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
@@ -262,7 +265,7 @@ import { fetchCustomers, fetchOpenOrders, fetchInventory, fetchItemDescriptions,
   completeReceipt, updateReceiverItemQty, assignMULabelsToReceiver, markOrderShipped, markOrderPacked, fetchShippedOrders, fetchAllCustomersRaw, fetchItemDimsBySkus, clearItemDimsCache, updateItemPackageUnitWeight } from "./extensiv/api";
 import { getExtensivToken, invalidateToken } from "./extensiv/client";
 import { runAllocationEngine, LocationTypeMap } from "./allocation/engine";
-import { createShipwellClient } from "./shipwell/api";
+import { createShipwellClient, normalizeShipwellStatus } from "./shipwell/api";
 
 // 10-minute in-memory cache for pallet weight calculation (carton weights + case amounts)
 const _palletWeightCache = new Map<string, {
@@ -3006,6 +3009,59 @@ const _appRouter = router({
         facilityName: r.facilityName,
       }));
     }),
+    /**
+     * Refresh the Shipwell status and bid count for a single order by polling the Shipwell API.
+     * Uses the order's shipwellShipmentId (if available) for live status.
+     */
+    refreshOrderStatus: protectedProcedure
+      .input(z.object({ extensivOrderId: z.number() }))
+      .mutation(async ({ input }) => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "No Shipwell config found." });
+        const orders = await getTrackedOrders();
+        const order = orders.find((o) => o.extensivOrderId === input.extensivOrderId);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+        if (!order.shipwellShipmentId && !order.shipwellOrderId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Order has not been sent to Shipwell yet." });
+        }
+        const client = createShipwellClient({
+          email: config.email,
+          password: config.password,
+          environment: config.environment as "sandbox" | "production",
+        });
+        if (order.shipwellShipmentId) {
+          const result = await client.getShipmentStatus(order.shipwellShipmentId);
+          const newStatus = result.normalizedStatus !== "unknown" ? result.normalizedStatus : (order.shipwellStatus ?? null);
+          if (newStatus) {
+            await updateShipwellStatus(order.extensivOrderId, newStatus);
+          }
+          let bidCount: number | null = order.shipwellBidCount ?? null;
+          if (newStatus === "quoting") {
+            bidCount = await client.getBidCount(order.shipwellShipmentId);
+            await updateShipwellBidCount(order.extensivOrderId, bidCount);
+          }
+          // Mirror to unified shipments table
+          try {
+            const mappedStatus: string | null =
+              newStatus === "in_transit" ? "in_transit" :
+              (newStatus === "carrier_confirmed" || newStatus === "tendered") ? "booked" :
+              null;
+            if (mappedStatus) {
+              const transitRow = await findShipmentByShipwellId(order.shipwellShipmentId);
+              if (transitRow && transitRow.status !== mappedStatus) {
+                await updateShipment(transitRow.id, { status: mappedStatus });
+                void pushShipmentToClearSight(transitRow.id, "shipment.updated");
+              }
+            }
+          } catch (err) {
+            console.warn("[refreshOrderStatus] Failed to mirror status:", err);
+          }
+          return { extensivOrderId: order.extensivOrderId, shipwellStatus: newStatus, shipwellBidCount: bidCount };
+        } else {
+          // PO stage only — no shipment to poll yet
+          return { extensivOrderId: order.extensivOrderId, shipwellStatus: order.shipwellStatus, shipwellBidCount: order.shipwellBidCount };
+        }
+      }),
   }),
 
   // ─── SLA Tracker ──────────────────────────────────────────────────────────────

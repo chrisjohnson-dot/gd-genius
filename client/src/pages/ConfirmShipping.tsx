@@ -4,11 +4,10 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   CheckSquare, RefreshCw, Search, AlertTriangle, Timer, CheckCircle2,
   ExternalLink, Send, Package, MapPin, Calendar, Clock, Loader2,
-  TrendingUp, Gavel, Truck, Filter,
+  TrendingUp, Gavel, Truck, Filter, RotateCw,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,6 +58,10 @@ function shipwellStatusLabel(status: string | null | undefined): { label: string
       return { label: "Quoting", cls: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30" };
     case "tendered":
       return { label: "Tendered", cls: "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-500/15 dark:text-purple-400 dark:border-purple-500/30" };
+    case "carrier_confirmed":
+      return { label: "Confirmed", cls: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30" };
+    case "in_transit":
+      return { label: "In Transit", cls: "bg-teal-100 text-teal-700 border-teal-300 dark:bg-teal-500/15 dark:text-teal-400 dark:border-teal-500/30" };
     default:
       return { label: "Not Sent", cls: "bg-zinc-100 text-zinc-600 border-zinc-300 dark:bg-zinc-500/15 dark:text-zinc-400 dark:border-zinc-500/30" };
   }
@@ -130,6 +133,10 @@ export default function ConfirmShipping() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [sendingIds, setSendingIds] = useState<Set<number>>(new Set());
+  // Track which rows are currently refreshing their Shipwell status
+  const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
+
+  const utils = trpc.useUtils();
 
   const { data: orders = [], isLoading, refetch, isFetching } = trpc.shipwell.listUnconfirmed.useQuery(
     undefined,
@@ -145,6 +152,22 @@ export default function ConfirmShipping() {
     onError: (err, variables) => {
       toast.error(`Failed to send order: ${err.message}`);
       setSendingIds((prev) => { const s = new Set(prev); s.delete(variables.extensivOrderId); return s; });
+    },
+  });
+
+  const refreshStatusMutation = trpc.shipwell.refreshOrderStatus.useMutation({
+    onSuccess: (data, variables) => {
+      const newStatus = data.shipwellStatus ?? "unknown";
+      const bidInfo = data.shipwellBidCount !== null && data.shipwellBidCount !== undefined
+        ? ` · ${data.shipwellBidCount} bid${data.shipwellBidCount !== 1 ? "s" : ""}`
+        : "";
+      toast.success(`Status updated: ${newStatus}${bidInfo}`);
+      setRefreshingIds((prev) => { const s = new Set(prev); s.delete(variables.extensivOrderId); return s; });
+      void refetch();
+    },
+    onError: (err, variables) => {
+      toast.error(`Refresh failed: ${err.message}`);
+      setRefreshingIds((prev) => { const s = new Set(prev); s.delete(variables.extensivOrderId); return s; });
     },
   });
 
@@ -189,6 +212,15 @@ export default function ConfirmShipping() {
   function handleSendToShipwell(order: UnconfirmedOrder) {
     setSendingIds((prev) => new Set(prev).add(order.extensivOrderId));
     sendOrderMutation.mutate({ extensivOrderId: order.extensivOrderId });
+  }
+
+  function handleRefreshStatus(order: UnconfirmedOrder) {
+    if (!order.shipwellOrderId) {
+      toast.warning("Order has not been sent to Shipwell yet — nothing to refresh.");
+      return;
+    }
+    setRefreshingIds((prev) => new Set(prev).add(order.extensivOrderId));
+    refreshStatusMutation.mutate({ extensivOrderId: order.extensivOrderId });
   }
 
   function handleMarkConfirmed(order: UnconfirmedOrder) {
@@ -353,7 +385,10 @@ export default function ConfirmShipping() {
                   const overdue = isOverdue(order);
                   const { label: swLabel, cls: swCls } = shipwellStatusLabel(order.shipwellStatus);
                   const isSending = sendingIds.has(order.extensivOrderId);
+                  const isRefreshing = refreshingIds.has(order.extensivOrderId);
                   const hasBids = (order.shipwellBidCount ?? 0) > 0;
+                  // Show refresh button only for orders already in Shipwell
+                  const canRefresh = !!order.shipwellOrderId;
 
                   return (
                     <tr
@@ -416,14 +451,19 @@ export default function ConfirmShipping() {
                         </span>
                       </td>
 
-                      {/* Shipwell Status */}
+                      {/* Shipwell Status — with inline refresh spinner when refreshing */}
                       <td className="px-4 py-3">
-                        <span className={cn(
-                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border",
-                          swCls
-                        )}>
-                          {swLabel}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn(
+                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border",
+                            swCls
+                          )}>
+                            {isRefreshing ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : null}
+                            {swLabel}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Bids / Rates */}
@@ -456,7 +496,7 @@ export default function ConfirmShipping() {
 
                       {/* Actions */}
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           {/* View in Shipwell */}
                           {order.shipwellPoUrl && (
                             <a
@@ -469,6 +509,25 @@ export default function ConfirmShipping() {
                                 Shipwell
                               </Button>
                             </a>
+                          )}
+
+                          {/* Refresh Shipwell Status — only if order has been sent to Shipwell */}
+                          {canRefresh && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 gap-1 text-xs"
+                              disabled={isRefreshing || isSending}
+                              onClick={() => handleRefreshStatus(order)}
+                              title="Refresh status and bid count from Shipwell API"
+                            >
+                              {isRefreshing ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RotateCw className="h-3.5 w-3.5" />
+                              )}
+                              {isRefreshing ? "Refreshing…" : "Refresh Status"}
+                            </Button>
                           )}
 
                           {/* Send to Shipwell — only if not yet sent */}
@@ -497,7 +556,7 @@ export default function ConfirmShipping() {
                             onClick={() => handleMarkConfirmed(order)}
                           >
                             <CheckSquare className="h-3.5 w-3.5" />
-                            Mark Confirmed
+                            Confirm
                           </Button>
                         </div>
                       </td>
@@ -525,11 +584,10 @@ export default function ConfirmShipping() {
 
       {/* ── Placeholder note ── */}
       <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground bg-muted/20">
-        <strong className="text-foreground">Mockup notes:</strong>{" "}
-        The <em>Mark Confirmed</em> button is a placeholder — it will update the order's Shipwell status to{" "}
-        <code>carrier_confirmed</code> once the workflow is finalised. The <em>Bids / Rates</em> column shows the
-        live <code>shipwellBidCount</code> from the database; full rate details are available directly in Shipwell
-        via the <em>Shipwell</em> link.
+        <strong className="text-foreground">Notes:</strong>{" "}
+        <em>Refresh Status</em> polls the Shipwell API in real-time to update the status and bid count for that order — it is available for any order already sent to Shipwell.
+        The <em>Confirm</em> button is a placeholder — it will update the order's Shipwell status to{" "}
+        <code>carrier_confirmed</code> once the workflow is finalised.
       </div>
     </div>
   );

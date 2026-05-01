@@ -11926,6 +11926,33 @@ const carrierPickupRouter = router({
         },
       });
 
+      // ── Auto-clear dock position ──────────────────────────────────────────
+      if (session.transactionId) {
+        try {
+          const { dockAssignments } = await import("../drizzle/schema.js");
+          const { isNull, and: andOp } = await import("drizzle-orm");
+          await db.update(dockAssignments)
+            .set({ clearedAt: new Date() })
+            .where(andOp(eq(dockAssignments.extensivOrderId, session.transactionId), isNull(dockAssignments.clearedAt)));
+        } catch (e) {
+          console.warn("[carrierPickup] dock auto-clear failed:", (e as Error).message);
+        }
+      }
+
+      // ── Push to ClearSight ────────────────────────────────────────────────
+      if (session.transactionId) {
+        try {
+          const { shipments: shipmentsTable } = await import("../drizzle/schema.js");
+          const shipmentRows = await db.select({ id: shipmentsTable.id }).from(shipmentsTable)
+            .where(eq(shipmentsTable.extensivOrderId, session.transactionId)).limit(1);
+          if (shipmentRows[0]) {
+            void pushShipmentToClearSight(shipmentRows[0].id, "shipment.updated");
+          }
+        } catch (e) {
+          console.warn("[carrierPickup] ClearSight push failed:", (e as Error).message);
+        }
+      }
+
       if (session.isDemo || !session.transactionId) {
         return { success: true, shippedInExtensiv: false, skippedExtensiv: true };
       }
@@ -11965,6 +11992,140 @@ const carrierPickupRouter = router({
       }
 
       return { success: true, shippedInExtensiv };
+    }),
+
+  /** Generate a BOL PDF for a pickup session and save the URL */
+  generatePickupBol: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      const [session] = await db.select().from(pickupSessions).where(eq(pickupSessions.id, input.sessionId));
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      const { generateBolPdf } = await import("./bolGenerator.js");
+      const bolUrl = await generateBolPdf({
+        orderNumber: session.transactionId ?? input.sessionId,
+        referenceNum: session.referenceNum,
+        clientName: session.clientName ?? "Unknown",
+        shipToName: session.shipToName,
+        facilityName: session.warehouseName,
+        outboundLocation: session.outboundLocation,
+        palletCount: session.expectedPallets,
+        carrierName: session.carrierName,
+        driverName: session.driverName,
+        trailerNumber: session.trailerNumber,
+        bolNumber: session.proNumber ?? `GD-PKP-${input.sessionId}`,
+        proNumber: session.proNumber,
+        appointmentId: input.sessionId,
+      });
+      await db.update(pickupSessions).set({ bolUrl }).where(eq(pickupSessions.id, input.sessionId));
+      // Auto-attach to shipping_documents
+      if (session.transactionId) {
+        try {
+          const { orderTracking: ot, shippingDocuments: sdTable } = await import("../drizzle/schema.js");
+          const { and, like } = await import("drizzle-orm");
+          const otRows = await db.select({ id: ot.id }).from(ot)
+            .where(eq(ot.extensivOrderId, session.transactionId)).limit(1);
+          if (otRows[0]) {
+            await db.delete(sdTable).where(
+              and(eq(sdTable.orderTrackingId, otRows[0].id), eq(sdTable.docType, "bol"), like(sdTable.note, "Auto-generated from pickup%"))
+            );
+            await db.insert(sdTable).values({
+              orderTrackingId: otRows[0].id,
+              docType: "bol",
+              fileName: `BOL-${session.transactionId}-PKP${input.sessionId}.pdf`,
+              fileUrl: bolUrl,
+              fileKey: `bol/pickup-${input.sessionId}-order-${session.transactionId}.pdf`,
+              mimeType: "application/pdf",
+              note: `Auto-generated from pickup session #${input.sessionId}`,
+              uploadedBy: "system",
+            });
+          }
+        } catch (e) {
+          console.warn("[generatePickupBol] Auto-attach failed:", (e as Error).message);
+        }
+      }
+      return { bolUrl };
+    }),
+
+  /** Overlay driver signature on the pickup BOL and save the signed URL */
+  savePickupBol: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      signatureDataUrl: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      const [session] = await db.select().from(pickupSessions).where(eq(pickupSessions.id, input.sessionId));
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      // Generate BOL first if not yet generated
+      let currentBolUrl = session.bolUrl;
+      if (!currentBolUrl) {
+        const { generateBolPdf } = await import("./bolGenerator.js");
+        currentBolUrl = await generateBolPdf({
+          orderNumber: session.transactionId ?? input.sessionId,
+          referenceNum: session.referenceNum,
+          clientName: session.clientName ?? "Unknown",
+          shipToName: session.shipToName,
+          facilityName: session.warehouseName,
+          outboundLocation: session.outboundLocation,
+          palletCount: session.expectedPallets,
+          carrierName: session.carrierName,
+          driverName: session.driverName,
+          trailerNumber: session.trailerNumber,
+          bolNumber: session.proNumber ?? `GD-PKP-${input.sessionId}`,
+          proNumber: session.proNumber,
+          appointmentId: input.sessionId,
+        });
+        await db.update(pickupSessions).set({ bolUrl: currentBolUrl }).where(eq(pickupSessions.id, input.sessionId));
+      }
+      const { overlaySignatureOnBol } = await import("./bolGenerator.js");
+      const signedBolUrl = await overlaySignatureOnBol(
+        currentBolUrl,
+        input.signatureDataUrl,
+        input.sessionId,
+        session.transactionId ?? input.sessionId
+      );
+      await db.update(pickupSessions).set({ signedBolUrl }).where(eq(pickupSessions.id, input.sessionId));
+      // Update shipping_documents with signed BOL
+      if (session.transactionId) {
+        try {
+          const { orderTracking: ot, shippingDocuments: sdTable } = await import("../drizzle/schema.js");
+          const { and } = await import("drizzle-orm");
+          const otRows = await db.select({ id: ot.id }).from(ot)
+            .where(eq(ot.extensivOrderId, session.transactionId)).limit(1);
+          if (otRows[0]) {
+            await db.delete(sdTable).where(and(eq(sdTable.orderTrackingId, otRows[0].id), eq(sdTable.docType, "bol")));
+            await db.insert(sdTable).values({
+              orderTrackingId: otRows[0].id,
+              docType: "bol",
+              fileName: `BOL-${session.transactionId}-PKP${input.sessionId}-SIGNED.pdf`,
+              fileUrl: signedBolUrl,
+              fileKey: `bol/signed/pickup-${input.sessionId}-order-${session.transactionId}-signed.pdf`,
+              mimeType: "application/pdf",
+              note: `Signed by driver — pickup session #${input.sessionId}`,
+              uploadedBy: "system",
+            });
+          }
+        } catch (e) {
+          console.warn("[savePickupBol] Update shipping_documents failed:", (e as Error).message);
+        }
+        // Push to ClearSight
+        try {
+          const { shipments: shipmentsTable } = await import("../drizzle/schema.js");
+          const shipmentRows = await db.select({ id: shipmentsTable.id }).from(shipmentsTable)
+            .where(eq(shipmentsTable.extensivOrderId, session.transactionId)).limit(1);
+          if (shipmentRows[0]) {
+            void pushShipmentToClearSight(shipmentRows[0].id, "shipment.updated");
+          }
+        } catch (e) {
+          console.warn("[savePickupBol] ClearSight push failed:", (e as Error).message);
+        }
+      }
+      return { bolUrl: currentBolUrl, signedBolUrl };
     }),
 
   /** List recent pickup sessions */

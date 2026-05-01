@@ -1559,3 +1559,11 @@
 - [ ] Shipping Quotes: Refresh All Stale bulk button — re-polls Shipwell for all orders quoting >2h in one click
 - [ ] Shipping Quotes: Select Rate wired to Shipwell tender API — selecting a carrier bid triggers Shipwell tender call, moves order from quoting to tendered
 - [ ] Dock Manager: lane/position map (26 lanes × A-E positions + overflow), search by customer/transaction/BOL, auto dock assignment after QC pack-out, link from Shipping Dashboard
+
+## Carrier Pickup Post-Completion Flow (May 2026)
+- [ ] Fix "Complete Pickup" button overflow/clipping in CarrierPickupScanner
+- [ ] BOL PDF generation on pickup completion (carrier, order, pallet details)
+- [ ] BOL save to S3 and store URL in shipment history
+- [ ] BOL print button on driver signature completion screen
+- [ ] Push completed pickup to ClearSight on BOL save
+- [ ] Auto-clear dock position when pickup is marked complete

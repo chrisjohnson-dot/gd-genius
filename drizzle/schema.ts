@@ -2315,6 +2315,10 @@ export const pickupSessions = mysqlTable("pickup_sessions", {
   shippedInExtensiv: boolean("shippedInExtensiv").default(false),
   /** Whether this session was created in demo mode */
   isDemo: boolean("isDemo").notNull().default(false),
+  /** URL of the generated BOL PDF */
+  bolUrl: varchar("bolUrl", { length: 1024 }),
+  /** URL of the signed BOL PDF (after driver signature) */
+  signedBolUrl: varchar("signedBolUrl", { length: 1024 }),
   completedAt: timestamp("completedAt"),
   createdBy: varchar("createdBy", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

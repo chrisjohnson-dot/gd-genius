@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Truck, MapPin, Package, CheckCircle2, AlertTriangle,
   RefreshCw, ClipboardList, ArrowLeft, Zap, XCircle, Volume2, VolumeX,
-  User, Hash, PenLine, Printer, Download, FileCheck,
+  User, Hash, PenLine, Printer, Download, FileCheck, Save, CloudUpload,
 } from "lucide-react";
 import { SignaturePad } from "@/components/SignaturePad";
 
@@ -109,6 +109,34 @@ export default function CarrierPickupScanner() {
 
   // Complete
   const [shippedInExtensiv, setShippedInExtensiv] = useState<boolean | null>(null);
+  const [isGeneratingBol, setIsGeneratingBol] = useState(false);
+
+  const generatePickupBolMutation = trpc.carrierPickup.generatePickupBol.useMutation({
+    onSuccess: (data) => {
+      setBolUrl(data.bolUrl);
+      setIsGeneratingBol(false);
+      toast.success("BOL generated — ready to print or sign");
+    },
+    onError: (err) => {
+      setIsGeneratingBol(false);
+      toast.error("BOL generation failed: " + err.message);
+    },
+  });
+
+  const savePickupBolMutation = trpc.carrierPickup.savePickupBol.useMutation({
+    onSuccess: (data) => {
+      setBolUrl(data.bolUrl);
+      setSignedBolUrl(data.signedBolUrl);
+      setShowSignatureCapture(false);
+      setIsSubmittingSignature(false);
+      toast.success("Signed BOL saved — ready to print");
+    },
+    onError: (err) => {
+      setIsSubmittingSignature(false);
+      toast.error("Save BOL failed: " + err.message);
+    },
+  });
+
   const submitSignatureMutation = trpc.carrierAppointments.submitSignature.useMutation({
     onSuccess: (data) => {
       if (data.signedBolUrl) setSignedBolUrl(data.signedBolUrl);
@@ -644,7 +672,7 @@ export default function CarrierPickupScanner() {
           </div>
 
           {/* RIGHT PANEL: Scan input + scanned list */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
               {/* Scan input area */}
@@ -779,7 +807,38 @@ export default function CarrierPickupScanner() {
 
             {/* ── Document & Signature Actions ── */}
             <div className="max-w-sm mx-auto mt-6 space-y-3">
-              {/* Signature capture */}
+
+              {/* Step 1: Generate BOL */}
+              {!bolUrl ? (
+                <Button
+                  size="lg"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                  disabled={isGeneratingBol || !sessionId}
+                  onClick={() => {
+                    if (!sessionId) return;
+                    setIsGeneratingBol(true);
+                    generatePickupBolMutation.mutate({ sessionId });
+                  }}
+                >
+                  {isGeneratingBol ? (
+                    <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Generating BOL…</>
+                  ) : (
+                    <><CloudUpload className="h-4 w-4 mr-2" /> Generate BOL</>
+                  )}
+                </Button>
+              ) : (
+                <div className="border border-indigo-300 rounded-lg p-3 bg-indigo-50 dark:bg-indigo-950/30 text-sm text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 shrink-0" />
+                  <span>BOL generated</span>
+                  <button className="ml-auto text-xs underline" onClick={() => {
+                    if (!sessionId) return;
+                    setIsGeneratingBol(true);
+                    generatePickupBolMutation.mutate({ sessionId });
+                  }}>Regenerate</button>
+                </div>
+              )}
+
+              {/* Step 2: Capture driver signature */}
               {!signatureDataUrl ? (
                 <Button
                   size="lg"
@@ -794,6 +853,26 @@ export default function CarrierPickupScanner() {
                   <span>Driver signature captured</span>
                   <button className="ml-auto text-xs underline" onClick={() => setShowSignatureCapture(true)}>Re-sign</button>
                 </div>
+              )}
+
+              {/* Step 3: Save signed BOL (only shown after signature captured) */}
+              {signatureDataUrl && !signedBolUrl && (
+                <Button
+                  size="lg"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  disabled={savePickupBolMutation.isPending || !sessionId}
+                  onClick={() => {
+                    if (!sessionId || !signatureDataUrl) return;
+                    setIsSubmittingSignature(true);
+                    savePickupBolMutation.mutate({ sessionId, signatureDataUrl });
+                  }}
+                >
+                  {savePickupBolMutation.isPending ? (
+                    <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Saving BOL…</>
+                  ) : (
+                    <><Save className="h-4 w-4 mr-2" /> Save BOL &amp; Push to History</>
+                  )}
+                </Button>
               )}
 
               {/* BOL / Signed BOL download + print */}
@@ -820,6 +899,12 @@ export default function CarrierPickupScanner() {
                   >
                     <Printer className="h-4 w-4 mr-2" /> Print BOL
                   </Button>
+                </div>
+              )}
+
+              {signedBolUrl && (
+                <div className="text-xs text-muted-foreground text-center">
+                  Signed BOL saved to Shipment History &amp; ClearSight
                 </div>
               )}
             </div>
@@ -921,17 +1006,8 @@ export default function CarrierPickupScanner() {
             <SignaturePad
               onSave={(dataUrl: string) => {
                 setSignatureDataUrl(dataUrl);
-                if (appointmentId) {
-                  setIsSubmittingSignature(true);
-                  submitSignatureMutation.mutate({
-                    id: appointmentId,
-                    signatureDataUrl: dataUrl,
-                  });
-                } else {
-                  // No appointment — just capture signature locally
-                  setShowSignatureCapture(false);
-                  toast.success("Signature captured");
-                }
+                setShowSignatureCapture(false);
+                toast.success("Signature captured — click \"Save BOL\" to finalize");
               }}
               onCancel={() => setShowSignatureCapture(false)}
             />

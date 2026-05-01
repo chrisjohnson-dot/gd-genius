@@ -929,6 +929,25 @@ export default function ShippingDashboard() {
   const criticalOrders = orders.filter((o) => daysInOutbound(o.shipReadyAt) >= 8 && o.displayStatus !== "shipped").length;
   const noLocation = orders.filter((o) => !o.outboundLocation && o.displayStatus !== "shipped").length;
 
+  // Bulk-fetch all docs for the KPI tile (only active ship-ready orders, not demo)
+  const activeOrderIds = useMemo(() => orders.filter((o) => o.displayStatus !== "shipped").map((o) => o.id), [orders]);
+  const { data: allDocsForKpi = [] } = trpc.shippingDashboard.listDocumentsByOrders.useQuery(
+    { orderTrackingIds: activeOrderIds },
+    { enabled: !demoMode && activeOrderIds.length > 0, refetchInterval: 300_000 }
+  );
+  const missingDocs = useMemo(() => {
+    if (demoMode) return 0;
+    const docsByOrderId = new Map<number, Set<string>>();
+    for (const doc of allDocsForKpi) {
+      if (!docsByOrderId.has(doc.orderTrackingId)) docsByOrderId.set(doc.orderTrackingId, new Set());
+      docsByOrderId.get(doc.orderTrackingId)!.add(doc.docType);
+    }
+    return activeOrderIds.filter((id) => {
+      const types = docsByOrderId.get(id);
+      return !types || !types.has("bol") || !types.has("pallet_label");
+    }).length;
+  }, [allDocsForKpi, activeOrderIds, demoMode]);
+
   return (
     <div className="p-7 page-enter">
       {/* Demo Mode Banner */}
@@ -996,7 +1015,7 @@ export default function ShippingDashboard() {
       </div>
 
       {/* KPI tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         {([
           { label: "Orders Ready",       value: totalOrders,    Icon: Ship,          color: "text-blue-600 dark:text-blue-400" },
           { label: "Total Pallets",      value: totalPallets,   Icon: Package,       color: "text-purple-600 dark:text-purple-400" },
@@ -1011,6 +1030,26 @@ export default function ShippingDashboard() {
             </div>
           </div>
         ))}
+        {/* Missing Docs tile */}
+        <div className={cn(
+          "rounded-xl border bg-card px-5 py-4 flex items-center gap-3",
+          demoMode
+            ? "border-amber-500/20"
+            : missingDocs > 0
+              ? "border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/20"
+              : "border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/20"
+        )}>
+          <FileText className={cn(
+            "h-8 w-8 shrink-0 opacity-80",
+            demoMode ? "text-muted-foreground" : missingDocs > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
+          )} />
+          <div>
+            <div className="text-2xl font-bold text-foreground tabular-nums">
+              {demoMode ? "—" : missingDocs}
+            </div>
+            <div className="text-[11px] text-muted-foreground font-medium">Missing Docs</div>
+          </div>
+        </div>
       </div>
 
       {/* No-location warning */}

@@ -405,6 +405,29 @@ export default function ClientProfile() {
                   ))}
                 </div>
               </div>
+              {/* ── Customs Documents ── */}
+              <div className="space-y-1 border-t pt-3">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Customs Documents Required</label>
+                <p className="text-[11px] text-muted-foreground">When enabled, customs documents are required for this customer&apos;s shipments to be considered complete on the Shipping Dashboard.</p>
+                <div className="flex gap-2 mt-1">
+                  {[0, 1].map((v) => (
+                    <Button
+                      key={v}
+                      size="sm"
+                      variant={(profile.requiresCustomsDocs ?? 0) === v ? "default" : "outline"}
+                      className={(profile.requiresCustomsDocs ?? 0) === v && v === 1 ? "bg-violet-600 hover:bg-violet-700 text-white border-violet-600" : ""}
+                      onClick={() => patch("requiresCustomsDocs", v)}
+                    >
+                      {v ? "Required" : "Not Required"}
+                    </Button>
+                  ))}
+                </div>
+                {(profile.requiresCustomsDocs ?? 0) === 1 && (
+                  <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-1">
+                    ✓ Customs docs will be enforced on the Shipping Dashboard for this customer.
+                  </p>
+                )}
+              </div>
             </div>
           </Section>
         </div>

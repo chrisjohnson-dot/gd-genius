@@ -157,6 +157,7 @@ export const clientProfilesRouter = router({
         billingFrequency: z.enum(["weekly", "biweekly", "monthly"]).optional(),
         billingPoRequired: z.number().optional(),
         specialInstructions: z.string().optional(),
+        requiresCustomsDocs: z.number().optional(),
       }),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -363,5 +364,25 @@ export const clientProfilesRouter = router({
           ? ((Number(stats.shippedThisMonth ?? 0) - Number(stats.shippedLastMonth ?? 0)) / Number(stats.shippedLastMonth)) * 100
           : 0,
       };
+    }),
+
+  // Bulk lookup: returns the set of clientIds that require customs documents.
+  // Used by the Shipping Dashboard to propagate the per-customer customs requirement.
+  getCustomsRequiredClients: protectedProcedure
+    .input(z.object({ clientIds: z.array(z.number()) }))
+    .query(async ({ input }) => {
+      if (input.clientIds.length === 0) return [] as number[];
+      const d = await getDb();
+      if (!d) return [] as number[];
+      const rows = await d
+        .select({ customerId: clientProfiles.customerId })
+        .from(clientProfiles)
+        .where(
+          and(
+            sql`${clientProfiles.customerId} IN (${sql.join(input.clientIds.map((id) => sql`${id}`), sql`, `)})`,
+            eq(clientProfiles.requiresCustomsDocs, 1)
+          )
+        );
+      return rows.map((r) => r.customerId);
     }),
 });

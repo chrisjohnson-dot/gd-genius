@@ -181,11 +181,13 @@ function ShipmentDetailDrawer({
   isDemo,
   onClose,
   onEdit,
+  customsRequiredSet,
 }: {
   order: OutboundOrder;
   isDemo: boolean;
   onClose: () => void;
   onEdit: (o: OutboundOrder) => void;
+  customsRequiredSet: Set<number>;
 }) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
@@ -207,10 +209,13 @@ function ShipmentDetailDrawer({
   );
   const drawerHasBol = drawerDocs.some((d) => d.docType === "bol");
   const drawerHasPalletLabel = drawerDocs.some((d) => d.docType === "pallet_label");
-  const docsComplete = isDemo || (drawerHasBol && drawerHasPalletLabel);
+  const drawerHasCustoms = drawerDocs.some((d) => d.docType === "customs");
+  const drawerNeedsCustoms = !isDemo && customsRequiredSet.has(order.clientId);
+  const docsComplete = isDemo || (drawerHasBol && drawerHasPalletLabel && (!drawerNeedsCustoms || drawerHasCustoms));
   const missingDocTypes: string[] = [
     ...(!drawerHasBol ? ["BOL"] : []),
     ...(!drawerHasPalletLabel ? ["Pallet Labels"] : []),
+    ...(drawerNeedsCustoms && !drawerHasCustoms ? ["Customs"] : []),
   ];
 
   // Appointment check — warn if a scheduled/confirmed appointment exists but docs are incomplete
@@ -338,7 +343,7 @@ function ShipmentDetailDrawer({
           )}
 
           {/* Shipping Documents */}
-          <ShippingDocumentsPanel order={order} isDemo={isDemo} />
+          <ShippingDocumentsPanel order={order} isDemo={isDemo} requiresCustomsDocs={customsRequiredSet.has(order.clientId)} />
 
           {/* Timestamps */}
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 pt-4 border-t border-border">
@@ -545,7 +550,7 @@ function DocStatusPill({ docs, onClick }: { docs: ShippingDoc[]; onClick?: () =>
  * Full shipping documents panel shown inside the ShipmentDetailDrawer.
  * Allows upload and deletion of BOL, customs, and pallet label files.
  */
-function ShippingDocumentsPanel({ order, isDemo }: { order: OutboundOrder; isDemo: boolean }) {
+function ShippingDocumentsPanel({ order, isDemo, requiresCustomsDocs = false }: { order: OutboundOrder; isDemo: boolean; requiresCustomsDocs?: boolean }) {
   const utils = trpc.useUtils();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadType, setUploadType] = useState<ShippingDoc["docType"]>("bol");
@@ -598,7 +603,8 @@ function ShippingDocumentsPanel({ order, isDemo }: { order: OutboundOrder; isDem
 
   const hasBol = docs.some((d) => d.docType === "bol");
   const hasPalletLabel = docs.some((d) => d.docType === "pallet_label");
-  const complete = hasBol && hasPalletLabel;
+  const hasCustoms = docs.some((d) => d.docType === "customs");
+  const complete = hasBol && hasPalletLabel && (!requiresCustomsDocs || hasCustoms);
 
   return (
     <div className={cn(
@@ -638,9 +644,13 @@ function ShippingDocumentsPanel({ order, isDemo }: { order: OutboundOrder; isDem
             </span>
           );
         })}
-        {docs.some((d) => d.docType === "customs") && (
-          <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
-            <CheckCircle2 className="h-3.5 w-3.5" />Customs
+        {requiresCustomsDocs && (
+          <span className={cn(
+            "flex items-center gap-1 font-medium",
+            hasCustoms ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+          )}>
+            {hasCustoms ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+            Customs
           </span>
         )}
       </div>
@@ -989,7 +999,14 @@ export default function ShippingDashboard() {
     { enabled: !demoMode && activeOrderIds.length > 0, refetchInterval: 300_000 }
   );
 
-  const grouped = useMemo(() => {
+  // Fetch which clients require customs documents (per-customer toggle in Client Profiles)
+  const uniqueClientIds = useMemo(() => [...new Set(orders.map((o) => o.clientId))], [orders]);
+  const { data: customsRequiredClientIds = [] } = trpc.clientProfiles.getCustomsRequiredClients.useQuery(
+    { clientIds: uniqueClientIds },
+    { enabled: !demoMode && uniqueClientIds.length > 0, staleTime: 60_000 }
+  );
+  const customsRequiredSet = useMemo(() => new Set(customsRequiredClientIds), [customsRequiredClientIds]);
+    const grouped = useMemo(() => {
     const q = search.toLowerCase().trim();
     let filtered = q
       ? orders.filter((o) =>
@@ -1019,9 +1036,10 @@ export default function ShippingDashboard() {
       if (!docsByOrderIdForSort.has(doc.orderTrackingId)) docsByOrderIdForSort.set(doc.orderTrackingId, new Set());
       docsByOrderIdForSort.get(doc.orderTrackingId)!.add(doc.docType);
     }
-    const hasCompleteDocs = (id: number) => {
+    const hasCompleteDocs = (id: number, clientId: number) => {
       const types = docsByOrderIdForSort.get(id);
-      return types?.has("bol") && types?.has("pallet_label");
+      const needsCustoms = customsRequiredSet.has(clientId);
+      return types?.has("bol") && types?.has("pallet_label") && (!needsCustoms || types?.has("customs"));
     };
     for (const list of Array.from(map.values())) list.sort((a: OutboundOrder, b: OutboundOrder) => {
       const aShipped = a.displayStatus === "shipped" ? 1 : 0;
@@ -1029,14 +1047,14 @@ export default function ShippingDashboard() {
       if (aShipped !== bShipped) return aShipped - bShipped;
       if (sortBy === "docs") {
         // Missing docs first, then complete docs; within each group sort by age
-        const aMissing = hasCompleteDocs(a.id) ? 1 : 0;
-        const bMissing = hasCompleteDocs(b.id) ? 1 : 0;
+        const aMissing = hasCompleteDocs(a.id, a.clientId) ? 1 : 0;
+        const bMissing = hasCompleteDocs(b.id, b.clientId) ? 1 : 0;
         if (aMissing !== bMissing) return aMissing - bMissing;
       }
       return daysInOutbound(b.shipReadyAt) - daysInOutbound(a.shipReadyAt);
     });
     return map;
-  }, [orders, search, tierFilter, sortBy, allDocsForKpi]);
+  }, [orders, search, tierFilter, sortBy, allDocsForKpi, customsRequiredSet]);
 
   const totalOrders = orders.filter((o) => o.displayStatus !== "shipped").length;
   const totalPallets = orders.filter((o) => o.displayStatus !== "shipped").reduce((s, o) => s + (o.palletCount ?? 0), 0);
@@ -1053,7 +1071,8 @@ export default function ShippingDashboard() {
     return orders.filter((o) => {
       if (o.displayStatus === "shipped") return false;
       const types = docsByOrderId.get(o.id);
-      return !types || !types.has("bol") || !types.has("pallet_label");
+      const needsCustoms = customsRequiredSet.has(o.clientId);
+      return !types || !types.has("bol") || !types.has("pallet_label") || (needsCustoms && !types.has("customs"));
     }).map((o) => ({
       id: o.id,
       label: o.referenceNum ?? String(o.extensivOrderId),
@@ -1061,9 +1080,10 @@ export default function ShippingDashboard() {
       missingTypes: [
         ...(!docsByOrderId.get(o.id)?.has("bol") ? ["BOL"] : []),
         ...(!docsByOrderId.get(o.id)?.has("pallet_label") ? ["Pallet Labels"] : []),
+        ...(customsRequiredSet.has(o.clientId) && !docsByOrderId.get(o.id)?.has("customs") ? ["Customs"] : []),
       ],
     }));
-  }, [allDocsForKpi, orders, demoMode]);
+  }, [allDocsForKpi, orders, demoMode, customsRequiredSet]);
   const missingDocs = missingDocsOrders.length;
   const [missingDocsBannerExpanded, setMissingDocsBannerExpanded] = useState(false);
 
@@ -1309,6 +1329,7 @@ export default function ShippingDashboard() {
           isDemo={demoMode}
           onClose={() => setSelectedOrder(null)}
           onEdit={(o) => { setSelectedOrder(null); setEditOrder(o); }}
+          customsRequiredSet={customsRequiredSet}
         />
       )}
 

@@ -2109,6 +2109,8 @@ export const clientProfiles = mysqlTable("client_profiles", {
   billingFrequency: mysqlEnum("billingFrequency", ["weekly", "biweekly", "monthly"]).default("monthly"),
   billingPoRequired: int("billingPoRequired").default(0),
   specialInstructions: text("specialInstructions"),
+  /** Whether this customer requires customs documents for international shipments (1 = yes, 0 = no) */
+  requiresCustomsDocs: int("requiresCustomsDocs").default(0),
   createdAt: timestamp("createdAt").defaultNow(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
 });

@@ -28,9 +28,16 @@ function msInOutbound(shipReadyAt: Date | string | null): number {
   if (!shipReadyAt) return 0;
   return Math.max(0, Date.now() - new Date(shipReadyAt).getTime());
 }
-/** Returns whole days (used for sorting / threshold logic). */
+/** Returns calendar days elapsed since shipReadyAt.
+ *  Apr 27 → May 1 = 4 days regardless of time-of-day.
+ */
 function daysInOutbound(shipReadyAt: Date | string | null): number {
-  return Math.floor(msInOutbound(shipReadyAt) / 86_400_000);
+  if (!shipReadyAt) return 0;
+  const start = new Date(shipReadyAt);
+  const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((todayMidnight.getTime() - startMidnight.getTime()) / 86_400_000));
 }
 /** Human-readable dock age: "< 1 hr", "4 hrs", "1 day", "3 days". */
 function formatDockAge(shipReadyAt: Date | string | null): string {

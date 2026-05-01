@@ -66,6 +66,8 @@ export interface ShipwellLineItem {
 export interface CreatePurchaseOrderInput {
   order_number: string;
   purchase_order_number?: string | null;
+  /** Extensiv order reference number — written to customer_reference_number so Genius can match shipments on sync */
+  customer_reference_number?: string | null;
   origin_address: ShipwellAddress;
   destination_address: ShipwellAddress;
   customer_name?: string | null;
@@ -118,6 +120,8 @@ export class ShipwellClient {
   private http: AxiosInstance;
   private token: string | null = null;
   private tokenExpiresAt: Date | null = null;
+  /** If set, this API key is used directly as a Bearer token (no email/password auth needed) */
+  private apiKey: string | null = null;
 
   constructor(
     private email: string,
@@ -129,6 +133,12 @@ export class ShipwellClient {
       timeout: 30_000,
       headers: { "Content-Type": "application/json" },
     });
+    // If the "password" field looks like an API key (32-char hex), use it directly
+    if (/^[0-9a-f]{32}$/.test(password)) {
+      this.apiKey = password;
+      this.token = password;
+      this.tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60_000);
+    }
   }
 
   // ─── Auth ───────────────────────────────────────────────────────────────────
@@ -138,12 +148,16 @@ export class ShipwellClient {
     if (this.token && this.tokenExpiresAt && this.tokenExpiresAt > new Date(Date.now() + 5 * 60_000)) {
       return this.token;
     }
-
+    // API key mode — no email/password auth needed
+    if (this.apiKey) {
+      this.token = this.apiKey;
+      this.tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60_000);
+      return this.token;
+    }
     const res = await this.http.post<{ token: string; api_key: string | null }>("/v2/auth/token/", {
       email: this.email,
       password: this.password,
     });
-
     this.token = res.data.token;
     this.tokenExpiresAt = new Date(Date.now() + 23 * 60 * 60_000);
     return this.token;

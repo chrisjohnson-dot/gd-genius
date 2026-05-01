@@ -2588,13 +2588,27 @@ const _appRouter = router({
       const db = await getDb();
       if (!db) return [];
       const { orderTracking } = await import("../drizzle/schema.js");
+      // Count orders per (facilityId, facilityName) pair so we can pick the dominant ID per name
       const rows = await db
-        .selectDistinct({ facilityId: orderTracking.facilityId, facilityName: orderTracking.facilityName })
+        .select({
+          facilityId: orderTracking.facilityId,
+          facilityName: orderTracking.facilityName,
+          cnt: sql<number>`COUNT(*)`,
+        })
         .from(orderTracking)
-        .where(sql`${orderTracking.facilityId} IS NOT NULL AND ${orderTracking.facilityName} IS NOT NULL`);
-      return rows
-        .filter((r): r is { facilityId: number; facilityName: string } => r.facilityId != null && r.facilityName != null)
-        .sort((a, b) => a.facilityName.localeCompare(b.facilityName));
+        .where(sql`${orderTracking.facilityId} IS NOT NULL AND ${orderTracking.facilityName} IS NOT NULL`)
+        .groupBy(orderTracking.facilityId, orderTracking.facilityName);
+      // Deduplicate by facilityName — keep the row with the highest order count
+      const byName = new Map<string, { facilityId: number; facilityName: string }>();
+      for (const r of rows) {
+        if (r.facilityId == null || r.facilityName == null) continue;
+        const existing = byName.get(r.facilityName);
+        const existingCnt = existing ? (rows.find(x => x.facilityId === existing.facilityId)?.cnt ?? 0) : 0;
+        if (!existing || (r.cnt ?? 0) > existingCnt) {
+          byName.set(r.facilityName, { facilityId: r.facilityId, facilityName: r.facilityName });
+        }
+      }
+      return Array.from(byName.values()).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
     }),
     /** Return all tracked orders, optionally filtered by facilityId, with hidden clients excluded */
     list: protectedProcedure
@@ -2924,6 +2938,7 @@ const _appRouter = router({
         const po = await client.createPurchaseOrder({
           order_number: String(order.extensivOrderId),
           purchase_order_number: order.poNum ?? undefined,
+          customer_reference_number: order.referenceNum ?? String(order.extensivOrderId),
           origin_address: originAddress,
           destination_address: destinationAddress,
           customer_name: order.clientName ?? undefined,
@@ -5489,6 +5504,7 @@ const qcScannerRouter = router({
       const po = await client.createPurchaseOrder({
         order_number: orderNumber,
         purchase_order_number: session.poNumber ?? trackedOrder?.poNum ?? undefined,
+        customer_reference_number: session.referenceNumber ?? (trackedOrder?.extensivOrderId ? String(trackedOrder.extensivOrderId) : undefined),
         origin_address: originAddress,
         destination_address: destinationAddress,
         customer_name: customerName,

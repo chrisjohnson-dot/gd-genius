@@ -4971,3 +4971,10 @@ export async function deleteSkuWeightOverride(id: number): Promise<void> {
   if (!db) return;
   await db.delete(skuWeightOverrides).where(eq(skuWeightOverrides.id, id));
 }
+
+export async function listAllSkuWeightOverrides(): Promise<SkuWeightOverride[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(skuWeightOverrides)
+    .orderBy(skuWeightOverrides.configId, skuWeightOverrides.customerId, skuWeightOverrides.sku);
+}

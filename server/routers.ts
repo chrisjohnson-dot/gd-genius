@@ -247,6 +247,7 @@ import {
   resolveEdiEscalation,
   dismissEdiEscalation,
   getSkuWeightOverrides,
+  listAllSkuWeightOverrides,
   getSkuWeightOverrideMap,
   upsertSkuWeightOverride,
   deleteSkuWeightOverride,
@@ -5549,6 +5550,34 @@ const skuWeightRouter = router({
     .input(z.object({ configId: z.number(), customerId: z.number() }))
     .query(async ({ input }) => {
       return getSkuWeightOverrides(input.configId, input.customerId);
+    }),
+
+  /** List ALL weight overrides across all configs/customers — for the management table in Settings */
+  listAll: protectedProcedure.query(async () => {
+    return listAllSkuWeightOverrides();
+  }),
+
+  /** Update a single override row by id */
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      cartonWeightLb: z.number().positive(),
+      unitsPerCarton: z.number().int().positive().optional().nullable(),
+      note: z.string().max(256).optional().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await (await import('./db')).getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { skuWeightOverrides: tbl } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      await db.update(tbl)
+        .set({
+          cartonWeightLb: String(input.cartonWeightLb),
+          unitsPerCarton: input.unitsPerCarton ?? null,
+          note: input.note ?? null,
+        })
+        .where(eq(tbl.id, input.id));
+      return { success: true };
     }),
   upsert: protectedProcedure
     .input(z.object({

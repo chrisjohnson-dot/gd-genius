@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle, CheckCircle2, Copy, Database, Loader2, Pencil, Plus,
-  RefreshCw, Settings2, Stethoscope, Trash2, Webhook, XCircle,
+  RefreshCw, Save, Scale, Settings2, Stethoscope, Trash2, Webhook, X, XCircle,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -784,6 +784,198 @@ function MuCacheSyncTab() {
   );
 }
 
+// ─── Weight Overrides Tab ────────────────────────────────────────────────────
+function WeightOverridesTab() {
+  const utils = trpc.useUtils();
+  const { data: configs } = trpc.config.list.useQuery();
+  const { data: rows, isLoading } = trpc.skuWeight.listAll.useQuery();
+
+  // Build a lookup: configId → name
+  const configName = (id: number) => configs?.find((c) => (c as { id: number }).id === id)?.name ?? `Config #${id}`;
+
+  // Editing state: rowId → { cartonWeightLb, unitsPerCarton, note }
+  const [editing, setEditing] = useState<Record<number, { cartonWeightLb: string; unitsPerCarton: string; note: string }>>({});
+
+  const updateMutation = trpc.skuWeight.update.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(`Weight override #${vars.id} updated`);
+      setEditing((prev) => { const n = { ...prev }; delete n[vars.id]; return n; });
+      utils.skuWeight.listAll.invalidate();
+    },
+    onError: (e) => toast.error(`Update failed: ${e.message}`),
+  });
+
+  const deleteMutation = trpc.skuWeight.delete.useMutation({
+    onSuccess: () => { toast.success('Override deleted'); utils.skuWeight.listAll.invalidate(); },
+    onError: (e) => toast.error(`Delete failed: ${e.message}`),
+  });
+
+  const startEdit = (row: { id: number; cartonWeightLb: string; unitsPerCarton: number | null; note: string | null }) => {
+    setEditing((prev) => ({
+      ...prev,
+      [row.id]: {
+        cartonWeightLb: String(row.cartonWeightLb),
+        unitsPerCarton: row.unitsPerCarton != null ? String(row.unitsPerCarton) : '',
+        note: row.note ?? '',
+      },
+    }));
+  };
+
+  const cancelEdit = (id: number) => setEditing((prev) => { const n = { ...prev }; delete n[id]; return n; });
+
+  const saveEdit = (id: number) => {
+    const e = editing[id];
+    if (!e) return;
+    const lb = parseFloat(e.cartonWeightLb);
+    if (isNaN(lb) || lb <= 0) { toast.error('Enter a valid weight > 0'); return; }
+    const upc = e.unitsPerCarton.trim() ? parseInt(e.unitsPerCarton, 10) : null;
+    updateMutation.mutate({ id, cartonWeightLb: lb, unitsPerCarton: upc ?? null, note: e.note.trim() || null });
+  };
+
+  // Search / filter
+  const [search, setSearch] = useState('');
+  const filtered = (rows ?? []).filter((r) =>
+    !search || r.sku.toLowerCase().includes(search.toLowerCase()) || configName(r.configId).toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          All manually entered carton weights. These are used when Extensiv has no weight data for a SKU.
+        </p>
+        <div className="relative w-56">
+          <input
+            type="text"
+            placeholder="Search SKU or config…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring pr-8"
+          />
+          {search && (
+            <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setSearch('')}>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-12 text-center">
+          <Scale className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-40" />
+          <p className="text-sm text-muted-foreground">
+            {search ? 'No overrides match your search.' : 'No weight overrides saved yet. They are created automatically when you enter weights in the QC Scanner.'}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-muted/40 border-b border-border">
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">SKU</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Config</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Customer ID</th>
+                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Carton Wt (lbs)</th>
+                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Units/Carton</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Note</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Updated</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.map((row) => {
+                const e = editing[row.id];
+                return (
+                  <tr key={row.id} className={`hover:bg-muted/20 transition-colors ${e ? 'bg-blue-50/60 dark:bg-blue-950/20' : ''}`}>
+                    <td className="px-4 py-2.5 font-mono text-xs font-semibold text-foreground">{row.sku}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{configName(row.configId)}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{row.customerId}</td>
+                    {e ? (
+                      <>
+                        <td className="px-4 py-1.5">
+                          <input
+                            type="number" min="0.01" step="0.01"
+                            className="w-20 text-xs border border-blue-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-right"
+                            value={e.cartonWeightLb}
+                            onChange={(ev) => setEditing((prev) => ({ ...prev, [row.id]: { ...prev[row.id], cartonWeightLb: ev.target.value } }))}
+                          />
+                        </td>
+                        <td className="px-4 py-1.5">
+                          <input
+                            type="number" min="1" step="1"
+                            className="w-16 text-xs border border-blue-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-right"
+                            placeholder="—"
+                            value={e.unitsPerCarton}
+                            onChange={(ev) => setEditing((prev) => ({ ...prev, [row.id]: { ...prev[row.id], unitsPerCarton: ev.target.value } }))}
+                          />
+                        </td>
+                        <td className="px-4 py-1.5" colSpan={2}>
+                          <input
+                            type="text" maxLength={256}
+                            className="w-full text-xs border border-blue-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            placeholder="Optional note…"
+                            value={e.note}
+                            onChange={(ev) => setEditing((prev) => ({ ...prev, [row.id]: { ...prev[row.id], note: ev.target.value } }))}
+                          />
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-2.5 text-xs text-right font-semibold tabular-nums">{Number(row.cartonWeightLb).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-xs text-right text-muted-foreground tabular-nums">{row.unitsPerCarton ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[160px] truncate" title={row.note ?? ''}>{row.note || <span className="opacity-40">—</span>}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{new Date(row.updatedAt).toLocaleDateString()}</td>
+                      </>
+                    )}
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {e ? (
+                          <>
+                            <Button size="sm" className="h-7 px-2 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                              disabled={updateMutation.isPending}
+                              onClick={() => saveEdit(row.id)}
+                            >
+                              <Save className="h-3 w-3" /> Save
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => cancelEdit(row.id)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={() => startEdit(row)}>
+                              <Pencil className="h-3 w-3" /> Edit
+                            </Button>
+                            <Button
+                              size="sm" variant="outline"
+                              className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive"
+                              disabled={deleteMutation.isPending}
+                              onClick={() => { if (confirm(`Delete weight override for "${row.sku}"?`)) deleteMutation.mutate({ id: row.id }); }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="px-4 py-2 border-t border-border bg-muted/20 text-xs text-muted-foreground">
+            {filtered.length} override{filtered.length !== 1 ? 's' : ''}{search ? ` matching "${search}"` : ''}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ApiSettingsDiagnostics() {
   return (
@@ -809,6 +1001,10 @@ export default function ApiSettingsDiagnostics() {
             <Database className="h-3.5 w-3.5" />
             MU Cache Sync
           </TabsTrigger>
+          <TabsTrigger value="weight-overrides" className="gap-1.5">
+            <Scale className="h-3.5 w-3.5" />
+            Weight Overrides
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings" className="pt-4">
@@ -821,6 +1017,10 @@ export default function ApiSettingsDiagnostics() {
 
         <TabsContent value="mu-sync" className="pt-4">
           <MuCacheSyncTab />
+        </TabsContent>
+
+        <TabsContent value="weight-overrides" className="pt-4">
+          <WeightOverridesTab />
         </TabsContent>
       </Tabs>
     </div>

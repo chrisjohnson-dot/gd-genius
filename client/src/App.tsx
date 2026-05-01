@@ -24,6 +24,7 @@ import QCDashboard from "@/pages/QCDashboard";
 import QCReports from "@/pages/QCReports";
 import ShippingDashboard from "@/pages/ShippingDashboard";
 import ShipOrders from "@/pages/ShipOrders";
+import ConfirmShipping from "@/pages/ConfirmShipping";
 import ShippingHistory from "@/pages/ShippingHistory";
 import ShippingCarriers from "@/pages/ShippingCarriers";
 import ShipwellSettings from "@/pages/ShipwellSettings";
@@ -112,6 +113,7 @@ function AppRoutes() {
         <Route path="/qc" component={QCDashboard} />
         <Route path="/qc/reports" component={QCReports} />
         <Route path="/shipping" component={ShippingDashboard} />
+        <Route path="/shipping/confirm" component={ConfirmShipping} />
         <Route path="/shipping/orders" component={ShipOrders} />
         <Route path="/shipping/history" component={ShippingHistory} />
         <Route path="/shipping/carriers" component={ShippingCarriers} />

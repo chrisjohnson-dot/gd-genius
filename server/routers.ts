@@ -2969,6 +2969,43 @@ const _appRouter = router({
 
         return { success: true, shipwellOrderId: po.id, poUrl };
       }),
+    /** List all ship_ready orders that are not yet carrier_confirmed in Shipwell. */
+    listUnconfirmed: protectedProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const { orderTracking } = await import('../drizzle/schema.js');
+      const { and, eq, or, isNull, inArray } = await import('drizzle-orm');
+      const rows = await db
+        .select()
+        .from(orderTracking)
+        .where(
+          and(
+            eq(orderTracking.lifecycleStatus, 'ship_ready'),
+            or(
+              isNull(orderTracking.shipwellStatus),
+              inArray(orderTracking.shipwellStatus, ['quoting', 'tendered'])
+            )
+          )
+        )
+        .orderBy(orderTracking.shipReadyAt);
+      return rows.map((r) => ({
+        id: r.id,
+        extensivOrderId: r.extensivOrderId,
+        referenceNum: r.referenceNum,
+        clientName: r.clientName,
+        shipToName: r.shipToName,
+        shipToCity: r.shipToCity,
+        requiredShipDate: r.requiredShipDate,
+        shipReadyAt: r.shipReadyAt,
+        shipwellStatus: r.shipwellStatus,
+        shipwellBidCount: r.shipwellBidCount,
+        shipwellOrderId: r.shipwellOrderId,
+        shipwellPoUrl: r.shipwellPoUrl,
+        palletCount: r.palletCount,
+        outboundLocation: r.outboundLocation,
+        facilityName: r.facilityName,
+      }));
+    }),
   }),
 
   // ─── SLA Tracker ──────────────────────────────────────────────────────────────

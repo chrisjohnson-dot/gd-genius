@@ -991,18 +991,29 @@ export default function ShippingDashboard() {
     { orderTrackingIds: activeOrderIds },
     { enabled: !demoMode && activeOrderIds.length > 0, refetchInterval: 300_000 }
   );
-  const missingDocs = useMemo(() => {
-    if (demoMode) return 0;
+  const missingDocsOrders = useMemo(() => {
+    if (demoMode) return [];
     const docsByOrderId = new Map<number, Set<string>>();
     for (const doc of allDocsForKpi) {
       if (!docsByOrderId.has(doc.orderTrackingId)) docsByOrderId.set(doc.orderTrackingId, new Set());
       docsByOrderId.get(doc.orderTrackingId)!.add(doc.docType);
     }
-    return activeOrderIds.filter((id) => {
-      const types = docsByOrderId.get(id);
+    return orders.filter((o) => {
+      if (o.displayStatus === "shipped") return false;
+      const types = docsByOrderId.get(o.id);
       return !types || !types.has("bol") || !types.has("pallet_label");
-    }).length;
-  }, [allDocsForKpi, activeOrderIds, demoMode]);
+    }).map((o) => ({
+      id: o.id,
+      label: o.referenceNum ?? String(o.extensivOrderId),
+      client: o.clientName,
+      missingTypes: [
+        ...(!docsByOrderId.get(o.id)?.has("bol") ? ["BOL"] : []),
+        ...(!docsByOrderId.get(o.id)?.has("pallet_label") ? ["Pallet Labels"] : []),
+      ],
+    }));
+  }, [allDocsForKpi, orders, demoMode]);
+  const missingDocs = missingDocsOrders.length;
+  const [missingDocsBannerExpanded, setMissingDocsBannerExpanded] = useState(false);
 
   return (
     <div className="p-7 page-enter">
@@ -1119,6 +1130,41 @@ export default function ShippingDashboard() {
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 dark:border-yellow-500/30 px-4 py-2.5 text-sm text-yellow-800 dark:text-yellow-300">
           <MapPin className="h-4 w-4 shrink-0" />
           <span><strong>{noLocation}</strong> order{noLocation !== 1 ? "s have" : " has"} no outbound location set. <span className="opacity-60">(Demo example)</span></span>
+        </div>
+      )}
+
+      {/* Missing docs warning banner */}
+      {missingDocs > 0 && !demoMode && (
+        <div className="mb-4 rounded-lg border border-red-400 bg-red-50 dark:bg-red-950/20 dark:border-red-700">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-800 dark:text-red-300"
+            onClick={() => setMissingDocsBannerExpanded((v) => !v)}
+          >
+            <FileText className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+            <span className="flex-1 text-left">
+              <strong>{missingDocs}</strong> order{missingDocs !== 1 ? "s are" : " is"} missing required shipping documents (BOL or Pallet Labels).
+            </span>
+            <ChevronDown className={cn("h-4 w-4 text-red-500 dark:text-red-400 transition-transform", missingDocsBannerExpanded && "rotate-180")} />
+          </button>
+          {missingDocsBannerExpanded && (
+            <div className="border-t border-red-300 dark:border-red-700 px-4 pb-3 pt-2">
+              <div className="flex flex-wrap gap-2">
+                {missingDocsOrders.map((o) => (
+                  <button
+                    key={o.id}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-red-300 dark:border-red-700 bg-white dark:bg-red-950/30 px-2.5 py-1 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                    onClick={() => setSelectedOrder(orders.find((x) => x.id === o.id) ?? null)}
+                    title={`Missing: ${o.missingTypes.join(", ")}`}
+                  >
+                    <span className="font-mono">{o.label}</span>
+                    <span className="text-red-400 dark:text-red-500">·</span>
+                    <span className="text-red-500 dark:text-red-400">{o.client}</span>
+                    <span className="ml-1 rounded bg-red-200 dark:bg-red-800 px-1 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-300">{o.missingTypes.join(", ")}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -112,7 +112,6 @@ const shippingItems = [
   { href: "/shipping/history",        label: "Shipping History",     icon: ScrollText },
   { href: "/shipping/appointments",   label: "Appointments",         icon: CalendarDays },
   { href: "/shipping/carrier-pickup", label: "Carrier Pickup",       icon: Truck },
-  { href: "/shipping/carrier-pickup/history", label: "Pickup History",  icon: History },
   { href: "/shipping/dock-manager",   label: "Dock Manager",         icon: Building2 },
   { href: "/edi-monitor",             label: "EDI 945 Monitor",      icon: Wifi },
 ];

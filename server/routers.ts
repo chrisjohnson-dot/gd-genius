@@ -3241,14 +3241,89 @@ const _appRouter = router({
             }
           } else {
             await updateShipwellStatus(order.extensivOrderId, "tendered");
-          }
-        } else {
+          }          } else {
           await updateShipwellStatus(order.extensivOrderId, "tendered");
         }
         return { success: true };
       }),
+    /**
+     * List all carrier bids for a Shipwell shipment.
+     * Uses GET /quoting/carrier-bids/?shipment={shipmentId}
+     */
+    listCarrierBids: protectedProcedure
+      .input(z.object({ shipmentId: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Shipwell not configured" });
+        const client = createShipwellClient({
+          email: config.email,
+          password: config.password,
+          environment: config.environment as "sandbox" | "production",
+        });
+        try {
+          const result = await client.getCarrierBids(input.shipmentId);
+          return {
+            bids: result.results.map((b) => ({
+              id: b.id,
+              carrierName: b.carrier_name ?? null,
+              carrierScac: b.carrier_scac ?? null,
+              totalCharge: b.total_charge_amount ?? null,
+              currency: b.currency ?? "USD",
+              transitDays: b.transit_days ?? null,
+              serviceType: b.service_type ?? null,
+              serviceLevel: b.service_level ?? null,
+              expirationDate: b.expiration_date ?? null,
+              status: b.status ?? null,
+              notes: b.notes ?? null,
+              createdAt: b.created_at ?? null,
+            })),
+            totalCount: result.total_count,
+          };
+        } catch (err) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: err instanceof Error ? err.message : "Failed to fetch carrier bids",
+          });
+        }
+      }),
+    /**
+     * Retrieve a single carrier bid by ID.
+     * Uses GET /v2/carrier-bids/{bidId}
+     */
+    getCarrierBid: protectedProcedure
+      .input(z.object({ bidId: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Shipwell not configured" });
+        const client = createShipwellClient({
+          email: config.email,
+          password: config.password,
+          environment: config.environment as "sandbox" | "production",
+        });
+        try {
+          const b = await client.getCarrierBid(input.bidId);
+          return {
+            id: b.id,
+            carrierName: b.carrier_name ?? null,
+            carrierScac: b.carrier_scac ?? null,
+            totalCharge: b.total_charge_amount ?? null,
+            currency: b.currency ?? "USD",
+            transitDays: b.transit_days ?? null,
+            serviceType: b.service_type ?? null,
+            serviceLevel: b.service_level ?? null,
+            expirationDate: b.expiration_date ?? null,
+            status: b.status ?? null,
+            notes: b.notes ?? null,
+            createdAt: b.created_at ?? null,
+          };
+        } catch (err) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: err instanceof Error ? err.message : "Failed to fetch carrier bid",
+          });
+        }
+      }),
   }),
-
   // ─── SLA Tracker ──────────────────────────────────────────────────────────────
   sla: router({
     /** List all per-customer SLA requirement overrides. */
@@ -4619,6 +4694,23 @@ const qcScannerRouter = router({
       } catch (err) {
         packError = err instanceof Error ? err.message : String(err);
         console.error(`[QcScanner] markOrderPacked threw unexpectedly:`, err);
+      }
+      // --- Non-fatal: promote order to ship_ready so it appears in the dock recommendation dialog ---
+      try {
+        const sessionForStatus = await getQcSessionById(input.sessionId);
+        const orderId = sessionForStatus?.transactionId ?? null;
+        if (orderId) {
+          const allOrders = await getTrackedOrders();
+          const currentOrder = allOrders.find((o) => o.extensivOrderId === orderId) ?? null;
+          // Only advance if currently at qc or qc_complete — never go backwards
+          if (currentOrder && (currentOrder.lifecycleStatus === "qc" || currentOrder.lifecycleStatus === "qc_complete")) {
+            await updateOrderLifecycleStatus(orderId, "ship_ready");
+            console.log(`[QcScanner] Auto-promoted order ${orderId} to ship_ready on session complete`);
+          }
+        }
+      } catch (err) {
+        // Non-fatal: dock recommendation will still show but order may not be found
+        console.warn(`[QcScanner] Auto ship_ready promotion failed:`, err);
       }
        return { success: true, packedInExtensiv, packError };
     }),

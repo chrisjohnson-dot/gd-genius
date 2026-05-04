@@ -115,6 +115,26 @@ export interface ShipwellShipmentStatusResult {
   carrierName?: string | null;
 }
 
+// ─── Carrier Bid types ───────────────────────────────────────────────────────
+export interface ShipwellCarrierBid {
+  id: string;                          // UUID
+  shipment_id?: string | null;
+  carrier_name?: string | null;
+  carrier_scac?: string | null;
+  total_charge_amount?: number | null;
+  currency?: string | null;
+  transit_days?: number | null;
+  service_type?: string | null;
+  service_level?: string | null;
+  expiration_date?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  status?: string | null;              // e.g. "pending", "accepted", "rejected"
+  notes?: string | null;
+  // Raw extra fields from Shipwell — kept for display purposes
+  [key: string]: unknown;
+}
+
 // ─── Client class ─────────────────────────────────────────────────────────────
 export class ShipwellClient {
   private http: AxiosInstance;
@@ -300,6 +320,41 @@ export class ShipwellClient {
       }
     }
     return results;
+  }
+
+  /**
+   * List all carrier bids for a shipment.
+   * GET /quoting/carrier-bids/?shipment={shipmentId}
+   */
+  async getCarrierBids(
+    shipmentId: string,
+    pageSize = 50
+  ): Promise<{ results: ShipwellCarrierBid[]; total_count: number }> {
+    const token = await this.authenticate();
+    const res = await this.http.get<{ results: ShipwellCarrierBid[]; total_count: number }>(
+      "/quoting/carrier-bids/",
+      {
+        headers: { Authorization: `Token ${token}` },
+        params: { shipment: shipmentId, "page-size": pageSize },
+      }
+    );
+    return {
+      results: res.data.results ?? [],
+      total_count: res.data.total_count ?? (res.data.results?.length ?? 0),
+    };
+  }
+
+  /**
+   * Retrieve a single carrier bid by ID.
+   * GET /v2/carrier-bids/{bidId}
+   */
+  async getCarrierBid(bidId: string): Promise<ShipwellCarrierBid> {
+    const token = await this.authenticate();
+    const res = await this.http.get<ShipwellCarrierBid>(
+      `/v2/carrier-bids/${bidId}`,
+      { headers: { Authorization: `Token ${token}` } }
+    );
+    return res.data;
   }
 
   /**

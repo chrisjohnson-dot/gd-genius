@@ -25,6 +25,7 @@ const ACTION_LABELS: Record<string, string> = {
   "pickSchedule.sendToShipwell": "Sent to Shipwell",
   "pickSchedule.dismissZeroBidWarning": "Dismissed Zero-Bid Warning",
   "overdueAlert.triggerNow": "Triggered Overdue Alert",
+  "shipwell_tender": "Tendered Carrier (Shipwell)",
 };
 
 function formatAction(action: string): string {
@@ -37,6 +38,7 @@ function actionCategory(action: string): "allocation" | "order" | "config" | "al
   if (action.startsWith("pickSchedule.")) return "order";
   if (action.startsWith("config.")) return "config";
   if (action.includes("alert") || action.includes("Alert")) return "alert";
+  if (action.startsWith("shipwell")) return "order";
   return "other";
 }
 
@@ -240,8 +242,20 @@ export default function AuditLog() {
                               ? `${log.entityType} #${log.entityId}`
                               : "—"}
                           </td>
-                          <td className="px-4 py-2 text-xs text-muted-foreground max-w-xs truncate">
-                            {log.details ? JSON.stringify(log.details) : "—"}
+                          <td className="px-4 py-2 text-xs text-muted-foreground max-w-xs">
+                            {log.action === "shipwell_tender" && log.details ? (
+                              <span className="inline-flex flex-col gap-0.5">
+                                <span><span className="font-medium text-foreground">{(log.details as Record<string, unknown>).carrierName as string ?? "Unknown carrier"}</span></span>
+                                {(log.details as Record<string, unknown>).totalCharge != null && (
+                                  <span className="text-green-700 font-semibold">${Number((log.details as Record<string, unknown>).totalCharge).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                )}
+                                {(log.details as Record<string, unknown>).referenceNum && (
+                                  <span>Ref: {(log.details as Record<string, unknown>).referenceNum as string}</span>
+                                )}
+                              </span>
+                            ) : log.details ? (
+                              <span className="truncate block">{JSON.stringify(log.details)}</span>
+                            ) : "—"}
                           </td>
                         </tr>
                       );

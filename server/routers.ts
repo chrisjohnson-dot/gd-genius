@@ -3371,6 +3371,20 @@ const _appRouter = router({
           console.warn("[tenderByBidId] Shipwell tender call failed, marking locally:", err);
         }
         await updateShipwellStatus(order.extensivOrderId, "tendered");
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "shipwell_tender",
+          entityType: "order",
+          entityId: String(input.extensivOrderId),
+          details: {
+            shipwellBidId: input.shipwellBidId,
+            carrierName: input.carrierName ?? null,
+            totalCharge: input.totalCharge ?? null,
+            shipwellShipmentId: order.shipwellShipmentId,
+            referenceNum: order.referenceNum ?? null,
+            tenderedBy: ctx.user.name ?? ctx.user.openId,
+          },
+        });
         return { success: true };
       }),
   }),

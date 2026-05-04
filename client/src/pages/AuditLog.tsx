@@ -249,8 +249,8 @@ export default function AuditLog() {
                                 {(log.details as Record<string, unknown>).totalCharge != null && (
                                   <span className="text-green-700 font-semibold">${Number((log.details as Record<string, unknown>).totalCharge).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 )}
-                                {(log.details as Record<string, unknown>).referenceNum && (
-                                  <span>Ref: {(log.details as Record<string, unknown>).referenceNum as string}</span>
+                                {(log.details as Record<string, unknown>).referenceNum != null && (
+                                  <span>Ref: {String((log.details as Record<string, unknown>).referenceNum)}</span>
                                 )}
                               </span>
                             ) : log.details ? (

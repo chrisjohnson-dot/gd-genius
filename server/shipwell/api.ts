@@ -116,21 +116,26 @@ export interface ShipwellShipmentStatusResult {
 }
 
 // ─── Carrier Bid types ───────────────────────────────────────────────────────
+// Fields match the actual Shipwell API response for GET /quoting/carrier-bids/
 export interface ShipwellCarrierBid {
-  id: string;                          // UUID
-  shipment_id?: string | null;
-  carrier_name?: string | null;
-  carrier_scac?: string | null;
-  total_charge_amount?: number | null;
-  currency?: string | null;
-  transit_days?: number | null;
-  service_type?: string | null;
-  service_level?: string | null;
-  expiration_date?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  status?: string | null;              // e.g. "pending", "accepted", "rejected"
-  notes?: string | null;
+  id: string | null;                          // UUID
+  shipment: string | null;                    // Shipwell shipment UUID
+  bid_amount: number | null;                  // Rate (float)
+  available_date: string | null;              // Carrier availability date (ISO date)
+  available_time: string | null;              // Carrier availability time
+  carrier_relationship: string | null;        // Carrier relationship UUID
+  contact_first_name: string | null;          // Carrier contact first name
+  contact_last_name: string | null;           // Carrier contact last name
+  contact_email: string | null;
+  contact_phone_number: string | null;
+  mc_number: string | null;                   // MC number
+  usdot_number: string | null;                // USDOT number
+  distance_from_pickup_miles: number | null;
+  equipment_type: number | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  created_by_user_full_name: string | null;   // Who submitted the bid
   // Raw extra fields from Shipwell — kept for display purposes
   [key: string]: unknown;
 }

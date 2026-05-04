@@ -3265,17 +3265,18 @@ const _appRouter = router({
           return {
             bids: result.results.map((b) => ({
               id: b.id,
-              carrierName: b.carrier_name ?? null,
-              carrierScac: b.carrier_scac ?? null,
-              totalCharge: b.total_charge_amount ?? null,
-              currency: b.currency ?? "USD",
-              transitDays: b.transit_days ?? null,
-              serviceType: b.service_type ?? null,
-              serviceLevel: b.service_level ?? null,
-              expirationDate: b.expiration_date ?? null,
-              status: b.status ?? null,
+              contactName: [b.contact_first_name, b.contact_last_name].filter(Boolean).join(' ') || null,
+              contactEmail: b.contact_email ?? null,
+              contactPhone: b.contact_phone_number ?? null,
+              mcNumber: b.mc_number ?? null,
+              usdotNumber: b.usdot_number ?? null,
+              bidAmount: b.bid_amount ?? null,
+              availableDate: b.available_date ?? null,
+              distanceMiles: b.distance_from_pickup_miles ?? null,
               notes: b.notes ?? null,
               createdAt: b.created_at ?? null,
+              createdByUser: b.created_by_user_full_name ?? null,
+              shipmentId: b.shipment ?? null,
             })),
             totalCount: result.total_count,
           };
@@ -3304,17 +3305,18 @@ const _appRouter = router({
           const b = await client.getCarrierBid(input.bidId);
           return {
             id: b.id,
-            carrierName: b.carrier_name ?? null,
-            carrierScac: b.carrier_scac ?? null,
-            totalCharge: b.total_charge_amount ?? null,
-            currency: b.currency ?? "USD",
-            transitDays: b.transit_days ?? null,
-            serviceType: b.service_type ?? null,
-            serviceLevel: b.service_level ?? null,
-            expirationDate: b.expiration_date ?? null,
-            status: b.status ?? null,
+            contactName: [b.contact_first_name, b.contact_last_name].filter(Boolean).join(' ') || null,
+            contactEmail: b.contact_email ?? null,
+            contactPhone: b.contact_phone_number ?? null,
+            mcNumber: b.mc_number ?? null,
+            usdotNumber: b.usdot_number ?? null,
+            bidAmount: b.bid_amount ?? null,
+            availableDate: b.available_date ?? null,
+            distanceMiles: b.distance_from_pickup_miles ?? null,
             notes: b.notes ?? null,
             createdAt: b.created_at ?? null,
+            createdByUser: b.created_by_user_full_name ?? null,
+            shipmentId: b.shipment ?? null,
           };
         } catch (err) {
           throw new TRPCError({
@@ -3344,6 +3346,7 @@ const _appRouter = router({
         const { getShipwellRates, selectShipwellRate } = await import('./db');
         const { shipwellRates } = await import('../drizzle/schema');
         const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
         let rates = await getShipwellRates(input.extensivOrderId);
         let matchedRate = rates.find((r) => r.shipwellBidId === input.shipwellBidId);
         if (!matchedRate) {
@@ -3407,26 +3410,27 @@ const _appRouter = router({
         // For each quoting shipment, fetch its carrier bids in parallel
         const enriched = await Promise.all(
           shipments.map(async (shipment) => {
-            let bids: { id: string; carrierName: string | null; carrierScac: string | null; totalChargeAmount: number | null; currency: string; transitDays: number | null; serviceType: string | null; serviceLevel: string | null; expirationDate: string | null; status: string | null; notes: string | null }[] = [];
+            let bids: { id: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null; mcNumber: string | null; usdotNumber: string | null; bidAmount: number | null; availableDate: string | null; distanceMiles: number | null; notes: string | null; createdAt: string | null; createdByUser: string | null }[] = [];
             try {
               const rawBids = await client.getCarrierBids(shipment.id);
-              bids = rawBids.map((b) => ({
+              bids = rawBids.results.map((b) => ({
                 id: b.id,
-                carrierName: b.carrier_name ?? null,
-                carrierScac: b.carrier_scac ?? null,
-                totalChargeAmount: b.total_charge_amount ?? null,
-                currency: b.currency ?? 'USD',
-                transitDays: b.transit_days ?? null,
-                serviceType: b.service_type ?? null,
-                serviceLevel: b.service_level ?? null,
-                expirationDate: b.expiration_date ?? null,
-                status: b.status ?? null,
+                contactName: [b.contact_first_name, b.contact_last_name].filter(Boolean).join(' ') || null,
+                contactEmail: b.contact_email ?? null,
+                contactPhone: b.contact_phone_number ?? null,
+                mcNumber: b.mc_number ?? null,
+                usdotNumber: b.usdot_number ?? null,
+                bidAmount: b.bid_amount ?? null,
+                availableDate: b.available_date ?? null,
+                distanceMiles: b.distance_from_pickup_miles ?? null,
                 notes: b.notes ?? null,
+                createdAt: b.created_at ?? null,
+                createdByUser: b.created_by_user_full_name ?? null,
               }));
             } catch {
               // bid fetch failure for one shipment should not block the rest
             }
-            const charges = bids.map((b) => b.totalChargeAmount).filter((v): v is number => v !== null);
+            const charges = bids.map((b) => b.bidAmount).filter((v): v is number => v !== null);
             return {
               shipmentId: shipment.id,
               status: shipment.status ?? 'quoting',
@@ -3478,12 +3482,14 @@ const _appRouter = router({
         const orders = await getTrackedOrders();
         const order = orders.find((o) => o.shipwellShipmentId === input.shipwellShipmentId);
         if (order) {
-          const db = getDb();
-          const { orderTracking } = await import('../drizzle/schema');
-          const { eq } = await import('drizzle-orm');
-          await db.update(orderTracking)
-            .set({ shipwellStatus: 'tendered', updatedAt: new Date() })
-            .where(eq(orderTracking.id, order.id));
+          const db = await getDb();
+          if (db) {
+            const { orderTracking } = await import('../drizzle/schema');
+            const { eq } = await import('drizzle-orm');
+            await db.update(orderTracking)
+              .set({ shipwellStatus: 'tendered', updatedAt: new Date() })
+              .where(eq(orderTracking.id, order.id));
+          }
           await createAuditLog({
             action: 'shipwell_tender',
             entityType: 'order',
@@ -3494,7 +3500,7 @@ const _appRouter = router({
               rate: input.totalCharge ?? null,
               shipwellBidId: input.bidId,
               shipwellShipmentId: input.shipwellShipmentId,
-              referenceNumber: order.referenceNumber ?? '',
+              referenceNum: order.referenceNum ?? '',
             }),
           });
         }

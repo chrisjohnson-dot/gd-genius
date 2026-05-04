@@ -8,7 +8,7 @@ import {
   RefreshCw, Search, AlertTriangle, Timer, CheckCircle2,
   Package, MapPin, Calendar, Clock, Flame,
   TrendingUp, Gavel, Truck, ChevronDown, ChevronUp,
-  DollarSign, Zap,
+  DollarSign, Zap, Loader2, X,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -325,6 +325,8 @@ export default function ConfirmShipping() {
   const [liveExpandedId, setLiveExpandedId] = useState<string | null>(null);
   const [tenderingBidId, setTenderingBidId] = useState<string | null>(null);
   const [confirmTender, setConfirmTender] = useState<{ bidId: string; shipmentId: string; carrierName: string; rate: number | null } | null>(null);
+
+  const utils = trpc.useUtils();
 
   const tenderLiveBidMutation = trpc.shipwell.tenderLiveBid.useMutation({
     onSuccess: () => {
@@ -674,12 +676,12 @@ export default function ConfirmShipping() {
                                     <table className="w-full text-sm">
                                       <thead>
                                         <tr className="bg-muted/60 border-b border-border">
-                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Carrier</th>
-                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">SCAC</th>
-                                          <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Transit Days</th>
-                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Expiry</th>
-                                          <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Rate</th>
-                                          <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Status</th>
+                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Contact</th>
+                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">MC# / DOT#</th>
+                                          <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Bid Amount</th>
+                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Available</th>
+                                          <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Distance</th>
+                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Notes</th>
                                           <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Action</th>
                                         </tr>
                                       </thead>
@@ -687,58 +689,49 @@ export default function ConfirmShipping() {
                                         {bids.map((bid: any, bidIdx: number) => (
                                           <tr key={bid.id ?? bidIdx} className={cn("border-b border-border last:border-0", bidIdx % 2 === 0 ? "bg-background" : "bg-muted/10")}>
                                             <td className="px-3 py-2.5">
-                                              <div className="font-medium text-foreground text-xs">{bid.carrier_name ?? bid.carrierName ?? "—"}</div>
+                                              <div className="font-medium text-foreground text-xs">{bid.contactName ?? "—"}</div>
+                                              {bid.createdByUser && bid.createdByUser !== bid.contactName && (
+                                                <div className="text-[10px] text-muted-foreground">via {bid.createdByUser}</div>
+                                              )}
                                             </td>
-                                            <td className="px-3 py-2.5">
-                                              <span className="font-mono text-[10px] text-muted-foreground">{bid.carrier_scac ?? bid.scac ?? "—"}</span>
-                                            </td>
-                                            <td className="px-3 py-2.5 text-center">
-                                              {bid.transit_days ?? bid.transitDays ? (
-                                                <span className="inline-flex items-center gap-1 text-xs font-medium">
-                                                  <Truck className="h-3 w-3 text-muted-foreground" />
-                                                  {bid.transit_days ?? bid.transitDays}d
-                                                </span>
-                                              ) : "—"}
-                                            </td>
-                                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                                              {bid.expiration_date ?? bid.expirationDate
-                                                ? new Date(bid.expiration_date ?? bid.expirationDate).toLocaleDateString()
-                                                : "—"}
+                                            <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground">
+                                              {bid.mcNumber ? <div>MC: {bid.mcNumber}</div> : null}
+                                              {bid.usdotNumber ? <div>DOT: {bid.usdotNumber}</div> : null}
+                                              {!bid.mcNumber && !bid.usdotNumber ? "—" : null}
                                             </td>
                                             <td className="px-3 py-2.5 text-right">
-                                              <span className="font-semibold text-xs">
-                                                {bid.total_amount != null
-                                                  ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(bid.total_amount)
-                                                  : bid.totalAmount != null
-                                                  ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(bid.totalAmount)
+                                              <span className="font-semibold text-xs text-emerald-700 dark:text-emerald-400">
+                                                {bid.bidAmount != null
+                                                  ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(bid.bidAmount)
                                                   : "—"}
                                               </span>
                                             </td>
-                                            <td className="px-3 py-2.5 text-center">
-                                              <span className={cn(
-                                                "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                                                bid.status === "accepted" ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-400" : "bg-zinc-100 text-zinc-600 border-zinc-300 dark:bg-zinc-500/15 dark:text-zinc-400"
-                                              )}>
-                                                {bid.status ?? "pending"}
-                                              </span>
+                                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                              {bid.availableDate
+                                                ? new Date(bid.availableDate).toLocaleDateString()
+                                                : "—"}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">
+                                              {bid.distanceMiles != null ? `${Number(bid.distanceMiles).toFixed(0)} mi` : "—"}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-[160px] truncate">
+                                              {bid.notes ?? "—"}
                                             </td>
                                             <td className="px-3 py-2.5 text-center">
-                                              {bid.status !== "accepted" && (
-                                                <Button
-                                                  size="sm"
-                                                  variant="default"
-                                                  className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white"
-                                                  disabled={tenderingBidId === bid.id}
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const rate = bid.total_amount ?? bid.totalAmount ?? null;
-                                                    const carrier = bid.carrier_name ?? bid.carrierName ?? "Unknown Carrier";
-                                                    setConfirmTender({ bidId: bid.id, shipmentId: s.id, carrierName: carrier, rate });
-                                                  }}
-                                                >
-                                                  {tenderingBidId === bid.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Tender"}
-                                                </Button>
-                                              )}
+                                              <Button
+                                                size="sm"
+                                                variant="default"
+                                                className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                disabled={tenderingBidId === bid.id}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const rate = bid.bidAmount ?? null;
+                                                  const carrier = bid.contactName ?? "Unknown Carrier";
+                                                  setConfirmTender({ bidId: bid.id, shipmentId: s.shipmentId ?? s.id, carrierName: carrier, rate });
+                                                }}
+                                              >
+                                                {tenderingBidId === bid.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Tender"}
+                                              </Button>
                                             </td>
                                           </tr>
                                         ))}
@@ -772,7 +765,7 @@ export default function ConfirmShipping() {
               )}?
             </p>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setConfirmTender(null)} disabled={tenderByBidIdMutation.isPending}>
+              <Button variant="outline" size="sm" onClick={() => setConfirmTender(null)} disabled={tenderLiveBidMutation.isPending}>
                 Cancel
               </Button>
               <Button

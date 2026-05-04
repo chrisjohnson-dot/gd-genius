@@ -373,7 +373,7 @@ function ShipwellStatusBadge({
   const isQuoting = status === "quoting";
   const bidCount = order.shipwellBidCount ?? 0;
   const [showBids, setShowBids] = useState(false);
-  const [confirmBid, setConfirmBid] = useState<{ id: string; carrierName: string | null; totalCharge: number | null } | null>(null);
+  const [confirmBid, setConfirmBid] = useState<{ id: string | null; contactName: string | null; bidAmount: number | null } | null>(null);
   const utils = trpc.useUtils();
   const tenderBid = trpc.shipwell.tenderByBidId.useMutation({
     onSuccess: (_data, vars) => {
@@ -480,62 +480,50 @@ function ShipwellStatusBadge({
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b" style={{ background: "#f8fafc" }}>
-                  <th className="text-left px-2 py-1 font-semibold text-gray-600">Carrier</th>
-                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Rate</th>
-                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Transit</th>
-                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Expires</th>
-                  <th className="text-center px-2 py-1 font-semibold text-gray-600">Status</th>
+                  <th className="text-left px-2 py-1 font-semibold text-gray-600">Contact</th>
+                  <th className="text-left px-2 py-1 font-semibold text-gray-600">MC# / DOT#</th>
+                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Bid Amount</th>
+                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Available</th>
+                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Distance</th>
                   <th className="text-center px-2 py-1 font-semibold text-gray-600">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {bidsData.bids.map((bid) => (
-                  <tr key={bid.id} className="border-b last:border-0 hover:bg-blue-50">
+                {bidsData.bids.map((bid, bidIdx) => (
+                  <tr key={bid.id ?? bidIdx} className="border-b last:border-0 hover:bg-blue-50">
                     <td className="px-2 py-1 font-medium text-gray-800">
-                      {bid.carrierName ?? "Unknown"}
-                      {bid.carrierScac && <span className="ml-1 text-gray-400">({bid.carrierScac})</span>}
+                      {bid.contactName ?? "Unknown"}
+                      {bid.createdByUser && bid.createdByUser !== bid.contactName && (
+                        <div className="text-[10px] text-gray-400">via {bid.createdByUser}</div>
+                      )}
+                    </td>
+                    <td className="px-2 py-1 text-gray-600 font-mono text-[10px]">
+                      {bid.mcNumber ? <div>MC: {bid.mcNumber}</div> : null}
+                      {bid.usdotNumber ? <div>DOT: {bid.usdotNumber}</div> : null}
+                      {!bid.mcNumber && !bid.usdotNumber ? "—" : null}
                     </td>
                     <td className="px-2 py-1 text-right font-semibold text-green-700">
-                      {bid.totalCharge != null
-                        ? `$${bid.totalCharge.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      {bid.bidAmount != null
+                        ? `$${bid.bidAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : "—"}
-                    </td>
-                    <td className="px-2 py-1 text-right text-gray-600">
-                      {bid.transitDays != null ? `${bid.transitDays}d` : "—"}
                     </td>
                     <td className="px-2 py-1 text-right text-gray-500">
-                      {bid.expirationDate
-                        ? new Date(bid.expirationDate).toLocaleDateString()
+                      {bid.availableDate
+                        ? new Date(bid.availableDate).toLocaleDateString()
                         : "—"}
                     </td>
-                    <td className="px-2 py-1 text-center">
-                      <span
-                        className="inline-block rounded px-1 py-0.5 text-[10px] font-bold"
-                        style={{
-                          background:
-                            bid.status === "accepted" ? "#dcfce7" :
-                            bid.status === "rejected" ? "#fee2e2" :
-                            "#f1f5f9",
-                          color:
-                            bid.status === "accepted" ? "#15803d" :
-                            bid.status === "rejected" ? "#b91c1c" :
-                            "#64748b",
-                        }}
-                      >
-                        {bid.status ?? "pending"}
-                      </span>
+                    <td className="px-2 py-1 text-right text-gray-500">
+                      {bid.distanceMiles != null ? `${bid.distanceMiles.toFixed(0)} mi` : "—"}
                     </td>
                     <td className="px-2 py-1 text-center">
-                      {bid.status !== "accepted" && (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmBid({ id: bid.id, carrierName: bid.carrierName, totalCharge: bid.totalCharge })}
-                          className="inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 hover:opacity-80"
-                          style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}
-                        >
-                          Tender
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setConfirmBid({ id: bid.id, contactName: bid.contactName, bidAmount: bid.bidAmount })}
+                        className="inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 hover:opacity-80"
+                        style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}
+                      >
+                        Tender
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -561,9 +549,9 @@ function ShipwellStatusBadge({
           >
             <div className="font-bold text-gray-800 text-base mb-1">Confirm Tender</div>
             <div className="text-gray-600 mb-4">
-              Tender this shipment to <span className="font-semibold text-gray-900">{confirmBid.carrierName ?? "this carrier"}</span>
-              {confirmBid.totalCharge != null && (
-                <> for <span className="font-semibold text-green-700">${confirmBid.totalCharge.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></>
+              Tender this shipment to <span className="font-semibold text-gray-900">{confirmBid.contactName ?? "this carrier"}</span>
+              {confirmBid.bidAmount != null && (
+                <> for <span className="font-semibold text-green-700">${confirmBid.bidAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></>
               )}?
             </div>
             <div className="flex gap-2 justify-end">
@@ -580,9 +568,9 @@ function ShipwellStatusBadge({
                 onClick={() => {
                   tenderBid.mutate({
                     extensivOrderId: order.extensivOrderId,
-                    shipwellBidId: confirmBid.id,
-                    carrierName: confirmBid.carrierName ?? undefined,
-                    totalCharge: confirmBid.totalCharge ?? undefined,
+                    shipwellBidId: confirmBid.id ?? "",
+                    carrierName: confirmBid.contactName ?? undefined,
+                    totalCharge: confirmBid.bidAmount ?? undefined,
                   });
                 }}
                 className="px-3 py-1.5 rounded text-xs font-semibold text-white hover:opacity-90 flex items-center gap-1"

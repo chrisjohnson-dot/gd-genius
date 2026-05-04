@@ -345,6 +345,31 @@ export default function ConfirmShipping() {
   );
   const liveShipments = liveData?.shipments ?? [];
   const liveError = liveData?.error ?? null;
+  // Facility filter for Live Quotes tab
+  const [liveFacilityFilter, setLiveFacilityFilter] = useState<string>("all");
+  const liveFacilityOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const s of liveShipments) {
+      const city = (s as any).origin_stop?.location?.address?.city ?? "";
+      const state = (s as any).origin_stop?.location?.address?.state_province ?? "";
+      const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        opts.push({ value: key, label: key });
+      }
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label));
+  }, [liveShipments]);
+  const filteredLiveShipments = useMemo(() => {
+    if (liveFacilityFilter === "all") return liveShipments;
+    return liveShipments.filter((s: any) => {
+      const city = s.origin_stop?.location?.address?.city ?? "";
+      const state = s.origin_stop?.location?.address?.state_province ?? "";
+      const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
+      return key === liveFacilityFilter;
+    });
+  }, [liveShipments, liveFacilityFilter]);
   // Live clock tick (every second for running quote age)
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -511,14 +536,38 @@ export default function ConfirmShipping() {
       {/* ── LIVE QUOTES TAB ── */}
       {activeTab === "live" && (
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <p className="text-sm text-muted-foreground">
               Real-time quoting shipments pulled directly from the Shipwell API.
             </p>
-            <Button size="sm" variant="outline" onClick={() => void liveRefetch()} disabled={liveLoading}>
-              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", liveLoading && "animate-spin")} />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              {liveFacilityOptions.length > 0 && (
+                <select
+                  value={liveFacilityFilter}
+                  onChange={(e) => setLiveFacilityFilter(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="all">All Facilities ({liveShipments.length})</option>
+                  {liveFacilityOptions.map((opt) => {
+                    const count = liveShipments.filter((s: any) => {
+                      const city = s.origin_stop?.location?.address?.city ?? "";
+                      const state = s.origin_stop?.location?.address?.state_province ?? "";
+                      const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
+                      return key === opt.value;
+                    }).length;
+                    return (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+              <Button size="sm" variant="outline" onClick={() => void liveRefetch()} disabled={liveLoading}>
+                <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", liveLoading && "animate-spin")} />
+                Refresh
+              </Button>
+            </div>
           </div>
           {liveError && (
             <div className="mb-4 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">
@@ -531,7 +580,7 @@ export default function ConfirmShipping() {
               <RefreshCw className="h-4 w-4 animate-spin" />
               Fetching live quotes from Shipwell…
             </div>
-          ) : liveShipments.length === 0 ? (
+          ) : filteredLiveShipments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
               <div className="text-sm font-medium">No outstanding quotes</div>
@@ -553,7 +602,7 @@ export default function ConfirmShipping() {
                   </tr>
                 </thead>
                 <tbody>
-                  {liveShipments.map((s: any, idx: number) => {
+                  {filteredLiveShipments.map((s: any, idx: number) => {
                     const isExpanded = liveExpandedId === s.id;
                     const bids: any[] = s.bids ?? [];
                     return (

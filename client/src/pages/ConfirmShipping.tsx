@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -316,11 +316,20 @@ function RatesPanel({ order }: { order: UnconfirmedOrder }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ConfirmShipping() {
+  const [activeTab, setActiveTab] = useState<"live" | "local">("live");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [liveExpandedId, setLiveExpandedId] = useState<string | null>(null);
+  // Live quotes directly from Shipwell API
+  const { data: liveData, isLoading: liveLoading, refetch: liveRefetch } = trpc.shipwell.listOutstandingQuotes.useQuery(
+    undefined,
+    { refetchInterval: 60_000 }
+  );
+  const liveShipments = liveData?.shipments ?? [];
+  const liveError = liveData?.error ?? null;
   // Live clock tick (every second for running quote age)
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -447,6 +456,230 @@ export default function ConfirmShipping() {
           </div>
         )}
       </div>
+
+      {/* Tab switcher */}
+      <div className="flex items-center gap-1 mb-6 border-b border-border">
+        <button
+          onClick={() => setActiveTab("live")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+            activeTab === "live"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Live Quotes from Shipwell
+          {liveShipments.length > 0 && (
+            <span className="ml-2 rounded-full bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+              {liveShipments.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("local")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+            activeTab === "local"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Local Tracking
+          {orders.length > 0 && (
+            <span className="ml-2 rounded-full bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">
+              {orders.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── LIVE QUOTES TAB ── */}
+      {activeTab === "live" && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              Real-time quoting shipments pulled directly from the Shipwell API.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => void liveRefetch()} disabled={liveLoading}>
+              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", liveLoading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
+          {liveError && (
+            <div className="mb-4 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+              <AlertTriangle className="inline h-4 w-4 mr-1.5" />
+              Shipwell API error: {liveError}
+            </div>
+          )}
+          {liveLoading ? (
+            <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Fetching live quotes from Shipwell…
+            </div>
+          ) : liveShipments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+              <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+              <div className="text-sm font-medium">No outstanding quotes</div>
+              <div className="text-xs">No shipments are currently in quoting status in Shipwell.</div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Shipwell ID</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Reference</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Customer</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Origin → Destination</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Pickup Date</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Bids</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Status</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveShipments.map((s: any, idx: number) => {
+                    const isExpanded = liveExpandedId === s.id;
+                    const bids: any[] = s.bids ?? [];
+                    return (
+                      <React.Fragment key={s.id ?? idx}>
+                        <tr
+                          key={`live-${s.id}`}
+                          className={cn(
+                            "border-b border-border transition-colors cursor-pointer",
+                            isExpanded ? "bg-primary/5" : idx % 2 === 0 ? "bg-background hover:bg-muted/30" : "bg-muted/10 hover:bg-muted/30"
+                          )}
+                          onClick={() => setLiveExpandedId(isExpanded ? null : s.id)}
+                        >
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-xs text-muted-foreground">{s.id?.slice(0, 8)}…</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono font-semibold text-xs">{s.referenceId ?? s.bol_number ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs">{s.customer_name ?? s.customer?.name ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <MapPin className="h-3 w-3 shrink-0" />
+                              <span>{s.origin_stop?.location?.address?.city ?? "?"}, {s.origin_stop?.location?.address?.state_province ?? ""}</span>
+                              <span className="mx-1">→</span>
+                              <span>{s.destination_stop?.location?.address?.city ?? "?"}, {s.destination_stop?.location?.address?.state_province ?? ""}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs">{s.pickup_date ? new Date(s.pickup_date).toLocaleDateString() : "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {bids.length > 0 ? (
+                              <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                {bids.length}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30">
+                              Quoting
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              size="sm" variant="ghost" className="h-7 w-7 p-0"
+                              title={isExpanded ? "Collapse bids" : "View carrier bids"}
+                              onClick={() => setLiveExpandedId(isExpanded ? null : s.id)}
+                            >
+                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </Button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="border-b border-border">
+                            <td colSpan={8} className="p-0">
+                              <div className="px-4 pb-4 pt-2 bg-muted/5">
+                                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
+                                  <DollarSign className="h-3.5 w-3.5" />
+                                  {bids.length} Carrier Bid{bids.length !== 1 ? "s" : ""} from Shipwell
+                                </div>
+                                {bids.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground italic">No bids received yet.</p>
+                                ) : (
+                                  <div className="rounded-lg border border-border overflow-hidden">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="bg-muted/60 border-b border-border">
+                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Carrier</th>
+                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">SCAC</th>
+                                          <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Transit Days</th>
+                                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Expiry</th>
+                                          <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Rate</th>
+                                          <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Status</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {bids.map((bid: any, bidIdx: number) => (
+                                          <tr key={bid.id ?? bidIdx} className={cn("border-b border-border last:border-0", bidIdx % 2 === 0 ? "bg-background" : "bg-muted/10")}>
+                                            <td className="px-3 py-2.5">
+                                              <div className="font-medium text-foreground text-xs">{bid.carrier_name ?? bid.carrierName ?? "—"}</div>
+                                            </td>
+                                            <td className="px-3 py-2.5">
+                                              <span className="font-mono text-[10px] text-muted-foreground">{bid.carrier_scac ?? bid.scac ?? "—"}</span>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-center">
+                                              {bid.transit_days ?? bid.transitDays ? (
+                                                <span className="inline-flex items-center gap-1 text-xs font-medium">
+                                                  <Truck className="h-3 w-3 text-muted-foreground" />
+                                                  {bid.transit_days ?? bid.transitDays}d
+                                                </span>
+                                              ) : "—"}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                              {bid.expiration_date ?? bid.expirationDate
+                                                ? new Date(bid.expiration_date ?? bid.expirationDate).toLocaleDateString()
+                                                : "—"}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right">
+                                              <span className="font-semibold text-xs">
+                                                {bid.total_amount != null
+                                                  ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(bid.total_amount)
+                                                  : bid.totalAmount != null
+                                                  ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(bid.totalAmount)
+                                                  : "—"}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-center">
+                                              <span className={cn(
+                                                "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                                                bid.status === "accepted" ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-400" : "bg-zinc-100 text-zinc-600 border-zinc-300 dark:bg-zinc-500/15 dark:text-zinc-400"
+                                              )}>
+                                                {bid.status ?? "pending"}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── LOCAL TRACKING TAB ── */}
+      {activeTab === "local" && (
+        <div>
 
       {/* KPI tiles */}
       <div className="grid grid-cols-6 gap-3 mb-6">
@@ -744,6 +977,8 @@ export default function ConfirmShipping() {
       <div className="mt-4 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300">
         <strong>Note:</strong> Orders labelled "MOCK DATA" are test records seeded for UI review. Real orders will appear here once they reach Ship Ready status and are sent to Shipwell during QC pack-out.
       </div>
+        </div>
+      )}
     </div>
   );
 }

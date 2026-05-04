@@ -3387,6 +3387,68 @@ const _appRouter = router({
         });
         return { success: true };
       }),
+    /**
+     * Fetch all outstanding shipping quotes directly from the Shipwell API.
+     * Returns all shipments currently in "quoting" status with their live carrier bids.
+     */
+    listOutstandingQuotes: protectedProcedure.query(async () => {
+      const config = await getShipwellConfig();
+      if (!config) return { shipments: [], error: 'No Shipwell configuration found.' as string | null };
+      const client = createShipwellClient({
+        email: config.email,
+        password: config.password,
+        environment: config.environment as 'production' | 'sandbox',
+      });
+      try {
+        // Fetch all shipments in quoting status (up to 200)
+        const { results: shipments } = await client.listShipments({ status: 'quoting', limit: 200 });
+        if (shipments.length === 0) return { shipments: [], error: null };
+
+        // For each quoting shipment, fetch its carrier bids in parallel
+        const enriched = await Promise.all(
+          shipments.map(async (shipment) => {
+            let bids: { id: string; carrierName: string | null; carrierScac: string | null; totalChargeAmount: number | null; currency: string; transitDays: number | null; serviceType: string | null; serviceLevel: string | null; expirationDate: string | null; status: string | null; notes: string | null }[] = [];
+            try {
+              const rawBids = await client.getCarrierBids(shipment.id);
+              bids = rawBids.map((b) => ({
+                id: b.id,
+                carrierName: b.carrier_name ?? null,
+                carrierScac: b.carrier_scac ?? null,
+                totalChargeAmount: b.total_charge_amount ?? null,
+                currency: b.currency ?? 'USD',
+                transitDays: b.transit_days ?? null,
+                serviceType: b.service_type ?? null,
+                serviceLevel: b.service_level ?? null,
+                expirationDate: b.expiration_date ?? null,
+                status: b.status ?? null,
+                notes: b.notes ?? null,
+              }));
+            } catch {
+              // bid fetch failure for one shipment should not block the rest
+            }
+            const charges = bids.map((b) => b.totalChargeAmount).filter((v): v is number => v !== null);
+            return {
+              shipmentId: shipment.id,
+              status: shipment.status ?? 'quoting',
+              referenceId: shipment.reference_id ?? null,
+              customerReferenceNumber: shipment.customer_reference_number ?? null,
+              createdAt: shipment.created_at ?? null,
+              updatedAt: shipment.updated_at ?? null,
+              bidCount: bids.length,
+              lowestBidAmount: charges.length > 0 ? Math.min(...charges) : null,
+              bids,
+            };
+          })
+        );
+
+        // Sort: most bids first, then newest first
+        enriched.sort((a, b) => b.bidCount - a.bidCount || (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+        return { shipments: enriched, error: null };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { shipments: [], error: `Shipwell API error: ${msg}` };
+      }
+    }),
   }),
   // ─── SLA Tracker ──────────────────────────────────────────────────────────────
   sla: router({

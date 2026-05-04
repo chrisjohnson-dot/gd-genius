@@ -19,6 +19,7 @@ import {
   ChevronUp,
   Clock,
   ExternalLink,
+  Loader2,
   MessageSquare,
   Package,
   PackageSearch,
@@ -371,6 +372,7 @@ function ShipwellStatusBadge({
   const href = order.shipwellShipmentUrl ?? order.shipwellPoUrl ?? "#";
   const isQuoting = status === "quoting";
   const bidCount = order.shipwellBidCount ?? 0;
+  const [showBids, setShowBids] = useState(false);
   const thresholdMs = thresholdHours * 60 * 60 * 1000;
   const quotingStarted = order.shipwellQuotingStartedAt
     ? new Date(order.shipwellQuotingStartedAt as string)
@@ -383,46 +385,142 @@ function ShipwellStatusBadge({
   const hoursInQuoting = quotingStarted
     ? Math.floor(quotingAgeMs / (60 * 60 * 1000))
     : 0;
+
+  const { data: bidsData, isLoading: bidsLoading } = trpc.shipwell.listCarrierBids.useQuery(
+    { shipmentId: order.shipwellShipmentId ?? "" },
+    { enabled: showBids && !!order.shipwellShipmentId }
+  );
+
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className="inline-flex items-center gap-1 text-[10px] font-bold rounded px-1.5 py-0.5 whitespace-nowrap hover:opacity-80 transition-opacity"
-      style={{
-        background: showZeroBidWarning ? "#fff7ed" : cfg.bg,
-        color: showZeroBidWarning ? "#c2410c" : cfg.text,
-        border: `1px solid ${showZeroBidWarning ? "#fed7aa" : cfg.border}`,
-      }}
-      title={
-        showZeroBidWarning
-          ? `⚠️ Zero bids for ${hoursInQuoting}h`
-          : `Shipwell: ${cfg.label}`
-      }
-    >
-      {showZeroBidWarning ? (
-        <AlertTriangle className="h-2.5 w-2.5 text-orange-500" />
-      ) : (
-        <ExternalLink className="h-2.5 w-2.5" />
-      )}
-      {cfg.label}
-      {isQuoting && (
-        <span
-          className="ml-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-bold min-w-[16px] h-4 px-1"
+    <div className="inline-block" onClick={(e) => e.stopPropagation()}>
+      <div className="inline-flex items-center gap-0.5">
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[10px] font-bold rounded px-1.5 py-0.5 whitespace-nowrap hover:opacity-80 transition-opacity"
           style={{
-            background: showZeroBidWarning
-              ? "#ea580c"
-              : bidCount > 0
-              ? "#1d4ed8"
-              : "#94a3b8",
-            color: "#fff",
+            background: showZeroBidWarning ? "#fff7ed" : cfg.bg,
+            color: showZeroBidWarning ? "#c2410c" : cfg.text,
+            border: `1px solid ${showZeroBidWarning ? "#fed7aa" : cfg.border}`,
           }}
+          title={
+            showZeroBidWarning
+              ? `⚠️ Zero bids for ${hoursInQuoting}h — action required`
+              : `Shipwell: ${cfg.label}${isQuoting ? ` — ${bidCount} bid${bidCount !== 1 ? "s" : ""} received` : ""}`
+          }
         >
-          {bidCount}
-        </span>
+          {showZeroBidWarning ? (
+            <AlertTriangle className="h-2.5 w-2.5 text-orange-500" />
+          ) : (
+            <ExternalLink className="h-2.5 w-2.5" />
+          )}
+          {cfg.label}
+          {isQuoting && (
+            <span
+              className="ml-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-bold min-w-[16px] h-4 px-1"
+              style={{
+                background: showZeroBidWarning
+                  ? "#ea580c"
+                  : bidCount > 0
+                  ? "#1d4ed8"
+                  : "#94a3b8",
+                color: "#fff",
+              }}
+            >
+              {bidCount}
+            </span>
+          )}
+        </a>
+        {isQuoting && !!order.shipwellShipmentId && (
+          <button
+            type="button"
+            onClick={() => setShowBids((v) => !v)}
+            className="inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1 py-0.5 ml-0.5 hover:opacity-80 transition-opacity"
+            style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}
+            title={showBids ? "Hide carrier bids" : "View carrier bids"}
+          >
+            {showBids ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+            Bids
+          </button>
+        )}
+      </div>
+      {showBids && !!order.shipwellShipmentId && (
+        <div
+          className="mt-1 rounded border bg-white shadow-md text-xs"
+          style={{ minWidth: 280, maxWidth: 420, border: "1px solid #bfdbfe" }}
+        >
+          <div className="flex items-center justify-between px-2 py-1 border-b" style={{ background: "#eff6ff" }}>
+            <span className="font-semibold text-blue-800">Carrier Bids</span>
+            <button type="button" onClick={() => setShowBids(false)} className="text-blue-400 hover:text-blue-700">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          {bidsLoading ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 text-gray-500">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading bids…
+            </div>
+          ) : !bidsData || bidsData.bids.length === 0 ? (
+            <div className="px-3 py-2 text-gray-400 italic">No bids received yet.</div>
+          ) : (
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b" style={{ background: "#f8fafc" }}>
+                  <th className="text-left px-2 py-1 font-semibold text-gray-600">Carrier</th>
+                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Rate</th>
+                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Transit</th>
+                  <th className="text-right px-2 py-1 font-semibold text-gray-600">Expires</th>
+                  <th className="text-center px-2 py-1 font-semibold text-gray-600">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bidsData.bids.map((bid) => (
+                  <tr key={bid.id} className="border-b last:border-0 hover:bg-blue-50">
+                    <td className="px-2 py-1 font-medium text-gray-800">
+                      {bid.carrierName ?? "Unknown"}
+                      {bid.carrierScac && <span className="ml-1 text-gray-400">({bid.carrierScac})</span>}
+                    </td>
+                    <td className="px-2 py-1 text-right font-semibold text-green-700">
+                      {bid.totalCharge != null
+                        ? `$${bid.totalCharge.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right text-gray-600">
+                      {bid.transitDays != null ? `${bid.transitDays}d` : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right text-gray-500">
+                      {bid.expirationDate
+                        ? new Date(bid.expirationDate).toLocaleDateString()
+                        : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-center">
+                      <span
+                        className="inline-block rounded px-1 py-0.5 text-[10px] font-bold"
+                        style={{
+                          background:
+                            bid.status === "accepted" ? "#dcfce7" :
+                            bid.status === "rejected" ? "#fee2e2" :
+                            "#f1f5f9",
+                          color:
+                            bid.status === "accepted" ? "#15803d" :
+                            bid.status === "rejected" ? "#b91c1c" :
+                            "#64748b",
+                        }}
+                      >
+                        {bid.status ?? "pending"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div className="px-2 py-1 text-[10px] text-gray-400 border-t">
+            {bidsData ? `${bidsData.totalCount} bid${bidsData.totalCount !== 1 ? "s" : ""} total` : ""}
+          </div>
+        </div>
       )}
-    </a>
+    </div>
   );
 }
 

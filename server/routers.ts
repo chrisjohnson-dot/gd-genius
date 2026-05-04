@@ -3431,13 +3431,24 @@ const _appRouter = router({
               // bid fetch failure for one shipment should not block the rest
             }
             const charges = bids.map((b) => b.bidAmount).filter((v): v is number => v !== null);
+            // Derive origin/destination from stops array or direct fields
+            const stops = shipment.stops ?? [];
+            const originStop = shipment.origin_stop ?? stops.find((s) => s.stop_type === 'pickup') ?? stops[0] ?? null;
+            const destStop = shipment.destination_stop ?? stops.find((s) => s.stop_type === 'delivery') ?? stops[stops.length - 1] ?? null;
+            const pickupDate = originStop?.planned_date ?? originStop?.planned_time_window_start ?? null;
             return {
               shipmentId: shipment.id,
               status: shipment.status ?? 'quoting',
               referenceId: shipment.reference_id ?? null,
               customerReferenceNumber: shipment.customer_reference_number ?? null,
+              customerName: shipment.customer_name ?? null,
               createdAt: shipment.created_at ?? null,
               updatedAt: shipment.updated_at ?? null,
+              originCity: originStop?.location?.address?.city ?? null,
+              originState: originStop?.location?.address?.state_province ?? null,
+              destCity: destStop?.location?.address?.city ?? null,
+              destState: destStop?.location?.address?.state_province ?? null,
+              pickupDate: pickupDate ?? null,
               bidCount: bids.length,
               lowestBidAmount: charges.length > 0 ? Math.min(...charges) : null,
               bids,

@@ -353,8 +353,8 @@ export default function ConfirmShipping() {
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
     for (const s of liveShipments) {
-      const city = (s as any).origin_stop?.location?.address?.city ?? "";
-      const state = (s as any).origin_stop?.location?.address?.state_province ?? "";
+      const city = (s as any).originCity ?? "";
+      const state = (s as any).originState ?? "";
       const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
       if (key && !seen.has(key)) {
         seen.add(key);
@@ -366,8 +366,8 @@ export default function ConfirmShipping() {
   const filteredLiveShipments = useMemo(() => {
     if (liveFacilityFilter === "all") return liveShipments;
     return liveShipments.filter((s: any) => {
-      const city = s.origin_stop?.location?.address?.city ?? "";
-      const state = s.origin_stop?.location?.address?.state_province ?? "";
+      const city = s.originCity ?? "";
+      const state = s.originState ?? "";
       const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
       return key === liveFacilityFilter;
     });
@@ -552,8 +552,8 @@ export default function ConfirmShipping() {
                   <option value="all">All Facilities ({liveShipments.length})</option>
                   {liveFacilityOptions.map((opt) => {
                     const count = liveShipments.filter((s: any) => {
-                      const city = s.origin_stop?.location?.address?.city ?? "";
-                      const state = s.origin_stop?.location?.address?.state_province ?? "";
+                      const city = s.originCity ?? "";
+                      const state = s.originState ?? "";
                       const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
                       return key === opt.value;
                     }).length;
@@ -605,37 +605,37 @@ export default function ConfirmShipping() {
                 </thead>
                 <tbody>
                   {filteredLiveShipments.map((s: any, idx: number) => {
-                    const isExpanded = liveExpandedId === s.id;
+                    const isExpanded = liveExpandedId === (s.shipmentId ?? s.id);
                     const bids: any[] = s.bids ?? [];
                     return (
-                      <React.Fragment key={s.id ?? idx}>
+                      <React.Fragment key={s.shipmentId ?? s.id ?? idx}>
                         <tr
-                          key={`live-${s.id}`}
+                          key={`live-${s.shipmentId ?? s.id}`}
                           className={cn(
                             "border-b border-border transition-colors cursor-pointer",
                             isExpanded ? "bg-primary/5" : idx % 2 === 0 ? "bg-background hover:bg-muted/30" : "bg-muted/10 hover:bg-muted/30"
                           )}
-                          onClick={() => setLiveExpandedId(isExpanded ? null : s.id)}
+                          onClick={() => setLiveExpandedId(isExpanded ? null : (s.shipmentId ?? s.id))}
                         >
                           <td className="px-4 py-3">
-                            <span className="font-mono text-xs text-muted-foreground">{s.id?.slice(0, 8)}…</span>
+                            <span className="font-mono text-xs text-muted-foreground">{(s.shipmentId ?? s.id)?.slice(0, 8)}…</span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="font-mono font-semibold text-xs">{s.referenceId ?? s.bol_number ?? "—"}</span>
+                            <span className="font-mono font-semibold text-xs">{s.referenceId ?? s.customerReferenceNumber ?? "—"}</span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-xs">{s.customer_name ?? s.customer?.name ?? "—"}</span>
+                            <span className="text-xs">{s.customerName ?? "—"}</span>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                               <MapPin className="h-3 w-3 shrink-0" />
-                              <span>{s.origin_stop?.location?.address?.city ?? "?"}, {s.origin_stop?.location?.address?.state_province ?? ""}</span>
+                              <span>{s.originCity ?? "?"}{s.originState ? `, ${s.originState}` : ""}</span>
                               <span className="mx-1">→</span>
-                              <span>{s.destination_stop?.location?.address?.city ?? "?"}, {s.destination_stop?.location?.address?.state_province ?? ""}</span>
+                              <span>{s.destCity ?? "?"}{s.destState ? `, ${s.destState}` : ""}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-xs">{s.pickup_date ? new Date(s.pickup_date).toLocaleDateString() : "—"}</span>
+                            <span className="text-xs">{s.pickupDate ? new Date(s.pickupDate).toLocaleDateString() : "—"}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {bids.length > 0 ? (
@@ -655,7 +655,7 @@ export default function ConfirmShipping() {
                             <Button
                               size="sm" variant="ghost" className="h-7 w-7 p-0"
                               title={isExpanded ? "Collapse bids" : "View carrier bids"}
-                              onClick={() => setLiveExpandedId(isExpanded ? null : s.id)}
+                              onClick={() => setLiveExpandedId(isExpanded ? null : (s.shipmentId ?? s.id))}
                             >
                               {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                             </Button>

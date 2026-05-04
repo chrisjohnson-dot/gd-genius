@@ -87,6 +87,23 @@ export interface ShipwellPurchaseOrder {
   created_at?: string | null;
 }
 
+export interface ShipwellStop {
+  stop_type?: string | null;          // 'pickup' | 'delivery'
+  planned_date?: string | null;
+  planned_time_window_start?: string | null;
+  location?: {
+    location_name?: string | null;
+    location_type?: string | null;
+    address?: {
+      address_1?: string | null;
+      city?: string | null;
+      state_province?: string | null;
+      postal_code?: string | null;
+      country?: string | null;
+    } | null;
+  } | null;
+}
+
 export interface ShipwellShipment {
   id: string;
   status?: string | null;
@@ -94,6 +111,13 @@ export interface ShipwellShipment {
   customer_reference_number?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  // Customer info
+  customer_name?: string | null;
+  // Stop info — the API returns an array of stops
+  stops?: ShipwellStop[] | null;
+  // Convenience aliases sometimes returned by the API
+  origin_stop?: ShipwellStop | null;
+  destination_stop?: ShipwellStop | null;
   // Tracking & carrier assignment fields
   pro_number?: string | null;
   bol_number?: string | null;

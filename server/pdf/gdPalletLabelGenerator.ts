@@ -215,16 +215,19 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);
 
   // ── SECTION 3: Packing slip ────────────────────────────────────────────────
-  const COL_SKU  = MARGIN;
-  const COL_DESC = MARGIN + 90;
-  const COL_QTY  = PW - MARGIN - 20;
-  const HDR_Y    = y + 5;
-  const ROW_H    = 17;  // pt per row
+  // Four columns: SKU | Description | Units | Cases
+  const COL_SKU   = MARGIN;
+  const COL_DESC  = MARGIN + 90;
+  const COL_CASES = PW - MARGIN - 22;          // right-most: Cases
+  const COL_UNITS = COL_CASES - 36;            // second from right: Units
+  const HDR_Y     = y + 5;
+  const ROW_H     = 17;  // pt per row
 
   doc.fillColor(BLACK).fontSize(7).font("Helvetica-Bold");
-  doc.text("SKU",         COL_SKU,  HDR_Y, { lineBreak: false });
-  doc.text("Description", COL_DESC, HDR_Y, { lineBreak: false });
-  doc.text("Qty",         COL_QTY,  HDR_Y, { lineBreak: false });
+  doc.text("SKU",         COL_SKU,   HDR_Y, { lineBreak: false });
+  doc.text("Description", COL_DESC,  HDR_Y, { lineBreak: false });
+  doc.text("Units",       COL_UNITS, HDR_Y, { lineBreak: false });
+  doc.text("Cases",       COL_CASES, HDR_Y, { lineBreak: false });
   _hline(doc, HDR_Y + 11, MARGIN, PW - MARGIN, 0.5);
 
   const maxRows = Math.floor((SLIP_H - 20) / ROW_H);
@@ -232,11 +235,14 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   for (let i = 0; i < maxRows; i++) {
     const ry = HDR_Y + 14 + i * ROW_H;
     if (i < p.items.length) {
-      const item = p.items[i];
+      const item  = p.items[i];
+      const cases = item.qty;
+      const units = item.qty * (item.caseAmount ?? 1);
       doc.fillColor(BLACK).fontSize(7).font("Helvetica");
-      doc.text(item.sku,                     COL_SKU,  ry + 2, { lineBreak: false, width: COL_DESC - COL_SKU - 4 });
-      doc.text(item.description ?? "",       COL_DESC, ry + 2, { lineBreak: false, width: COL_QTY - COL_DESC - 4 });
-      doc.text(String(item.qty),             COL_QTY,  ry + 2, { lineBreak: false });
+      doc.text(item.sku,              COL_SKU,   ry + 2, { lineBreak: false, width: COL_DESC  - COL_SKU  - 4 });
+      doc.text(item.description ?? "", COL_DESC, ry + 2, { lineBreak: false, width: COL_UNITS - COL_DESC - 4 });
+      doc.text(String(units),         COL_UNITS, ry + 2, { lineBreak: false });
+      doc.text(String(cases),         COL_CASES, ry + 2, { lineBreak: false });
     }
     // Ruled line after each row
     _hline(doc, ry + ROW_H - 1, MARGIN, PW - MARGIN, 0.25, LIGHT_GRAY);

@@ -1184,6 +1184,18 @@ function WarehouseCard({
     [facility.orders]
   );
 
+  // Total bids across all quoting orders in this facility
+  const quotingBidTotal = useMemo(
+    () => facility.orders
+      .filter((o) => o.shipwellStatus === "quoting")
+      .reduce((sum, o) => sum + (o.shipwellBidCount ?? 0), 0),
+    [facility.orders]
+  );
+  const quotingOrderCount = useMemo(
+    () => facility.orders.filter((o) => o.shipwellStatus === "quoting").length,
+    [facility.orders]
+  );
+
   const hasUrgent = facility.orders.some((o) => getAgeDays(o) >= 7);
   const hasHigh =
     !hasUrgent && facility.orders.some((o) => getAgeDays(o) >= 3);
@@ -1755,6 +1767,15 @@ function WarehouseCard({
                     {overdueCount} overdue
                   </span>
                 )}
+                {quotingOrderCount > 0 && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: quotingBidTotal > 0 ? "#dbeafe" : "#f1f5f9", color: quotingBidTotal > 0 ? "#1d4ed8" : "#64748b", border: quotingBidTotal > 0 ? "1px solid #bfdbfe" : "1px solid #cbd5e1" }}
+                    title={`${quotingOrderCount} order${quotingOrderCount !== 1 ? "s" : ""} in quoting — ${quotingBidTotal} bid${quotingBidTotal !== 1 ? "s" : ""} received`}
+                  >
+                    {quotingBidTotal} bid{quotingBidTotal !== 1 ? "s" : ""}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -1916,6 +1937,15 @@ function WarehouseCard({
                     }}
                   >
                     {overdueCount} overdue
+                  </span>
+                )}
+                {quotingOrderCount > 0 && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: quotingBidTotal > 0 ? "#dbeafe" : "#f1f5f9", color: quotingBidTotal > 0 ? "#1d4ed8" : "#64748b", border: quotingBidTotal > 0 ? "1px solid #bfdbfe" : "1px solid #cbd5e1" }}
+                    title={`${quotingOrderCount} order${quotingOrderCount !== 1 ? "s" : ""} in quoting — ${quotingBidTotal} bid${quotingBidTotal !== 1 ? "s" : ""} received`}
+                  >
+                    {quotingBidTotal} bid{quotingBidTotal !== 1 ? "s" : ""}
                   </span>
                 )}
               </p>

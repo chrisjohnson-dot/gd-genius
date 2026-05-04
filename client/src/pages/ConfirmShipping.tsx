@@ -323,6 +323,21 @@ export default function ConfirmShipping() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [liveExpandedId, setLiveExpandedId] = useState<string | null>(null);
+  const [tenderingBidId, setTenderingBidId] = useState<string | null>(null);
+  const [confirmTender, setConfirmTender] = useState<{ bidId: string; shipmentId: string; carrierName: string; rate: number | null } | null>(null);
+
+  const tenderLiveBidMutation = trpc.shipwell.tenderLiveBid.useMutation({
+    onSuccess: () => {
+      toast.success("Carrier tendered successfully");
+      setConfirmTender(null);
+      setTenderingBidId(null);
+      utils.shipwell.listOutstandingQuotes.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message ?? "Failed to tender carrier");
+      setTenderingBidId(null);
+    },
+  });
   // Live quotes directly from Shipwell API
   const { data: liveData, isLoading: liveLoading, refetch: liveRefetch } = trpc.shipwell.listOutstandingQuotes.useQuery(
     undefined,
@@ -616,6 +631,7 @@ export default function ConfirmShipping() {
                                           <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Expiry</th>
                                           <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Rate</th>
                                           <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Status</th>
+                                          <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Action</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -657,6 +673,24 @@ export default function ConfirmShipping() {
                                                 {bid.status ?? "pending"}
                                               </span>
                                             </td>
+                                            <td className="px-3 py-2.5 text-center">
+                                              {bid.status !== "accepted" && (
+                                                <Button
+                                                  size="sm"
+                                                  variant="default"
+                                                  className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                  disabled={tenderingBidId === bid.id}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const rate = bid.total_amount ?? bid.totalAmount ?? null;
+                                                    const carrier = bid.carrier_name ?? bid.carrierName ?? "Unknown Carrier";
+                                                    setConfirmTender({ bidId: bid.id, shipmentId: s.id, carrierName: carrier, rate });
+                                                  }}
+                                                >
+                                                  {tenderingBidId === bid.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Tender"}
+                                                </Button>
+                                              )}
+                                            </td>
                                           </tr>
                                         ))}
                                       </tbody>
@@ -674,6 +708,42 @@ export default function ConfirmShipping() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── TENDER CONFIRMATION DIALOG (Live Quotes) ── */}
+      {confirmTender && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card border border-border rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h3 className="text-base font-semibold mb-1">Confirm Tender</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Tender <span className="font-semibold text-foreground">{confirmTender.carrierName}</span>
+              {confirmTender.rate != null && (
+                <> at <span className="font-semibold text-foreground">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(confirmTender.rate)}</span></>
+              )}?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setConfirmTender(null)} disabled={tenderByBidIdMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={tenderLiveBidMutation.isPending}
+                onClick={() => {
+                  setTenderingBidId(confirmTender.bidId);
+                  tenderLiveBidMutation.mutate({
+                    bidId: confirmTender.bidId,
+                    shipwellShipmentId: confirmTender.shipmentId,
+                    carrierName: confirmTender.carrierName,
+                    totalCharge: confirmTender.rate ?? undefined,
+                  });
+                }}
+              >
+                {tenderLiveBidMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Confirm Tender"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

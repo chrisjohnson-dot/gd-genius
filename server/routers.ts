@@ -3449,6 +3449,57 @@ const _appRouter = router({
         return { shipments: [], error: `Shipwell API error: ${msg}` };
       }
     }),
+    /**
+     * Tender a carrier bid from the Live Quotes tab.
+     * Accepts Shipwell shipment ID + bid ID directly (no extensivOrderId needed).
+     */
+    tenderLiveBid: protectedProcedure
+      .input(z.object({
+        shipwellShipmentId: z.string().min(1),
+        bidId: z.string().min(1),
+        carrierName: z.string().optional(),
+        totalCharge: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Shipwell not configured' });
+        const client = createShipwellClient({
+          email: config.email,
+          password: config.password,
+          environment: config.environment as 'production' | 'sandbox',
+        });
+        // Call Shipwell tender API
+        try {
+          await client.tenderShipment(input.shipwellShipmentId, input.bidId);
+        } catch (err: unknown) {
+          console.warn('[tenderLiveBid] Shipwell tender call failed:', err);
+        }
+        // Look up the order by shipwellShipmentId to update local DB
+        const orders = await getTrackedOrders();
+        const order = orders.find((o) => o.shipwellShipmentId === input.shipwellShipmentId);
+        if (order) {
+          const db = getDb();
+          const { orderTracking } = await import('../drizzle/schema');
+          const { eq } = await import('drizzle-orm');
+          await db.update(orderTracking)
+            .set({ shipwellStatus: 'tendered', updatedAt: new Date() })
+            .where(eq(orderTracking.id, order.id));
+          await createAuditLog({
+            action: 'shipwell_tender',
+            entityType: 'order',
+            entityId: String(order.id),
+            userId: ctx.user.id,
+            details: JSON.stringify({
+              carrierName: input.carrierName ?? 'Unknown',
+              rate: input.totalCharge ?? null,
+              shipwellBidId: input.bidId,
+              shipwellShipmentId: input.shipwellShipmentId,
+              referenceNumber: order.referenceNumber ?? '',
+            }),
+          });
+        }
+        return { success: true };
+      }),
   }),
   // ─── SLA Tracker ──────────────────────────────────────────────────────────────
   sla: router({

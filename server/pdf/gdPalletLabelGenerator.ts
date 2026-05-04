@@ -107,7 +107,7 @@ export interface GdPalletLabelData {
   totalPallets: number;
   palletUpc: string;   // used as barcode value
   // Items on this pallet
-  items: Array<{ sku: string; description?: string | null; qty: number }>;
+  items: Array<{ sku: string; description?: string | null; qty: number; caseAmount?: number }>;
 }
 
 // ─── Main generator ───────────────────────────────────────────────────────────
@@ -188,8 +188,8 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   doc.text("Transaction ID", MARGIN, INFO_LABEL_Y, { lineBreak: false });
   doc.text("Weight & Dims",  MID + MARGIN, INFO_LABEL_Y, { lineBreak: false });
 
-  doc.fillColor(BLACK).fontSize(26).font("Helvetica-Bold");
-  doc.text(String(p.transactionId), MARGIN, INFO_TX_Y, { lineBreak: false });
+  doc.fillColor(BLACK).fontSize(18).font("Helvetica-Bold");
+  doc.text(String(p.transactionId), MARGIN, INFO_TX_Y, { lineBreak: false, width: MID - MARGIN * 2 });
 
   const weightStr = p.weightLbs != null ? `${p.weightLbs} LBS` : "—";
   const dimStr    = (p.dimL != null && p.dimW != null && p.dimH != null)
@@ -245,28 +245,30 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   y += SLIP_H;
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);
 
-  // ── SECTION 4: Total QTY + Pallet ─────────────────────────────────────────
-  const totalQty = p.items.reduce((s, i) => s + i.qty, 0);
-  // Font size chosen so text fills ~80% of FOOT_H (36pt band → 18pt font)
-  const FOOT_FONT = 18;
-  // PDFKit text Y is the top of the ascender line. For Helvetica Bold 18pt,
-  // the rendered cap-height is ~12.6pt and the ascender adds ~4pt above caps.
-  // To visually center the capital letters in the 36pt band:
-  //   visual center = FOOT_H/2 = 18pt from top of band
-  //   cap top = footY + ~4pt (ascender above caps)
-  //   cap bottom = footY + ~4 + 12.6 ≈ footY + 16.6pt
-  //   so footY = 18 - (16.6/2) - 4 ≈ 5.7 → round to 6
-  // FOOT_H = 44pt. 18pt Helvetica Bold rendered cap-height ≈ 13pt.
-  // Visual center offset = (44 - 13) / 2 ≈ 15pt from top of band.
-  const footY = y + 15;
-  const palletStr = `Pallet: ${p.palletNumber} of ${p.totalPallets}`;
+  // ── SECTION 4: Pallet X of Y | N Units | N Cases ─────────────────────────
+  const totalCases = p.items.reduce((s, i) => s + i.qty, 0);
+  const totalUnits = p.items.reduce((s, i) => s + i.qty * (i.caseAmount ?? 1), 0);
+  // Use 14pt font so all three items fit on one line comfortably
+  const FOOT_FONT = 14;
+  // FOOT_H = 44pt. 14pt Helvetica Bold rendered cap-height ≈ 10pt.
+  // Visual center offset = (44 - 10) / 2 ≈ 17pt from top of band.
+  const footY = y + 17;
+  const palletStr  = `Pallet: ${p.palletNumber} of ${p.totalPallets}`;
+  const unitsStr   = `${totalUnits} Units`;
+  const casesStr   = `${totalCases} Cases`;
   doc.fillColor(BLACK).fontSize(FOOT_FONT).font("Helvetica-Bold");
-  // Left-justify Pallet
+  // Left: Pallet X of Y
   doc.text(palletStr, MARGIN, footY, { lineBreak: false });
-  // Right-justify Total QTY — measure text width then position so right edge aligns with label right margin
-  const totalQtyStr = `Total QTY: ${totalQty}`;
-  const totalQtyWidth = doc.widthOfString(totalQtyStr);
-  doc.text(totalQtyStr, PW - MARGIN - totalQtyWidth, footY, { lineBreak: false });
+  // Right: Cases (right-justified)
+  const casesWidth = doc.widthOfString(casesStr);
+  doc.text(casesStr, PW - MARGIN - casesWidth, footY, { lineBreak: false });
+  // Middle: Units — centered between left text end and right text start
+  const palletWidth = doc.widthOfString(palletStr);
+  const leftEdge  = MARGIN + palletWidth + 6;
+  const rightEdge = PW - MARGIN - casesWidth - 6;
+  const unitsWidth = doc.widthOfString(unitsStr);
+  const unitsMidX  = leftEdge + (rightEdge - leftEdge - unitsWidth) / 2;
+  doc.text(unitsStr, Math.max(leftEdge, unitsMidX), footY, { lineBreak: false });
 
   y += FOOT_H;
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);

@@ -739,16 +739,19 @@ export default function QcScanner() {
               });
             }
           }
-          // Persist pallet item assignments to server so they survive page refresh
-          // Use the already-updated palletsRef (after setPallets above) to get the capped qty
+          // Persist pallet item assignments to server so they survive page refresh.
+          // IMPORTANT: use the pallet-local qty (prevPalletQty + scannedAmount), NOT the
+          // session-level committedTotal — that value accumulates across all pallets and
+          // would write a cumulative count to subsequent pallets.
           const latestPallet = palletsRef.current.find((p) => p.id === activePallet.id);
           const existingItemsForPersist = (latestPallet?.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
           const existingForPersist = existingItemsForPersist.find((i) => i.sku === scannedSku);
-          // Use server-committed scannedQty capped at expectedQty — never write over-count to DB
-          const cappedPersistQty = Math.min(committedTotal, expectedQty === Infinity ? committedTotal : expectedQty);
+          const prevPalletQtyForPersist = existingForPersist?.qty ?? 0;
+          // Cap at expectedQty so we never write an over-count to the DB
+          const palletLocalQty = Math.min(prevPalletQtyForPersist + scannedAmount, expectedQty === Infinity ? prevPalletQtyForPersist + scannedAmount : expectedQty);
           const newItemsForPersist = existingForPersist
-            ? existingItemsForPersist.map((i) => i.sku === scannedSku ? { ...i, qty: cappedPersistQty } : i)
-            : [...existingItemsForPersist, { sku: scannedSku, upc: scannedUpc, qty: cappedPersistQty }];
+            ? existingItemsForPersist.map((i) => i.sku === scannedSku ? { ...i, qty: palletLocalQty } : i)
+            : [...existingItemsForPersist, { sku: scannedSku, upc: scannedUpc, qty: palletLocalQty }];
           updatePalletItems.mutate({ palletId: activePallet.id, items: newItemsForPersist });
         }
       }

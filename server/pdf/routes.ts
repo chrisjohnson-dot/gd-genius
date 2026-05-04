@@ -678,6 +678,7 @@ export function registerPdfRoutes(app: Express) {
           sku: pi.sku,
           description: itemMap.get(pi.sku)?.description ?? undefined,
           qty: pi.qty,
+          caseAmount: itemMap.get(pi.sku)?.caseAmount ?? 1,
         })),
       };
     });

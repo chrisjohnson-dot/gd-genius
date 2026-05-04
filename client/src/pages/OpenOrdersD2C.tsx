@@ -373,6 +373,20 @@ function ShipwellStatusBadge({
   const isQuoting = status === "quoting";
   const bidCount = order.shipwellBidCount ?? 0;
   const [showBids, setShowBids] = useState(false);
+  const [confirmBid, setConfirmBid] = useState<{ id: string; carrierName: string | null; totalCharge: number | null } | null>(null);
+  const utils = trpc.useUtils();
+  const tenderBid = trpc.shipwell.tenderByBidId.useMutation({
+    onSuccess: (_data, vars) => {
+      toast.success(`Tendered to ${vars.carrierName ?? "carrier"} successfully`);
+      setConfirmBid(null);
+      setShowBids(false);
+      utils.pickSchedule.listByChannel.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Tender failed: ${err.message}`);
+      setConfirmBid(null);
+    },
+  });
   const thresholdMs = thresholdHours * 60 * 60 * 1000;
   const quotingStarted = order.shipwellQuotingStartedAt
     ? new Date(order.shipwellQuotingStartedAt as string)
@@ -471,6 +485,7 @@ function ShipwellStatusBadge({
                   <th className="text-right px-2 py-1 font-semibold text-gray-600">Transit</th>
                   <th className="text-right px-2 py-1 font-semibold text-gray-600">Expires</th>
                   <th className="text-center px-2 py-1 font-semibold text-gray-600">Status</th>
+                  <th className="text-center px-2 py-1 font-semibold text-gray-600">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -510,6 +525,18 @@ function ShipwellStatusBadge({
                         {bid.status ?? "pending"}
                       </span>
                     </td>
+                    <td className="px-2 py-1 text-center">
+                      {bid.status !== "accepted" && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmBid({ id: bid.id, carrierName: bid.carrierName, totalCharge: bid.totalCharge })}
+                          className="inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 hover:opacity-80"
+                          style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}
+                        >
+                          Tender
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -517,6 +544,54 @@ function ShipwellStatusBadge({
           )}
           <div className="px-2 py-1 text-[10px] text-gray-400 border-t">
             {bidsData ? `${bidsData.totalCount} bid${bidsData.totalCount !== 1 ? "s" : ""} total` : ""}
+          </div>
+        </div>
+      )}
+      {/* Tender confirmation dialog */}
+      {confirmBid && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.35)" }}
+          onClick={() => setConfirmBid(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl p-5 text-sm"
+            style={{ minWidth: 300, maxWidth: 380 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="font-bold text-gray-800 text-base mb-1">Confirm Tender</div>
+            <div className="text-gray-600 mb-4">
+              Tender this shipment to <span className="font-semibold text-gray-900">{confirmBid.carrierName ?? "this carrier"}</span>
+              {confirmBid.totalCharge != null && (
+                <> for <span className="font-semibold text-green-700">${confirmBid.totalCharge.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></>
+              )}?
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmBid(null)}
+                className="px-3 py-1.5 rounded text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={tenderBid.isPending}
+                onClick={() => {
+                  tenderBid.mutate({
+                    extensivOrderId: order.extensivOrderId,
+                    shipwellBidId: confirmBid.id,
+                    carrierName: confirmBid.carrierName ?? undefined,
+                    totalCharge: confirmBid.totalCharge ?? undefined,
+                  });
+                }}
+                className="px-3 py-1.5 rounded text-xs font-semibold text-white hover:opacity-90 flex items-center gap-1"
+                style={{ background: "#15803d" }}
+              >
+                {tenderBid.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                Confirm Tender
+              </button>
+            </div>
           </div>
         </div>
       )}

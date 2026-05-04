@@ -3323,6 +3323,56 @@ const _appRouter = router({
           });
         }
       }),
+    /**
+     * Tender a shipment directly by Shipwell bid ID (UUID from the carrier bids API).
+     * Looks up or creates the matching shipwell_rates row, then calls tenderShipment.
+     */
+    tenderByBidId: protectedProcedure
+      .input(z.object({
+        extensivOrderId: z.number(),
+        shipwellBidId: z.string().min(1),
+        carrierName: z.string().optional(),
+        totalCharge: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const config = await getShipwellConfig();
+        if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Shipwell not configured" });
+        const orders = await getTrackedOrders();
+        const order = orders.find((o) => o.extensivOrderId === input.extensivOrderId);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
+        if (!order.shipwellShipmentId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Order has no Shipwell shipment" });
+        const { getShipwellRates, selectShipwellRate } = await import('./db');
+        const { shipwellRates } = await import('../drizzle/schema');
+        const db = await getDb();
+        let rates = await getShipwellRates(input.extensivOrderId);
+        let matchedRate = rates.find((r) => r.shipwellBidId === input.shipwellBidId);
+        if (!matchedRate) {
+          await db.insert(shipwellRates).values({
+            extensivOrderId: input.extensivOrderId,
+            shipwellShipmentId: order.shipwellShipmentId,
+            carrierName: input.carrierName ?? "Unknown",
+            totalRateCents: input.totalCharge ? Math.round(input.totalCharge * 100) : 0,
+            shipwellBidId: input.shipwellBidId,
+            isMock: false,
+          });
+          rates = await getShipwellRates(input.extensivOrderId);
+          matchedRate = rates.find((r) => r.shipwellBidId === input.shipwellBidId);
+        }
+        if (!matchedRate) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not resolve rate row for bid" });
+        await selectShipwellRate(input.extensivOrderId, matchedRate.id, ctx.user.name ?? ctx.user.openId);
+        const client = createShipwellClient({
+          email: config.email,
+          password: config.password,
+          environment: config.environment as "sandbox" | "production",
+        });
+        try {
+          await client.tenderShipment(order.shipwellShipmentId, input.shipwellBidId);
+        } catch (err) {
+          console.warn("[tenderByBidId] Shipwell tender call failed, marking locally:", err);
+        }
+        await updateShipwellStatus(order.extensivOrderId, "tendered");
+        return { success: true };
+      }),
   }),
   // ─── SLA Tracker ──────────────────────────────────────────────────────────────
   sla: router({

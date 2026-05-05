@@ -2874,9 +2874,20 @@ const _appRouter = router({
         entityId: null,
         details: {},
       });
-      // Run async so UI gets immediate response
-      syncOrdersNow().catch((err) => console.error("[PickSchedule] Manual sync failed:", err));
-      return { success: true, message: "Sync started. Refresh in a moment to see updated orders." };
+      // Await the sync so the UI gets real results and the user knows when it's done
+      try {
+        const result = await syncOrdersNow();
+        return {
+          success: true,
+          message: `Sync complete: ${result.message}`,
+          inserted: result.inserted,
+          updated: result.updated,
+          removed: result.removed,
+        };
+      } catch (err) {
+        console.error("[PickSchedule] Manual sync failed:", err);
+        return { success: false, message: "Sync failed — check server logs for details.", inserted: 0, updated: 0, removed: 0 };
+      }
     }),
   }),
 

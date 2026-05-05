@@ -538,13 +538,20 @@ export default function OrderSelection() {
   // Sync mutation — triggers a live Extensiv pull when user wants fresh data
   const utils = trpc.useUtils();
   const syncMutation = trpc.pickSchedule.syncNow.useMutation({
-    onSuccess: () => {
-      toast.success("Sync started — orders will refresh in a moment");
-      // Invalidate DB-backed queries after a short delay to pick up new data
-      setTimeout(() => {
-        utils.extensiv.openOrdersFromDb.invalidate();
-        utils.extensiv.openOrderCountsFromDb.invalidate();
-      }, 5000);
+    onSuccess: (data) => {
+      if (data.success) {
+        const parts = [];
+        if (data.inserted) parts.push(`+${data.inserted} new`);
+        if (data.updated) parts.push(`~${data.updated} updated`);
+        if (data.removed) parts.push(`-${data.removed} removed`);
+        const detail = parts.length ? ` (${parts.join(', ')})` : ' (no changes)';
+        toast.success(`Sync complete${detail}`);
+      } else {
+        toast.error(data.message ?? 'Sync failed');
+      }
+      // Immediately invalidate now that sync is complete
+      utils.extensiv.openOrdersFromDb.invalidate();
+      utils.extensiv.openOrderCountsFromDb.invalidate();
     },
     onError: (e) => toast.error(`Sync failed: ${e.message}`),
   });

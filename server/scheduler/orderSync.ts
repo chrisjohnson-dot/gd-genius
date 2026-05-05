@@ -119,7 +119,23 @@ export async function syncOrdersNow(): Promise<{
             })
           );
 
-          const result = await upsertTrackedOrders(ordersForFacility, config.id, facilityId);
+          // Retry upsert up to 3 times on transient DB errors (ECONNRESET, timeout)
+          let result = { inserted: 0, updated: 0, removed: 0 };
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              result = await upsertTrackedOrders(ordersForFacility, config.id, facilityId);
+              break;
+            } catch (dbErr: unknown) {
+              const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+              if (attempt < 3 && (msg.includes('ECONNRESET') || msg.includes('timeout') || msg.includes('ETIMEDOUT'))) {
+                console.warn(`[OrderSync] DB upsert attempt ${attempt} failed for facility ${facilityId}, retrying in 3s...`);
+                await new Promise((res) => setTimeout(res, 3000));
+              } else {
+                console.error(`[OrderSync] DB upsert failed for facility ${facilityId} after ${attempt} attempt(s):`, dbErr);
+                break;
+              }
+            }
+          }
           totalInserted += result.inserted;
           totalUpdated += result.updated;
           totalRemoved += result.removed;

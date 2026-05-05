@@ -179,7 +179,8 @@ export class ShipwellClient {
   ) {
     this.http = axios.create({
       baseURL: BASE_URLS[environment],
-      timeout: 30_000,
+      // Increased from 30s to 90s — paginated fetches across many pages can take longer
+      timeout: 90_000,
       headers: { "Content-Type": "application/json" },
     });
     // If the "password" field looks like an API key (32-char hex), use it directly
@@ -319,7 +320,8 @@ export class ShipwellClient {
   /**
    * Fetches ALL shipments by auto-paginating through every page.
    * Uses page_size=200 (Shipwell's max) to minimise round-trips.
-   * Optionally filters by status.
+   * Includes per-page retry logic (up to 3 attempts with backoff) to handle
+   * transient TLS socket disconnects.
    */
   async listAllShipments(opts?: { status?: string }): Promise<ShipwellShipment[]> {
     const token = await this.authenticate();
@@ -328,16 +330,35 @@ export class ShipwellClient {
     let page = 1;
     let totalCount = 0;
 
-    do {
-      const params: Record<string, string | number> = { page_size: PAGE_SIZE, page };
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    const fetchPage = async (pageNum: number): Promise<{ results: ShipwellShipment[]; count: number }> => {
+      const params: Record<string, string | number> = { page_size: PAGE_SIZE, page: pageNum };
       if (opts?.status) params.status = opts.status;
+      const MAX_RETRIES = 3;
+      let lastErr: unknown;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const res = await this.http.get<{ results: ShipwellShipment[]; count: number }>("/v2/shipments/", {
+            headers: { Authorization: `Token ${token}` },
+            params,
+            // Per-request timeout slightly under the axios instance timeout
+            timeout: 60_000,
+          });
+          return res.data;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < MAX_RETRIES) {
+            // Exponential backoff: 1s, 2s
+            await sleep(attempt * 1_000);
+          }
+        }
+      }
+      throw lastErr;
+    };
 
-      const res = await this.http.get<{ results: ShipwellShipment[]; count: number }>("/v2/shipments/", {
-        headers: { Authorization: `Token ${token}` },
-        params,
-      });
-
-      const { results, count } = res.data;
+    do {
+      const { results, count } = await fetchPage(page);
       totalCount = count ?? 0;
       all.push(...results);
 
@@ -347,6 +368,9 @@ export class ShipwellClient {
 
       // Safety cap: never fetch more than 20 pages (~4000 shipments)
       if (page > 20) break;
+
+      // Small delay between pages to avoid overwhelming the connection
+      await sleep(200);
     } while (true);
 
     return all;

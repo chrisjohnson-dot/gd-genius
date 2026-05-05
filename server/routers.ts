@@ -3404,8 +3404,23 @@ const _appRouter = router({
     /**
      * Fetch all outstanding shipping quotes directly from the Shipwell API.
      * Returns all shipments currently in "quoting" status with their live carrier bids.
+     * Results are cached server-side for 2 minutes to avoid hammering the API on every
+     * client refresh and to survive transient TLS socket disconnects.
      */
     listOutstandingQuotes: protectedProcedure.query(async () => {
+      // ── 2-minute server-side cache ──────────────────────────────────────────
+      type CacheEntry = { data: { shipments: unknown[]; error: string | null }; expiresAt: number };
+      const CACHE_KEY = 'listOutstandingQuotes';
+      const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+      if (!(globalThis as Record<string, unknown>).__shipwellQuoteCache) {
+        (globalThis as Record<string, unknown>).__shipwellQuoteCache = new Map<string, CacheEntry>();
+      }
+      const cache = (globalThis as Record<string, unknown>).__shipwellQuoteCache as Map<string, CacheEntry>;
+      const cached = cache.get(CACHE_KEY);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.data;
+      }
+      // ── End cache check ─────────────────────────────────────────────────────
       const config = await getShipwellConfig();
       if (!config) return { shipments: [], error: 'No Shipwell configuration found.' as string | null };
       const client = createShipwellClient({
@@ -3506,9 +3521,17 @@ const _appRouter = router({
           if (b.bidCount !== a.bidCount) return b.bidCount - a.bidCount;
           return (b.createdAt ?? '').localeCompare(a.createdAt ?? '');
         });
-        return { shipments: enriched, error: null };
+        const result = { shipments: enriched, error: null };
+        // Store in cache for 2 minutes
+        cache.set(CACHE_KEY, { data: result as { shipments: unknown[]; error: string | null }, expiresAt: Date.now() + CACHE_TTL_MS });
+        return result;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
+        // On error, return stale cache if available (better than a blank screen)
+        const stale = cache.get(CACHE_KEY);
+        if (stale) {
+          return { ...stale.data, error: `Shipwell API error (showing cached data): ${msg}` };
+        }
         return { shipments: [], error: `Shipwell API error: ${msg}` };
       }
     }),

@@ -81,18 +81,16 @@ function fmtRunningClock(ts: Date | string | null | undefined, now: number): str
 }
 
 function shipwellStatusLabel(status: string | null | undefined): { label: string; cls: string } {
-  switch (status) {
-    case "quoting":
-      return { label: "Quoting", cls: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30" };
-    case "tendered":
-      return { label: "Tendered", cls: "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-500/15 dark:text-purple-400 dark:border-purple-500/30" };
-    case "carrier_confirmed":
-      return { label: "Confirmed", cls: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30" };
-    case "in_transit":
-      return { label: "In Transit", cls: "bg-teal-100 text-teal-700 border-teal-300 dark:bg-teal-500/15 dark:text-teal-400 dark:border-teal-500/30" };
-    default:
-      return { label: "Not Sent", cls: "bg-zinc-100 text-zinc-600 border-zinc-300 dark:bg-zinc-500/15 dark:text-zinc-400 dark:border-zinc-500/30" };
-  }
+  const s = (status ?? '').toLowerCase();
+  if (s === 'quoting' || s.includes('quot')) return { label: 'Quoting', cls: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30' };
+  if (s === 'tendered' || s.includes('tender')) return { label: 'Tendered', cls: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-500/15 dark:text-purple-400 dark:border-purple-500/30' };
+  if (s === 'carrier_confirmed' || s.includes('confirm')) return { label: 'Confirmed', cls: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30' };
+  if (s === 'in_transit' || s.includes('transit') || s.includes('picked_up')) return { label: 'In Transit', cls: 'bg-teal-100 text-teal-700 border-teal-300 dark:bg-teal-500/15 dark:text-teal-400 dark:border-teal-500/30' };
+  // Newly pushed orders may have status 'pending', 'new', 'unknown', or similar before Shipwell transitions them
+  if (s === 'pending' || s === 'new' || s === 'draft') return { label: 'Pending', cls: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30' };
+  if (s === 'unknown' || s === '') return { label: 'Pending', cls: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30' };
+  // Fallback: show the raw status capitalised
+  return { label: status ? status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Pending', cls: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30' };
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -540,7 +538,7 @@ export default function ConfirmShipping() {
         <div>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <p className="text-sm text-muted-foreground">
-              Real-time quoting shipments pulled directly from the Shipwell API.
+              All active Shipwell shipments (quoting, tendered, confirmed, in-transit). Delivered and cancelled are excluded.
             </p>
             <div className="flex items-center gap-2">
               {liveFacilityOptions.length > 0 && (
@@ -585,8 +583,8 @@ export default function ConfirmShipping() {
           ) : filteredLiveShipments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
-              <div className="text-sm font-medium">No outstanding quotes</div>
-              <div className="text-xs">No shipments are currently in quoting status in Shipwell.</div>
+              <div className="text-sm font-medium">No active shipments</div>
+              <div className="text-xs">No active shipments found in Shipwell (delivered and cancelled are excluded).</div>
             </div>
           ) : (
             <div className="rounded-lg border border-border overflow-hidden">

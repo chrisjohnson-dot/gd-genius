@@ -3414,8 +3414,14 @@ const _appRouter = router({
         environment: config.environment as 'production' | 'sandbox',
       });
       try {
-        // Fetch all shipments in quoting status (up to 200)
-        const { results: shipments } = await client.listShipments({ status: 'quoting', limit: 200 });
+        // Fetch all active shipments (no status filter) so newly-pushed orders appear immediately.
+        // Exclude only delivered and cancelled — everything else (quoting, tendered, carrier_confirmed,
+        // in_transit, pending, new, etc.) should be visible so dispatchers can track the full pipeline.
+        const { results: allShipments } = await client.listShipments({ limit: 200 });
+        const shipments = allShipments.filter((s) => {
+          const norm = normalizeShipwellStatus(s.status);
+          return norm !== 'delivered' && norm !== 'cancelled';
+        });
         if (shipments.length === 0) return { shipments: [], error: null };
 
         // For each quoting shipment, fetch its carrier bids in parallel
@@ -3449,7 +3455,7 @@ const _appRouter = router({
             const pickupDate = originStop?.planned_date ?? originStop?.planned_time_window_start ?? null;
             return {
               shipmentId: shipment.id,
-              status: shipment.status ?? 'quoting',
+              status: shipment.status ?? 'unknown',
               referenceId: shipment.reference_id ?? null,
               customerReferenceNumber: shipment.customer_reference_number ?? null,
               customerName: shipment.customer_name ?? null,
@@ -3467,8 +3473,17 @@ const _appRouter = router({
           })
         );
 
-        // Sort: most bids first, then newest first
-        enriched.sort((a, b) => b.bidCount - a.bidCount || (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+        // Sort: quoting first (most actionable), then by bid count desc, then newest first
+        const statusOrder: Record<string, number> = { quoting: 0, tendered: 1, carrier_confirmed: 2, in_transit: 3, unknown: 4 };
+        enriched.sort((a, b) => {
+          const aNorm = normalizeShipwellStatus(a.status);
+          const bNorm = normalizeShipwellStatus(b.status);
+          const aOrd = statusOrder[aNorm] ?? 5;
+          const bOrd = statusOrder[bNorm] ?? 5;
+          if (aOrd !== bOrd) return aOrd - bOrd;
+          if (b.bidCount !== a.bidCount) return b.bidCount - a.bidCount;
+          return (b.createdAt ?? '').localeCompare(a.createdAt ?? '');
+        });
         return { shipments: enriched, error: null };
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);

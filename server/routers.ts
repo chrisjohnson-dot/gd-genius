@@ -5570,6 +5570,10 @@ const qcScannerRouter = router({
           const totalExpected = scanItems.reduce((acc, i) => acc + (i.expectedQty ?? 0), 0);
           const totalScanned = scanItems.reduce((acc, i) => acc + (i.scannedQty ?? 0), 0);
           const skuCount = scanItems.length;
+          const totalCases = scanItems.reduce((acc, i) => {
+            const ca = i.caseAmount && i.caseAmount > 1 ? i.caseAmount : 1;
+            return acc + (ca > 1 ? Math.floor((i.scannedQty ?? 0) / ca) : (i.scannedQty ?? 0));
+          }, 0);
           return {
             ...s,
             pallets: pallets.map((p) => ({
@@ -5587,6 +5591,7 @@ const qcScannerRouter = router({
             skuCount,
             totalExpected,
             totalScanned,
+            totalCases,
           };
         })
       );

@@ -64,6 +64,7 @@ type SessionRow = {
   skuCount: number;
   totalExpected: number;
   totalScanned: number;
+  totalCases?: number;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -307,6 +308,11 @@ function SessionCard({ session }: { session: SessionRow }) {
                 <ClipboardList className="w-3.5 h-3.5" />
                 {session.skuCount} SKU{session.skuCount !== 1 ? "s" : ""}
               </span>
+              {(session.totalCases ?? 0) > 0 && (
+                <span className="flex items-center gap-1 font-medium text-blue-600 dark:text-blue-400">
+                  {session.totalCases} case{(session.totalCases ?? 0) !== 1 ? "s" : ""}
+                </span>
+              )}
               {accuracy !== null && (
                 <span
                   className={`font-semibold ${

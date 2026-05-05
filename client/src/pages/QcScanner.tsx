@@ -3417,9 +3417,15 @@ function DockRecommendDialog({
     }
   }, [spaces]);
 
+  const setStagingLane = trpc.qcScanner.setStagingLane.useMutation();
+
   const assignDock = trpc.shippingDashboard.updateOutbound.useMutation({
     onSuccess: () => {
       toast.success(`Staged at: ${selectedLocation ?? "Overflow"}`);
+      // Persist the staging lane to the qc_scan_sessions record
+      if (sessionInfo?.sessionId) {
+        setStagingLane.mutate({ sessionId: sessionInfo.sessionId, stagingLane: selectedLocation ?? "Overflow" });
+      }
       onConfirm(selectedLocation ?? null);
     },
     onError: (e) => toast.error(e.message),

@@ -30,6 +30,7 @@ import {
   Weight,
   Ruler,
   ExternalLink,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -65,6 +66,7 @@ type SessionRow = {
   totalExpected: number;
   totalScanned: number;
   totalCases?: number;
+  stagingLane?: string | null;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -311,6 +313,12 @@ function SessionCard({ session }: { session: SessionRow }) {
               {(session.totalCases ?? 0) > 0 && (
                 <span className="flex items-center gap-1 font-medium text-blue-600 dark:text-blue-400">
                   {session.totalCases} case{(session.totalCases ?? 0) !== 1 ? "s" : ""}
+                </span>
+              )}
+              {session.stagingLane && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 font-semibold">
+                  <MapPin className="w-3 h-3" />
+                  {session.stagingLane}
                 </span>
               )}
               {accuracy !== null && (

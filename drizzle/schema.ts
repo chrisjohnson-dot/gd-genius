@@ -624,6 +624,8 @@ export const qcScanSessions = mysqlTable("qc_scan_sessions", {
   packedInExtensiv: boolean("packedInExtensiv").default(false),
   completedAt: timestamp("completedAt"),
   shippedAt: timestamp("shippedAt"),
+  /** Outbound staging lane assigned after session completion (e.g. "A2", "Overflow") */
+  stagingLane: varchar("stagingLane", { length: 64 }),
   createdBy: varchar("createdBy", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

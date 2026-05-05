@@ -225,7 +225,7 @@ import {
 import { createVeeqoClient, lbsToOz, type VeeqoAddress } from "./veeqo";
 import { fireCortexWebhook, pushShipmentToClearSight } from "./cortex/webhook";
 import { pushPurchaseOrderToOpFi, flushPendingPurchaseOrderPushes } from "./purchaseOrderPush";
-import { purchaseOrders, carrierRoutingTable, receivePalletSessions, pickupSessions, pickupScans, carrierAppointments } from "../drizzle/schema";
+import { purchaseOrders, carrierRoutingTable, receivePalletSessions, pickupSessions, pickupScans, carrierAppointments, qcScanSessions } from "../drizzle/schema";
 import { fetchAllCarrierRates, getCarrierConnectionStatus, hasAnyCarrierCredentials, buyCarrierLabel, voidFedExLabel, type CarrierRateInput, type CarrierLabelInput } from "./carriers";
 import { evaluateVerdict, generateQcPassZpl } from "./productionLine";
 import {
@@ -5600,6 +5600,22 @@ const qcScannerRouter = router({
         sessions: enriched,
         total: filtered.length,
       };
+    }),
+
+  /** Persist the outbound staging lane chosen in the dock recommendation dialog */
+  setStagingLane: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      stagingLane: z.string().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      await db.update(qcScanSessions)
+        .set({ stagingLane: input.stagingLane ?? null })
+        .where(eq(qcScanSessions.id, input.sessionId));
+      return { ok: true };
     }),
 
   /**

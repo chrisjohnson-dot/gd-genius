@@ -3414,10 +3414,10 @@ const _appRouter = router({
         environment: config.environment as 'production' | 'sandbox',
       });
       try {
-        // Fetch all active shipments (no status filter) so newly-pushed orders appear immediately.
+        // Fetch ALL active shipments across all pages (auto-paginated, 200/page).
         // Exclude only delivered and cancelled — everything else (quoting, tendered, carrier_confirmed,
         // in_transit, pending, new, etc.) should be visible so dispatchers can track the full pipeline.
-        const { results: allShipments } = await client.listShipments({ limit: 200 });
+        const allShipments = await client.listAllShipments();
         const shipments = allShipments.filter((s) => {
           const norm = normalizeShipwellStatus(s.status);
           return norm !== 'delivered' && norm !== 'cancelled';

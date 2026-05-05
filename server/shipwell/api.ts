@@ -317,6 +317,42 @@ export class ShipwellClient {
   }
 
   /**
+   * Fetches ALL shipments by auto-paginating through every page.
+   * Uses page_size=200 (Shipwell's max) to minimise round-trips.
+   * Optionally filters by status.
+   */
+  async listAllShipments(opts?: { status?: string }): Promise<ShipwellShipment[]> {
+    const token = await this.authenticate();
+    const PAGE_SIZE = 200;
+    const all: ShipwellShipment[] = [];
+    let page = 1;
+    let totalCount = 0;
+
+    do {
+      const params: Record<string, string | number> = { page_size: PAGE_SIZE, page };
+      if (opts?.status) params.status = opts.status;
+
+      const res = await this.http.get<{ results: ShipwellShipment[]; count: number }>("/v2/shipments/", {
+        headers: { Authorization: `Token ${token}` },
+        params,
+      });
+
+      const { results, count } = res.data;
+      totalCount = count ?? 0;
+      all.push(...results);
+
+      // Stop if we've received everything or got an empty page
+      if (results.length === 0 || all.length >= totalCount) break;
+      page++;
+
+      // Safety cap: never fetch more than 20 pages (~4000 shipments)
+      if (page > 20) break;
+    } while (true);
+
+    return all;
+  }
+
+  /**
    * Batch-poll status for multiple shipment IDs.
    * Returns a map of shipmentId → status result.
    */

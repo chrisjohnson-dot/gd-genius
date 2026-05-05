@@ -3424,7 +3424,19 @@ const _appRouter = router({
         });
         if (shipments.length === 0) return { shipments: [], error: null };
 
-        // For each quoting shipment, fetch its carrier bids in parallel
+        // Build a lookup map from Shipwell PO ID → local order tracking row
+        // so we can resolve the GoDirect customer name and sent-at timestamp.
+        const allTrackedOrders = await getTrackedOrders();
+        const byShipwellId = new Map<string, typeof allTrackedOrders[0]>();
+        const byRefNum = new Map<string, typeof allTrackedOrders[0]>();
+        for (const o of allTrackedOrders) {
+          if (o.shipwellOrderId) byShipwellId.set(o.shipwellOrderId, o);
+          if (o.shipwellShipmentId) byShipwellId.set(o.shipwellShipmentId, o);
+          if (o.referenceNum) byRefNum.set(o.referenceNum, o);
+          if (o.extensivOrderId) byRefNum.set(String(o.extensivOrderId), o);
+        }
+
+        // For each shipment, fetch its carrier bids in parallel
         const enriched = await Promise.all(
           shipments.map(async (shipment) => {
             let bids: { id: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null; mcNumber: string | null; usdotNumber: string | null; bidAmount: number | null; availableDate: string | null; distanceMiles: number | null; notes: string | null; createdAt: string | null; createdByUser: string | null }[] = [];
@@ -3453,12 +3465,22 @@ const _appRouter = router({
             const originStop = shipment.origin_stop ?? stops.find((s) => s.stop_type === 'pickup') ?? stops[0] ?? null;
             const destStop = shipment.destination_stop ?? stops.find((s) => s.stop_type === 'delivery') ?? stops[stops.length - 1] ?? null;
             const pickupDate = originStop?.planned_date ?? originStop?.planned_time_window_start ?? null;
+            // Resolve local GoDirect order: try by Shipwell PO/shipment ID first, then by reference number
+            const localOrder =
+              byShipwellId.get(shipment.id) ??
+              (shipment.reference_id ? byRefNum.get(shipment.reference_id) : undefined) ??
+              (shipment.customer_reference_number ? byRefNum.get(shipment.customer_reference_number) : undefined) ??
+              null;
             return {
               shipmentId: shipment.id,
               status: shipment.status ?? 'unknown',
               referenceId: shipment.reference_id ?? null,
               customerReferenceNumber: shipment.customer_reference_number ?? null,
               customerName: shipment.customer_name ?? null,
+              // GoDirect customer name resolved from local order tracking
+              gdClientName: localOrder?.clientName ?? null,
+              // When this order was sent to Shipwell (from local DB)
+              sentToShipwellAt: localOrder?.shipwellSentAt?.toISOString() ?? shipment.created_at ?? null,
               createdAt: shipment.created_at ?? null,
               updatedAt: shipment.updated_at ?? null,
               originCity: originStop?.location?.address?.city ?? null,

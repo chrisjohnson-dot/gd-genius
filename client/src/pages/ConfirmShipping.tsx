@@ -591,9 +591,10 @@ export default function ConfirmShipping() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Date Sent</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Shipwell ID</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Reference</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Customer</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">GD Customer</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Origin → Destination</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Pickup Date</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">Bids</th>
@@ -615,6 +616,16 @@ export default function ConfirmShipping() {
                           )}
                           onClick={() => setLiveExpandedId(isExpanded ? null : (s.shipmentId ?? s.id))}
                         >
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {s.sentToShipwellAt ? (
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium">{new Date(s.sentToShipwellAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                <span className="text-[11px] text-muted-foreground">{new Date(s.sentToShipwellAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3">
                             <span className="font-mono text-xs text-muted-foreground">{(s.shipmentId ?? s.id)?.slice(0, 8)}…</span>
                           </td>
@@ -622,7 +633,16 @@ export default function ConfirmShipping() {
                             <span className="font-mono font-semibold text-xs">{s.referenceId ?? s.customerReferenceNumber ?? "—"}</span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-xs">{s.customerName ?? "—"}</span>
+                            {s.gdClientName ? (
+                              <div className="flex flex-col">
+                                <span className="text-xs font-semibold">{s.gdClientName}</span>
+                                {s.customerName && s.customerName !== s.gdClientName && (
+                                  <span className="text-[11px] text-muted-foreground">{s.customerName}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs">{s.customerName ?? "—"}</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -645,9 +665,7 @@ export default function ConfirmShipping() {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30">
-                              Quoting
-                            </span>
+                            {(() => { const sl = shipwellStatusLabel(s.status); return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${sl.cls}`}>{sl.label}</span>; })()}
                           </td>
                           <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <Button
@@ -661,7 +679,7 @@ export default function ConfirmShipping() {
                         </tr>
                         {isExpanded && (
                           <tr className="border-b border-border">
-                            <td colSpan={8} className="p-0">
+                            <td colSpan={9} className="p-0">
                               <div className="px-4 pb-4 pt-2 bg-muted/5">
                                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
                                   <DollarSign className="h-3.5 w-3.5" />

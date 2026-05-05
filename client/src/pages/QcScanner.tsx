@@ -1770,6 +1770,19 @@ export default function QcScanner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* ─── Dock Location Recommendation Dialog (also needed in start phase after confirm) ─── */}
+      <DockRecommendDialog
+        open={dockRecommendDialog}
+        onClose={() => { setDockRecommendDialog(false); setCompletedSessionInfo(null); }}
+        onConfirm={(lane) => { setAssignedStagingLane(lane); setDockRecommendDialog(false); setShipwellDialog(true); }}
+        sessionInfo={completedSessionInfo}
+      />
+      <ShipwellConfirmDialog
+        open={shipwellDialog}
+        onClose={() => { setShipwellDialog(false); setCompletedSessionInfo(null); setAssignedStagingLane(null); }}
+        sessionInfo={completedSessionInfo}
+        assignedLane={assignedStagingLane}
+      />
       </>
     );
   }

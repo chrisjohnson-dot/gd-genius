@@ -187,11 +187,11 @@ function ItemsTable({
     );
   }
 
-  // Compact QC view: SKU | Description | [Case] | Req | − Scanned +
+  // Compact QC view: SKU | Description | [Case] | Req | Cases | − Scanned +
   const hasCaseAmounts = showCaseBadge && items.some((i) => (i.caseAmount ?? 1) > 1);
   const cols = phase === "scanning"
-    ? hasCaseAmounts ? "100px 1fr 46px 44px 90px" : "100px 1fr 44px 90px"
-    : hasCaseAmounts ? "100px 1fr 46px 44px 56px" : "100px 1fr 44px 56px";
+    ? hasCaseAmounts ? "100px 1fr 46px 44px 50px 90px" : "100px 1fr 44px 50px 90px"
+    : hasCaseAmounts ? "100px 1fr 46px 44px 50px 56px" : "100px 1fr 44px 50px 56px";
   return (
     <div className="rounded-lg overflow-hidden border border-border">
       {/* Header */}
@@ -203,6 +203,7 @@ function ItemsTable({
         <span>Description</span>
         {hasCaseAmounts && <span className="text-right">Case</span>}
         <span className="text-right">Req</span>
+        <span className="text-right">Cases</span>
         <span className="text-right">Scanned</span>
       </div>
 
@@ -248,6 +249,13 @@ function ItemsTable({
             {/* Required qty */}
             <div className="text-right text-xs font-semibold text-[#333333]">
               {item.expectedQty}
+            </div>
+
+            {/* Calculated cases */}
+            <div className="text-right text-xs font-semibold tabular-nums text-blue-700">
+              {(item.caseAmount ?? 1) > 1
+                ? Math.floor(item.scannedQty / (item.caseAmount ?? 1))
+                : item.scannedQty}
             </div>
 
             {/* Scanned qty with optional +/- controls */}
@@ -296,7 +304,11 @@ function ItemsTable({
         style={{ gridTemplateColumns: cols, background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "4px 8px" }}
       >
         <span className="text-[#15527f] uppercase tracking-wide col-span-2">Total</span>
+        {hasCaseAmounts && <span />}
         <span className="text-right text-[#333333]">{items.reduce((s, i) => s + i.expectedQty, 0)}</span>
+        <span className="text-right text-blue-700">
+          {items.reduce((s, i) => s + ((i.caseAmount ?? 1) > 1 ? Math.floor(i.scannedQty / (i.caseAmount ?? 1)) : i.scannedQty), 0)}
+        </span>
         <span className="text-right">
           <span className={
             items.every((i) => i.scannedQty >= i.expectedQty) ? "text-green-600"
@@ -1658,11 +1670,12 @@ export default function QcScanner() {
                   {/* Header */}
                   <div
                     className="grid text-white text-xs font-bold uppercase tracking-wide"
-                    style={{ gridTemplateColumns: "110px 1fr 70px 70px", background: "#15527f", padding: "0 10px", height: 32, alignItems: "center" }}
+                    style={{ gridTemplateColumns: "110px 1fr 70px 60px 70px", background: "#15527f", padding: "0 10px", height: 32, alignItems: "center" }}
                   >
                     <span>SKU</span>
                     <span>Description</span>
                     <span className="text-right">Req</span>
+                    <span className="text-right">Cases</span>
                     <span className="text-right">Scanned</span>
                   </div>
                   {sessionSummaryQuery.data.items.map((item, idx) => {
@@ -1676,7 +1689,7 @@ export default function QcScanner() {
                         key={item.id}
                         className="grid text-sm border-b border-[#CDD4DC] last:border-0"
                         style={{
-                          gridTemplateColumns: "110px 1fr 70px 70px",
+                          gridTemplateColumns: "110px 1fr 70px 60px 70px",
                           background: over ? "#FFF8E7" : done ? "#F0FDF4" : idx % 2 === 1 ? "#EEF4FB" : "#ffffff",
                           padding: "5px 10px",
                           alignItems: "start",
@@ -1692,6 +1705,11 @@ export default function QcScanner() {
                           )}
                         </div>
                         <span className="text-right text-xs font-mono text-[#333333] pt-0.5">{item.expectedQty}</span>
+                        <span className="text-right text-xs font-semibold font-mono pt-0.5 text-blue-700">
+                          {(item.caseAmount ?? 1) > 1
+                            ? Math.floor(item.scannedQty / (item.caseAmount ?? 1))
+                            : item.scannedQty}
+                        </span>
                         <span className={`text-right text-xs font-semibold font-mono pt-0.5 ${
                           over ? "text-amber-600" : done ? "text-green-600" : "text-[#333333]"
                         }`}>{item.scannedQty}</span>
@@ -1701,11 +1719,14 @@ export default function QcScanner() {
                   {/* Totals footer */}
                   <div
                     className="grid text-sm font-bold"
-                    style={{ gridTemplateColumns: "110px 1fr 70px 70px", background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "5px 10px", alignItems: "center" }}
+                    style={{ gridTemplateColumns: "110px 1fr 70px 60px 70px", background: "#EDFAEB", borderTop: "2px solid #CDD4DC", padding: "5px 10px", alignItems: "center" }}
                   >
                     <span className="text-xs text-[#15527f] uppercase tracking-wide col-span-2">Total</span>
                     <span className="text-right text-xs font-mono text-[#333333]">
                       {sessionSummaryQuery.data.items.reduce((s, i) => s + i.expectedQty, 0)}
+                    </span>
+                    <span className="text-right text-xs font-semibold font-mono text-blue-700">
+                      {sessionSummaryQuery.data.items.reduce((s, i) => s + ((i.caseAmount ?? 1) > 1 ? Math.floor(i.scannedQty / (i.caseAmount ?? 1)) : i.scannedQty), 0)}
                     </span>
                     <span className="text-right text-xs font-semibold font-mono text-green-600">
                       {sessionSummaryQuery.data.items.reduce((s, i) => s + i.scannedQty, 0)}

@@ -1237,14 +1237,17 @@ export default function QcScanner() {
       } else {
         toast.success("Session completed and saved");
       }
-      // Capture session info for dock recommendation before clearing state
+      // Use server-returned sessionMeta to avoid stale closure bug where
+      // session state may have already been cleared or point to a different session.
+      // Fall back to current session state only if server didn't return metadata.
+      const meta = data.sessionMeta;
       setCompletedSessionInfo({
-        sessionId: session?.id ?? 0,
-        configId: session?.warehouseId ?? null,
-        palletCount: pallets.length,
-        customerName: session?.customerName ?? null,
-        transactionId: session?.transactionId ?? null,
-        customerId: (session as any)?.customerId ?? null,
+        sessionId: meta?.sessionId ?? session?.id ?? 0,
+        configId: meta?.configId ?? session?.warehouseId ?? null,
+        palletCount: meta?.palletCount ?? pallets.length,
+        customerName: meta?.customerName ?? session?.customerName ?? null,
+        transactionId: meta?.transactionId ?? session?.transactionId ?? null,
+        customerId: meta?.customerId ?? (session as any)?.customerId ?? null,
       });
       setPhase("start");
       setSession(null);

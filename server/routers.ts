@@ -4862,6 +4862,8 @@ const qcScannerRouter = router({
   completeSession: protectedProcedure
     .input(z.object({ sessionId: z.number() }))
     .mutation(async ({ input, ctx }) => {
+      // Fetch session before clearing so we can return metadata to the frontend
+      const sessionBeforeComplete = await getQcSessionById(input.sessionId);
       await updateQcSession(input.sessionId, { status: "complete", completedAt: new Date() });
       await createAuditLog({
         action: "qc.completeSession",
@@ -4917,7 +4919,22 @@ const qcScannerRouter = router({
         // Non-fatal: dock recommendation will still show but order may not be found
         console.warn(`[QcScanner] Auto ship_ready promotion failed:`, err);
       }
-       return { success: true, packedInExtensiv, packError };
+      // Return session metadata so the frontend can use it directly (avoids stale closure bug)
+      const pallets = await getQcPallets(input.sessionId);
+      const activePalletCount = pallets.filter((p) => !p.deletedAt).length;
+      return {
+        success: true,
+        packedInExtensiv,
+        packError,
+        sessionMeta: {
+          sessionId: input.sessionId,
+          customerName: sessionBeforeComplete?.customerName ?? null,
+          transactionId: sessionBeforeComplete?.transactionId ?? null,
+          customerId: sessionBeforeComplete?.customerId ?? null,
+          configId: sessionBeforeComplete?.warehouseId ?? null,
+          palletCount: activePalletCount,
+        },
+      };
     }),
   // Manually retry marking an order as Packed in Extensiv for a completed session
   retryPackInExtensiv: protectedProcedure

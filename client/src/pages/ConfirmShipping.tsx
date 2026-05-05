@@ -347,6 +347,12 @@ export default function ConfirmShipping() {
   const liveError = liveData?.error ?? null;
   // Facility filter for Live Quotes tab
   const [liveFacilityFilter, setLiveFacilityFilter] = useState<string>("all");
+  const [liveCustomerFilter, setLiveCustomerFilter] = useState<string>("all");
+  const [liveStatusFilter, setLiveStatusFilter] = useState<string>("all");
+  const [liveSearchText, setLiveSearchText] = useState<string>("");
+  const [liveDateFrom, setLiveDateFrom] = useState<string>("");
+  const [liveDateTo, setLiveDateTo] = useState<string>("");
+
   const liveFacilityOptions = useMemo(() => {
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
@@ -361,15 +367,74 @@ export default function ConfirmShipping() {
     }
     return opts.sort((a, b) => a.label.localeCompare(b.label));
   }, [liveShipments]);
+
+  const liveCustomerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const s of liveShipments) {
+      const name = (s as any).gdClientName ?? (s as any).customerName ?? "";
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        opts.push({ value: name, label: name });
+      }
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label));
+  }, [liveShipments]);
+
+  const liveStatusOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const s of liveShipments) {
+      const st = (s as any).status ?? "unknown";
+      seen.add(st);
+    }
+    return Array.from(seen).sort();
+  }, [liveShipments]);
+
   const filteredLiveShipments = useMemo(() => {
-    if (liveFacilityFilter === "all") return liveShipments;
-    return liveShipments.filter((s: any) => {
-      const city = s.originCity ?? "";
-      const state = s.originState ?? "";
-      const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
-      return key === liveFacilityFilter;
+    return (liveShipments as any[]).filter((s) => {
+      // Facility (origin city/state)
+      if (liveFacilityFilter !== "all") {
+        const city = s.originCity ?? "";
+        const state = s.originState ?? "";
+        const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
+        if (key !== liveFacilityFilter) return false;
+      }
+      // GD Customer
+      if (liveCustomerFilter !== "all") {
+        const name = s.gdClientName ?? s.customerName ?? "";
+        if (name !== liveCustomerFilter) return false;
+      }
+      // Status
+      if (liveStatusFilter !== "all") {
+        if ((s.status ?? "unknown") !== liveStatusFilter) return false;
+      }
+      // Free-text search (reference, customer, shipment ID)
+      if (liveSearchText.trim()) {
+        const q = liveSearchText.trim().toLowerCase();
+        const haystack = [
+          s.shipmentId ?? "",
+          s.referenceId ?? "",
+          s.customerReferenceNumber ?? "",
+          s.gdClientName ?? "",
+          s.customerName ?? "",
+        ].join(" ").toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      // Date Sent range
+      if (liveDateFrom) {
+        const sent = s.sentToShipwellAt ? new Date(s.sentToShipwellAt) : null;
+        if (!sent || sent < new Date(liveDateFrom)) return false;
+      }
+      if (liveDateTo) {
+        const sent = s.sentToShipwellAt ? new Date(s.sentToShipwellAt) : null;
+        // Include the full end day
+        const endOfDay = new Date(liveDateTo);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (!sent || sent > endOfDay) return false;
+      }
+      return true;
     });
-  }, [liveShipments, liveFacilityFilter]);
+  }, [liveShipments, liveFacilityFilter, liveCustomerFilter, liveStatusFilter, liveSearchText, liveDateFrom, liveDateTo]);
   // Live clock tick (every second for running quote age)
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -536,37 +601,100 @@ export default function ConfirmShipping() {
       {/* ── LIVE QUOTES TAB ── */}
       {activeTab === "live" && (
         <div>
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <p className="text-sm text-muted-foreground">
-              All active Shipwell shipments (quoting, tendered, confirmed, in-transit). Delivered and cancelled are excluded.
-            </p>
-            <div className="flex items-center gap-2">
+          {/* ── Filter bar ── */}
+          <div className="mb-4 space-y-2">
+            {/* Row 1: search + refresh */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[180px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={liveSearchText}
+                  onChange={(e) => setLiveSearchText(e.target.value)}
+                  placeholder="Search reference, customer, shipment ID…"
+                  className="h-8 pl-8 text-xs"
+                />
+                {liveSearchText && (
+                  <button onClick={() => setLiveSearchText("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              <Button size="sm" variant="outline" onClick={() => void liveRefetch()} disabled={liveLoading}>
+                <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", liveLoading && "animate-spin")} />
+                Refresh
+              </Button>
+              {/* Clear all filters */}
+              {(liveCustomerFilter !== "all" || liveStatusFilter !== "all" || liveFacilityFilter !== "all" || liveSearchText || liveDateFrom || liveDateTo) && (
+                <Button size="sm" variant="ghost" className="text-xs text-muted-foreground h-8 px-2" onClick={() => {
+                  setLiveCustomerFilter("all"); setLiveStatusFilter("all"); setLiveFacilityFilter("all");
+                  setLiveSearchText(""); setLiveDateFrom(""); setLiveDateTo("");
+                }}>
+                  <X className="h-3 w-3 mr-1" /> Clear filters
+                </Button>
+              )}
+            </div>
+            {/* Row 2: dropdowns + date range */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* GD Customer */}
+              {liveCustomerOptions.length > 0 && (
+                <select
+                  value={liveCustomerFilter}
+                  onChange={(e) => setLiveCustomerFilter(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="all">All Customers</option>
+                  {liveCustomerOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              )}
+              {/* Status */}
+              {liveStatusOptions.length > 0 && (
+                <select
+                  value={liveStatusFilter}
+                  onChange={(e) => setLiveStatusFilter(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="all">All Statuses</option>
+                  {liveStatusOptions.map((st) => {
+                    const { label } = shipwellStatusLabel(st);
+                    return <option key={st} value={st}>{label}</option>;
+                  })}
+                </select>
+              )}
+              {/* Facility (origin) */}
               {liveFacilityOptions.length > 0 && (
                 <select
                   value={liveFacilityFilter}
                   onChange={(e) => setLiveFacilityFilter(e.target.value)}
                   className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="all">All Facilities ({liveShipments.length})</option>
-                  {liveFacilityOptions.map((opt) => {
-                    const count = liveShipments.filter((s: any) => {
-                      const city = s.originCity ?? "";
-                      const state = s.originState ?? "";
-                      const key = city && state ? `${city}, ${state}` : city || state || "Unknown";
-                      return key === opt.value;
-                    }).length;
-                    return (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label} ({count})
-                      </option>
-                    );
-                  })}
+                  <option value="all">All Facilities</option>
+                  {liveFacilityOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
                 </select>
               )}
-              <Button size="sm" variant="outline" onClick={() => void liveRefetch()} disabled={liveLoading}>
-                <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", liveLoading && "animate-spin")} />
-                Refresh
-              </Button>
+              {/* Date Sent range */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Sent from</span>
+                <input
+                  type="date"
+                  value={liveDateFrom}
+                  onChange={(e) => setLiveDateFrom(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <input
+                  type="date"
+                  value={liveDateTo}
+                  onChange={(e) => setLiveDateTo(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground ml-auto">
+                {filteredLiveShipments.length} of {liveShipments.length} shipment{liveShipments.length !== 1 ? "s" : ""}
+              </span>
             </div>
           </div>
           {liveError && (

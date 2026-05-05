@@ -2451,10 +2451,12 @@ export default function QcScanner() {
                       <div className="rounded-lg overflow-hidden border border-border mb-3">
                         <div
                           className="grid text-white text-xs font-bold uppercase tracking-wide"
-                          style={{ gridTemplateColumns: "1fr 80px", background: "#15527f", padding: "0 8px", height: 30, alignItems: "center" }}
+                          style={{ gridTemplateColumns: "1fr 54px 54px 80px", background: "#15527f", padding: "0 8px", height: 30, alignItems: "center" }}
                         >
                           <span>SKU</span>
-                          <span className="text-right">Qty</span>
+                          <span className="text-right">Units</span>
+                          <span className="text-right">Cases</span>
+                          <span className="text-right">Wt</span>
                         </div>
                         {(!pallet.items || pallet.items.length === 0) ? (
                           <div className="px-3 py-4 text-xs text-muted-foreground italic text-center">Scan items to populate this pallet…</div>
@@ -2466,7 +2468,7 @@ export default function QcScanner() {
                               <div
                                 key={i}
                                 className="grid items-center text-sm border-b border-[#CDD4DC] last:border-0"
-                                style={{ gridTemplateColumns: "1fr auto 80px 80px", background: i % 2 === 1 ? "#EEF4FB" : "#ffffff", padding: "6px 8px" }}
+                                style={{ gridTemplateColumns: "1fr auto 54px 54px 80px", background: i % 2 === 1 ? "#EEF4FB" : "#ffffff", padding: "6px 8px" }}
                               >
                                 <span className="font-mono text-xs">{item.sku}</span>
                                 {/* Remove / adjust controls — only shown during active scanning */}
@@ -2514,7 +2516,17 @@ export default function QcScanner() {
                                   </div>
                                 )}
                                 {phase !== "scanning" && <span />}
-                                <span className="text-right font-semibold text-sm">×{item.qty}</span>
+                                <span className="text-right font-semibold text-sm tabular-nums">{item.qty}</span>
+                                {/* Cases = floor(qty ÷ caseAmount) */}
+                                {(() => {
+                                  const scanItem = items.find((si) => si.sku === item.sku);
+                                  const ca = scanItem?.caseAmount ?? 1;
+                                  return (
+                                    <span className="text-right text-xs font-semibold tabular-nums text-blue-700">
+                                      {ca > 1 ? Math.floor(item.qty / ca) : item.qty}
+                                    </span>
+                                  );
+                                })()}
                                 {skuEntry ? (
                                   <TooltipProvider delayDuration={200}>
                                     <Tooltip>
@@ -2552,9 +2564,9 @@ export default function QcScanner() {
                         {(pallet.calculatedWeightLb || pallet.weightOverrideLb) && (
                           <div
                             className="grid items-center border-t-2 border-[#15527f]"
-                            style={{ gridTemplateColumns: "1fr 80px", background: "#f0f7ff", padding: "6px 8px" }}
+                            style={{ gridTemplateColumns: "1fr 54px 54px 80px", background: "#f0f7ff", padding: "6px 8px" }}
                           >
-                            <span className="text-xs font-bold text-[#15527f] uppercase tracking-wide">Total Weight</span>
+                            <span className="text-xs font-bold text-[#15527f] uppercase tracking-wide col-span-3">Total Weight</span>
                             <span className="text-right font-bold text-sm text-[#15527f]">
                               {pallet.weightOverrideLb ? (
                                 <span className="text-orange-600">{pallet.weightOverrideLb} lbs</span>

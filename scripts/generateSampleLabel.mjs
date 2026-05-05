@@ -34,9 +34,11 @@ const pallets = [
     totalPallets: 3,
     palletUpc: "00100012345678901",
     items: [
-      { sku: "APP-TEE-SM-BLK",    description: "Classic Tee — Small Black",    qty: 4, caseAmount: 12 },
-      { sku: "APP-TEE-MD-BLK",    description: "Classic Tee — Medium Black",   qty: 3, caseAmount: 12 },
-      { sku: "APP-HOODIE-SM-NVY", description: "Pullover Hoodie — Small Navy", qty: 2, caseAmount:  6 },
+      { sku: "K18-31005",  description: "K18 Biomimetic HairScienceTM Leave-In Molecular Repair Hair Mask", qty: 216,  caseAmount: 108 },
+      { sku: "K18-40035L", description: "K18-40035L K18 Detox 8.5oz",                                     qty: 108,  caseAmount: 12  },
+      { sku: "K18-40125",  description: "K18 Biomimetic HairScienceTM DAMAGE SHIELD pH Protective",        qty: 12,   caseAmount: 12  },
+      { sku: "K18-33072",  description: "1.6oz AirWash Dry Shampoo",                                       qty: 96,   caseAmount: 80  },
+      { sku: "K18-35092",  description: "HeatBounce Leave-in 4oz",                                         qty: 36,   caseAmount: 12  },
     ],
   },
   {

@@ -236,8 +236,8 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
     const ry = HDR_Y + 14 + i * ROW_H;
     if (i < p.items.length) {
       const item  = p.items[i];
-      const cases = item.qty;
-      const units = item.qty * (item.caseAmount ?? 1);
+      const units = item.qty;                                          // qty is already in eaches
+      const cases = Math.floor(item.qty / Math.max(item.caseAmount ?? 1, 1)); // cases = eaches ÷ pack size
       doc.fillColor(BLACK).fontSize(7).font("Helvetica");
       doc.text(item.sku,              COL_SKU,   ry + 2, { lineBreak: false, width: COL_DESC  - COL_SKU  - 4 });
       doc.text(item.description ?? "", COL_DESC, ry + 2, { lineBreak: false, width: COL_UNITS - COL_DESC - 4 });
@@ -252,8 +252,8 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);
 
   // ── SECTION 4: Pallet X of Y | N Units | N Cases ─────────────────────────
-  const totalCases = p.items.reduce((s, i) => s + i.qty, 0);
-  const totalUnits = p.items.reduce((s, i) => s + i.qty * (i.caseAmount ?? 1), 0);
+  const totalUnits = p.items.reduce((s, i) => s + i.qty, 0);                                                          // qty is eaches
+  const totalCases = p.items.reduce((s, i) => s + Math.floor(i.qty / Math.max(i.caseAmount ?? 1, 1)), 0); // cases = eaches ÷ pack size
   // Use 14pt font so all three items fit on one line comfortably
   const FOOT_FONT = 14;
   // FOOT_H = 44pt. 14pt Helvetica Bold rendered cap-height ≈ 10pt.

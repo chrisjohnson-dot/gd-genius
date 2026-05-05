@@ -2194,6 +2194,11 @@ export default function QcScanner() {
                 const palletItems = (pallet.items as Array<{ sku: string; qty: number }> | null) ?? [];
                 const palletSkuCount = palletItems.length;
                 const palletUnitCount = palletItems.reduce((s, i) => s + (i.qty ?? 0), 0);
+                const palletCaseCount = palletItems.reduce((s, i) => {
+                  const scanItem = items.find((si) => si.sku === i.sku);
+                  const ca = scanItem?.caseAmount ?? 1;
+                  return s + (ca > 1 ? Math.floor((i.qty ?? 0) / ca) : (i.qty ?? 0));
+                }, 0);
                 const palletWeight = pallet.weightOverrideLb ?? pallet.calculatedWeightLb;
                 // Live running weight estimate — derived from demoUpcMap (demo) or calculatedWeightLb (real)
                 // For demo sessions: sum(weightLbPerCase / caseAmount * qty) + tare
@@ -2243,12 +2248,14 @@ export default function QcScanner() {
                           MU {pallet.muLabel}
                         </span>
                       )}
-                      {/* Summary: SKUs · units · weight */}
+                      {/* Summary: SKUs · units · cases · weight */}
                       {palletSkuCount > 0 ? (
                         <span className="text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">{palletSkuCount}</span> SKU{palletSkuCount !== 1 ? "s" : ""}
                           {" · "}
                           <span className="font-medium text-foreground">{palletUnitCount}</span> unit{palletUnitCount !== 1 ? "s" : ""}
+                          {" · "}
+                          <span className="font-medium text-blue-600 dark:text-blue-400">{palletCaseCount}</span> <span className="text-blue-600 dark:text-blue-400">case{palletCaseCount !== 1 ? "s" : ""}</span>
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground italic">Empty</span>

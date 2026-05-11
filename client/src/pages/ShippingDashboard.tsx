@@ -1001,7 +1001,21 @@ function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo, onSe
                     <td className="px-4 py-3 text-[13px] text-foreground/80 whitespace-nowrap">{fmtDate(order.requiredShipDate)}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       {order.outboundLocation
-                        ? <span className="inline-flex items-center gap-1 text-[13px] text-blue-600 dark:text-blue-400"><MapPin className="h-3 w-3 shrink-0" />{order.outboundLocation}</span>
+                        ? (
+                          <span className="inline-flex items-center gap-1 group">
+                            <MapPin className="h-3 w-3 shrink-0 text-blue-600 dark:text-blue-400" />
+                            <span className="text-[13px] text-blue-600 dark:text-blue-400">{order.outboundLocation}</span>
+                            {!isShipped && !isDemo && onAssignDock && (
+                              <button
+                                onClick={() => onAssignDock(order)}
+                                title="Change dock location"
+                                className="opacity-0 group-hover:opacity-100 ml-0.5 p-0.5 rounded hover:bg-muted transition-all text-muted-foreground hover:text-foreground"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            )}
+                          </span>
+                        )
                         : !isShipped && !isDemo && onAssignDock
                           ? (
                             <button

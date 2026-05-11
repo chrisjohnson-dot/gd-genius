@@ -9092,6 +9092,7 @@ const shippingDashboardRouter = router({
       const db = await getDb();
       if (!db) return null;
       const { orderTracking } = await import("../drizzle/schema.js");
+      const { eq } = await import("drizzle-orm");
       const rows = await db
         .select({
           id: orderTracking.id,

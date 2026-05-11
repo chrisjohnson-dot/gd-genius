@@ -4969,10 +4969,11 @@ const qcScannerRouter = router({
         if (orderId) {
           const allOrders = await getTrackedOrders();
           const currentOrder = allOrders.find((o) => o.extensivOrderId === orderId) ?? null;
-          // Only advance if currently at qc or qc_complete — never go backwards
-          if (currentOrder && (currentOrder.lifecycleStatus === "qc" || currentOrder.lifecycleStatus === "qc_complete")) {
+          // Advance to ship_ready from any pre-ship stage — never go backwards from ship_ready/shipped
+          const preShipStages = ["unallocated", "allocated", "picking", "qc", "qc_complete"];
+          if (currentOrder && preShipStages.includes(currentOrder.lifecycleStatus)) {
             await updateOrderLifecycleStatus(orderId, "ship_ready");
-            console.log(`[QcScanner] Auto-promoted order ${orderId} to ship_ready on session complete`);
+            console.log(`[QcScanner] Auto-promoted order ${orderId} from ${currentOrder.lifecycleStatus} to ship_ready on session complete`);
           }
         }
       } catch (err) {
@@ -9084,6 +9085,28 @@ const shippingDashboardRouter = router({
         overflow: qualifyingBlocks.length === 0,
       };
     }),
+  /** Get an order_tracking row by extensivOrderId regardless of lifecycle stage — used by dock dialog */
+  getOrderByExtensivId: protectedProcedure
+    .input(z.object({ extensivOrderId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const { orderTracking } = await import("../drizzle/schema.js");
+      const rows = await db
+        .select({
+          id: orderTracking.id,
+          extensivOrderId: orderTracking.extensivOrderId,
+          clientName: orderTracking.clientName,
+          lifecycleStatus: orderTracking.lifecycleStatus,
+          outboundLocation: orderTracking.outboundLocation,
+          palletCount: orderTracking.palletCount,
+        })
+        .from(orderTracking)
+        .where(eq(orderTracking.extensivOrderId, input.extensivOrderId))
+        .limit(1);
+      return rows[0] ?? null;
+    }),
+
   /** Update outbound location and/or pallet count for an order */
   updateOutbound: protectedProcedure
     .input(z.object({

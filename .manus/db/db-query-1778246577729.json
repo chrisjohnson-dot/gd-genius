@@ -1,0 +1,98 @@
+{
+  "query": "\nSELECT \n  extensivOrderId,\n  referenceNum,\n  extensivStatus,\n  lifecycleStatus,\n  facilityId,\n  facilityName,\n  configId,\n  DATE_FORMAT(lastSyncedAt, '%Y-%m-%d %H:%i') as lastSynced,\n  DATE_FORMAT(firstSeenAt, '%Y-%m-%d %H:%i') as firstSeen\nFROM order_tracking\nWHERE extensivOrderId IN (3380922, 3381901, 3381903, 3381904, 3381905, 3387496, 3391434, 3391436)\nORDER BY extensivOrderId;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT \n  extensivOrderId,\n  referenceNum,\n  extensivStatus,\n  lifecycleStatus,\n  facilityId,\n  facilityName,\n  configId,\n  DATE_FORMAT(lastSyncedAt, '%Y-%m-%d %H:%i') as lastSynced,\n  DATE_FORMAT(firstSeenAt, '%Y-%m-%d %H:%i') as firstSeen\nFROM order_tracking\nWHERE extensivOrderId IN (3380922, 3381901, 3381903, 3381904, 3381905, 3387496, 3391434, 3391436)\nORDER BY extensivOrderId;\n",
+  "rows": [
+    {
+      "extensivOrderId": "3380922",
+      "referenceNum": "21666076",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-01 18:03"
+    },
+    {
+      "extensivOrderId": "3381901",
+      "referenceNum": "21666082",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-01 23:05"
+    },
+    {
+      "extensivOrderId": "3381903",
+      "referenceNum": "21666084",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-01 23:05"
+    },
+    {
+      "extensivOrderId": "3381904",
+      "referenceNum": "21666085",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-01 23:05"
+    },
+    {
+      "extensivOrderId": "3381905",
+      "referenceNum": "21666086",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-01 23:05"
+    },
+    {
+      "extensivOrderId": "3387496",
+      "referenceNum": "21666101",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-04 14:38"
+    },
+    {
+      "extensivOrderId": "3391434",
+      "referenceNum": "21666122",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-05 20:37"
+    },
+    {
+      "extensivOrderId": "3391436",
+      "referenceNum": "21666123",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "configId": "3",
+      "lastSynced": "2026-05-08 13:13",
+      "firstSeen": "2026-05-05 20:37"
+    }
+  ],
+  "messages": [],
+  "stdout": "extensivOrderId\treferenceNum\textensivStatus\tlifecycleStatus\tfacilityId\tfacilityName\tconfigId\tlastSynced\tfirstSeen\n3380922\t21666076\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-01 18:03\n3381901\t21666082\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-01 23:05\n3381903\t21666084\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-01 23:05\n3381904\t21666085\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-01 23:05\n3381905\t21666086\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-01 23:05\n3387496\t21666101\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-04 14:38\n3391434\t21666122\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-05 20:37\n3391436\t21666123\t0\tunallocated\t3\tRENO - Reno\t3\t2026-05-08 13:13\t2026-05-05 20:37\n",
+  "stderr": "",
+  "execution_time_ms": 66
+}

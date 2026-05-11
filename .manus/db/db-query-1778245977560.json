@@ -1,0 +1,210 @@
+{
+  "query": "\nSELECT \n  extensivOrderId,\n  referenceNum,\n  extensivStatus,\n  lifecycleStatus,\n  clientId,\n  clientName,\n  facilityId,\n  creationDate\nFROM order_tracking\nWHERE clientName LIKE '%Lil%' OR clientName LIKE '%lil%'\nORDER BY creationDate DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT \n  extensivOrderId,\n  referenceNum,\n  extensivStatus,\n  lifecycleStatus,\n  clientId,\n  clientName,\n  facilityId,\n  creationDate\nFROM order_tracking\nWHERE clientName LIKE '%Lil%' OR clientName LIKE '%lil%'\nORDER BY creationDate DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "extensivOrderId": "3395679",
+      "referenceNum": "21666130",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-06T22:30:11.287"
+    },
+    {
+      "extensivOrderId": "3395551",
+      "referenceNum": "21666129",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-06T20:30:24.29"
+    },
+    {
+      "extensivOrderId": "3394985",
+      "referenceNum": "21666128",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-06T16:30:23.22"
+    },
+    {
+      "extensivOrderId": "3394277",
+      "referenceNum": "21666127",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-06T10:30:21.967"
+    },
+    {
+      "extensivOrderId": "3393073",
+      "referenceNum": "21666126",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T23:30:20.367"
+    },
+    {
+      "extensivOrderId": "3392032",
+      "referenceNum": "21666125",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T18:30:19.76"
+    },
+    {
+      "extensivOrderId": "3392031",
+      "referenceNum": "21666124",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T18:30:19.39"
+    },
+    {
+      "extensivOrderId": "3391436",
+      "referenceNum": "21666123",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T13:30:22.73"
+    },
+    {
+      "extensivOrderId": "3391434",
+      "referenceNum": "21666122",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T13:30:22.313"
+    },
+    {
+      "extensivOrderId": "3391176",
+      "referenceNum": "21666121",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T11:30:22.263"
+    },
+    {
+      "extensivOrderId": "3390930",
+      "referenceNum": "21666120",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T09:30:34.547"
+    },
+    {
+      "extensivOrderId": "3390927",
+      "referenceNum": "21666119",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T09:30:32.35"
+    },
+    {
+      "extensivOrderId": "3390772",
+      "referenceNum": "21666118",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T08:30:21.657"
+    },
+    {
+      "extensivOrderId": "3390670",
+      "referenceNum": "21666117",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T07:30:21.643"
+    },
+    {
+      "extensivOrderId": "3390587",
+      "referenceNum": "21666116",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T06:30:21.063"
+    },
+    {
+      "extensivOrderId": "3390007",
+      "referenceNum": "21666115",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-05T01:30:20.117"
+    },
+    {
+      "extensivOrderId": "3389717",
+      "referenceNum": "21666114",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-04T20:30:19.487"
+    },
+    {
+      "extensivOrderId": "3389424",
+      "referenceNum": "21666113",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-04T19:30:19.53"
+    },
+    {
+      "extensivOrderId": "3389423",
+      "referenceNum": "21666112",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-04T19:30:19.08"
+    },
+    {
+      "extensivOrderId": "3389216",
+      "referenceNum": "21666111",
+      "extensivStatus": "0",
+      "lifecycleStatus": "allocated",
+      "clientId": "216",
+      "clientName": "Lil Bucks",
+      "facilityId": "3",
+      "creationDate": "2026-05-04T16:30:18.613"
+    }
+  ],
+  "messages": [],
+  "stdout": "extensivOrderId\treferenceNum\textensivStatus\tlifecycleStatus\tclientId\tclientName\tfacilityId\tcreationDate\n3395679\t21666130\t0\tallocated\t216\tLil Bucks\t3\t2026-05-06T22:30:11.287\n3395551\t21666129\t0\tallocated\t216\tLil Bucks\t3\t2026-05-06T20:30:24.29\n3394985\t21666128\t0\tallocated\t216\tLil Bucks\t3\t2026-05-06T16:30:23.22\n3394277\t21666127\t0\tallocated\t216\tLil Bucks\t3\t2026-05-06T10:30:21.967\n3393073\t21666126\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T23:30:20.367\n3392032\t21666125\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T18:30:19.76\n3392031\t21666124\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T18:30:19.39\n3391436\t21666123\t0\tunallocated\t216\tLil Bucks\t3\t2026-05-05T13:30:22.73\n3391434\t21666122\t0\tunallocated\t216\tLil Bucks\t3\t2026-05-05T13:30:22.313\n3391176\t21666121\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T11:30:22.263\n3390930\t21666120\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T09:30:34.547\n3390927\t21666119\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T09:30:32.35\n3390772\t21666118\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T08:30:21.657\n3390670\t21666117\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T07:30:21.643\n3390587\t21666116\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T06:30:21.063\n3390007\t21666115\t0\tallocated\t216\tLil Bucks\t3\t2026-05-05T01:30:20.117\n3389717\t21666114\t0\tallocated\t216\tLil Bucks\t3\t2026-05-04T20:30:19.487\n3389424\t21666113\t0\tallocated\t216\tLil Bucks\t3\t2026-05-04T19:30:19.53\n3389423\t21666112\t0\tallocated\t216\tLil Bucks\t3\t2026-05-04T19:30:19.08\n3389216\t21666111\t0\tallocated\t216\tLil Bucks\t3\t2026-05-04T16:30:18.613\n",
+  "stderr": "",
+  "execution_time_ms": 141
+}

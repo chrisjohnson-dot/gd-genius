@@ -1,0 +1,21 @@
+{
+  "query": "\nSELECT \n  extensivOrderId,\n  clientName,\n  lifecycleStatus,\n  outboundLocation,\n  palletCount,\n  shipwellOrderId,\n  shipwellStatus,\n  DATE_FORMAT(shipReadyAt, '%Y-%m-%d %H:%i') as shipReadyAt,\n  DATE_FORMAT(lastSyncedAt, '%Y-%m-%d %H:%i') as lastSynced\nFROM order_tracking\nWHERE extensivOrderId = 3389063;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT \n  extensivOrderId,\n  clientName,\n  lifecycleStatus,\n  outboundLocation,\n  palletCount,\n  shipwellOrderId,\n  shipwellStatus,\n  DATE_FORMAT(shipReadyAt, '%Y-%m-%d %H:%i') as shipReadyAt,\n  DATE_FORMAT(lastSyncedAt, '%Y-%m-%d %H:%i') as lastSynced\nFROM order_tracking\nWHERE extensivOrderId = 3389063;\n",
+  "rows": [
+    {
+      "extensivOrderId": "3389063",
+      "clientName": "Growl Products INC.",
+      "lifecycleStatus": "allocated",
+      "outboundLocation": "NULL",
+      "palletCount": "0",
+      "shipwellOrderId": "4e86b052-e7d9-4d43-91dc-03d9cf33e382",
+      "shipwellStatus": "NULL",
+      "shipReadyAt": "NULL",
+      "lastSynced": "2026-05-06 20:25"
+    }
+  ],
+  "messages": [],
+  "stdout": "extensivOrderId\tclientName\tlifecycleStatus\toutboundLocation\tpalletCount\tshipwellOrderId\tshipwellStatus\tshipReadyAt\tlastSynced\n3389063\tGrowl Products INC.\tallocated\tNULL\t0\t4e86b052-e7d9-4d43-91dc-03d9cf33e382\tNULL\tNULL\t2026-05-06 20:25\n",
+  "stderr": "",
+  "execution_time_ms": 368
+}

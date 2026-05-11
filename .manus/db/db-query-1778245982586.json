@@ -1,0 +1,150 @@
+{
+  "query": "\nSELECT \n  extensivOrderId,\n  referenceNum,\n  extensivStatus,\n  lifecycleStatus,\n  facilityId\nFROM order_tracking\nWHERE clientName LIKE '%Lil%' \n  AND lifecycleStatus = 'unallocated'\nORDER BY creationDate DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT \n  extensivOrderId,\n  referenceNum,\n  extensivStatus,\n  lifecycleStatus,\n  facilityId\nFROM order_tracking\nWHERE clientName LIKE '%Lil%' \n  AND lifecycleStatus = 'unallocated'\nORDER BY creationDate DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "extensivOrderId": "3391436",
+      "referenceNum": "21666123",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3391434",
+      "referenceNum": "21666122",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3387496",
+      "referenceNum": "21666101",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3381905",
+      "referenceNum": "21666086",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3381904",
+      "referenceNum": "21666085",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3381903",
+      "referenceNum": "21666084",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3381901",
+      "referenceNum": "21666082",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3380925",
+      "referenceNum": "21666079",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3380924",
+      "referenceNum": "21666078",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3380923",
+      "referenceNum": "21666077",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3380922",
+      "referenceNum": "21666076",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3372651",
+      "referenceNum": "21666071",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3372650",
+      "referenceNum": "21666070",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3372649",
+      "referenceNum": "21666069",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3372648",
+      "referenceNum": "21666068",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3372535",
+      "referenceNum": "21666067",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3371894",
+      "referenceNum": "21666048",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3371893",
+      "referenceNum": "21666047",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3367501",
+      "referenceNum": "21666023",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    },
+    {
+      "extensivOrderId": "3367500",
+      "referenceNum": "21666022",
+      "extensivStatus": "0",
+      "lifecycleStatus": "unallocated",
+      "facilityId": "3"
+    }
+  ],
+  "messages": [],
+  "stdout": "extensivOrderId\treferenceNum\textensivStatus\tlifecycleStatus\tfacilityId\n3391436\t21666123\t0\tunallocated\t3\n3391434\t21666122\t0\tunallocated\t3\n3387496\t21666101\t0\tunallocated\t3\n3381905\t21666086\t0\tunallocated\t3\n3381904\t21666085\t0\tunallocated\t3\n3381903\t21666084\t0\tunallocated\t3\n3381901\t21666082\t0\tunallocated\t3\n3380925\t21666079\t0\tunallocated\t3\n3380924\t21666078\t0\tunallocated\t3\n3380923\t21666077\t0\tunallocated\t3\n3380922\t21666076\t0\tunallocated\t3\n3372651\t21666071\t0\tunallocated\t3\n3372650\t21666070\t0\tunallocated\t3\n3372649\t21666069\t0\tunallocated\t3\n3372648\t21666068\t0\tunallocated\t3\n3372535\t21666067\t0\tunallocated\t3\n3371894\t21666048\t0\tunallocated\t3\n3371893\t21666047\t0\tunallocated\t3\n3367501\t21666023\t0\tunallocated\t3\n3367500\t21666022\t0\tunallocated\t3\n",
+  "stderr": "",
+  "execution_time_ms": 553
+}

@@ -3434,14 +3434,21 @@ function DockRecommendDialog({
     onError: (e) => toast.error(e.message),
   });
 
-  // Find the order_tracking row for this session's transactionId so we can assign the location
+  // Find the order_tracking row for this session's transactionId so we can assign the location.
+  // Primary: check ship_ready orders list. Fallback: direct lookup by extensivOrderId (catches
+  // orders that haven't been promoted to ship_ready yet due to lifecycle stage mismatch).
   const { data: outboundOrders } = trpc.shippingDashboard.listOutbound.useQuery(
     undefined,
     { enabled: open && !!sessionInfo?.transactionId }
   );
-  const matchedOrder = outboundOrders?.find(
+  const matchedFromOutbound = outboundOrders?.find(
     (o) => o.extensivOrderId === sessionInfo?.transactionId
   );
+  const { data: fallbackOrder } = trpc.shippingDashboard.getOrderByExtensivId.useQuery(
+    { extensivOrderId: sessionInfo?.transactionId ?? 0 },
+    { enabled: open && !!sessionInfo?.transactionId && !matchedFromOutbound }
+  );
+  const matchedOrder = matchedFromOutbound ?? fallbackOrder ?? null;
 
   function handleAssign() {
     if (!matchedOrder) return;

@@ -1,0 +1,370 @@
+{
+  "query": "DESCRIBE order_tracking;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute DESCRIBE order_tracking;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "extensivOrderId",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "referenceNum",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "poNum",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "configId",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "clientId",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "clientName",
+      "Type": "varchar(256)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "facilityId",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "facilityName",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipToName",
+      "Type": "varchar(512)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipToCity",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "totalPieces",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "skuCount",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "notes",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "extensivStatus",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "creationDate",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "lifecycleStatus",
+      "Type": "enum('unallocated','allocated','picking','qc','qc_complete','ship_ready','shipped')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "unallocated",
+      "Extra": ""
+    },
+    {
+      "Field": "firstSeenAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "lastSyncedAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "allocatedAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "pickingAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "qcAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "qcCompleteAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipReadyAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "outboundLocation",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "palletCount",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    },
+    {
+      "Field": "assignedAssociate",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellOrderId",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellPoUrl",
+      "Type": "varchar(512)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellSentAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellShipmentId",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellShipmentUrl",
+      "Type": "varchar(512)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellStatus",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellStatusUpdatedAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellBidCount",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellQuotingStartedAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellLastBidAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shipwellZeroBidNotifiedAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "requiredShipDate",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "lastOverdueAlertSentAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "savedElements",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "slaExtensionDays",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "slaExtensionNote",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "shippedAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nextensivOrderId\tint\tNO\tMUL\tNULL\t\nreferenceNum\tvarchar(256)\tYES\t\tNULL\t\npoNum\tvarchar(256)\tYES\t\tNULL\t\nconfigId\tint\tNO\t\tNULL\t\nclientId\tint\tNO\t\tNULL\t\nclientName\tvarchar(256)\tNO\t\tNULL\t\nfacilityId\tint\tNO\t\tNULL\t\nfacilityName\tvarchar(256)\tYES\t\tNULL\t\nshipToName\tvarchar(512)\tYES\t\tNULL\t\nshipToCity\tvarchar(256)\tYES\t\tNULL\t\ntotalPieces\tint\tYES\t\t0\t\nskuCount\tint\tYES\t\t0\t\nnotes\ttext\tYES\t\tNULL\t\nextensivStatus\tint\tYES\t\t0\t\ncreationDate\tvarchar(64)\tYES\t\tNULL\t\nlifecycleStatus\tenum('unallocated','allocated','picking','qc','qc_complete','ship_ready','shipped')\tNO\t\tunallocated\t\nfirstSeenAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nlastSyncedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nallocatedAt\ttimestamp\tYES\t\tNULL\t\npickingAt\ttimestamp\tYES\t\tNULL\t\nqcAt\ttimestamp\tYES\t\tNULL\t\nqcCompleteAt\ttimestamp\tYES\t\tNULL\t\nshipReadyAt\ttimestamp\tYES\t\tNULL\t\noutboundLocation\tvarchar(256)\tYES\t\tNULL\t\npalletCount\tint\tNO\t\t0\t\nupdatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\nassignedAssociate\tvarchar(256)\tYES\t\tNULL\t\nshipwellOrderId\tvarchar(64)\tYES\t\tNULL\t\nshipwellPoUrl\tvarchar(512)\tYES\t\tNULL\t\nshipwellSentAt\ttimestamp\tYES\t\tNULL\t\nshipwellShipmentId\tvarchar(64)\tYES\t\tNULL\t\nshipwellShipmentUrl\tvarchar(512)\tYES\t\tNULL\t\nshipwellStatus\tvarchar(64)\tYES\t\tNULL\t\nshipwellStatusUpdatedAt\ttimestamp\tYES\t\tNULL\t\nshipwellBidCount\tint\tYES\t\tNULL\t\nshipwellQuotingStartedAt\ttimestamp\tYES\t\tNULL\t\nshipwellLastBidAt\ttimestamp\tYES\t\tNULL\t\nshipwellZeroBidNotifiedAt\ttimestamp\tYES\t\tNULL\t\nrequiredShipDate\tvarchar(64)\tYES\t\tNULL\t\nlastOverdueAlertSentAt\ttimestamp\tYES\t\tNULL\t\nsavedElements\ttext\tYES\t\tNULL\t\nslaExtensionDays\tint\tYES\t\t0\t\nslaExtensionNote\ttext\tYES\t\tNULL\t\nshippedAt\ttimestamp\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 59
+}

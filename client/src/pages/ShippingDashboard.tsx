@@ -18,6 +18,7 @@ import {
   ChevronDown, ChevronRight, Pencil, AlertTriangle, CheckCircle2, Timer, Truck,
   FlaskConical, ArrowRight, ClipboardList, Calendar, Hash, Building2, ExternalLink,
   Plus, X, FileText, Upload, Trash2, XCircle, Globe, Tag, Loader2, ArrowUpDown,
+  Navigation,
 } from "lucide-react";
 
 
@@ -454,6 +455,158 @@ function DetailField({ icon, label, value }: { icon: React.ReactNode; label: str
 
 // ─── Edit Dialog ──────────────────────────────────────────────────────────────
 
+// ─── Assign Dock Dialog (smart lane picker) ─────────────────────────────────
+function AssignDockDialog({ order, onClose }: { order: OutboundOrder; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const { data: spaces, isLoading } = trpc.shippingDashboard.listAvailableDockSpaces.useQuery(
+    {
+      facilityId: order.facilityId,
+      palletCount: (order.palletCount ?? 1) > 0 ? (order.palletCount ?? 1) : 1,
+      clientId: order.clientId,
+    },
+    { enabled: true }
+  );
+
+  const recommended = spaces?.recommended;
+  const isOverflow = spaces?.overflow === true;
+
+  // Auto-select recommended on load
+  useEffect(() => {
+    if (!spaces || selectedLocation) return;
+    if (spaces.recommended) setSelectedLocation(spaces.recommended.label);
+    else if (spaces.overflow) setSelectedLocation("Overflow");
+  }, [spaces, selectedLocation]);
+
+  const update = trpc.shippingDashboard.updateOutbound.useMutation({
+    onSuccess: () => {
+      utils.shippingDashboard.listOutbound.invalidate();
+      onClose();
+    },
+    onSettled: () => setSaving(false),
+    onError: (e) => toast.error(e.message),
+  });
+
+  function handleAssign() {
+    if (!selectedLocation) return;
+    setSaving(true);
+    update.mutate({ id: order.id, outboundLocation: selectedLocation === "Overflow" ? "Overflow" : selectedLocation });
+  }
+
+  const available = spaces?.available ?? [];
+
+  // Group available positions by lane number for display
+  const laneGroups: { lane: number; label: string }[] = available.map((a) => ({ lane: a.lane, label: a.label }));
+
+  return (
+    <Dialog open onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Navigation className="h-4 w-4 text-blue-500" />
+            Assign Dock Location
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {order.clientName} — TX {order.extensivOrderId} · {order.palletCount ?? 0} pallets
+          </p>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading available positions…</span>
+          </div>
+        ) : (
+          <div className="space-y-4 py-1">
+            {/* Recommended */}
+            {recommended && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Recommended</p>
+                <button
+                  onClick={() => setSelectedLocation(recommended.label)}
+                  className={cn(
+                    "w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 transition-colors",
+                    selectedLocation === recommended.label
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+                      : "border-border hover:border-blue-300 hover:bg-muted/30"
+                  )}
+                >
+                  <div className="text-left">
+                    <p className="text-xl font-black text-blue-600 dark:text-blue-400">{recommended.label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Lane {recommended.lane} · Position{recommended.positions.length > 1 ? "s" : ""} {recommended.positions.join(", ")}</p>
+                  </div>
+                  {selectedLocation === recommended.label && <CheckCircle2 className="h-5 w-5 text-blue-500 shrink-0" />}
+                </button>
+              </div>
+            )}
+
+            {/* All available positions */}
+            {laneGroups.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  All Available Positions ({spaces?.occupiedCount ?? 0} of {spaces?.totalCells ?? 0} occupied)
+                </p>
+                <div className="grid grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                  {laneGroups.map((g) => (
+                    <button
+                      key={g.label}
+                      onClick={() => setSelectedLocation(g.label)}
+                      className={cn(
+                        "rounded-lg border px-2 py-2 text-[13px] font-semibold transition-colors",
+                        selectedLocation === g.label
+                          ? "border-blue-500 bg-blue-500 text-white"
+                          : "border-border hover:border-blue-300 hover:bg-muted/40 text-foreground"
+                      )}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Overflow */}
+            {isOverflow && (
+              <button
+                onClick={() => setSelectedLocation("Overflow")}
+                className={cn(
+                  "w-full rounded-xl border-2 px-4 py-3 text-left transition-colors",
+                  selectedLocation === "Overflow"
+                    ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20"
+                    : "border-orange-300 hover:bg-orange-50/50 dark:border-orange-700"
+                )}
+              >
+                <p className="text-base font-bold text-orange-600 dark:text-orange-400">Overflow</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">No standard positions available</p>
+              </button>
+            )}
+
+            {!isLoading && laneGroups.length === 0 && !isOverflow && (
+              <p className="text-sm text-muted-foreground text-center py-4">No positions available.</p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button
+            size="sm"
+            disabled={saving || !selectedLocation || isLoading}
+            onClick={handleAssign}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+            <MapPin className="h-3.5 w-3.5 mr-1.5" />
+            Assign {selectedLocation ?? "…"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EditOutboundDialog({ order, onClose }: { order: OutboundOrder; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [location, setLocation] = useState(order.outboundLocation ?? "");
@@ -743,13 +896,14 @@ function ShippingDocumentsPanel({ order, isDemo, requiresCustomsDocs = false }: 
 
 // ─── Warehouse Section ────────────────────────────────────────────────────────
 
-function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo, onSelectForDocs }: {
+function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo, onSelectForDocs, onAssignDock }: {
   facilityName: string;
   orders: OutboundOrder[];
   onEdit: (o: OutboundOrder) => void;
   onSelect: (o: OutboundOrder) => void;
   isDemo?: boolean;
   onSelectForDocs?: (o: OutboundOrder) => void;
+  onAssignDock?: (o: OutboundOrder) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const totalPallets = orders.reduce((s, o) => s + (o.palletCount ?? 0), 0);
@@ -845,10 +999,20 @@ function WarehouseSection({ facilityName, orders, onEdit, onSelect, isDemo, onSe
                       {order.shipToCity && <div className="text-[11px] text-muted-foreground">{order.shipToCity}</div>}
                     </td>
                     <td className="px-4 py-3 text-[13px] text-foreground/80 whitespace-nowrap">{fmtDate(order.requiredShipDate)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       {order.outboundLocation
                         ? <span className="inline-flex items-center gap-1 text-[13px] text-blue-600 dark:text-blue-400"><MapPin className="h-3 w-3 shrink-0" />{order.outboundLocation}</span>
-                        : <span className="text-[12px] text-muted-foreground italic">Not set</span>}
+                        : !isShipped && !isDemo && onAssignDock
+                          ? (
+                            <button
+                              onClick={() => onAssignDock(order)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/20 transition-colors"
+                            >
+                              <Navigation className="h-3 w-3" />
+                              Assign Dock
+                            </button>
+                          )
+                          : <span className="text-[12px] text-muted-foreground italic">Not set</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {(order.palletCount ?? 0) > 0
@@ -988,6 +1152,7 @@ export default function ShippingDashboard() {
   const [sortBy, setSortBy] = useState<"age" | "docs">("age");  // default: age (existing behaviour)
   const [editOrder, setEditOrder] = useState<OutboundOrder | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
+  const [assignDockOrder, setAssignDockOrder] = useState<OutboundOrder | null>(null);
   // Reset filters/selection whenever global warehouse changes
   useEffect(() => { setSearch(""); setTierFilter(null); setSelectedOrder(null); setEditOrder(null); }, [globalFacilityId]);
 
@@ -1304,6 +1469,7 @@ export default function ShippingDashboard() {
             onEdit={setEditOrder}
             onSelect={setSelectedOrder}
             onSelectForDocs={setSelectedOrder}
+            onAssignDock={setAssignDockOrder}
             isDemo={demoMode}
           />
         ))
@@ -1321,6 +1487,7 @@ export default function ShippingDashboard() {
       )}
 
       {!demoMode && editOrder && <EditOutboundDialog order={editOrder} onClose={() => setEditOrder(null)} />}
+      {!demoMode && assignDockOrder && <AssignDockDialog order={assignDockOrder} onClose={() => setAssignDockOrder(null)} />}
     </div>
   );
 }

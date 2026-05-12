@@ -144,8 +144,9 @@ function DockCell({
       <div className="flex items-center justify-between mb-0.5">
         <span className="text-[10px] font-bold text-muted-foreground tracking-wider">{label}</span>
         {!isEmpty && (
-          <span className="text-[9px] font-semibold text-muted-foreground">
-            {activeOrders.reduce((s, o) => s + (o.palletCount ?? 0), 0)} plt
+          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-primary/15 text-primary rounded px-1 py-0.5 leading-none">
+            <Package className="w-2.5 h-2.5" />
+            <span>{activeOrders.reduce((s, o) => s + (o.palletCount ?? 0), 0)}</span>
           </span>
         )}
       </div>
@@ -172,6 +173,14 @@ function DockCell({
                 >
                   {shortClientName(o.clientName)}
                 </div>
+                {o.palletCount != null && o.palletCount > 0 && (
+                  <div
+                    className="px-1 pb-0 text-[9px] font-black leading-tight text-center tabular-nums"
+                    style={{ color: color.text, opacity: 0.9 }}
+                  >
+                    {o.palletCount} plt
+                  </div>
+                )}
                 {age && (
                   <div
                     className="px-1 pb-1 text-[11px] font-black leading-tight tabular-nums text-center"

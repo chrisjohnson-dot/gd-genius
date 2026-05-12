@@ -112,6 +112,7 @@ type UnconfirmedOrder = {
   shipwellShipmentId?: string | null;
   palletCount: number | null;
   outboundLocation: string | null;
+  facilityId: number | null;
   facilityName: string | null;
   shipwellStatusUpdatedAt: Date | string | null;
   shipwellQuotingStartedAt: Date | string | null;
@@ -488,17 +489,23 @@ export default function ConfirmShipping() {
     return (now - new Date(order.shipwellQuotingStartedAt).getTime()) > 2 * 3_600_000;
   }, [now]);
 
+  // Facility-scoped orders for Local Tracking tab
+  const facilityOrders = useMemo(() => {
+    if (selectedFacilityId == null) return orders;
+    return orders.filter((o) => o.facilityId === selectedFacilityId);
+  }, [orders, selectedFacilityId]);
+
   // KPI counts
-  const totalCount = orders.length;
-  const overdueCount = useMemo(() => orders.filter(isOverdue).length, [orders]);
-  const quotingCount = useMemo(() => orders.filter((o) => o.shipwellStatus === "quoting").length, [orders]);
-  const notSentCount = useMemo(() => orders.filter((o) => !o.shipwellStatus).length, [orders]);
-  const tenderedCount = useMemo(() => orders.filter((o) => o.shipwellStatus === "tendered").length, [orders]);
-  const staleCount = useMemo(() => orders.filter(isStaleQuote).length, [orders, isStaleQuote]);
+  const totalCount = facilityOrders.length;
+  const overdueCount = useMemo(() => facilityOrders.filter(isOverdue).length, [facilityOrders]);
+  const quotingCount = useMemo(() => facilityOrders.filter((o) => o.shipwellStatus === "quoting").length, [facilityOrders]);
+  const notSentCount = useMemo(() => facilityOrders.filter((o) => !o.shipwellStatus).length, [facilityOrders]);
+  const tenderedCount = useMemo(() => facilityOrders.filter((o) => o.shipwellStatus === "tendered").length, [facilityOrders]);
+  const staleCount = useMemo(() => facilityOrders.filter(isStaleQuote).length, [facilityOrders, isStaleQuote]);
 
   // Filtered + sorted list
   const filtered = useMemo(() => {
-    let list = [...orders];
+    let list = [...facilityOrders];
     if (filterStatus === "overdue") list = list.filter(isOverdue);
     else if (filterStatus === "quoting") list = list.filter((o) => o.shipwellStatus === "quoting");
     else if (filterStatus === "tendered") list = list.filter((o) => o.shipwellStatus === "tendered");
@@ -596,9 +603,9 @@ export default function ConfirmShipping() {
           )}
         >
           Local Tracking
-          {orders.length > 0 && (
+          {facilityOrders.length > 0 && (
             <span className="ml-2 rounded-full bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">
-              {orders.length}
+              {facilityOrders.length}
             </span>
           )}
         </button>
@@ -1016,8 +1023,16 @@ export default function ConfirmShipping() {
             </button>
           ))}
         </div>
-        <div className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} order{filtered.length !== 1 ? "s" : ""}
+        <div className="ml-auto flex items-center gap-2">
+          {selectedFacilityId != null && selectedFacilityName && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-semibold">
+              <MapPin className="h-2.5 w-2.5" />
+              {selectedFacilityName}
+            </span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {filtered.length} order{filtered.length !== 1 ? "s" : ""}
+          </span>
         </div>
       </div>
 

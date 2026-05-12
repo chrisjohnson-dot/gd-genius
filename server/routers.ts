@@ -3076,6 +3076,7 @@ const _appRouter = router({
         shipwellPoUrl: r.shipwellPoUrl,
         palletCount: r.palletCount,
         outboundLocation: r.outboundLocation,
+        facilityId: r.facilityId,
         facilityName: r.facilityName,
         shipwellStatusUpdatedAt: r.shipwellStatusUpdatedAt,
         shipwellQuotingStartedAt: r.shipwellQuotingStartedAt,

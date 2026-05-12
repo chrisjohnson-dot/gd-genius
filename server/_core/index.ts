@@ -14,6 +14,7 @@ import { startOrderSyncScheduler } from "../scheduler/orderSync";
 import { startShipwellSyncScheduler } from "../scheduler/shipwellSync";
 import { startOverdueAlertScheduler } from "../scheduler/overdueAlert";
 import { registerCortexRoutes } from "../cortex/routes";
+import { scheduledOrderSyncHandler } from "../scheduled/orderSync";
 import { registerExtensivWebhookRoutes } from "../webhooks/extensiv";
 import { registerScanEndpoint } from "../scanEndpoint";
 import { registerScanImageEndpoints } from "../scanImageEndpoint";
@@ -60,6 +61,8 @@ async function startServer() {
   registerPdfRoutes(app);
   // GD Cortex integration REST endpoints
   registerCortexRoutes(app);
+  // Heartbeat scheduled endpoint — POST /api/scheduled/orderSync
+  app.post("/api/scheduled/orderSync", scheduledOrderSyncHandler);
   // Extensiv webhook receiver — POST /api/webhooks/extensiv
   registerExtensivWebhookRoutes(app);
   // Vision system scan endpoint — /api/scan

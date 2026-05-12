@@ -1,0 +1,9 @@
+{
+  "query": "\nUPDATE order_tracking ot\nJOIN (\n  SELECT \n    s.transactionId,\n    COUNT(p.id) AS pallet_count\n  FROM qc_scan_sessions s\n  JOIN qc_pallets p ON p.sessionId = s.id AND p.deletedAt IS NULL\n  WHERE s.status = 'complete'\n    AND s.transactionId IS NOT NULL\n  GROUP BY s.transactionId\n) pq ON ot.extensivOrderId = pq.transactionId\nSET ot.palletCount = pq.pallet_count\nWHERE ot.lifecycleStatus IN ('ship_ready', 'shipped')\n  AND (ot.palletCount IS NULL OR ot.palletCount = 0);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nUPDATE order_tracking ot\nJOIN (\n  SELECT \n    s.transactionId,\n    COUNT(p.id) AS pallet_count\n  FROM qc_scan_sessions s\n  JOIN qc_pallets p ON p.sessionId = s.id AND p.deletedAt IS NULL\n  WHERE s.status = 'complete'\n    AND s.transactionId IS NOT NULL\n  GROUP BY s.transactionId\n) pq ON ot.extensivOrderId = pq.transactionId\nSET ot.palletCount = pq.pallet_count\nWHERE ot.lifecycleStatus IN ('ship_ready', 'shipped')\n  AND (ot.palletCount IS NULL OR ot.palletCount = 0);\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 309
+}

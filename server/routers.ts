@@ -4983,6 +4983,25 @@ const qcScannerRouter = router({
       // Return session metadata so the frontend can use it directly (avoids stale closure bug)
       const pallets = await getQcPallets(input.sessionId);
       const activePalletCount = pallets.filter((p) => !p.deletedAt).length;
+
+      // Persist pallet count to orderTracking so Shipping Dashboard and Dock Manager show it
+      try {
+        const orderId = sessionBeforeComplete?.transactionId ?? null;
+        if (orderId && activePalletCount > 0) {
+          const { eq: eqPc } = await import("drizzle-orm");
+          const dbPc = await getDb();
+          if (dbPc) {
+            const { orderTracking: otPc } = await import("../drizzle/schema.js");
+            await dbPc.update(otPc)
+              .set({ palletCount: activePalletCount })
+              .where(eqPc(otPc.extensivOrderId, orderId));
+            console.log(`[QcScanner] Wrote palletCount=${activePalletCount} to orderTracking for order ${orderId}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[QcScanner] Failed to persist palletCount to orderTracking:`, err);
+      }
+
       return {
         success: true,
         packedInExtensiv,

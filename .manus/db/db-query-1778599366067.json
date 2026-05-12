@@ -1,0 +1,15 @@
+{
+  "query": "\nSELECT \n  COUNT(*) as total_ship_ready,\n  SUM(CASE WHEN palletCount IS NULL OR palletCount = 0 THEN 1 ELSE 0 END) as missing_pallet_count,\n  SUM(CASE WHEN palletCount > 0 THEN 1 ELSE 0 END) as has_pallet_count\nFROM order_tracking\nWHERE lifecycleStatus IN ('ship_ready', 'shipped');\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT \n  COUNT(*) as total_ship_ready,\n  SUM(CASE WHEN palletCount IS NULL OR palletCount = 0 THEN 1 ELSE 0 END) as missing_pallet_count,\n  SUM(CASE WHEN palletCount > 0 THEN 1 ELSE 0 END) as has_pallet_count\nFROM order_tracking\nWHERE lifecycleStatus IN ('ship_ready', 'shipped');\n",
+  "rows": [
+    {
+      "total_ship_ready": "16",
+      "missing_pallet_count": "0",
+      "has_pallet_count": "16"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_ship_ready\tmissing_pallet_count\thas_pallet_count\n16\t0\t16\n",
+  "stderr": "",
+  "execution_time_ms": 336
+}

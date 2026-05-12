@@ -686,7 +686,11 @@ export function registerPdfRoutes(app: Express) {
     // Build SSCC label data per pallet
     const ssccLabels: SsccLabelData[] = pallets.map((p) => {
       const palletItems = (p.items as Array<{ sku: string; qty: number }> | null) ?? [];
-      const caseCount = palletItems.reduce((s, i) => s + i.qty, 0);
+      // caseCount = sum of floor(qty ÷ caseAmount) per item — NOT a raw unit sum
+      const caseCount = palletItems.reduce((s, i) => {
+        const ca = Math.max(itemMap.get(i.sku)?.caseAmount ?? 1, 1);
+        return s + Math.floor((i.qty ?? 0) / ca);
+      }, 0);
       // SSCC-18: pad transactionId to 18 digits (GS1 format: extension digit + company prefix + serial + check)
       const rawSscc = String(txId).padStart(17, "0") + "0";
       const sscc18  = p.palletUpc?.replace(/\D/g, "").padStart(18, "0") ?? rawSscc;

@@ -211,11 +211,15 @@ function ItemsTable({
       {items.map((item, idx) => {
         const done = item.scannedQty >= item.expectedQty;
         const over = item.scannedQty > item.expectedQty;
+        const ca = item.caseAmount ?? 1;
+        // Partial case: scanned qty doesn't divide evenly into full cases
+        const isPartialCase = ca > 1 && item.scannedQty > 0 && (item.scannedQty % ca) !== 0;
         const isAlt = idx % 2 === 1;
         const isFlashing = flashSku === item.sku;
         let rowBg = isAlt ? "#EEF4FB" : "#ffffff";
+        if (isPartialCase && !over) rowBg = isAlt ? "#fef3c7" : "#fffbeb"; // amber for partial case
         if (over)  rowBg = isAlt ? "#fef3c7" : "#fffbeb";
-        if (done && !over) rowBg = isAlt ? "#dcfce7" : "#f0fdf4";
+        if (done && !over && !isPartialCase) rowBg = isAlt ? "#dcfce7" : "#f0fdf4";
         if (isFlashing) rowBg = "#bbf7d0"; // bright green flash override
 
         return (
@@ -251,10 +255,22 @@ function ItemsTable({
               {item.expectedQty}
             </div>
 
-            {/* Calculated cases */}
-            <div className="text-right text-xs font-semibold tabular-nums text-blue-700">
-              {(item.caseAmount ?? 1) > 1
-                ? Math.floor(item.scannedQty / (item.caseAmount ?? 1))
+            {/* Calculated cases — amber ⚠ if partial case */}
+            <div className={`text-right text-xs font-semibold tabular-nums flex items-center justify-end gap-0.5 ${isPartialCase ? "text-amber-600" : "text-blue-700"}`}>
+              {isPartialCase && (
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="text-xs max-w-[180px]">
+                      Partial case: {item.scannedQty} units ÷ {ca} per case = {(item.scannedQty / ca).toFixed(2)} cases ({item.scannedQty % ca} unit{item.scannedQty % ca !== 1 ? "s" : ""} left over)
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {ca > 1
+                ? Math.floor(item.scannedQty / ca)
                 : item.scannedQty}
             </div>
 
@@ -1310,6 +1326,11 @@ export default function QcScanner() {
   const totalScanned = items.reduce((s, i) => s + i.scannedQty, 0);
   const progress = totalExpected > 0 ? Math.min(100, Math.round((totalScanned / totalExpected) * 100)) : 0;
   const allComplete = items.length > 0 && items.every((i) => i.scannedQty >= i.expectedQty);
+  // Partial case items: caseAmount > 1 and scannedQty doesn't divide evenly
+  const partialCaseItems = items.filter((i) => {
+    const ca = i.caseAmount ?? 1;
+    return ca > 1 && i.scannedQty > 0 && (i.scannedQty % ca) !== 0;
+  });
 
   useEffect(() => {
     if (phase === "scanning") {
@@ -3207,6 +3228,28 @@ export default function QcScanner() {
               <div className="flex items-center gap-2 text-red-700 bg-red-50 dark:bg-red-950/20 rounded-lg p-2.5">
                 <Flag className="w-4 h-4 shrink-0" />
                 <span>{openFlags.length} flagged scan{openFlags.length !== 1 ? "s" : ""} still open. Resolve them before closing or confirm to proceed.</span>
+              </div>
+            )}
+            {partialCaseItems.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{partialCaseItems.length} SKU{partialCaseItems.length !== 1 ? "s have" : " has"} a partial case count</span>
+                </div>
+                <ul className="space-y-1">
+                  {partialCaseItems.map((i) => {
+                    const ca = i.caseAmount ?? 1;
+                    const remainder = i.scannedQty % ca;
+                    return (
+                      <li key={i.sku} className="text-xs text-amber-800 dark:text-amber-300 font-mono flex items-baseline gap-1">
+                        <span className="font-bold">{i.sku}</span>
+                        <span className="text-amber-600">—</span>
+                        <span>{i.scannedQty} units ÷ {ca}/case = {Math.floor(i.scannedQty / ca)} full case{Math.floor(i.scannedQty / ca) !== 1 ? "s" : ""} + {remainder} leftover unit{remainder !== 1 ? "s" : ""}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="text-xs text-amber-700">Confirm below to proceed anyway, or go back and adjust the scan counts.</p>
               </div>
             )}
 

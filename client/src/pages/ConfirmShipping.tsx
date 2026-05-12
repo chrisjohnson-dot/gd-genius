@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useWarehouse } from "@/contexts/WarehouseContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -314,6 +315,7 @@ function RatesPanel({ order }: { order: UnconfirmedOrder }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ConfirmShipping() {
+  const { selectedFacilityId, selectedFacilityName } = useWarehouse();
   const [activeTab, setActiveTab] = useState<"live" | "local">("live");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
@@ -392,7 +394,11 @@ export default function ConfirmShipping() {
 
   const filteredLiveShipments = useMemo(() => {
     return (liveShipments as any[]).filter((s) => {
-      // Facility (origin city/state)
+      // Auto-filter by selected warehouse facility (from sidebar pill)
+      if (selectedFacilityId != null) {
+        if ((s.gdFacilityId ?? null) !== selectedFacilityId) return false;
+      }
+      // Manual facility filter (origin city/state dropdown)
       if (liveFacilityFilter !== "all") {
         const city = s.originCity ?? "";
         const state = s.originState ?? "";
@@ -692,9 +698,17 @@ export default function ConfirmShipping() {
                   className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
-              <span className="text-xs text-muted-foreground ml-auto">
-                {filteredLiveShipments.length} of {liveShipments.length} shipment{liveShipments.length !== 1 ? "s" : ""}
-              </span>
+              <div className="flex items-center gap-2 ml-auto">
+                {selectedFacilityId != null && selectedFacilityName && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-semibold">
+                    <MapPin className="h-2.5 w-2.5" />
+                    {selectedFacilityName}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {filteredLiveShipments.length} of {liveShipments.length} shipment{liveShipments.length !== 1 ? "s" : ""}
+                </span>
+              </div>
             </div>
           </div>
           {liveError && (

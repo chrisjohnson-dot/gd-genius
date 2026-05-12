@@ -3494,6 +3494,9 @@ const _appRouter = router({
               customerName: shipment.customer_name ?? null,
               // GoDirect customer name resolved from local order tracking
               gdClientName: localOrder?.clientName ?? null,
+              // GoDirect facility resolved from local order tracking
+              gdFacilityId: localOrder?.facilityId ?? null,
+              gdFacilityName: localOrder?.facilityName ?? null,
               // When this order was sent to Shipwell (from local DB)
               sentToShipwellAt: localOrder?.shipwellSentAt?.toISOString() ?? shipment.created_at ?? null,
               createdAt: shipment.created_at ?? null,

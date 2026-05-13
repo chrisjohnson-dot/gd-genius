@@ -1,0 +1,9 @@
+{
+  "query": "\n-- Step 1: Flip letter+number (e.g. \"A1\", \"B4\", \"D3\") → number+letter (e.g. \"1A\", \"4B\", \"3D\")\n-- Matches exactly: one letter A-E followed by 1-2 digits, nothing else\nUPDATE order_tracking\nSET outboundLocation = CONCAT(\n  REGEXP_SUBSTR(outboundLocation, '[0-9]+'),\n  REGEXP_SUBSTR(outboundLocation, '^[A-E]')\n)\nWHERE outboundLocation REGEXP '^[A-E][0-9]{1,2}$';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \n-- Step 1: Flip letter+number (e.g. \"A1\", \"B4\", \"D3\") → number+letter (e.g. \"1A\", \"4B\", \"3D\")\n-- Matches exactly: one letter A-E followed by 1-2 digits, nothing else\nUPDATE order_tracking\nSET outboundLocation = CONCAT(\n  REGEXP_SUBSTR(outboundLocation, '[0-9]+'),\n  REGEXP_SUBSTR(outboundLocation, '^[A-E]')\n)\nWHERE outboundLocation REGEXP '^[A-E][0-9]{1,2}$';\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 699
+}

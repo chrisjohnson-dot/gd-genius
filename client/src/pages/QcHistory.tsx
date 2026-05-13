@@ -83,6 +83,39 @@ const PALLET_TYPE_LABELS: Record<string, string> = {
   chep: "CHEP",
 };
 
+/**
+ * Normalise a dock location string to the canonical number+letter format (e.g. "1A").
+ * Handles legacy letter+number ("A1"), "Lane N+Letter" ("Lane 1A"),
+ * range values ("A6–B6" → "6A–6B"), and already-correct values ("1A").
+ * Returns the original string unchanged if it doesn't match any known pattern.
+ */
+function formatDockLocation(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const s = raw.trim();
+
+  // Strip optional "Lane " prefix
+  const stripped = s.replace(/^Lane\s+/i, "");
+
+  // Range: two single-cell values joined by – or -
+  const rangeParts = stripped.split(/\s*[–-]\s*/);
+  if (rangeParts.length === 2) {
+    return rangeParts.map(formatSingleCell).join("–");
+  }
+
+  return formatSingleCell(stripped);
+}
+
+function formatSingleCell(cell: string): string {
+  const upper = cell.trim().toUpperCase();
+  // Already number+letter: "1A", "12E"
+  if (/^\d{1,2}[A-E]$/.test(upper)) return upper;
+  // Legacy letter+number: "A1", "E12"
+  const m = upper.match(/^([A-E])(\d{1,2})$/);
+  if (m) return `${m[2]}${m[1]}`;
+  // Unrecognised — return as-is
+  return cell;
+}
+
 function formatDate(d: Date | null | undefined): string {
   if (!d) return "—";
   return new Date(d).toLocaleString(undefined, {
@@ -318,7 +351,7 @@ function SessionCard({ session }: { session: SessionRow }) {
               {session.stagingLane && (
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 font-semibold">
                   <MapPin className="w-3 h-3" />
-                  {session.stagingLane}
+                  {formatDockLocation(session.stagingLane)}
                 </span>
               )}
               {accuracy !== null && (

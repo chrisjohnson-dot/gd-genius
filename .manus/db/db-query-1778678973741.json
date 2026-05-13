@@ -1,0 +1,9 @@
+{
+  "query": "\n-- Step 2: Strip \"Lane \" prefix from \"Lane 1A\", \"Lane 3B\" etc → \"1A\", \"3B\"\nUPDATE order_tracking\nSET outboundLocation = REPLACE(outboundLocation, 'Lane ', '')\nWHERE outboundLocation REGEXP '^Lane [0-9]{1,2}[A-E]$';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \n-- Step 2: Strip \"Lane \" prefix from \"Lane 1A\", \"Lane 3B\" etc → \"1A\", \"3B\"\nUPDATE order_tracking\nSET outboundLocation = REPLACE(outboundLocation, 'Lane ', '')\nWHERE outboundLocation REGEXP '^Lane [0-9]{1,2}[A-E]$';\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 382
+}

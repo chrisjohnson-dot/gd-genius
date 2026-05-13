@@ -1,0 +1,98 @@
+{
+  "query": "\nSELECT outboundLocation, COUNT(*) as cnt\nFROM order_tracking\nWHERE outboundLocation IS NOT NULL AND outboundLocation != ''\nGROUP BY outboundLocation\nORDER BY outboundLocation;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT outboundLocation, COUNT(*) as cnt\nFROM order_tracking\nWHERE outboundLocation IS NOT NULL AND outboundLocation != ''\nGROUP BY outboundLocation\nORDER BY outboundLocation;\n",
+  "rows": [
+    {
+      "outboundLocation": "1A",
+      "cnt": "2"
+    },
+    {
+      "outboundLocation": "1B",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "1C",
+      "cnt": "2"
+    },
+    {
+      "outboundLocation": "1D",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "1E",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "2A",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "2B",
+      "cnt": "2"
+    },
+    {
+      "outboundLocation": "2C",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "2D",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "2E",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "3A",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "3B",
+      "cnt": "2"
+    },
+    {
+      "outboundLocation": "3C",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "3D",
+      "cnt": "2"
+    },
+    {
+      "outboundLocation": "3E",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "4A",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "4B",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "4C",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "4D",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "5E",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "6A–6B",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "Overflow",
+      "cnt": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "outboundLocation\tcnt\n1A\t2\n1B\t1\n1C\t2\n1D\t1\n1E\t1\n2A\t1\n2B\t2\n2C\t1\n2D\t1\n2E\t1\n3A\t1\n3B\t2\n3C\t1\n3D\t2\n3E\t1\n4A\t1\n4B\t1\n4C\t1\n4D\t1\n5E\t1\n6A–6B\t1\nOverflow\t1\n",
+  "stderr": "",
+  "execution_time_ms": 820
+}

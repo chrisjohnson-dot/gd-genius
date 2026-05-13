@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT outboundLocation, COUNT(*) as cnt\nFROM order_tracking\nWHERE outboundLocation IS NOT NULL AND outboundLocation != ''\nGROUP BY outboundLocation\nORDER BY outboundLocation\nLIMIT 10 OFFSET 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT outboundLocation, COUNT(*) as cnt\nFROM order_tracking\nWHERE outboundLocation IS NOT NULL AND outboundLocation != ''\nGROUP BY outboundLocation\nORDER BY outboundLocation\nLIMIT 10 OFFSET 20;\n",
+  "rows": [
+    {
+      "outboundLocation": "6A–6B",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "Overflow",
+      "cnt": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "outboundLocation\tcnt\n6A–6B\t1\nOverflow\t1\n",
+  "stderr": "",
+  "execution_time_ms": 498
+}

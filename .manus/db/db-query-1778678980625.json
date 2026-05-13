@@ -1,0 +1,9 @@
+{
+  "query": "\n-- Step 3: Convert range \"A6–B6\" → \"6A–6B\"\n-- Handle both dash variants (en-dash – and hyphen -)\nUPDATE order_tracking\nSET outboundLocation = '6A–6B'\nWHERE outboundLocation IN ('A6–B6', 'A6-B6');\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \n-- Step 3: Convert range \"A6–B6\" → \"6A–6B\"\n-- Handle both dash variants (en-dash – and hyphen -)\nUPDATE order_tracking\nSET outboundLocation = '6A–6B'\nWHERE outboundLocation IN ('A6–B6', 'A6-B6');\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 771
+}

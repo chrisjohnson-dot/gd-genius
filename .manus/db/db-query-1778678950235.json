@@ -1,0 +1,118 @@
+{
+  "query": "\nSELECT outboundLocation, COUNT(*) as cnt\nFROM order_tracking\nWHERE outboundLocation IS NOT NULL AND outboundLocation != ''\nGROUP BY outboundLocation\nORDER BY cnt DESC\nLIMIT 100;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT outboundLocation, COUNT(*) as cnt\nFROM order_tracking\nWHERE outboundLocation IS NOT NULL AND outboundLocation != ''\nGROUP BY outboundLocation\nORDER BY cnt DESC\nLIMIT 100;\n",
+  "rows": [
+    {
+      "outboundLocation": "Lane 1A",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "A6–B6",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "A1",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "D2",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "D3",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "Lane 3B",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "E5",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "B3",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "C4",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "A3",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "Lane 1C",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "C1",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "D1",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "E3",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "C2",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "E2",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "B2",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "C3",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "Lane 2B",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "D4",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "B4",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "Overflow",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "E1",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "B1",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "A2",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "Lane 3D",
+      "cnt": "1"
+    },
+    {
+      "outboundLocation": "A4",
+      "cnt": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "outboundLocation\tcnt\nLane 1A\t1\nA6–B6\t1\nA1\t1\nD2\t1\nD3\t1\nLane 3B\t1\nE5\t1\nB3\t1\nC4\t1\nA3\t1\nLane 1C\t1\nC1\t1\nD1\t1\nE3\t1\nC2\t1\nE2\t1\nB2\t1\nC3\t1\nLane 2B\t1\nD4\t1\nB4\t1\nOverflow\t1\nE1\t1\nB1\t1\nA2\t1\nLane 3D\t1\nA4\t1\n",
+  "stderr": "",
+  "execution_time_ms": 354
+}

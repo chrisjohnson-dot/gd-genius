@@ -9,8 +9,12 @@ import { Loader2, Package, MapPin, Truck, CheckCircle2, Search, X, RefreshCw, Wa
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const POSITIONS = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
-const LEVELS = ["A", "B", "C", "D", "E"] as const;
+// LANES = numbers 1–26 (outer axis — rows on the map)
+// POSITIONS = letters A–E (inner axis — columns on the map, A=front, E=back)
+const LANES = Array.from({ length: 26 }, (_, i) => i + 1); // 1–26
+const POSITIONS = ["A", "B", "C", "D", "E"] as const;
+// Keep LEVELS as an alias so existing references compile
+const LEVELS = POSITIONS;
 
 // Age-based color coding: green 0–3 days, yellow 4–7 days, red 8+ days
 function getAgeColor(shipReadyAt: Date | string | null): { bg: string; text: string } {
@@ -62,8 +66,9 @@ function parseDockLocation(raw: string | null): { position: number; level: strin
   return null;
 }
 
-function cellKey(position: number, level: string) {
-  return `${level}${position}`;
+// cellKey: lane (number) + position (letter) → e.g. "1A"
+function cellKey(lane: number, position: string) {
+  return `${lane}${position}`;
 }
 
 /** Returns true if the order matches the search query */
@@ -124,7 +129,8 @@ function DockCell({
   const isEmpty = activeOrders.length === 0;
   const hasHighlight = activeOrders.some((o) => highlightIds.has(o.id));
   const searchActive = highlightIds.size > 0;
-  const label = `${level}${position}`;
+  // label: lane number first, position letter second (e.g. "1A")
+  const label = `${position}${level}`;
 
   const borderStyle =
     !isEmpty && activeOrders.length === 1
@@ -256,7 +262,7 @@ function AssignDockDialog({
               </p>
               {(currentParsed || isCurrentOverflow) && (
                 <p className="text-amber-600 dark:text-amber-400 mt-1 font-medium">
-                  Current: {isCurrentOverflow ? "Overflow" : `${currentParsed!.level}${currentParsed!.position}`}
+                  Current: {isCurrentOverflow ? "Overflow" : `${currentParsed!.position}${currentParsed!.level}`}
                 </p>
               )}
               {order.shipReadyAt && (
@@ -299,27 +305,27 @@ function AssignDockDialog({
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex-1">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Level</label>
-                  <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Lane</label>
+                  <Select value={String(selectedPosition)} onValueChange={(v) => setSelectedPosition(parseInt(v, 10))}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {LEVELS.map((l) => <SelectItem key={l} value={l}>Level {l}</SelectItem>)}
+                      {LANES.map((p) => <SelectItem key={p} value={String(p)}>Lane {p}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex-1">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Position</label>
-                  <Select value={String(selectedPosition)} onValueChange={(v) => setSelectedPosition(parseInt(v, 10))}>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Position (A=front, E=back)</label>
+                  <Select value={selectedLevel} onValueChange={setSelectedLevel}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {POSITIONS.map((p) => <SelectItem key={p} value={String(p)}>Position {p}</SelectItem>)}
+                      {POSITIONS.map((l) => <SelectItem key={l} value={l}>Position {l}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="flex items-center justify-center">
                 <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 border-2 border-primary">
-                  <span className="text-2xl font-black text-primary">{selectedLevel}{selectedPosition}</span>
+                  <span className="text-2xl font-black text-primary">{selectedPosition}{selectedLevel}</span>
                 </div>
               </div>
             </div>
@@ -367,12 +373,13 @@ function AssignDockDialog({
                 if (mode === "overflow") {
                   assignDock.mutate({ id: order.id, outboundLocation: "OVERFLOW" });
                 } else {
-                  assignDock.mutate({ id: order.id, outboundLocation: `${selectedLevel}${selectedPosition}` });
+                  // Store as number+letter (e.g. "1A") — lane first, position second
+                  assignDock.mutate({ id: order.id, outboundLocation: `${selectedPosition}${selectedLevel}` });
                 }
               }}
             >
               {assignDock.isPending ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
-              Assign {mode === "overflow" ? "Overflow" : `${selectedLevel}${selectedPosition}`}
+              Assign {mode === "overflow" ? "Overflow" : `${selectedPosition}${selectedLevel}`}
             </Button>
           </div>
         </DialogFooter>
@@ -570,6 +577,7 @@ export default function DockManager() {
     for (const o of facilityOrders) {
       const parsed = parseDockLocation(o.outboundLocation);
       if (!parsed) continue;
+      // parsed.position = number (lane), parsed.level = letter (position)
       const key = cellKey(parsed.position, parsed.level);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(o);
@@ -603,7 +611,7 @@ export default function DockManager() {
       })
       .filter(Boolean)
   ).size;
-  const totalCells = POSITIONS.length * LEVELS.length;
+  const totalCells = LANES.length * POSITIONS.length;
 
   const searchActive = search.trim().length > 0 || tierFilter !== null;
   const matchCount = matchedIds.size;
@@ -619,7 +627,7 @@ export default function DockManager() {
             Dock Manager
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Visual map of all pallets currently on the dock — lanes 1–26, positions A–E.
+            Visual map of all pallets currently on the dock — lanes 1–26 (rows), positions A–E (columns, A=front, E=back).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -766,7 +774,7 @@ export default function DockManager() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {facilityOrders.filter((o) => matchedIds.has(o.id)).map((o) => {
                   const parsed = parseDockLocation(o.outboundLocation);
-                  const dockPos = parsed ? `${parsed.level}${parsed.position}` : null;
+                  const dockPos = parsed ? `${parsed.position}${parsed.level}` : null;
                   return (
                     <div
                       key={o.id}
@@ -815,11 +823,11 @@ export default function DockManager() {
             </div>
           )}
 
-          {/* Dock Grid */}
+          {/* Dock Grid — Lanes (1–26) as rows, Positions (A–E) as columns */}
           <div className="overflow-x-auto">
-            <div className="min-w-[900px]">
-              {/* Column headers */}
-              <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `48px repeat(26, minmax(0, 1fr))` }}>
+            <div className="min-w-[500px]">
+              {/* Column headers: A (front) → E (back) */}
+              <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `48px repeat(5, minmax(0, 1fr))` }}>
                 <div />
                 {POSITIONS.map((pos) => (
                   <div key={pos} className="text-center text-[10px] font-bold text-muted-foreground py-1">
@@ -828,26 +836,26 @@ export default function DockManager() {
                 ))}
               </div>
 
-              {/* Rows by level */}
-              {LEVELS.map((level) => (
+              {/* Rows by lane number */}
+              {LANES.map((lane) => (
                 <div
-                  key={level}
+                  key={lane}
                   className="grid gap-1 mb-1"
-                  style={{ gridTemplateColumns: `48px repeat(26, minmax(0, 1fr))` }}
+                  style={{ gridTemplateColumns: `48px repeat(5, minmax(0, 1fr))` }}
                 >
                   <div className="flex items-center justify-center">
                     <span className="text-xs font-bold text-muted-foreground bg-muted/30 rounded px-2 py-0.5">
-                      {level}
+                      {lane}
                     </span>
                   </div>
                   {POSITIONS.map((pos) => {
-                    const key = cellKey(pos, level);
+                    const key = cellKey(lane, pos);
                     const cellOrders = cellMap.get(key) ?? [];
                     return (
                       <DockCell
                         key={key}
-                        position={pos}
-                        level={level}
+                        position={lane}
+                        level={pos}
                         orders={cellOrders}
                         highlightIds={matchedIds}
                         allClientIds={allClientIds}

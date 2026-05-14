@@ -140,10 +140,87 @@ import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+// ─── Decimal coercion ────────────────────────────────────────────────────────
+// The MySQL2 driver returns DECIMAL/NUMERIC columns as plain strings (e.g.
+// "1543.00"). superjson cannot serialise these as numbers, which causes a
+// JSON.parse error on the client. This helper recursively walks any query
+// result and converts every string that looks like a decimal number to a
+// JavaScript number, permanently preventing the issue across all queries.
+function coerceDecimals<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") {
+    // Match strings that are purely numeric with a decimal point (e.g. "30.00", "1543.5")
+    if (/^-?\d+\.\d+$/.test(value)) return Number(value) as unknown as T;
+    return value;
+  }
+  if (Array.isArray(value)) return value.map(coerceDecimals) as unknown as T;
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as object)) {
+      out[key] = coerceDecimals((value as Record<string, unknown>)[key]);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
+// Extend coerceDecimals to also handle the string "NULL" returned by raw MySQL2 execute()
+function coerceRawRow(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") {
+    if (value === "NULL") return null;
+    if (/^-?\d+\.\d+$/.test(value)) return Number(value);
+    return value;
+  }
+  if (Array.isArray(value)) return value.map(coerceRawRow);
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as object)) {
+      out[key] = coerceRawRow((value as Record<string, unknown>)[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
+// Wrap a drizzle instance so every query result is coerced.
+function withDecimalCoercion(db: ReturnType<typeof drizzle>): ReturnType<typeof drizzle> {
+  return new Proxy(db, {
+    get(target, prop, receiver) {
+      const original = Reflect.get(target, prop, receiver);
+      // Intercept the query-builder methods that return rows
+      if (prop === "select" || prop === "execute" || prop === "query") {
+        if (typeof original === "function") {
+          return function (...args: unknown[]) {
+            const result = (original as Function).apply(target, args);
+            // The result is a query builder or Promise — wrap its .then so we coerce on resolution
+            if (result && typeof result === "object" && typeof (result as Promise<unknown>).then === "function") {
+              return new Proxy(result, {
+                get(qb, qbProp, qbReceiver) {
+                  if (qbProp === "then") {
+                    return (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
+                      (result as Promise<unknown>).then(
+                        (rows) => resolve(coerceRawRow(rows)),
+                        reject
+                      );
+                  }
+                  return Reflect.get(qb, qbProp, qbReceiver);
+                },
+              });
+            }
+            return result;
+          };
+        }
+      }
+      return original;
+    },
+  });
+}
+
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _db = withDecimalCoercion(drizzle(process.env.DATABASE_URL));
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -2096,13 +2173,7 @@ export async function upsertQcScanItem(sessionId: number, sku: string, upc: stri
 export async function getQcScanItems(sessionId: number): Promise<QcScanItem[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(qcScanItems).where(eq(qcScanItems.sessionId, sessionId));
-  // MySQL driver returns decimal columns as strings — coerce to number|null so
-  // superjson can serialise them without throwing a JSON.parse error on the client.
-  return rows.map((r) => ({
-    ...r,
-    cartonWeightLb: r.cartonWeightLb != null ? Number(r.cartonWeightLb) as unknown as typeof r.cartonWeightLb : null,
-  }));
+  return db.select().from(qcScanItems).where(eq(qcScanItems.sessionId, sessionId));
 }
 
 export async function incrementQcScanItem(sessionId: number, sku: string, amount: number): Promise<QcScanItem | null> {
@@ -2126,13 +2197,7 @@ export async function incrementQcScanItem(sessionId: number, sku: string, amount
   }
   // Re-read the actual committed value
   const updated = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
-  const row = updated[0] ?? null;
-  if (!row) return null;
-  // MySQL driver returns decimal columns as strings — coerce to number|null
-  return {
-    ...row,
-    cartonWeightLb: row.cartonWeightLb != null ? Number(row.cartonWeightLb) as unknown as typeof row.cartonWeightLb : null,
-  };
+  return updated[0] ?? null;
 }
 
 // QC Pallets
@@ -2147,19 +2212,10 @@ export async function createQcPallet(data: InsertQcPallet): Promise<number> {
 export async function getQcPallets(sessionId: number): Promise<QcPallet[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db
+  return db
     .select()
     .from(qcPallets)
     .where(and(eq(qcPallets.sessionId, sessionId), isNull(qcPallets.deletedAt)));
-  // MySQL driver returns decimal columns as strings — coerce to number|null so
-  // superjson can serialise them without throwing a JSON.parse error on the client.
-  return rows.map((p) => ({
-    ...p,
-    palletHeightIn: p.palletHeightIn != null ? Number(p.palletHeightIn) as unknown as typeof p.palletHeightIn : null,
-    calculatedWeightLb: p.calculatedWeightLb != null ? Number(p.calculatedWeightLb) as unknown as typeof p.calculatedWeightLb : null,
-    weightOverrideLb: p.weightOverrideLb != null ? Number(p.weightOverrideLb) as unknown as typeof p.weightOverrideLb : null,
-    palletTareWeightLb: p.palletTareWeightLb != null ? Number(p.palletTareWeightLb) as unknown as typeof p.palletTareWeightLb : null,
-  }));
 }
 
 export async function updateQcPallet(id: number, data: Partial<QcPallet>): Promise<void> {

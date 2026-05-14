@@ -6,6 +6,8 @@ import { storagePut } from '../storage';
 
 // ─── Photo Capture Router ─────────────────────────────────────────────────────
 // Handles uploading photos to S3 and linking them to entities (orders, exceptions, QC sessions)
+// Note: NULL string coercion and decimal coercion are handled globally by the
+// withDecimalCoercion Proxy in db.ts — no manual coercion needed here.
 
 export const photoCaptureRouter = router({
   // Upload a base64-encoded photo and store it in S3
@@ -49,24 +51,9 @@ export const photoCaptureRouter = router({
       const rows = await db.execute<any>(sql`
         SELECT * FROM media_attachments WHERE file_key = ${fileKey} LIMIT 1
       `);
-      const raw = (rows as any[])[0];
-      const nullify = (v: unknown) => (v === 'NULL' || v === null || v === undefined ? null : v);
-      const attachment = raw ? {
-        id: Number(raw.id),
-        entity_type: raw.entity_type ?? null,
-        entity_id: raw.entity_id ?? null,
-        category: raw.category ?? 'other',
-        file_key: raw.file_key ?? null,
-        file_url: raw.file_url ?? null,
-        file_size_bytes: raw.file_size_bytes != null ? Number(raw.file_size_bytes) : null,
-        mime_type: raw.mime_type ?? null,
-        width: nullify(raw.width) != null ? Number(raw.width) : null,
-        height: nullify(raw.height) != null ? Number(raw.height) : null,
-        note: nullify(raw.note),
-        captured_by: raw.captured_by ?? null,
-        captured_at: raw.captured_at != null ? Number(raw.captured_at) : null,
-      } : null;
-      return { success: true, attachment };
+      const raw = (rows as any[])[0] ?? null;
+      // Global coercion middleware handles NULL strings and decimal strings
+      return { success: true, attachment: raw };
     }),
 
   // List photos for an entity
@@ -88,24 +75,8 @@ export const photoCaptureRouter = router({
           ${input.category ? sql`AND ma.category = ${input.category}` : sql``}
         ORDER BY ma.captured_at DESC
       `);
-      // Coerce MySQL driver quirks: string "NULL" → null, bigint strings → numbers
-      const nullify = (v: unknown) => (v === 'NULL' || v === null || v === undefined ? null : v);
-      return (rows as any[]).map((r: any) => ({
-        id: Number(r.id),
-        entity_type: r.entity_type ?? null,
-        entity_id: r.entity_id ?? null,
-        category: r.category ?? 'other',
-        file_key: r.file_key ?? null,
-        file_url: r.file_url ?? null,
-        file_size_bytes: r.file_size_bytes != null ? Number(r.file_size_bytes) : null,
-        mime_type: r.mime_type ?? null,
-        width: nullify(r.width) != null ? Number(r.width) : null,
-        height: nullify(r.height) != null ? Number(r.height) : null,
-        note: nullify(r.note),
-        captured_by: r.captured_by ?? null,
-        captured_by_name: nullify(r.captured_by_name),
-        captured_at: r.captured_at != null ? Number(r.captured_at) : null,
-      }));
+      // Global coercion middleware handles NULL strings and decimal strings
+      return rows as any[];
     }),
 
   // Delete a photo
@@ -135,7 +106,7 @@ export const photoCaptureRouter = router({
           AND entity_id IN (${sql.join(input.entityIds.map(id => sql`${id}`), sql`, `)})
         GROUP BY entity_id
       `);
-      // Coerce MySQL driver quirks: entity_id and count may come back as strings
+      // Global coercion middleware handles NULL strings and numeric strings
       return (rows as any[]).map((r: any) => ({
         entityId: String(r.entity_id ?? ''),
         count: r.count != null ? Number(r.count) : 0,

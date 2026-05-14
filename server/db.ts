@@ -2126,7 +2126,13 @@ export async function incrementQcScanItem(sessionId: number, sku: string, amount
   }
   // Re-read the actual committed value
   const updated = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
-  return updated[0] ?? null;
+  const row = updated[0] ?? null;
+  if (!row) return null;
+  // MySQL driver returns decimal columns as strings — coerce to number|null
+  return {
+    ...row,
+    cartonWeightLb: row.cartonWeightLb != null ? Number(row.cartonWeightLb) as unknown as typeof row.cartonWeightLb : null,
+  };
 }
 
 // QC Pallets
@@ -2149,6 +2155,8 @@ export async function getQcPallets(sessionId: number): Promise<QcPallet[]> {
   // superjson can serialise them without throwing a JSON.parse error on the client.
   return rows.map((p) => ({
     ...p,
+    palletHeightIn: p.palletHeightIn != null ? Number(p.palletHeightIn) as unknown as typeof p.palletHeightIn : null,
+    calculatedWeightLb: p.calculatedWeightLb != null ? Number(p.calculatedWeightLb) as unknown as typeof p.calculatedWeightLb : null,
     weightOverrideLb: p.weightOverrideLb != null ? Number(p.weightOverrideLb) as unknown as typeof p.weightOverrideLb : null,
     palletTareWeightLb: p.palletTareWeightLb != null ? Number(p.palletTareWeightLb) as unknown as typeof p.palletTareWeightLb : null,
   }));

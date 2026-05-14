@@ -40,6 +40,21 @@ const trpcClient = trpc.createClient({
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
+        }).then(async (res) => {
+          // Diagnostic: if the response is not JSON, log the raw body and URL so we
+          // can identify exactly which procedure is returning non-JSON content.
+          const ct = res.headers.get("content-type") ?? "";
+          if (!ct.includes("application/json")) {
+            const url = typeof input === "string" ? input : (input as Request).url;
+            const body = await res.clone().text().catch(() => "(unreadable)");
+            console.error(
+              `[tRPC] Non-JSON response from ${url}\n` +
+              `  Status: ${res.status} ${res.statusText}\n` +
+              `  Content-Type: ${ct}\n` +
+              `  Body preview: ${body.slice(0, 300)}`
+            );
+          }
+          return res;
         });
       },
     }),

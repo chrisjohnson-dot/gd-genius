@@ -2096,7 +2096,13 @@ export async function upsertQcScanItem(sessionId: number, sku: string, upc: stri
 export async function getQcScanItems(sessionId: number): Promise<QcScanItem[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(qcScanItems).where(eq(qcScanItems.sessionId, sessionId));
+  const rows = await db.select().from(qcScanItems).where(eq(qcScanItems.sessionId, sessionId));
+  // MySQL driver returns decimal columns as strings — coerce to number|null so
+  // superjson can serialise them without throwing a JSON.parse error on the client.
+  return rows.map((r) => ({
+    ...r,
+    cartonWeightLb: r.cartonWeightLb != null ? Number(r.cartonWeightLb) as unknown as typeof r.cartonWeightLb : null,
+  }));
 }
 
 export async function incrementQcScanItem(sessionId: number, sku: string, amount: number): Promise<QcScanItem | null> {
@@ -2135,10 +2141,17 @@ export async function createQcPallet(data: InsertQcPallet): Promise<number> {
 export async function getQcPallets(sessionId: number): Promise<QcPallet[]> {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const rows = await db
     .select()
     .from(qcPallets)
     .where(and(eq(qcPallets.sessionId, sessionId), isNull(qcPallets.deletedAt)));
+  // MySQL driver returns decimal columns as strings — coerce to number|null so
+  // superjson can serialise them without throwing a JSON.parse error on the client.
+  return rows.map((p) => ({
+    ...p,
+    weightOverrideLb: p.weightOverrideLb != null ? Number(p.weightOverrideLb) as unknown as typeof p.weightOverrideLb : null,
+    palletTareWeightLb: p.palletTareWeightLb != null ? Number(p.palletTareWeightLb) as unknown as typeof p.palletTareWeightLb : null,
+  }));
 }
 
 export async function updateQcPallet(id: number, data: Partial<QcPallet>): Promise<void> {

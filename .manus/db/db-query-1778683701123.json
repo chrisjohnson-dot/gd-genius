@@ -1,0 +1,9 @@
+{
+  "query": "\n-- Step 2: Convert range values — handle each known range explicitly\n-- \"A2–B2\" → \"2A–2B\"\nUPDATE qc_scan_sessions SET stagingLane = '2A–2B' WHERE stagingLane IN ('A2–B2', 'A2-B2');\n-- \"A6–B6\" → \"6A–6B\"\nUPDATE qc_scan_sessions SET stagingLane = '6A–6B' WHERE stagingLane IN ('A6–B6', 'A6-B6');\n-- \"A6–E6\" → \"6A–6E\"\nUPDATE qc_scan_sessions SET stagingLane = '6A–6E' WHERE stagingLane IN ('A6–E6', 'A6-E6');\n-- \"C2–D2\" → \"2C–2D\"\nUPDATE qc_scan_sessions SET stagingLane = '2C–2D' WHERE stagingLane IN ('C2–D2', 'C2-D2');\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \n-- Step 2: Convert range values — handle each known range explicitly\n-- \"A2–B2\" → \"2A–2B\"\nUPDATE qc_scan_sessions SET stagingLane = '2A–2B' WHERE stagingLane IN ('A2–B2', 'A2-B2');\n-- \"A6–B6\" → \"6A–6B\"\nUPDATE qc_scan_sessions SET stagingLane = '6A–6B' WHERE stagingLane IN ('A6–B6', 'A6-B6');\n-- \"A6–E6\" → \"6A–6E\"\nUPDATE qc_scan_sessions SET stagingLane = '6A–6E' WHERE stagingLane IN ('A6–E6', 'A6-E6');\n-- \"C2–D2\" → \"2C–2D\"\nUPDATE qc_scan_sessions SET stagingLane = '2C–2D' WHERE stagingLane IN ('C2–D2', 'C2-D2');\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 316
+}

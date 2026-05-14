@@ -72,7 +72,24 @@ export const photoCaptureRouter = router({
           ${input.category ? sql`AND ma.category = ${input.category}` : sql``}
         ORDER BY ma.captured_at DESC
       `);
-      return rows as any[];
+      // Coerce MySQL driver quirks: string "NULL" → null, bigint strings → numbers
+      const nullify = (v: unknown) => (v === 'NULL' || v === null || v === undefined ? null : v);
+      return (rows as any[]).map((r: any) => ({
+        id: Number(r.id),
+        entity_type: r.entity_type ?? null,
+        entity_id: r.entity_id ?? null,
+        category: r.category ?? 'other',
+        file_key: r.file_key ?? null,
+        file_url: r.file_url ?? null,
+        file_size_bytes: r.file_size_bytes != null ? Number(r.file_size_bytes) : null,
+        mime_type: r.mime_type ?? null,
+        width: nullify(r.width) != null ? Number(r.width) : null,
+        height: nullify(r.height) != null ? Number(r.height) : null,
+        note: nullify(r.note),
+        captured_by: r.captured_by ?? null,
+        captured_by_name: nullify(r.captured_by_name),
+        captured_at: r.captured_at != null ? Number(r.captured_at) : null,
+      }));
     }),
 
   // Delete a photo

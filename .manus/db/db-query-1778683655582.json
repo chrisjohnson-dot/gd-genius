@@ -1,0 +1,94 @@
+{
+  "query": "\nSELECT stagingLane, COUNT(*) as cnt\nFROM qc_scan_sessions\nWHERE stagingLane IS NOT NULL AND stagingLane != ''\nGROUP BY stagingLane\nORDER BY stagingLane;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT stagingLane, COUNT(*) as cnt\nFROM qc_scan_sessions\nWHERE stagingLane IS NOT NULL AND stagingLane != ''\nGROUP BY stagingLane\nORDER BY stagingLane;\n",
+  "rows": [
+    {
+      "stagingLane": "A2",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "A2–B2",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "A3",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "A4",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "A5",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "A6",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "A6–B6",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "A6–E6",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "B2",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "B3",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "B6",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "C2–D2",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "C3",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "C4",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "C6",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "D3",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "D6",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "E2",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "E3",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "E6",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "Overflow",
+      "cnt": "4"
+    }
+  ],
+  "messages": [],
+  "stdout": "stagingLane\tcnt\nA2\t1\nA2–B2\t1\nA3\t1\nA4\t1\nA5\t1\nA6\t1\nA6–B6\t2\nA6–E6\t1\nB2\t1\nB3\t1\nB6\t2\nC2–D2\t1\nC3\t1\nC4\t1\nC6\t2\nD3\t1\nD6\t2\nE2\t1\nE3\t1\nE6\t1\nOverflow\t4\n",
+  "stderr": "",
+  "execution_time_ms": 308
+}

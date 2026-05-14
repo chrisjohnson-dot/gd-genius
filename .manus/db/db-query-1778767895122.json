@@ -1,0 +1,13 @@
+{
+  "query": "SHOW TABLES LIKE 'media_attachments';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SHOW TABLES LIKE 'media_attachments';",
+  "rows": [
+    {
+      "Tables_in_K5ogkLhSXtccCnqH4Vm3fs (media_attachments)": "media_attachments"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_K5ogkLhSXtccCnqH4Vm3fs (media_attachments)\nmedia_attachments\n",
+  "stderr": "",
+  "execution_time_ms": 257
+}

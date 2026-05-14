@@ -1,0 +1,40 @@
+{
+  "query": "SELECT * FROM media_attachments LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT * FROM media_attachments LIMIT 3;",
+  "rows": [
+    {
+      "id": "1",
+      "entity_type": "qc_session",
+      "entity_id": "180004",
+      "category": "other",
+      "file_key": "photos/qc_session/180004/1777300495374-5xfgodyv.jpeg",
+      "file_url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/photos/qc_session/180004/1777300495374-5xfgodyv.jpeg",
+      "file_size_bytes": "857240",
+      "mime_type": "image/jpeg",
+      "width": "NULL",
+      "height": "NULL",
+      "note": "NULL",
+      "captured_by": "2880197",
+      "captured_at": "1777300495692"
+    },
+    {
+      "id": "2",
+      "entity_type": "qc_session",
+      "entity_id": "180004",
+      "category": "other",
+      "file_key": "photos/qc_session/180004/1777300506520-japz58wu.jpeg",
+      "file_url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/photos/qc_session/180004/1777300506520-japz58wu.jpeg",
+      "file_size_bytes": "807170",
+      "mime_type": "image/jpeg",
+      "width": "NULL",
+      "height": "NULL",
+      "note": "NULL",
+      "captured_by": "2880197",
+      "captured_at": "1777300506737"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity_type\tentity_id\tcategory\tfile_key\tfile_url\tfile_size_bytes\tmime_type\twidth\theight\tnote\tcaptured_by\tcaptured_at\n1\tqc_session\t180004\tother\tphotos/qc_session/180004/1777300495374-5xfgodyv.jpeg\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/photos/qc_session/180004/1777300495374-5xfgodyv.jpeg\t857240\timage/jpeg\tNULL\tNULL\tNULL\t2880197\t1777300495692\n2\tqc_session\t180004\tother\tphotos/qc_session/180004/1777300506520-japz58wu.jpeg\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs/photos/qc_session/180004/1777300506520-japz58wu.jpeg\t807170\timage/jpeg\tNULL\tNULL\tNULL\t2880197\t1777300506737\n",
+  "stderr": "",
+  "execution_time_ms": 266
+}

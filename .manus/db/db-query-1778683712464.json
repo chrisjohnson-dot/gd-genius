@@ -1,0 +1,94 @@
+{
+  "query": "\nSELECT stagingLane, COUNT(*) as cnt\nFROM qc_scan_sessions\nWHERE stagingLane IS NOT NULL AND stagingLane != ''\nGROUP BY stagingLane\nORDER BY stagingLane;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute \nSELECT stagingLane, COUNT(*) as cnt\nFROM qc_scan_sessions\nWHERE stagingLane IS NOT NULL AND stagingLane != ''\nGROUP BY stagingLane\nORDER BY stagingLane;\n",
+  "rows": [
+    {
+      "stagingLane": "2A",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "2A–2B",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "2B",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "2C–2D",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "2E",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "3A",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "3B",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "3C",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "3D",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "3E",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "4A",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "4C",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "5A",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "6A",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "6A–6B",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "6A–6E",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "6B",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "6C",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "6D",
+      "cnt": "2"
+    },
+    {
+      "stagingLane": "6E",
+      "cnt": "1"
+    },
+    {
+      "stagingLane": "Overflow",
+      "cnt": "4"
+    }
+  ],
+  "messages": [],
+  "stdout": "stagingLane\tcnt\n2A\t1\n2A–2B\t1\n2B\t1\n2C–2D\t1\n2E\t1\n3A\t1\n3B\t1\n3C\t1\n3D\t1\n3E\t1\n4A\t1\n4C\t1\n5A\t1\n6A\t1\n6A–6B\t2\n6A–6E\t1\n6B\t2\n6C\t2\n6D\t2\n6E\t1\nOverflow\t4\n",
+  "stderr": "",
+  "execution_time_ms": 274
+}

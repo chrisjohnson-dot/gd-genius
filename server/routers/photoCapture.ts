@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { router, protectedProcedure } from '../_core/trpc';
 import { getDb } from '../db';
-import { sql } from 'drizzle-orm';
+import { eq, and, inArray, desc, sql } from 'drizzle-orm';
+import { mediaAttachments } from '../../drizzle/schema';
 import { storagePut } from '../storage';
 
 // ─── Photo Capture Router ─────────────────────────────────────────────────────
 // Handles uploading photos to S3 and linking them to entities (orders, exceptions, QC sessions)
-// Note: NULL string coercion and decimal coercion are handled globally by the
-// withDecimalCoercion Proxy in db.ts — no manual coercion needed here.
+// Uses Drizzle typed selects throughout to avoid MySQL2 raw string coercion issues.
 
 export const photoCaptureRouter = router({
   // Upload a base64-encoded photo and store it in S3
@@ -37,23 +37,29 @@ export const photoCaptureRouter = router({
       // Upload to S3
       const { url } = await storagePut(fileKey, buffer, input.mimeType);
 
-      // Insert DB record
+      // Insert DB record using Drizzle typed insert
       const now = Date.now();
-      await db.execute(sql`
-        INSERT INTO media_attachments
-          (entity_type, entity_id, category, file_key, file_url, file_size_bytes, mime_type, note, captured_by, captured_at)
-        VALUES
-          (${input.entityType}, ${input.entityId}, ${input.category}, ${fileKey}, ${url},
-           ${input.fileSizeBytes || buffer.length}, ${input.mimeType}, ${input.note ?? null},
-           ${ctx.user.id}, ${now})
-      `);
+      await db.insert(mediaAttachments).values({
+        entityType: input.entityType,
+        entityId: input.entityId,
+        category: input.category,
+        fileKey,
+        fileUrl: url,
+        fileSizeBytes: input.fileSizeBytes || buffer.length,
+        mimeType: input.mimeType,
+        note: input.note ?? null,
+        capturedBy: ctx.user.id,
+        capturedAt: now,
+      });
 
-      const rows = await db.execute<any>(sql`
-        SELECT * FROM media_attachments WHERE file_key = ${fileKey} LIMIT 1
-      `);
-      const raw = (rows as any[])[0] ?? null;
-      // Global coercion middleware handles NULL strings and decimal strings
-      return { success: true, attachment: raw };
+      // Fetch the inserted row using typed select
+      const rows = await db
+        .select()
+        .from(mediaAttachments)
+        .where(eq(mediaAttachments.fileKey, fileKey))
+        .limit(1);
+
+      return { success: true, attachment: rows[0] ?? null };
     }),
 
   // List photos for an entity
@@ -66,17 +72,20 @@ export const photoCaptureRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error('DB unavailable');
-      const rows = await db.execute<any>(sql`
-        SELECT ma.*, u.name as captured_by_name
-        FROM media_attachments ma
-        LEFT JOIN users u ON u.id = ma.captured_by
-        WHERE ma.entity_type = ${input.entityType}
-          AND ma.entity_id = ${input.entityId}
-          ${input.category ? sql`AND ma.category = ${input.category}` : sql``}
-        ORDER BY ma.captured_at DESC
-      `);
-      // Global coercion middleware handles NULL strings and decimal strings
-      return rows as any[];
+
+      const conditions = [
+        eq(mediaAttachments.entityType, input.entityType),
+        eq(mediaAttachments.entityId, input.entityId),
+        ...(input.category ? [eq(mediaAttachments.category, input.category)] : []),
+      ];
+
+      const rows = await db
+        .select()
+        .from(mediaAttachments)
+        .where(and(...conditions))
+        .orderBy(desc(mediaAttachments.capturedAt));
+
+      return rows;
     }),
 
   // Delete a photo
@@ -85,7 +94,7 @@ export const photoCaptureRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error('DB unavailable');
-      await db.execute(sql`DELETE FROM media_attachments WHERE id = ${input.id}`);
+      await db.delete(mediaAttachments).where(eq(mediaAttachments.id, input.id));
       return { success: true };
     }),
 
@@ -99,17 +108,24 @@ export const photoCaptureRouter = router({
       const db = await getDb();
       if (!db) throw new Error('DB unavailable');
       if (input.entityIds.length === 0) return [];
-      const rows = await db.execute<any>(sql`
-        SELECT entity_id, COUNT(*) as count
-        FROM media_attachments
-        WHERE entity_type = ${input.entityType}
-          AND entity_id IN (${sql.join(input.entityIds.map(id => sql`${id}`), sql`, `)})
-        GROUP BY entity_id
-      `);
-      // Global coercion middleware handles NULL strings and numeric strings
-      return (rows as any[]).map((r: any) => ({
-        entityId: String(r.entity_id ?? ''),
-        count: r.count != null ? Number(r.count) : 0,
+
+      const rows = await db
+        .select({
+          entityId: mediaAttachments.entityId,
+          count: sql<number>`COUNT(*)`,
+        })
+        .from(mediaAttachments)
+        .where(
+          and(
+            eq(mediaAttachments.entityType, input.entityType),
+            inArray(mediaAttachments.entityId, input.entityIds)
+          )
+        )
+        .groupBy(mediaAttachments.entityId);
+
+      return rows.map((r) => ({
+        entityId: r.entityId,
+        count: Number(r.count),
       }));
     }),
 });

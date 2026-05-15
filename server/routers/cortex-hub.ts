@@ -12,7 +12,7 @@
  * 5. Run pnpm test to verify all tests pass
  */
 
-import { eq, desc, gte, and } from "drizzle-orm";
+import { eq, desc, gte, and, or, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../../server/db";
 import {
@@ -20,6 +20,7 @@ import {
   geniusProductionJobs,
   geniusMaterialsInventory,
   geniusCortexEvents,
+  orderTracking,
 } from "../../drizzle/schema";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 
@@ -407,6 +408,96 @@ export const cortexHubRouter = router({
               .limit(input.limit);
 
       return { events: rows };
+    }),
+
+  // -------------------------------------------------------------------------
+  // getOrders — PUBLIC (called by the Genius Heartbeat handler via cortexOrderSync)
+  // Returns open orders from Genius's local order_tracking cache.
+  // This is the fast-path endpoint: the Heartbeat job calls this instead of
+  // hitting Extensiv directly, so no Extensiv auth round-trip is needed.
+  // -------------------------------------------------------------------------
+  getOrders: publicProcedure
+    .input(
+      z.object({
+        apiKey: z.string().optional(),
+        status: z.enum(["open", "all"]).default("open"),
+        facilityId: z.number().int().optional(),
+        clientId: z.number().int().optional(),
+        limit: z.number().int().min(1).max(500).default(500),
+        offset: z.number().int().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const isValid = await validateApiKey(input.apiKey);
+      if (!isValid) throw new Error("Invalid API key");
+
+      const db = await getDb();
+      if (!db) return { orders: [], hasMore: false, total: 0 };
+
+      // Build filter conditions
+      const conditions = [];
+
+      // "open" = orders not yet shipped in Genius lifecycle
+      if (input.status === "open") {
+        conditions.push(
+          inArray(orderTracking.lifecycleStatus, [
+            "unallocated",
+            "allocated",
+            "picking",
+            "qc",
+            "qc_complete",
+            "ship_ready",
+          ])
+        );
+      }
+
+      if (input.facilityId) {
+        conditions.push(eq(orderTracking.facilityId, input.facilityId));
+      }
+      if (input.clientId) {
+        conditions.push(eq(orderTracking.clientId, input.clientId));
+      }
+
+      const rows = await db
+        .select({
+          extensivOrderId: orderTracking.extensivOrderId,
+          referenceNum: orderTracking.referenceNum,
+          poNum: orderTracking.poNum,
+          configId: orderTracking.configId,
+          clientId: orderTracking.clientId,
+          clientName: orderTracking.clientName,
+          facilityId: orderTracking.facilityId,
+          facilityName: orderTracking.facilityName,
+          shipToName: orderTracking.shipToName,
+          shipToCity: orderTracking.shipToCity,
+          totalPieces: orderTracking.totalPieces,
+          skuCount: orderTracking.skuCount,
+          notes: orderTracking.notes,
+          savedElements: orderTracking.savedElements,
+          extensivStatus: orderTracking.extensivStatus,
+          creationDate: orderTracking.creationDate,
+          requiredShipDate: orderTracking.requiredShipDate,
+        })
+        .from(orderTracking)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(orderTracking.id))
+        .limit(input.limit + 1)
+        .offset(input.offset);
+
+      const hasMore = rows.length > input.limit;
+      const orders = hasMore ? rows.slice(0, input.limit) : rows;
+
+      // Coerce numeric fields
+      const normalised = orders.map((o) => ({
+        ...o,
+        fullyAllocated: false as boolean,
+        totalPieces: Number(o.totalPieces ?? 0),
+        skuCount: Number(o.skuCount ?? 0),
+        extensivStatus: Number(o.extensivStatus ?? 0),
+        facilityName: o.facilityName ?? "",
+      }));
+
+      return { orders: normalised, hasMore, total: normalised.length };
     }),
 
   // -------------------------------------------------------------------------

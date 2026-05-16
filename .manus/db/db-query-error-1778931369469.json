@@ -1,0 +1,8 @@
+{
+  "query": "SELECT txId, facilityId, facilityName, status, customerName FROM order_tracking WHERE facilityId = 2 AND facilityName = 'RENO - Reno' LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT txId, facilityId, facilityName, status, customerName FROM order_tracking WHERE facilityId = 2 AND facilityName = 'RENO - Reno' LIMIT 10;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'txid' in 'field list'"
+  ]
+}

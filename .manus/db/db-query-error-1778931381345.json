@@ -1,0 +1,8 @@
+{
+  "query": "UPDATE order_tracking SET facilityId = 3 WHERE facilityId = 2 AND facilityName = 'RENO - Reno';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute UPDATE order_tracking SET facilityId = 3 WHERE facilityId = 2 AND facilityName = 'RENO - Reno';",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1062 (23000) at line 1: Duplicate entry '?' for key 'order_tracking.uq_order_config_facility'"
+  ]
+}

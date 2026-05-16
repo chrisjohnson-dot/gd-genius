@@ -1,0 +1,31 @@
+{
+  "query": "SELECT a.id, a.extensivOrderId, a.facilityId as fid_2, b.facilityId as fid_3, b.facilityName as name_3 FROM order_tracking a JOIN order_tracking b ON a.extensivOrderId = b.extensivOrderId AND a.configId = b.configId WHERE a.facilityId = 2 AND a.facilityName = 'RENO - Reno' AND b.facilityId = 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT a.id, a.extensivOrderId, a.facilityId as fid_2, b.facilityId as fid_3, b.facilityName as name_3 FROM order_tracking a JOIN order_tracking b ON a.extensivOrderId = b.extensivOrderId AND a.configId = b.configId WHERE a.facilityId = 2 AND a.facilityName = 'RENO - Reno' AND b.facilityId = 3;",
+  "rows": [
+    {
+      "id": "5406667",
+      "extensivOrderId": "3433871",
+      "fid_2": "2",
+      "fid_3": "3",
+      "name_3": "RENO - Reno"
+    },
+    {
+      "id": "5406706",
+      "extensivOrderId": "3434502",
+      "fid_2": "2",
+      "fid_3": "3",
+      "name_3": "RENO - Reno"
+    },
+    {
+      "id": "5406707",
+      "extensivOrderId": "3434503",
+      "fid_2": "2",
+      "fid_3": "3",
+      "name_3": "RENO - Reno"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\textensivOrderId\tfid_2\tfid_3\tname_3\n5406667\t3433871\t2\t3\tRENO - Reno\n5406706\t3434502\t2\t3\tRENO - Reno\n5406707\t3434503\t2\t3\tRENO - Reno\n",
+  "stderr": "",
+  "execution_time_ms": 390
+}

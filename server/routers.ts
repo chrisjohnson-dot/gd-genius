@@ -2599,17 +2599,19 @@ const _appRouter = router({
         .from(orderTracking)
         .where(sql`${orderTracking.facilityId} IS NOT NULL AND ${orderTracking.facilityName} IS NOT NULL`)
         .groupBy(orderTracking.facilityId, orderTracking.facilityName);
-      // Deduplicate by facilityName — keep the row with the highest order count
-      const byName = new Map<string, { facilityId: number; facilityName: string }>();
+      // Deduplicate by facilityId — keep the row with the highest order count as the canonical name for that ID.
+      // This prevents the same facilityId from appearing twice (e.g. stale rows with a mismatched facilityName).
+      const byId = new Map<number, { facilityId: number; facilityName: string; cnt: number }>();
       for (const r of rows) {
         if (r.facilityId == null || r.facilityName == null) continue;
-        const existing = byName.get(r.facilityName);
-        const existingCnt = existing ? (rows.find(x => x.facilityId === existing.facilityId)?.cnt ?? 0) : 0;
-        if (!existing || (r.cnt ?? 0) > existingCnt) {
-          byName.set(r.facilityName, { facilityId: r.facilityId, facilityName: r.facilityName });
+        const existing = byId.get(r.facilityId);
+        if (!existing || (r.cnt ?? 0) > existing.cnt) {
+          byId.set(r.facilityId, { facilityId: r.facilityId, facilityName: r.facilityName, cnt: r.cnt ?? 0 });
         }
       }
-      return Array.from(byName.values()).sort((a, b) => a.facilityName.localeCompare(b.facilityName));
+      return Array.from(byId.values())
+        .map(({ facilityId, facilityName }) => ({ facilityId, facilityName }))
+        .sort((a, b) => a.facilityName.localeCompare(b.facilityName));
     }),
     /** Return all tracked orders, optionally filtered by facilityId, with hidden clients excluded */
     list: protectedProcedure

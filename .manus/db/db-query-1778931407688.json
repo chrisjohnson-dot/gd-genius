@@ -1,0 +1,45 @@
+{
+  "query": "SELECT a.id, a.extensivOrderId, a.facilityId as fid_1, b.facilityId as fid_2, b.facilityName as name_2 FROM order_tracking a LEFT JOIN order_tracking b ON a.extensivOrderId = b.extensivOrderId AND a.configId = b.configId AND b.facilityId = 2 WHERE a.facilityId = 1 AND a.facilityName = 'COL-Columbus';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT a.id, a.extensivOrderId, a.facilityId as fid_1, b.facilityId as fid_2, b.facilityName as name_2 FROM order_tracking a LEFT JOIN order_tracking b ON a.extensivOrderId = b.extensivOrderId AND a.configId = b.configId AND b.facilityId = 2 WHERE a.facilityId = 1 AND a.facilityName = 'COL-Columbus';",
+  "rows": [
+    {
+      "id": "4248685",
+      "extensivOrderId": "900000001",
+      "fid_1": "1",
+      "fid_2": "NULL",
+      "name_2": "NULL"
+    },
+    {
+      "id": "4248686",
+      "extensivOrderId": "900000002",
+      "fid_1": "1",
+      "fid_2": "NULL",
+      "name_2": "NULL"
+    },
+    {
+      "id": "4248687",
+      "extensivOrderId": "900000003",
+      "fid_1": "1",
+      "fid_2": "NULL",
+      "name_2": "NULL"
+    },
+    {
+      "id": "4248688",
+      "extensivOrderId": "900000004",
+      "fid_1": "1",
+      "fid_2": "NULL",
+      "name_2": "NULL"
+    },
+    {
+      "id": "4248689",
+      "extensivOrderId": "900000005",
+      "fid_1": "1",
+      "fid_2": "NULL",
+      "name_2": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\textensivOrderId\tfid_1\tfid_2\tname_2\n4248685\t900000001\t1\tNULL\tNULL\n4248686\t900000002\t1\tNULL\tNULL\n4248687\t900000003\t1\tNULL\tNULL\n4248688\t900000004\t1\tNULL\tNULL\n4248689\t900000005\t1\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 405
+}

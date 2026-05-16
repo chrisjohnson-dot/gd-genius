@@ -1,0 +1,40 @@
+{
+  "query": "SELECT facilityId, facilityName, COUNT(*) as cnt FROM order_tracking WHERE facilityId IS NOT NULL AND facilityName IS NOT NULL GROUP BY facilityId, facilityName ORDER BY facilityName;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4NCq8mAsshAuKGA.2865343ca485 --database K5ogkLhSXtccCnqH4Vm3fs --execute SELECT facilityId, facilityName, COUNT(*) as cnt FROM order_tracking WHERE facilityId IS NOT NULL AND facilityName IS NOT NULL GROUP BY facilityId, facilityName ORDER BY facilityName;",
+  "rows": [
+    {
+      "facilityId": "4",
+      "facilityName": "CAL-Calgary",
+      "cnt": "306"
+    },
+    {
+      "facilityId": "2",
+      "facilityName": "COL-Columbus",
+      "cnt": "29979"
+    },
+    {
+      "facilityId": "1",
+      "facilityName": "COL-Columbus",
+      "cnt": "5"
+    },
+    {
+      "facilityId": "3",
+      "facilityName": "RENO - Reno",
+      "cnt": "7846"
+    },
+    {
+      "facilityId": "2",
+      "facilityName": "RENO - Reno",
+      "cnt": "3"
+    },
+    {
+      "facilityId": "1",
+      "facilityName": "TOR-Toronto",
+      "cnt": "38517"
+    }
+  ],
+  "messages": [],
+  "stdout": "facilityId\tfacilityName\tcnt\n4\tCAL-Calgary\t306\n2\tCOL-Columbus\t29979\n1\tCOL-Columbus\t5\n3\tRENO - Reno\t7846\n2\tRENO - Reno\t3\n1\tTOR-Toronto\t38517\n",
+  "stderr": "",
+  "execution_time_ms": 448
+}

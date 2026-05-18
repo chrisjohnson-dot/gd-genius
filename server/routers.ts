@@ -694,7 +694,7 @@ const _appRouter = router({
           matchedLocations: matchedLocations.length,
           seeded: entries.length,
           customers: input.customers.length,
-          preview: entries.slice(0, 30),
+          preview: entries,
           dryRun: input.dryRun ?? false,
         };
       }),

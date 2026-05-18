@@ -290,8 +290,8 @@ function BulkPickFaceDialog({
               </div>
             ) : (
               <>
-                <p className="text-xs text-muted-foreground">Showing first {Math.min(30, previewResult.seeded)} of {previewResult.seeded} entries:</p>
-                <div className="space-y-1 max-h-64 overflow-y-auto">
+                <p className="text-xs text-muted-foreground">{previewResult.seeded} entries to be saved:</p>
+                <div className="space-y-1 max-h-96 overflow-y-auto">
                   {previewResult.preview.map((item, i) => (
                     <div key={i} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />

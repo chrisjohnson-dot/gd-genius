@@ -624,6 +624,80 @@ const _appRouter = router({
           dryRun: input.dryRun ?? false,
         };
       }),
+
+    // Bulk-seed pick face locations from Extensiv using a name prefix pattern
+    seedPickFaceFromExtensiv: protectedProcedure
+      .input(z.object({
+        configId: z.number(),
+        facilityId: z.number(),
+        facilityName: z.string().optional(),
+        // Name prefix to match pick face locations (e.g. "HR" matches HR001, HR002, ...)
+        locationPrefix: z.string(),
+        // Customers to assign these pick face locations to
+        customers: z.array(z.object({
+          customerId: z.number(),
+          customerName: z.string(),
+        })),
+        dryRun: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const config = await getExtensivConfigById(input.configId);
+        if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+
+        // Fetch all locations from Extensiv for this facility
+        const allLocations = await fetchExtensivLocations(config, input.facilityId);
+        console.log(`[seedPickFaceFromExtensiv] Fetched ${allLocations.length} locations for facility ${input.facilityId}`);
+
+        const prefix = input.locationPrefix.trim().toUpperCase();
+
+        // Filter to locations whose name starts with the given prefix
+        // Exclude staging locations (they end in -Stage or -Staging)
+        const matchedLocations = allLocations.filter((l) => {
+          const name = l.name.trim().toUpperCase();
+          const isStaging = name.endsWith("-STAGE") || name.endsWith("-STAGING") || name.includes("STAGING");
+          return name.startsWith(prefix) && !isStaging;
+        });
+
+        console.log(`[seedPickFaceFromExtensiv] ${matchedLocations.length} locations match prefix "${prefix}"`);
+
+        // Build the full set of entries: each matched location × each customer
+        const entries: Array<{ customerId: number; customerName: string; locationId: number; locationName: string }> = [];
+        for (const customer of input.customers) {
+          for (const loc of matchedLocations) {
+            entries.push({
+              customerId: customer.customerId,
+              customerName: customer.customerName,
+              locationId: loc.locationId,
+              locationName: loc.name.trim(),
+            });
+          }
+        }
+
+        if (!input.dryRun) {
+          for (const entry of entries) {
+            await upsertLocationConfig({
+              configId: input.configId,
+              customerId: entry.customerId,
+              customerName: entry.customerName,
+              facilityId: input.facilityId,
+              facilityName: input.facilityName,
+              locationId: entry.locationId,
+              locationName: entry.locationName,
+              locationType: "pick_face",
+            });
+          }
+        }
+
+        return {
+          success: true,
+          totalLocations: allLocations.length,
+          matchedLocations: matchedLocations.length,
+          seeded: entries.length,
+          customers: input.customers.length,
+          preview: entries.slice(0, 30),
+          dryRun: input.dryRun ?? false,
+        };
+      }),
   }),
 
   // ─── Extensiv Data (live from API) ─────────────────────────────────────────

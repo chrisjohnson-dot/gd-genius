@@ -1,0 +1,62 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "db",
+    "server",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://4NCq8mAsshAuKGA.2865343ca485:9X0dm2uiL1goZL2EASv7@gateway04.us-east-1.prod.aws.tidbcloud.com:4000/K5ogkLhSXtccCnqH4Vm3fs?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": [
+    "no_db_push"
+  ],
+  "git_remote": {
+    "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663425420251/K5ogkLhSXtccCnqH4Vm3fs",
+    "access_key_id": "ASIAZV3A2ECZLHGIUAP2",
+    "secret_access_key": "leWlDDanUrG5yjR3ABsJem3qB7qZo106tykES8Eb",
+    "session_token": "IQoJb3JpZ2luX2VjEN///////////wEaCXVzLWVhc3QtMSJHMEUCIEqYvhZGTRS4Vd0nPChR+/wjLygkmoy37OajhNjRbYzQAiEA1W7c58Ry9y6OuYZ8HqKTGVuIEaPQJtoeJrB17suLL3Aq/wMIp///////////ARAEGgw2NjUzODYwOTg4NjYiDDA48aKHMjJ5lKm6XirTAwwujsYfWZi9L+t08zl0+5uoovS/M6BXAJU3QKUJ4mhDqCtvy9tZmmrC0vBcjca9Acnh1DE+vLhfXM+oGzez/VMn/CUkMEZU4sbbPh9k1IROq7troMNL/Xd2evcsEVfnomK8W2kBr1Aozp5evdXg2uWf+zUM4BdKZ91+xGHeVDYPvs9BN0n6EXvdFxsXzZasAu5+BOkA2SJICz+kSk7ojSjKxRlU6fb7fvNCKy1EKHKiSH+lBnRPyqJjFOriRIe6gSPPLQsERcfCMXqq67gxRe3Ql5uBZHktssSbMl/23wmHz+KOO4BW7Y5HWAGZ/5SL09T2i6UmFOs2/LZfck4YF68xxreylOKkhBP2EjkQelX1VvLjnoV0RTLImmbPa+diOdlnHOt1Xc72uRo1dfRb1dGo/GFBOOUm2541rwonzfG5Djv2PN3HSmD5BdfgOqh4tx9wo56VB4dKVPJ3Q2S3Ax9oaKGOesLXpM+4SQXuVY//d1iPA9pv0k6frU0hYBvEjb3OXprcgt4C/D8gAOTz7pduPv6M30C/xPdIUxxDIItyeIWujvCOmRg7upoEgTHTGGt4DBGGi91SfohBJu8DZcrfJs3QlPhUdfAx9BUcyQSDwqKpMNiap9AGOp0BhIkros0KKbdSIbeZeWnB3OJA5PuCHOBA02+s91j1Q6AQ3lmDfGAD4uINFsg1aQXGHSyRlH2tKXC/K2da9r/Vx5QFaDdi7sYZiA1k5HcURJjKnHuSDvnsoitETRyGePjUgl++0zViioGwi2yoe3WQmARCUO5MOKZDbdEfB8l23FJg5uI345dob0foN67RjrtAW7QOLIdP91xANwiF6A==",
+    "expiration": "2026-05-18T02:14:48.000Z"
+  },
+  "name": "gd-allocation-agent",
+  "path": "/home/ubuntu/gd-allocation-agent",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "7XD46j7oyZwitCxqVsDqfk",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "DHL_PASSWORD": "UbVsoJ2c0VhWRPNm",
+    "DHL_USER_KEY": "GND",
+    "FEDEX_ACCOUNT_NUMBER": "506908620",
+    "FEDEX_ONE_RATE_ACCOUNT_NUMBER": "942412380",
+    "FEDEX_ONE_RATE_PASSWORD": "b673a22f92aa47ec8a9bbc4830cb565b",
+    "FEDEX_ONE_RATE_USER_KEY": "l78ea5d72cb6174d97a42c0fdbba4b8252",
+    "FEDEX_PASSWORD": "7497f757dff741e095930d9800e68698",
+    "FEDEX_USER_KEY": "l7455a29977db541658a8a13984f73eb98",
+    "GD_ROBOTICS_API_KEY": "gdr-k9x2m7p4n8q1w5v3j6t0y8r2s4u6e1b",
+    "JWT_SECRET": "Cxf6tZEgqRXEEMsamzxW3x",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "ONTRAC_ACCOUNT": "222873",
+    "ONTRAC_PASSWORD": "a8532b71-24e9-46d6-97a7-358d421d29c2",
+    "OPFI_API_KEY": "genius-gd-2024",
+    "OPFI_BASE_URL": "https://gobilling-nefrolgy.manus.space",
+    "OWNER_NAME": "Chris Johnson",
+    "OWNER_OPEN_ID": "KWcBj96ZJhD3KdbCZx3WLW",
+    "SHARED_LOGIN_PASSWORD": "2026gogd",
+    "SHARED_LOGIN_USERNAME": "GDtakesovertheworld",
+    "UPS_ACCOUNT_NUMBER": "FX2809",
+    "UPS_REST_TOKEN": "UPSTOKEN_d34dfc04d9d54714b3c7ef942068f49f",
+    "USPS_EHUB_API_KEY": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpYXQiOjE2NDUwMzAzODksImRhdGEiOnsidXNlciI6eyJpZCI6NjI2NiwiY3VzdG9tZXJfaWQiOjUzNDMsImVtYWlsIjoiYWxsYW4uaGlua2xlQGdvZGlyZWN0c29sdXRpb25zLmNvbSJ9LCJzY29wZXMiOlsiYXBpX3B1YmxpYyJdfX0.RCED8T2aA5w6yDkFdTVqWcEB3Zav_rXk2TkCcGPD-446Mv9zzJVoEaEZcsXtgv7HQDZSKp-PJVfMCbXLeG1Mzw",
+    "VEEQO_API_KEY": "Vqt/2592b31d14988dbbef930131297ec2e1",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "24f67ea4-640e-4a85-be4d-219ffb04315c",
+    "VITE_APP_ID": "K5ogkLhSXtccCnqH4Vm3fs",
+    "VITE_APP_LOGO": "https://files.manuscdn.com/user_upload_by_module/web_dev_logo/310519663425420251/qxmSVfdfOmthaSxx.png",
+    "VITE_APP_TITLE": "Genius",
+    "VITE_FRONTEND_FORGE_API_KEY": "6eYgipNxLRmTmZXrQ8BuVV",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}

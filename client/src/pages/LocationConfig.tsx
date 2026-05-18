@@ -10,6 +10,7 @@ import {
   AlertCircle,
   CheckCircle2,
   FlaskConical,
+  Layers,
   Loader2,
   MapPin,
   Pencil,
@@ -39,6 +40,274 @@ const locTypeLabel: Record<LocationType, string> = {
   pick_face: "Pick Face",
   warehouse: "Warehouse",
 };
+
+// ─── Bulk Pick Face Dialog ───────────────────────────────────────────────────
+function BulkPickFaceDialog({
+  open,
+  onClose,
+  configId,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  configId: number;
+  onSuccess: () => void;
+}) {
+  const { data: facilities, isLoading: facilitiesLoading } = trpc.extensiv.facilities.useQuery(
+    { configId },
+    { enabled: open }
+  );
+  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
+  const [locationPrefix, setLocationPrefix] = useState("HR");
+
+  const { data: customers, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
+    { configId, facilityId: selectedFacilityId ?? 0 },
+    { enabled: !!selectedFacilityId }
+  );
+
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<number>>(new Set());
+  const [step, setStep] = useState<"configure" | "preview" | "done">("configure");
+  const [previewResult, setPreviewResult] = useState<{
+    totalLocations: number;
+    matchedLocations: number;
+    seeded: number;
+    customers: number;
+    preview: Array<{ customerId: number; customerName: string; locationId: number; locationName: string }>;
+  } | null>(null);
+
+  const seedMutation = trpc.locations.seedPickFaceFromExtensiv.useMutation({
+    onSuccess: (data) => {
+      if (data.dryRun) {
+        setPreviewResult(data);
+        setStep("preview");
+      } else {
+        toast.success(`Added ${data.seeded} pick face location${data.seeded !== 1 ? "s" : ""} successfully!`);
+        onSuccess();
+        onClose();
+        setStep("configure");
+        setPreviewResult(null);
+      }
+    },
+    onError: (e) => toast.error(`Failed: ${e.message}`),
+  });
+
+  const toggleCustomer = (id: number) => {
+    setSelectedCustomerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllCustomers = () => {
+    if (customers) setSelectedCustomerIds(new Set(customers.map((c) => c.id)));
+  };
+
+  const buildPayload = (dryRun: boolean) => {
+    const selectedFacility = facilities?.find((f) => f.id === selectedFacilityId);
+    return {
+      configId,
+      facilityId: selectedFacilityId!,
+      facilityName: selectedFacility?.name,
+      locationPrefix: locationPrefix.trim(),
+      customers: (customers ?? []).filter((c) => selectedCustomerIds.has(c.id)).map((c) => ({
+        customerId: c.id,
+        customerName: c.name,
+      })),
+      dryRun,
+    };
+  };
+
+  const handlePreview = () => {
+    if (!selectedFacilityId) { toast.error("Select a facility first"); return; }
+    if (!locationPrefix.trim()) { toast.error("Enter a location prefix"); return; }
+    if (selectedCustomerIds.size === 0) { toast.error("Select at least one customer"); return; }
+    seedMutation.mutate(buildPayload(true));
+  };
+
+  const handleConfirm = () => seedMutation.mutate(buildPayload(false));
+
+  const handleClose = () => {
+    onClose();
+    setStep("configure");
+    setPreviewResult(null);
+    setSelectedFacilityId(null);
+    setSelectedCustomerIds(new Set());
+    setLocationPrefix("HR");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            Bulk Add Pick Face Locations
+          </DialogTitle>
+        </DialogHeader>
+
+        {step === "configure" && (
+          <div className="space-y-5 py-2">
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md text-xs text-blue-800 dark:text-blue-300 space-y-1">
+              <p className="font-semibold">What are pick face locations?</p>
+              <p>
+                Pick face locations are forward-pick slots where inventory is replenished from bulk storage.
+                Enter a prefix (e.g. <code>HR</code>) and Genius will find all matching Extensiv locations
+                (HR001, HR002 … HR400) and register them as pick face locations for the selected clients.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">1. Select Facility</Label>
+              {facilitiesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading facilities...
+                </div>
+              ) : (
+                <Select
+                  value={selectedFacilityId ? String(selectedFacilityId) : ""}
+                  onValueChange={(v) => { setSelectedFacilityId(Number(v)); setSelectedCustomerIds(new Set()); }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a facility..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(facilities ?? []).map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">2. Location Name Prefix</Label>
+              <p className="text-xs text-muted-foreground">
+                All Extensiv locations whose name starts with this prefix will be added as pick face locations.
+                Example: <code>HR</code> matches HR001, HR002 … HR400.
+              </p>
+              <Input
+                placeholder="e.g. HR"
+                value={locationPrefix}
+                onChange={(e) => setLocationPrefix(e.target.value)}
+                className="max-w-xs"
+              />
+            </div>
+
+            {selectedFacilityId && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">3. Select Clients</Label>
+                  <button
+                    type="button"
+                    className="text-xs text-primary underline"
+                    onClick={selectAllCustomers}
+                  >
+                    Select all
+                  </button>
+                </div>
+                {customersLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading clients...
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {(customers ?? []).map((c) => (
+                      <label key={c.id} className="flex items-center gap-3 cursor-pointer select-none rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                          checked={selectedCustomerIds.has(c.id)}
+                          onChange={() => toggleCustomer(c.id)}
+                        />
+                        <span className="text-sm font-medium">{c.name}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">ID: {c.id}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md text-xs text-amber-800 dark:text-amber-300">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                A <strong>dry run preview</strong> runs first — you'll see exactly which locations will be saved before anything is committed.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {step === "preview" && previewResult && (
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center p-3 bg-muted rounded-lg">
+                <p className="text-2xl font-bold">{previewResult.matchedLocations}</p>
+                <p className="text-xs text-muted-foreground">Locations matched</p>
+              </div>
+              <div className="text-center p-3 bg-muted rounded-lg">
+                <p className="text-2xl font-bold">{previewResult.customers}</p>
+                <p className="text-xs text-muted-foreground">Clients</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                <p className="text-2xl font-bold text-green-700 dark:text-green-400">{previewResult.seeded}</p>
+                <p className="text-xs text-muted-foreground">Entries to save</p>
+              </div>
+            </div>
+
+            {previewResult.matchedLocations === 0 ? (
+              <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md text-xs text-red-800 dark:text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>No locations found matching prefix "{locationPrefix}". Check the prefix and try again.</span>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">Showing first {Math.min(30, previewResult.seeded)} of {previewResult.seeded} entries:</p>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {previewResult.preview.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                      <span className="font-medium w-20 shrink-0">{item.customerName}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span>{item.locationName}</span>
+                      <span className="text-muted-foreground ml-auto">(ID: {item.locationId})</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          {step === "configure" && (
+            <Button
+              onClick={handlePreview}
+              disabled={!selectedFacilityId || !locationPrefix.trim() || selectedCustomerIds.size === 0 || seedMutation.isPending}
+            >
+              {seedMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Searching...</> : "Preview →"}
+            </Button>
+          )}
+          {step === "preview" && (
+            <>
+              <Button variant="outline" onClick={() => setStep("configure")}>← Back</Button>
+              {previewResult && previewResult.matchedLocations > 0 && (
+                <Button
+                  onClick={handleConfirm}
+                  disabled={seedMutation.isPending}
+                >
+                  {seedMutation.isPending
+                    ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving...</>
+                    : `Save ${previewResult.seeded} Pick Face Location${previewResult.seeded !== 1 ? "s" : ""}`}
+                </Button>
+              )}
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ─── Auto-Populate Dialog ─────────────────────────────────────────────────────
 interface StagingMapping {
@@ -342,6 +611,7 @@ export default function LocationConfig() {
 
   const [open, setOpen] = useState(false);
   const [autoPopulateOpen, setAutoPopulateOpen] = useState(false);
+  const [bulkPickFaceOpen, setBulkPickFaceOpen] = useState(false);
   const [form, setForm] = useState<Partial<LocationForm>>({});
   // Multi-select state: set of location IDs
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -424,13 +694,22 @@ export default function LocationConfig() {
           </div>
           <div className="flex items-center gap-2">
             {selectedConfigId && (
-              <Button
-                variant="outline"
-                onClick={() => setAutoPopulateOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <Sparkles className="h-4 w-4" /> Auto-Detect from Extensiv
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkPickFaceOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Layers className="h-4 w-4" /> Bulk Add Pick Face
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setAutoPopulateOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Sparkles className="h-4 w-4" /> Auto-Detect Staging
+                </Button>
+              </>
             )}
             <Button onClick={openNew} className="flex items-center gap-2">
               <Plus className="h-4 w-4" /> Add Manually
@@ -643,6 +922,16 @@ export default function LocationConfig() {
           </>
         )}
       </div>
+
+      {/* Bulk Pick Face Dialog */}
+      {selectedConfigId && (
+        <BulkPickFaceDialog
+          open={bulkPickFaceOpen}
+          onClose={() => setBulkPickFaceOpen(false)}
+          configId={selectedConfigId}
+          onSuccess={() => utils.locations.list.invalidate()}
+        />
+      )}
 
       {/* Auto-Populate Dialog */}
       {selectedConfigId && (

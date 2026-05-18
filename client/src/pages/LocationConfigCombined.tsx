@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle, CheckCircle2, Check, ChevronDown, ChevronRight, ChevronsUpDown, Database,
-  Eye, FlaskConical, Hash, Info, Loader2, MapPin, Pencil, Plus, Save,
+  Eye, FlaskConical, Hash, Info, Layers, Loader2, MapPin, Pencil, Plus, Save,
   Search, Trash2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -123,12 +123,231 @@ function CustomerCombobox({
   );
 }
 
+// ─── Bulk Pick Face Dialog ───────────────────────────────────────────────────
+function BulkPickFaceDialog({
+  open,
+  onClose,
+  configId,
+  facilityId,
+  facilityName,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  configId: number;
+  facilityId: number;
+  facilityName?: string;
+  onSuccess: () => void;
+}) {
+  const { data: customers, isLoading: customersLoading } = trpc.extensiv.customersForFacility.useQuery(
+    { configId, facilityId },
+    { enabled: open && !!facilityId }
+  );
+
+  const [locationPrefix, setLocationPrefix] = useState("HR");
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<number>>(new Set());
+  const [step, setStep] = useState<"configure" | "preview">("configure");
+  const [previewResult, setPreviewResult] = useState<{
+    totalLocations: number;
+    matchedLocations: number;
+    seeded: number;
+    customers: number;
+    preview: Array<{ customerId: number; customerName: string; locationId: number; locationName: string }>;
+  } | null>(null);
+
+  const seedMutation = trpc.locations.seedPickFaceFromExtensiv.useMutation({
+    onSuccess: (data) => {
+      if (data.dryRun) {
+        setPreviewResult(data);
+        setStep("preview");
+      } else {
+        toast.success(`Added ${data.seeded} pick face location${data.seeded !== 1 ? "s" : ""} for ${data.customers} client${data.customers !== 1 ? "s" : ""}!`);
+        onSuccess();
+        handleClose();
+      }
+    },
+    onError: (e) => toast.error(`Failed: ${e.message}`),
+  });
+
+  const toggleCustomer = (id: number) => {
+    setSelectedCustomerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (customers) setSelectedCustomerIds(new Set(customers.map((c: { id: number }) => c.id)));
+  };
+
+  const buildPayload = (dryRun: boolean) => ({
+    configId,
+    facilityId,
+    facilityName,
+    locationPrefix: locationPrefix.trim(),
+    customers: (customers ?? []).filter((c: { id: number }) => selectedCustomerIds.has(c.id)).map((c: { id: number; name: string }) => ({
+      customerId: c.id,
+      customerName: c.name,
+    })),
+    dryRun,
+  });
+
+  const handleClose = () => {
+    onClose();
+    setStep("configure");
+    setPreviewResult(null);
+    setSelectedCustomerIds(new Set());
+    setLocationPrefix("HR");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            Bulk Add Pick Face Locations
+          </DialogTitle>
+        </DialogHeader>
+
+        {step === "configure" && (
+          <div className="space-y-5 py-2">
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md text-xs text-blue-800 dark:text-blue-300">
+              <p className="font-semibold mb-1">How it works</p>
+              <p>Enter a location name prefix (e.g. <code>HR</code>). Genius will fetch all Extensiv locations
+              for <strong>{facilityName ?? `Facility ${facilityId}`}</strong> that start with that prefix
+              and register them as pick face locations for every selected client.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Location prefix</Label>
+              <p className="text-xs text-muted-foreground">e.g. <code>HR</code> matches HR001, HR002 … HR400</p>
+              <Input
+                placeholder="HR"
+                value={locationPrefix}
+                onChange={(e) => setLocationPrefix(e.target.value)}
+                className="max-w-xs"
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Clients to assign</Label>
+                <button type="button" className="text-xs text-primary underline" onClick={selectAll}>Select all</button>
+              </div>
+              {customersLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading clients…
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+                  {(customers ?? []).map((c: { id: number; name: string }) => (
+                    <label key={c.id} className="flex items-center gap-3 cursor-pointer select-none rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                        checked={selectedCustomerIds.has(c.id)}
+                        onChange={() => toggleCustomer(c.id)}
+                      />
+                      <span className="text-sm font-medium">{c.name}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">ID: {c.id}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md text-xs text-amber-800 dark:text-amber-300">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>A <strong>dry run preview</strong> runs first — you'll see exactly what will be saved before committing.</span>
+            </div>
+          </div>
+        )}
+
+        {step === "preview" && previewResult && (
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center p-3 bg-muted rounded-lg">
+                <p className="text-2xl font-bold">{previewResult.matchedLocations}</p>
+                <p className="text-xs text-muted-foreground">Locations matched</p>
+              </div>
+              <div className="text-center p-3 bg-muted rounded-lg">
+                <p className="text-2xl font-bold">{previewResult.customers}</p>
+                <p className="text-xs text-muted-foreground">Clients</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                <p className="text-2xl font-bold text-green-700 dark:text-green-400">{previewResult.seeded}</p>
+                <p className="text-xs text-muted-foreground">Entries to save</p>
+              </div>
+            </div>
+
+            {previewResult.matchedLocations === 0 ? (
+              <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md text-xs text-red-800 dark:text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>No locations found matching prefix "{locationPrefix}" in Extensiv. Check the prefix and try again.</span>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">Showing first {Math.min(30, previewResult.seeded)} of {previewResult.seeded} entries:</p>
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  {previewResult.preview.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                      <span className="font-medium w-20 shrink-0">{item.customerName}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span>{item.locationName}</span>
+                      <span className="text-muted-foreground ml-auto">(ID: {item.locationId})</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          {step === "configure" && (
+            <>
+              <Button variant="outline" onClick={handleClose}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  if (!locationPrefix.trim()) { toast.error("Enter a location prefix"); return; }
+                  if (selectedCustomerIds.size === 0) { toast.error("Select at least one client"); return; }
+                  seedMutation.mutate(buildPayload(true));
+                }}
+                disabled={seedMutation.isPending}
+              >
+                {seedMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Searching…</> : "Preview →"}
+              </Button>
+            </>
+          )}
+          {step === "preview" && (
+            <>
+              <Button variant="outline" onClick={() => setStep("configure")}>← Back</Button>
+              {previewResult && previewResult.matchedLocations > 0 && (
+                <Button onClick={() => seedMutation.mutate(buildPayload(false))} disabled={seedMutation.isPending}>
+                  {seedMutation.isPending
+                    ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</>
+                    : `Save ${previewResult.seeded} Pick Face Location${previewResult.seeded !== 1 ? "s" : ""}`}
+                </Button>
+              )}
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function LocationAssignmentsTab() {
   const utils = trpc.useUtils();
   const { data: configs } = trpc.config.list.useQuery();
   const [selectedConfigId, setSelectedConfigId] = useState<number | null>(null);
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [bulkPickFaceOpen, setBulkPickFaceOpen] = useState(false);
   const [editForm, setEditForm] = useState<Partial<LocationForm>>({});
   const [testConfigId, setTestConfigId] = useState<number | null>(null);
   const [testFacilityId, setTestFacilityId] = useState<number | null>(null);
@@ -420,6 +639,11 @@ function LocationAssignmentsTab() {
               onClick={() => { setTestConfigId(activeConfigId); setTestFacilityId(activeFacilityId); setRunTest(true); }}>
               <FlaskConical className="h-3.5 w-3.5" /> Test Extensiv Locations
             </Button>
+            {activeConfigId && activeFacilityId && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setBulkPickFaceOpen(true)}>
+                <Layers className="h-3.5 w-3.5" /> Bulk Add Pick Face
+              </Button>
+            )}
             <Button size="sm" className="gap-1.5 text-xs" onClick={() => openEdit()}>
               <Plus className="h-3.5 w-3.5" /> Add Location
             </Button>
@@ -489,6 +713,18 @@ function LocationAssignmentsTab() {
           </div>
         )}
       </div>
+
+      {/* Bulk Pick Face Dialog */}
+      {activeConfigId && activeFacilityId && (
+        <BulkPickFaceDialog
+          open={bulkPickFaceOpen}
+          onClose={() => setBulkPickFaceOpen(false)}
+          configId={activeConfigId}
+          facilityId={activeFacilityId}
+          facilityName={facilities?.find((f) => f.id === activeFacilityId)?.name}
+          onSuccess={() => utils.locations.list.invalidate()}
+        />
+      )}
 
       {/* Add / Edit Location dialog — simplified: Customer autocomplete + Location Name + Type + Extensiv lookup */}
       <Dialog open={editOpen} onOpenChange={(o) => { if (!o) { setLookupTrigger(false); setLookupDone(false); setLookupResults(null); } setEditOpen(o); }}>

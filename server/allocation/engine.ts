@@ -703,8 +703,28 @@ export function runAllocationEngine(
           // 4. Fallback: legacy customer-level pick face location
           pfId = pickFaceLocationId;
           pfName = pickFaceLocationName ?? "Pick Face";
+        } else if (allPickFaceLocations.length > 0) {
+          // 5. All configured pick face locations are occupied by other SKUs.
+          //    Find the least-occupied one (fewest total units on hand) so the
+          //    picker has a sensible destination rather than no pick face at all.
+          //    This handles the case where a client shares a pick face zone (e.g.
+          //    HR001-HR400) across many SKUs and no location is ever truly empty.
+          const pfQtyMap = new Map<number, number>();
+          for (const r of Array.from(inventoryPool.values())) {
+            const locId = r.locationIdentifier?.id ?? -1;
+            if (configuredPfLocationIds.has(locId) && r.remainingQty > 0) {
+              pfQtyMap.set(locId, (pfQtyMap.get(locId) ?? 0) + r.remainingQty);
+            }
+          }
+          const leastOccupied = allPickFaceLocations.reduce((best, loc) => {
+            const qty = pfQtyMap.get(loc.locationId) ?? 0;
+            const bestQty = pfQtyMap.get(best.locationId) ?? 0;
+            return qty < bestQty ? loc : best;
+          });
+          pfId = leastOccupied.locationId;
+          pfName = leastOccupied.locationName;
         }
-        // 5. pfId remains 0 → no pick face move
+        // 6. pfId remains 0 → no pick face move (only if allPickFaceLocations is empty)
       }
     }
 

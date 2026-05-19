@@ -1967,10 +1967,11 @@ export async function markOrderPacked(
   const token = await getExtensivToken(config);
   const baseUrl = config.baseUrl || "https://secure-wms.com";
 
-  // Fetch ETag first
+  // Fetch ETag first (30s timeout to avoid blocking Cloud Run's 180s limit)
   const getResp = await axios.get(baseUrl + "/orders/" + orderId, {
     headers: { Authorization: "Bearer " + token, Accept: "application/hal+json" },
     validateStatus: () => true,
+    timeout: 30000,
   });
   if (getResp.status !== 200) {
     return { success: false, error: "Failed to fetch order for ETag: HTTP " + getResp.status };
@@ -1984,11 +1985,11 @@ export async function markOrderPacked(
   };
   if (etag) headers["If-Match"] = `""`;
 
-  // PUT /orders/{orderId}/status with status=2 (Packed)
+  // PUT /orders/{orderId}/status with status=2 (Packed) — 30s timeout
   const putResp = await axios.put(
     baseUrl + "/orders/" + orderId + "/status",
     { status: 2 },
-    { headers, validateStatus: () => true }
+    { headers, validateStatus: () => true, timeout: 30000 }
   );
 
   if (putResp.status === 200 || putResp.status === 204) return { success: true };

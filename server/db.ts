@@ -2182,17 +2182,27 @@ export async function incrementQcScanItem(sessionId: number, sku: string, amount
   const rows = await db.select().from(qcScanItems).where(and(eq(qcScanItems.sessionId, sessionId), eq(qcScanItems.sku, sku)));
   if (rows.length === 0) return null;
   const item = rows[0];
-  const timestamps = (item.scanTimestamps as number[] | null) ?? [];
-  if (amount > 0) timestamps.push(Date.now());
+  const now = Date.now();
   if (amount > 0) {
-    // Atomic cap: LEAST(scannedQty + amount, expectedQty) prevents race-condition over-scanning
+    // Atomic cap: LEAST(scannedQty + amount, expectedQty) prevents race-condition over-scanning.
+    // Timestamps are appended atomically in SQL using JSON_ARRAY_APPEND to avoid the read-modify-write
+    // race that caused JSON corruption when multiple mutations fired simultaneously.
     await db.execute(
-      sql`UPDATE qc_scan_items SET scannedQty = LEAST(scannedQty + ${amount}, expectedQty), scanTimestamps = ${JSON.stringify(timestamps)} WHERE sessionId = ${sessionId} AND sku = ${sku}`
+      sql`UPDATE qc_scan_items
+          SET scannedQty = LEAST(scannedQty + ${amount}, expectedQty),
+              scanTimestamps = IF(
+                scannedQty < expectedQty,
+                JSON_ARRAY_APPEND(COALESCE(scanTimestamps, JSON_ARRAY()), '$', ${now}),
+                COALESCE(scanTimestamps, JSON_ARRAY())
+              )
+          WHERE sessionId = ${sessionId} AND sku = ${sku}`
     );
   } else {
-    // Decrement: floor at 0
+    // Decrement: floor at 0, no timestamp appended
     await db.execute(
-      sql`UPDATE qc_scan_items SET scannedQty = GREATEST(scannedQty + ${amount}, 0), scanTimestamps = ${JSON.stringify(timestamps)} WHERE sessionId = ${sessionId} AND sku = ${sku}`
+      sql`UPDATE qc_scan_items
+          SET scannedQty = GREATEST(scannedQty + ${amount}, 0)
+          WHERE sessionId = ${sessionId} AND sku = ${sku}`
     );
   }
   // Re-read the actual committed value

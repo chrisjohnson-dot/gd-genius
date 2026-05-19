@@ -281,7 +281,7 @@ function ItemsTable({
                   variant="ghost"
                   size="icon"
                   className="h-5 w-5 shrink-0 p-0"
-                  disabled={item.scannedQty <= 0}
+                  disabled={item.scannedQty <= 0 || adjustQty.isPending}
                   onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: -1 }); onAdjust?.(item.sku, -1); }}
                 >
                   <Minus className="w-2.5 h-2.5" />
@@ -297,7 +297,7 @@ function ItemsTable({
                   variant="ghost"
                   size="icon"
                   className="h-5 w-5 shrink-0 p-0"
-                  disabled={item.scannedQty >= item.expectedQty}
+                  disabled={item.scannedQty >= item.expectedQty || adjustQty.isPending}
                   onClick={() => { adjustQty.mutate({ sessionId, sku: item.sku, delta: 1 }); onAdjust?.(item.sku, 1); }}
                 >
                   <Plus className="w-2.5 h-2.5" />

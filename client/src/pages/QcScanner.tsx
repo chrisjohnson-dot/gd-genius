@@ -1362,20 +1362,26 @@ export default function QcScanner() {
 
   // Search filter (TX ID or Reference Number)
   const [sessionSearch, setSessionSearch] = useState("");
+  const [shipwellFilter, setShipwellFilter] = useState<"all" | "sent" | "not_sent">("all");
 
   if (phase === "start") {
     const recent = recentSessionsQuery.data?.sessions ?? [];
-    const filteredRecent = sessionSearch.trim()
-      ? recent.filter((s) => {
-          const q = sessionSearch.trim().toLowerCase();
-          return (
-            String(s.transactionId ?? "").includes(q) ||
-            s.referenceNumber?.toLowerCase().includes(q) ||
-            s.customerName?.toLowerCase().includes(q) ||
-            s.poNumber?.toLowerCase().includes(q)
-          );
-        })
-      : recent;
+    const filteredRecent = recent.filter((s) => {
+      // Text search
+      if (sessionSearch.trim()) {
+        const q = sessionSearch.trim().toLowerCase();
+        const textMatch =
+          String(s.transactionId ?? "").includes(q) ||
+          s.referenceNumber?.toLowerCase().includes(q) ||
+          s.customerName?.toLowerCase().includes(q) ||
+          s.poNumber?.toLowerCase().includes(q);
+        if (!textMatch) return false;
+      }
+      // Shipwell status filter
+      if (shipwellFilter === "sent" && !s.shipwellOrderId) return false;
+      if (shipwellFilter === "not_sent" && (!!s.shipwellOrderId || !s.foundInExtensiv)) return false;
+      return true;
+    });
     return (
       <>
       <div className="flex flex-col items-center min-h-[60vh] gap-8 p-8">
@@ -1468,28 +1474,43 @@ export default function QcScanner() {
 
         {/* Recent Sessions panel */}
         <div className="w-full max-w-2xl">
-          <div className="flex items-center justify-between mb-3 gap-3">
+          <div className="flex items-center justify-between mb-3 gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2 shrink-0">
               <ClipboardList className="w-4 h-4" />
               Recent Completed Sessions
             </h2>
-            <div className="relative flex-1 max-w-xs">
-              <input
-                type="text"
-                value={sessionSearch}
-                onChange={(e) => setSessionSearch(e.target.value)}
-                placeholder="Search TX ID, ref #, customer…"
-                className="w-full h-8 pl-3 pr-7 text-xs rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              {sessionSearch && (
-                <button
-                  onClick={() => setSessionSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
+            <div className="flex items-center gap-2 flex-1 justify-end">
+              {/* Shipwell status filter */}
+              <select
+                value={shipwellFilter}
+                onChange={(e) => setShipwellFilter(e.target.value as "all" | "sent" | "not_sent")}
+                className="h-8 pl-2 pr-6 text-xs rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+                title="Filter by Shipwell sync status"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
+              >
+                <option value="all">All Shipwell</option>
+                <option value="sent">✓ Sent</option>
+                <option value="not_sent">Not Sent</option>
+              </select>
+              {/* Text search */}
+              <div className="relative max-w-[200px] flex-1">
+                <input
+                  type="text"
+                  value={sessionSearch}
+                  onChange={(e) => setSessionSearch(e.target.value)}
+                  placeholder="Search TX ID, ref #…"
+                  className="w-full h-8 pl-3 pr-7 text-xs rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                {sessionSearch && (
+                  <button
+                    onClick={() => setSessionSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           {recentSessionsQuery.isLoading ? (
@@ -1506,7 +1527,11 @@ export default function QcScanner() {
           ) : filteredRecent.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg">
               <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              No sessions match &ldquo;{sessionSearch}&rdquo;
+              {shipwellFilter === "not_sent" && !sessionSearch.trim()
+                ? "All sessions have been sent to Shipwell ✓"
+                : shipwellFilter === "sent" && !sessionSearch.trim()
+                ? "No sessions have been sent to Shipwell yet"
+                : "No sessions match the current filters"}
             </div>
           ) : (
             <div className="rounded-lg border border-border overflow-hidden">

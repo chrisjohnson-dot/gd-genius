@@ -6140,39 +6140,46 @@ const qcScannerRouter = router({
 
       const poUrl = client.getPoUrl(po.id);
 
-      // Mark order_tracking row as sent to Shipwell (if we have a tracked order)
-      if (trackedOrder) {
-        await markOrderSentToShipwell(trackedOrder.extensivOrderId, po.id, poUrl);
-        // Write unified shipment record
+      // Return immediately — all post-creation work runs in the background
+      // so the Cloud Run 180s hard limit is never hit by slow downstream calls.
+      void (async () => {
         try {
-          const ltlShipmentId = await createShipment({
-            platform: "shipwell",
-            mode: "ltl",
-            extensivOrderId: trackedOrder.extensivOrderId,
-            orderNumber: session.referenceNumber ?? undefined,
-            customerId: trackedOrder.clientId ?? undefined,
-            customerName: customerName,
-            facilityName: facilityName,
-            shipToName: trackedOrder.shipToName ?? undefined,
-            shipToCity: trackedOrder.shipToCity ?? undefined,
-            shipwellOrderId: po.id,
-            status: "booked",
-            bookedByUserId: String(ctx.user.id),
-            bookedByName: ctx.user.name ?? undefined,
+          // Mark order_tracking row as sent to Shipwell (if we have a tracked order)
+          if (trackedOrder) {
+            await markOrderSentToShipwell(trackedOrder.extensivOrderId, po.id, poUrl);
+            // Write unified shipment record
+            try {
+              const ltlShipmentId = await createShipment({
+                platform: "shipwell",
+                mode: "ltl",
+                extensivOrderId: trackedOrder.extensivOrderId,
+                orderNumber: session.referenceNumber ?? undefined,
+                customerId: trackedOrder.clientId ?? undefined,
+                customerName: customerName,
+                facilityName: facilityName,
+                shipToName: trackedOrder.shipToName ?? undefined,
+                shipToCity: trackedOrder.shipToCity ?? undefined,
+                shipwellOrderId: po.id,
+                status: "booked",
+                bookedByUserId: String(ctx.user.id),
+                bookedByName: ctx.user.name ?? undefined,
+              });
+              void pushShipmentToClearSight(ltlShipmentId, "shipment.created");
+            } catch (err) {
+              console.error("[QcShipwell] Failed to write unified shipment record:", err);
+            }
+          }
+          await createAuditLog({
+            userId: ctx.user.id,
+            action: "qcScanner.sendToShipwell",
+            entityType: "qc_scan_session",
+            entityId: String(session.id),
+            details: { shipwellOrderId: po.id, poUrl, palletCount, totalWeightLb, environment: config.environment },
           });
-          void pushShipmentToClearSight(ltlShipmentId, "shipment.created");
         } catch (err) {
-          console.error("[QcShipwell] Failed to write unified shipment record:", err);
+          console.error("[QcShipwell] Background post-creation work failed:", err);
         }
-      }
-
-      await createAuditLog({
-        userId: ctx.user.id,
-        action: "qcScanner.sendToShipwell",
-        entityType: "qc_scan_session",
-        entityId: String(session.id),
-        details: { shipwellOrderId: po.id, poUrl, palletCount, totalWeightLb, environment: config.environment },
-      });
+      })();
 
       return { success: true, shipwellOrderId: po.id, poUrl };
     }),

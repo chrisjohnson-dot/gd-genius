@@ -63,6 +63,11 @@ async function startServer() {
   registerCortexRoutes(app);
   // Heartbeat scheduled endpoint — POST /api/scheduled/orderSync
   app.post("/api/scheduled/orderSync", scheduledOrderSyncHandler);
+  // Keep-alive heartbeat — prevents Cloud Run cold starts during business hours
+  app.post("/api/scheduled/keepalive", (_req, res) => {
+    console.log(`[Keepalive] Ping received at ${new Date().toISOString()} — container is warm`);
+    res.json({ ok: true, ts: Date.now() });
+  });
   // Extensiv webhook receiver — POST /api/webhooks/extensiv
   registerExtensivWebhookRoutes(app);
   // Vision system scan endpoint — /api/scan

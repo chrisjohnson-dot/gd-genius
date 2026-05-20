@@ -2313,6 +2313,12 @@ export type RecentQcSession = {
   foundInExtensiv: boolean;
   /** true = every item in the session has a case amount > 1 configured */
   allCaseConfigured: boolean;
+  /** Shipwell PO/order UUID — null if not yet sent to Shipwell */
+  shipwellOrderId: string | null;
+  /** Deep link to the Shipwell PO */
+  shipwellPoUrl: string | null;
+  /** Live Shipwell status (quoting, tendered, carrier_confirmed, in_transit, delivered) */
+  shipwellStatus: string | null;
 };
 
 export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcSession[]> {
@@ -2349,6 +2355,26 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
         .where(eq(qcScanItems.sessionId, s.id));
       const cc = caseCheck[0] ?? { totalItems: 0, caseItems: 0 };
       const allCaseConfigured = Number(cc.totalItems) > 0 && Number(cc.totalItems) === Number(cc.caseItems);
+      // Look up Shipwell sync status from order_tracking via transactionId
+      let shipwellOrderId: string | null = null;
+      let shipwellPoUrl: string | null = null;
+      let shipwellStatus: string | null = null;
+      if (s.transactionId) {
+        const otRows = await db
+          .select({
+            shipwellOrderId: orderTracking.shipwellOrderId,
+            shipwellPoUrl: orderTracking.shipwellPoUrl,
+            shipwellStatus: orderTracking.shipwellStatus,
+          })
+          .from(orderTracking)
+          .where(eq(orderTracking.extensivOrderId, s.transactionId))
+          .limit(1);
+        if (otRows[0]) {
+          shipwellOrderId = otRows[0].shipwellOrderId ?? null;
+          shipwellPoUrl = otRows[0].shipwellPoUrl ?? null;
+          shipwellStatus = otRows[0].shipwellStatus ?? null;
+        }
+      }
       return {
         id: s.id,
         referenceNumber: s.referenceNumber,
@@ -2363,6 +2389,9 @@ export async function getRecentCompletedQcSessions(limit = 5): Promise<RecentQcS
         packedInExtensiv: s.packedInExtensiv ?? null,
         foundInExtensiv: s.foundInExtensiv,
         allCaseConfigured,
+        shipwellOrderId,
+        shipwellPoUrl,
+        shipwellStatus,
       };
     })
   );

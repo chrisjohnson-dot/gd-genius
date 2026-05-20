@@ -1514,7 +1514,7 @@ export default function QcScanner() {
               <div
                 className="grid text-white text-xs font-bold uppercase tracking-wide"
                 style={{
-                  gridTemplateColumns: "1fr 160px 90px 90px 90px 60px 80px",
+                  gridTemplateColumns: "1fr 160px 90px 90px 90px 60px 80px 80px",
                   background: "#15527f",
                   padding: "0 12px",
                   height: 32,
@@ -1528,6 +1528,7 @@ export default function QcScanner() {
                 <span className="text-right">Scanned</span>
                 <span className="text-right">Case</span>
                 <span className="text-right">Extensiv</span>
+                <span className="text-right">Shipwell</span>
               </div>
               {filteredRecent.map((s, idx) => {
                 const isAlt = idx % 2 === 1;
@@ -1544,7 +1545,7 @@ export default function QcScanner() {
                     tabIndex={0}
                     className="grid w-full text-left text-sm border-b border-[#CDD4DC] last:border-0 hover:brightness-95 transition-all cursor-pointer"
                     style={{
-                      gridTemplateColumns: "1fr 160px 90px 90px 90px 60px 80px",
+                      gridTemplateColumns: "1fr 160px 90px 90px 90px 60px 80px 80px",
                       background: rowBg,
                       minHeight: 44,
                       padding: "6px 12px",
@@ -1605,6 +1606,39 @@ export default function QcScanner() {
                           }`} />
                           Pending
                         </button>
+                      )}
+                    </div>
+                    {/* Shipwell sync status badge */}
+                    <div className="flex justify-end">
+                      {!s.foundInExtensiv ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium" title="Manual label — no Shipwell order">N/A</span>
+                      ) : s.shipwellOrderId ? (
+                        s.shipwellPoUrl ? (
+                          <a
+                            href={s.shipwellPoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold hover:bg-green-200 transition-colors"
+                            title={`Sent to Shipwell${s.shipwellStatus ? ` · Status: ${s.shipwellStatus}` : ""}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            ✓ Sent
+                          </a>
+                        ) : (
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold"
+                            title={`Sent to Shipwell${s.shipwellStatus ? ` · Status: ${s.shipwellStatus}` : ""}`}
+                          >
+                            ✓ Sent
+                          </span>
+                        )
+                      ) : (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium"
+                          title="Not yet sent to Shipwell"
+                        >
+                          Not Sent
+                        </span>
                       )}
                     </div>
                   </div>

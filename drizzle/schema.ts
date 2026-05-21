@@ -805,7 +805,7 @@ export const muLabels = mysqlTable("mu_labels", {
   syncedToExtensiv: boolean("synced_to_extensiv").notNull().default(false),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
 }, (t) => ({
-  uniqueAssignment: uniqueIndex("mu_labels_unique_assignment").on(t.configId, t.receiverItemId, t.muLabel),
+  uqConfigMuLabel: uniqueIndex("uq_config_mu_label").on(t.configId, t.muLabel),
 }));
 export type MuLabel = typeof muLabels.$inferSelect;
 export type InsertMuLabel = typeof muLabels.$inferInsert;

@@ -139,7 +139,7 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   const ADDR_H  = 62;   // Ship From / Ship To (compact — extra lines for packing slip)
   const INFO_H  = 54;   // Trans ID + dims
   const FOOT_H  = 44;   // Total QTY + Pallet row — extra height so text is visually centered
-  const BC_H    = PH * 0.25;  // bottom quarter
+  const BC_H    = PH * 0.18;  // reduced from 25% to 18% for better scannability
   const SLIP_H  = PH - ADDR_H - INFO_H - FOOT_H - BC_H;
 
   let y = 0;
@@ -282,13 +282,14 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   // ── SECTION 5: Barcode ─────────────────────────────────────────────────────
   const BC_DRAW_H = BC_H - 20;
   const BC_Y      = y + 6;
-  const BC_W      = PW - MARGIN * 2;
+  const BC_W      = (PW - MARGIN * 2) * 0.70;  // reduced to 70% width for better scannability
 
-  drawCode128(doc, p.palletUpc, MARGIN, BC_Y, BC_W, BC_DRAW_H);
+  const BC_X      = MARGIN + ((PW - MARGIN * 2) - BC_W) / 2;  // center the narrower barcode
+  drawCode128(doc, p.palletUpc, BC_X, BC_Y, BC_W, BC_DRAW_H);
 
   // SSCC caption
   doc.fillColor(DARK_GRAY).fontSize(6).font("Helvetica");
-  doc.text(p.palletUpc, MARGIN, BC_Y + BC_DRAW_H + 4, { lineBreak: false });
+  doc.text(p.palletUpc, BC_X, BC_Y + BC_DRAW_H + 4, { lineBreak: false });
 }
 
 function _hline(

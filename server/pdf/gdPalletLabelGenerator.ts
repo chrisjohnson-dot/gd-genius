@@ -282,14 +282,13 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   // ── SECTION 5: Barcode ─────────────────────────────────────────────────────
   const BC_DRAW_H = BC_H - 20;
   const BC_Y      = y + 6;
-  const BC_W      = (PW - MARGIN * 2) * 0.70;  // reduced to 70% width for better scannability
+  const BC_W      = PW - MARGIN * 2;  // full label width for maximum bar width and scannability
 
-  const BC_X      = MARGIN + ((PW - MARGIN * 2) - BC_W) / 2;  // center the narrower barcode
-  drawCode128(doc, p.palletUpc, BC_X, BC_Y, BC_W, BC_DRAW_H);
+  drawCode128(doc, p.palletUpc, MARGIN, BC_Y, BC_W, BC_DRAW_H);
 
   // SSCC caption
   doc.fillColor(DARK_GRAY).fontSize(6).font("Helvetica");
-  doc.text(p.palletUpc, BC_X, BC_Y + BC_DRAW_H + 4, { lineBreak: false });
+  doc.text(p.palletUpc, MARGIN, BC_Y + BC_DRAW_H + 4, { lineBreak: false });
 }
 
 function _hline(

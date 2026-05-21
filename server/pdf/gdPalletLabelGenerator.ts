@@ -10,6 +10,7 @@
  *  - SSCC caption below barcode
  */
 import PDFDocument from "pdfkit";
+import bwipjs from "bwip-js";
 
 // ─── Page constants: 4in × 6in at 72pt/in ────────────────────────────────────
 const PW     = 4 * 72;   // 288 pt
@@ -63,51 +64,30 @@ function encodeCode128B(data: string): string {
   return codes.map((c) => CODE128_PATTERNS[c]).join("");
 }
 
-// ─── 203 DPI barcode optimisation ────────────────────────────────────────────
-// At 203 DPI, 1 dot = 72/203 ≈ 0.3547 pt.
-// Fractional bar widths cause uneven dot rounding when the PDF is rasterised by
-// the thermal printer driver, producing bars that are 1 dot too wide or narrow.
-// Fix: snap every module to the nearest integer number of dots, accumulate the
-// sub-dot remainder, and flush it into the next module (error-diffusion).
-// This guarantees every printed bar is an exact integer number of dots wide.
-const DOTS_PER_INCH = 203;
-const PT_PER_DOT    = 72 / DOTS_PER_INCH;   // ≈ 0.35468 pt
-
-function drawCode128(
+// ─── 203 DPI barcode via bwip-js ─────────────────────────────────────────────
+// bwip-js renders a pixel-perfect raster PNG at the native dot grid.
+// scale=2 → 2 pixels per module = 9.85 mils X-dim (within Code128 7.5-15 mil spec).
+// This completely avoids the PDF anti-aliasing that blurs hand-drawn vector bars.
+async function drawCode128Raster(
   doc: PDFKit.PDFDocument,
   data: string,
   x: number,
   y: number,
-  targetW: number,
-  barH: number
-) {
-  const bits = encodeCode128B(data);
-
-  // Ideal module width in dots (may be fractional)
-  const idealDotsPerModule = (targetW / PT_PER_DOT) / bits.length;
-
-  // Build an array of integer dot-widths using error-diffusion rounding
-  // so the total always sums to exactly targetW in dots.
-  let accumErr = 0;
-  const dotWidths: number[] = [];
-  for (let i = 0; i < bits.length; i++) {
-    const exact = idealDotsPerModule + accumErr;
-    const rounded = Math.round(exact);
-    accumErr = exact - rounded;
-    dotWidths.push(Math.max(1, rounded));  // minimum 1 dot per module
-  }
-
-  // Draw — convert dot widths back to points for PDFKit
-  let cx = x;
-  doc.save().fillColor(BLACK);
-  for (let i = 0; i < bits.length; i++) {
-    const ptW = dotWidths[i] * PT_PER_DOT;
-    if (bits[i] === "1") {
-      doc.rect(cx, y, ptW, barH).fill();
-    }
-    cx += ptW;
-  }
-  doc.restore();
+  drawW: number,
+  drawH: number
+): Promise<void> {
+  const png = await bwipjs.toBuffer({
+    bcid:        "code128",
+    text:        data,
+    scale:       2,          // 2 dots/module = 9.85 mils at 203 DPI
+    height:      15,         // bar height in mm (tall for scanner tolerance)
+    includetext: false,
+    paddingleft:  10,        // quiet zone: 10 modules each side (spec minimum)
+    paddingright: 10,
+    paddingtop:   2,
+    paddingbottom: 2,
+  });
+  doc.image(png, x, y, { width: drawW, height: drawH });
 }
 
 // ─── Label data shape ─────────────────────────────────────────────────────────
@@ -137,10 +117,10 @@ export interface GdPalletLabelData {
 }
 
 // ─── Main generator ───────────────────────────────────────────────────────────
-export function generateGdPalletLabel(
+export async function generateGdPalletLabel(
   pallets: GdPalletLabelData[],
   outputStream: NodeJS.WritableStream
-): void {
+): Promise<void> {
   const doc = new PDFDocument({
     size: [PW, PH],
     margin: 0,
@@ -152,15 +132,15 @@ export function generateGdPalletLabel(
   // Print 2 copies of each pallet label
   for (const pallet of pallets) {
     doc.addPage({ size: [PW, PH], margin: 0 });
-    _drawLabel(doc, pallet);
+    await _drawLabel(doc, pallet);
     doc.addPage({ size: [PW, PH], margin: 0 });
-    _drawLabel(doc, pallet);
+    await _drawLabel(doc, pallet);
   }
 
   doc.end();
 }
 
-function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
+async function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData): Promise<void> {
   // ── Zone heights (pt) ──────────────────────────────────────────────────────
   const ADDR_H  = 62;   // Ship From / Ship To (compact — extra lines for packing slip)
   const INFO_H  = 54;   // Trans ID + dims
@@ -305,44 +285,18 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   y += FOOT_H;
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);
 
-  // ── SECTION 5: Barcode ─────────────────────────────────────────────────────
-  // 203 DPI optimisation: constrain barcode width so the X-dimension (narrow bar)
-  // is exactly 2 dots = 9.85 mils — the GS1/Code128 sweet spot for 203 DPI scanners.
-  // Formula: maxW = numModules * 2 dots * PT_PER_DOT
-  // We calculate numModules from the actual encoded bit string, then cap at label width.
-  const BC_DRAW_H = BC_H - 20;
-  const BC_Y      = y + 6;
-  {
-    const { bits: _bits } = (() => {
-      // Encode to get exact module count
-      function _enc(data: string): string {
-        const start = 104;
-        const codes: number[] = [start];
-        let chk = start;
-        for (let i = 0; i < data.length; i++) {
-          const v = data.charCodeAt(i) - 32;
-          codes.push(v);
-          chk += v * (i + 1);
-        }
-        codes.push(chk % 103);
-        codes.push(106);
-        return codes.map((c) => CODE128_PATTERNS[c]).join("");
-      }
-      return { bits: _enc(p.palletUpc) };
-    })();
-    const TARGET_X_DOTS = 2;                              // 2 dots per narrow module = 9.85 mils
-    const idealW  = _bits.length * TARGET_X_DOTS * PT_PER_DOT;
-    const maxW    = PW - MARGIN * 2;
-    const BC_W    = Math.min(idealW, maxW);
-    const BC_X    = MARGIN + (maxW - BC_W) / 2;          // center on label
+  // ── SECTION 5: Barcode (bwip-js raster, 203 DPI) ─────────────────────────────
+  // Rendered as a PNG image — no PDF anti-aliasing, pixel-perfect at 203 DPI.
+  const BC_DRAW_H = BC_H - 16;
+  const BC_Y      = y + 4;
+  const BC_W      = PW - MARGIN * 2;   // full label width; bwip-js handles quiet zones internally
 
-    drawCode128(doc, p.palletUpc, BC_X, BC_Y, BC_W, BC_DRAW_H);
+  await drawCode128Raster(doc, p.palletUpc, MARGIN, BC_Y, BC_W, BC_DRAW_H);
 
-    // SSCC caption — centered under barcode
-    doc.fillColor(DARK_GRAY).fontSize(6).font("Helvetica");
-    const captionW = doc.widthOfString(p.palletUpc);
-    doc.text(p.palletUpc, BC_X + (BC_W - captionW) / 2, BC_Y + BC_DRAW_H + 4, { lineBreak: false });
-  }
+  // SSCC caption — centered under barcode
+  doc.fillColor(DARK_GRAY).fontSize(6).font("Helvetica");
+  const captionW = doc.widthOfString(p.palletUpc);
+  doc.text(p.palletUpc, MARGIN + (BC_W - captionW) / 2, BC_Y + BC_DRAW_H + 3, { lineBreak: false });
 }
 
 function _hline(

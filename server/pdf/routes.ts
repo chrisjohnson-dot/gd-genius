@@ -713,7 +713,7 @@ export function registerPdfRoutes(app: Express) {
 
     // Generate PDFs
     const gdBuf = labelType !== "sscc"
-      ? await pdfToBuffer((pt) => Promise.resolve(generateGdPalletLabel(gdLabels, pt)))
+      ? await pdfToBuffer((pt) => generateGdPalletLabel(gdLabels, pt))
       : null;
     const ssccBuf = labelType !== "gd"
       ? await pdfToBuffer((pt) => Promise.resolve(generateSsccLabel(ssccLabels, pt)))

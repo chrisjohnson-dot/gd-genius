@@ -248,6 +248,7 @@ export default function CarrierPickupScanner() {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
+        if (expectedPallets > 0 && scannedCount < expectedPallets) return;
         setShowConfirmDialog(true);
       }
       // Escape clears the full-screen error blocker
@@ -836,12 +837,18 @@ export default function CarrierPickupScanner() {
                   variant="default"
                   size="lg"
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  disabled={expectedPallets > 0 && scannedCount < expectedPallets}
                   onClick={() => setShowConfirmDialog(true)}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                   Complete Pickup ({scannedCount} pallets scanned)
                   <span className="ml-2 text-xs opacity-75">Ctrl+Enter</span>
                 </Button>
+                {expectedPallets > 0 && scannedCount < expectedPallets && (
+                  <p className="text-xs text-center text-muted-foreground mt-2">
+                    {expectedPallets - scannedCount} pallet{expectedPallets - scannedCount !== 1 ? "s" : ""} remaining before pickup can be completed
+                  </p>
+                )}
               </div>
             )}
           </div>

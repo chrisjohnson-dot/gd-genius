@@ -85,6 +85,7 @@ import PullManager from "@/pages/ltl/PullManager";
 import Associates from "@/pages/ltl/Associates";
 import LivePullBoard from "@/pages/ltl/LivePullBoard";
 import EdiMonitor from "@/pages/EdiMonitor";
+import OrderDropCadence from "@/pages/OrderDropCadence";
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -178,6 +179,7 @@ function AppRoutes() {
         <Route path="/ltl/associates" component={Associates} />
         <Route path="/ltl/live-board" component={LivePullBoard} />
         <Route path="/edi-monitor" component={EdiMonitor} />
+        <Route path="/order-drop-cadence" component={OrderDropCadence} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

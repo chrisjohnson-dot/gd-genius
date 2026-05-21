@@ -68,6 +68,7 @@ const dashboardItems = [
   { href: "/exceptions",       label: "Requires Attention",  icon: AlertTriangle, exceptionsBadge: true },
   { href: "/live-ops",           label: "Live Ops View",      icon: Monitor },
   { href: "/workload",             label: "Workload Planning",  icon: BarChart2, workloadBadge: true },
+  { href: "/order-drop-cadence",   label: "Order Drop Cadence", icon: BarChart3 },
 ];
 
 const receivingItems = [

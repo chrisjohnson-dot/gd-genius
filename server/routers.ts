@@ -12076,6 +12076,7 @@ const shippingHistoryRouter = router({
 });
 
 import { cortexHubRouter } from "./routers/cortex-hub";
+import { analyticsRouter } from "./routers/analytics";
 import { notesRouter } from "./routers/notes";
 import { exceptionsRouter } from "./routers/exceptions";
 import { myShiftRouter } from "./routers/myShift";
@@ -13183,5 +13184,6 @@ export const appRouterV4 = router({
   carrierAppointments: carrierAppointmentsRouter,
   dockManager: dockManagerRouter,
   muSync: muSyncRouter,
+  analytics: analyticsRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

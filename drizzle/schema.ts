@@ -2540,3 +2540,27 @@ export const dockAssignments = mysqlTable("dock_assignments", {
 });
 export type DockAssignment = typeof dockAssignments.$inferSelect;
 export type InsertDockAssignment = typeof dockAssignments.$inferInsert;
+
+// ─── B2B Order Drop Cadence Cache ────────────────────────────────────────────
+// Pre-aggregated cadence data derived from order_tracking.
+// Refreshed nightly by the /api/scheduled/refreshCadenceCache heartbeat.
+// Two row types per (facilityId, clientId) pair:
+//   rowType = 'weekday_avg'  → avgUnitsPerOrder by Mon–Sun (dow 1-7)
+//   rowType = 'weekly_vol'   → totalUnits per ISO week per day-of-week
+//
+// weekday_avg row: weekIso = NULL, dow = 1-7, orderCount, totalUnits, avgUnitsPerOrder
+// weekly_vol  row: weekIso = 'YYYY-Www', dow = 1-7, orderCount, totalUnits, avgUnitsPerOrder
+export const b2bCadenceCache = mysqlTable("b2b_cadence_cache", {
+  id: int("id").autoincrement().primaryKey(),
+  facilityId: int("facility_id"),          // NULL = all facilities
+  clientId: int("client_id"),              // NULL = all clients
+  rowType: mysqlEnum("row_type", ["weekday_avg", "weekly_vol"]).notNull(),
+  weekIso: varchar("week_iso", { length: 10 }),  // e.g. '2025-W47', NULL for weekday_avg
+  dow: int("dow").notNull(),               // 1=Sun, 2=Mon, ..., 7=Sat (MySQL DAYOFWEEK)
+  orderCount: int("order_count").notNull().default(0),
+  totalUnits: int("total_units").notNull().default(0),
+  avgUnitsPerOrder: decimal("avg_units_per_order", { precision: 10, scale: 4 }),
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+});
+export type B2bCadenceCache = typeof b2bCadenceCache.$inferSelect;
+export type InsertB2bCadenceCache = typeof b2bCadenceCache.$inferInsert;

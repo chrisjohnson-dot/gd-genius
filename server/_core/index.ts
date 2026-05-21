@@ -63,6 +63,19 @@ async function startServer() {
   registerCortexRoutes(app);
   // Heartbeat scheduled endpoint — POST /api/scheduled/orderSync
   app.post("/api/scheduled/orderSync", scheduledOrderSyncHandler);
+  // Nightly cadence cache refresh — recomputes B2B order drop cadence from order_tracking
+  app.post("/api/scheduled/refreshCadenceCache", async (_req, res) => {
+    try {
+      const { computeAndStoreCadence } = await import("../routers/analytics");
+      await computeAndStoreCadence(null, null);
+      console.log(`[CadenceCache] Refreshed global cadence cache at ${new Date().toISOString()}`);
+      res.json({ ok: true, refreshedAt: new Date().toISOString() });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[CadenceCache] Refresh failed: ${msg}`);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
   // Keep-alive heartbeat — prevents Cloud Run cold starts during business hours
   app.post("/api/scheduled/keepalive", (_req, res) => {
     console.log(`[Keepalive] Ping received at ${new Date().toISOString()} — container is warm`);

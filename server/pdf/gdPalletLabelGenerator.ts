@@ -306,15 +306,43 @@ function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData) {
   _hline(doc, y, MARGIN, PW - MARGIN, 1.5);
 
   // ── SECTION 5: Barcode ─────────────────────────────────────────────────────
+  // 203 DPI optimisation: constrain barcode width so the X-dimension (narrow bar)
+  // is exactly 2 dots = 9.85 mils — the GS1/Code128 sweet spot for 203 DPI scanners.
+  // Formula: maxW = numModules * 2 dots * PT_PER_DOT
+  // We calculate numModules from the actual encoded bit string, then cap at label width.
   const BC_DRAW_H = BC_H - 20;
   const BC_Y      = y + 6;
-  const BC_W      = PW - MARGIN * 2;  // full label width for maximum bar width and scannability
+  {
+    const { bits: _bits } = (() => {
+      // Encode to get exact module count
+      function _enc(data: string): string {
+        const start = 104;
+        const codes: number[] = [start];
+        let chk = start;
+        for (let i = 0; i < data.length; i++) {
+          const v = data.charCodeAt(i) - 32;
+          codes.push(v);
+          chk += v * (i + 1);
+        }
+        codes.push(chk % 103);
+        codes.push(106);
+        return codes.map((c) => CODE128_PATTERNS[c]).join("");
+      }
+      return { bits: _enc(p.palletUpc) };
+    })();
+    const TARGET_X_DOTS = 2;                              // 2 dots per narrow module = 9.85 mils
+    const idealW  = _bits.length * TARGET_X_DOTS * PT_PER_DOT;
+    const maxW    = PW - MARGIN * 2;
+    const BC_W    = Math.min(idealW, maxW);
+    const BC_X    = MARGIN + (maxW - BC_W) / 2;          // center on label
 
-  drawCode128(doc, p.palletUpc, MARGIN, BC_Y, BC_W, BC_DRAW_H);
+    drawCode128(doc, p.palletUpc, BC_X, BC_Y, BC_W, BC_DRAW_H);
 
-  // SSCC caption
-  doc.fillColor(DARK_GRAY).fontSize(6).font("Helvetica");
-  doc.text(p.palletUpc, MARGIN, BC_Y + BC_DRAW_H + 4, { lineBreak: false });
+    // SSCC caption — centered under barcode
+    doc.fillColor(DARK_GRAY).fontSize(6).font("Helvetica");
+    const captionW = doc.widthOfString(p.palletUpc);
+    doc.text(p.palletUpc, BC_X + (BC_W - captionW) / 2, BC_Y + BC_DRAW_H + 4, { lineBreak: false });
+  }
 }
 
 function _hline(

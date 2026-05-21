@@ -63,6 +63,16 @@ function encodeCode128B(data: string): string {
   return codes.map((c) => CODE128_PATTERNS[c]).join("");
 }
 
+// ─── 203 DPI barcode optimisation ────────────────────────────────────────────
+// At 203 DPI, 1 dot = 72/203 ≈ 0.3547 pt.
+// Fractional bar widths cause uneven dot rounding when the PDF is rasterised by
+// the thermal printer driver, producing bars that are 1 dot too wide or narrow.
+// Fix: snap every module to the nearest integer number of dots, accumulate the
+// sub-dot remainder, and flush it into the next module (error-diffusion).
+// This guarantees every printed bar is an exact integer number of dots wide.
+const DOTS_PER_INCH = 203;
+const PT_PER_DOT    = 72 / DOTS_PER_INCH;   // ≈ 0.35468 pt
+
 function drawCode128(
   doc: PDFKit.PDFDocument,
   data: string,
@@ -72,14 +82,30 @@ function drawCode128(
   barH: number
 ) {
   const bits = encodeCode128B(data);
-  const barW = targetW / bits.length;
+
+  // Ideal module width in dots (may be fractional)
+  const idealDotsPerModule = (targetW / PT_PER_DOT) / bits.length;
+
+  // Build an array of integer dot-widths using error-diffusion rounding
+  // so the total always sums to exactly targetW in dots.
+  let accumErr = 0;
+  const dotWidths: number[] = [];
+  for (let i = 0; i < bits.length; i++) {
+    const exact = idealDotsPerModule + accumErr;
+    const rounded = Math.round(exact);
+    accumErr = exact - rounded;
+    dotWidths.push(Math.max(1, rounded));  // minimum 1 dot per module
+  }
+
+  // Draw — convert dot widths back to points for PDFKit
   let cx = x;
   doc.save().fillColor(BLACK);
-  for (const bit of bits) {
-    if (bit === "1") {
-      doc.rect(cx, y, barW, barH).fill();
+  for (let i = 0; i < bits.length; i++) {
+    const ptW = dotWidths[i] * PT_PER_DOT;
+    if (bits[i] === "1") {
+      doc.rect(cx, y, ptW, barH).fill();
     }
-    cx += barW;
+    cx += ptW;
   }
   doc.restore();
 }

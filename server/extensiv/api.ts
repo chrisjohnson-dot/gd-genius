@@ -733,6 +733,25 @@ export async function fetchInventoryByMuLabel(
 ): Promise<ExtensivInventoryRecord[]> {
   const client = createExtensivClient(config);
   try {
+    // ── Attempt 1 (PRIMARY): GET /inventory?rql=palletIdentifier.nameKey.name=={muLabel} ──────────
+    // CONFIRMED WORKING: live probe returned receiveItemId=866372 for MU 182252 (2026-05-21).
+    // Integer-style MU labels (e.g. 182252) are the normal format for this customer
+    // (3,203 of 3,269 MUs). This is the authoritative path — all other attempts are fallbacks.
+    try {
+      const primaryRecords = await fetchInventoryFromPath(client, "/inventory", {
+        rql: `palletIdentifier.nameKey.name==${encodeURIComponent(muLabel)}`,
+      });
+      if (primaryRecords.length > 0) {
+        console.log(`[fetchInventoryByMuLabel] PRIMARY hit (palletIdentifier.nameKey.name) for muLabel=${muLabel}: ${primaryRecords.length} records`);
+        return primaryRecords.map((r) => ({ ...r, muLabel }));
+      }
+    } catch (primaryErr) {
+      console.warn(`[fetchInventoryByMuLabel] PRIMARY path failed for muLabel=${muLabel}:`, (primaryErr as Error).message);
+    }
+
+    // ── Attempt 0 (warm-up cache): Fast DB lookup from nightly-synced mu_labels table. ──────────
+    // The nightly sync is a warm-up cache ONLY — the primary path above is authoritative.
+    // This is kept as a fast-path for MUs that are already in the DB cache with a valid receiveItemId.
     // Attempt 0: Fast DB lookup from nightly-synced mu_labels table.
     // The nightly MU on-file sync populates mu_labels with receiveItemId for every MU label
     // across all warehouses. If we find a match here, we can skip all live API calls.

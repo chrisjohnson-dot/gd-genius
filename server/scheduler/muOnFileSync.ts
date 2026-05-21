@@ -1,5 +1,17 @@
 /**
- * Nightly MU-on-file re-sync scheduler.
+ * Nightly MU warm-up cache sync scheduler.
+ *
+ * ⚠️  WARM-UP CACHE ONLY — NOT THE CRITICAL PATH
+ *
+ * The primary MU lookup path is now a direct live query:
+ *   GET /inventory?rql=palletIdentifier.nameKey.name=={muLabel}
+ * This resolves any MU label in real time without relying on this cache.
+ *
+ * This nightly sync exists purely as a performance warm-up:
+ *   - Pre-populates the mu_labels table so the first lookup of a freshly
+ *     received pallet is instant (DB hit) rather than a live API call.
+ *   - Failures here are NON-BLOCKING — the live /inventory query is always
+ *     the authoritative fallback.
  *
  * Runs at 07:30 UTC (2:30 AM Eastern) every night — 30 minutes after the SKU dims sync.
  *
@@ -9,11 +21,6 @@
  * timestamp, drastically reducing Extensiv API calls.
  *
  * State is persisted in the `sync_state` table keyed by (config_id, facility_id, 'mu_on_file').
- *
- * For each active Extensiv config, for each facility (warehouse), fetches receivers
- * with detail=ReceiveItems and upserts every receiver item that has a muLabel into the
- * mu_labels table. This ensures the QC scanner can resolve MU barcodes instantly via a
- * fast DB lookup (Attempt 0) before falling back to live Extensiv API calls.
  */
 import cron from "node-cron";
 import { getDb, getExtensivConfigs } from "../db";
@@ -257,10 +264,13 @@ export async function syncMuOnFileNow(): Promise<{ success: boolean; message: st
     }
 
     lastSyncAt = new Date();
-    lastSyncSummary = `Synced ${totalMus} MU label records across all warehouses`;
+    lastSyncSummary = `[warm-up cache] Synced ${totalMus} MU label records across all warehouses`;
     return { success: true, message: lastSyncSummary, muCount: totalMus };
   } catch (err: any) {
-    lastSyncSummary = `Error: ${err?.message}`;
+    // Failures are non-blocking — the live GET /inventory?rql=palletIdentifier.nameKey.name
+    // query is always the authoritative fallback for MU resolution.
+    lastSyncSummary = `[warm-up cache] Error (non-blocking): ${err?.message}`;
+    console.warn(`[MuOnFileSync] Warm-up cache sync failed (non-blocking): ${err?.message}`);
     return { success: false, message: lastSyncSummary, muCount: 0 };
   } finally {
     syncRunning = false;
@@ -275,10 +285,10 @@ export function getMuOnFileSyncInfo() {
 export function startMuOnFileSyncScheduler() {
   // 07:30 UTC = 02:30 AM Eastern (EST) / 03:30 AM Eastern (EDT)
   cron.schedule("0 30 7 * * *", () => {
-    console.log("[MuOnFileSync] Starting nightly MU on-file sync...");
+    console.log("[MuOnFileSync] Starting nightly MU warm-up cache sync (non-blocking)...");
     syncMuOnFileNow()
-      .then((result) => console.log(`[MuOnFileSync] Completed: ${result.message}`))
-      .catch((err) => console.error("[MuOnFileSync] Scheduler error:", err));
+      .then((result) => console.log(`[MuOnFileSync] ${result.message}`))
+      .catch((err) => console.warn(`[MuOnFileSync] Warm-up cache sync error (non-blocking): ${err?.message}`));
   });
-  console.log("[MuOnFileSync] Nightly MU on-file sync scheduled at 07:30 UTC (2:30 AM Eastern)");
+  console.log("[MuOnFileSync] Nightly MU warm-up cache sync scheduled at 07:30 UTC (2:30 AM Eastern) — non-blocking");
 }

@@ -2564,3 +2564,19 @@ export const b2bCadenceCache = mysqlTable("b2b_cadence_cache", {
 });
 export type B2bCadenceCache = typeof b2bCadenceCache.$inferSelect;
 export type InsertB2bCadenceCache = typeof b2bCadenceCache.$inferInsert;
+
+// ─── Team Accounts (QC Operator restricted access) ───────────────────────────
+// Username/password accounts for warehouse operators with restricted page access.
+// These accounts can only access QC Scanner and QC History.
+export const teamAccounts = mysqlTable("team_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  username: varchar("username", { length: 128 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  role: varchar("role", { length: 64 }).notNull().default("qc_operator"),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TeamAccount = typeof teamAccounts.$inferSelect;
+export type InsertTeamAccount = typeof teamAccounts.$inferInsert;

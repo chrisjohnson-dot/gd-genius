@@ -323,6 +323,99 @@ const _appRouter = router({
         }
         return { success: true } as const;
       }),
+    // Login for restricted team accounts (qc_operator role)
+    teamLogin: publicProcedure
+      .input(z.object({ username: z.string(), password: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const bcrypt = await import("bcryptjs");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { teamAccounts } = await import("../drizzle/schema.js");
+        const { eq } = await import("drizzle-orm");
+        const [account] = await db.select().from(teamAccounts)
+          .where(eq(teamAccounts.username, input.username.trim()));
+        if (!account || !account.active) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid username or password" });
+        }
+        const valid = await bcrypt.compare(input.password, account.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid username or password" });
+        }
+        // Use a stable openId derived from the team account id
+        const openId = `team-account-${account.id}`;
+        await upsertUser({
+          openId,
+          name: account.name,
+          email: null,
+          loginMethod: "team",
+          role: "user",
+          lastSignedIn: new Date(),
+        });
+        const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
+        const sessionToken = await sdk.signSession(
+          { openId, appId: ENV.appId || "gd-agent", name: account.name, role: account.role },
+          { expiresInMs: EIGHT_HOURS_MS }
+        );
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+        return { success: true, role: account.role, name: account.name } as const;
+      }),
+  }),
+  // ─── Team Account Management (admin only) ─────────────────────────────────
+  teamAccounts: router({
+    list: protectedProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { teamAccounts } = await import("../drizzle/schema.js");
+      const rows = await db.select({
+        id: teamAccounts.id,
+        username: teamAccounts.username,
+        name: teamAccounts.name,
+        role: teamAccounts.role,
+        active: teamAccounts.active,
+        createdAt: teamAccounts.createdAt,
+      }).from(teamAccounts);
+      return rows;
+    }),
+    create: protectedProcedure
+      .input(z.object({ username: z.string().min(1), password: z.string().min(1), name: z.string().min(1), role: z.string().default("qc_operator") }))
+      .mutation(async ({ input }) => {
+        const bcrypt = await import("bcryptjs");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { teamAccounts } = await import("../drizzle/schema.js");
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        await db.insert(teamAccounts).values({
+          username: input.username.trim(),
+          passwordHash,
+          name: input.name.trim(),
+          role: input.role,
+          active: true,
+        });
+        return { success: true };
+      }),
+    deactivate: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { teamAccounts } = await import("../drizzle/schema.js");
+        const { eq } = await import("drizzle-orm");
+        await db.update(teamAccounts).set({ active: false }).where(eq(teamAccounts.id, input.id));
+        return { success: true };
+      }),
+    resetPassword: protectedProcedure
+      .input(z.object({ id: z.number(), newPassword: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        const bcrypt = await import("bcryptjs");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { teamAccounts } = await import("../drizzle/schema.js");
+        const { eq } = await import("drizzle-orm");
+        const passwordHash = await bcrypt.hash(input.newPassword, 10);
+        await db.update(teamAccounts).set({ passwordHash }).where(eq(teamAccounts.id, input.id));
+        return { success: true };
+      }),
   }),
 
   // ─── Extensiv Config ───────────────────────────────────────────────────────

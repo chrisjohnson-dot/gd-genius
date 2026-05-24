@@ -157,21 +157,41 @@ function SharedLoginGate() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
+  const [, navigate] = useLocation();
   const utils = trpc.useUtils();
-  const loginMutation = trpc.auth.sharedLogin.useMutation({
-    onSuccess: () => {
+
+  const sharedLoginMutation = trpc.auth.sharedLogin.useMutation({
+    onSuccess: () => { utils.auth.me.invalidate(); },
+    onError: (err) => { setError(err.message || "Invalid username or password"); },
+  });
+
+  const teamLoginMutation = trpc.auth.teamLogin.useMutation({
+    onSuccess: (data) => {
       utils.auth.me.invalidate();
+      // QC operators are redirected directly to the QC Scanner
+      if (data.role === "qc_operator") {
+        setTimeout(() => navigate("/qc/scanner"), 100);
+      }
     },
-    onError: (err) => {
-      setError(err.message || "Invalid username or password");
-    },
+    onError: (err) => { setError(err.message || "Invalid username or password"); },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    loginMutation.mutate({ username: username.trim(), password, rememberMe });
+    // Try team login first; if it fails fall back to shared login
+    teamLoginMutation.mutate(
+      { username: username.trim(), password },
+      {
+        onError: () => {
+          // Not a team account — try shared login
+          sharedLoginMutation.mutate({ username: username.trim(), password, rememberMe });
+        },
+      }
+    );
   };
+
+  const isPending = sharedLoginMutation.isPending || teamLoginMutation.isPending;
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: "#f3f4f6" }}>
@@ -225,9 +245,9 @@ function SharedLoginGate() {
             type="submit"
             size="lg"
             className="w-full"
-            disabled={loginMutation.isPending}
+            disabled={isPending}
           >
-            {loginMutation.isPending ? "Signing in..." : "Sign In"}
+            {isPending ? "Signing in..." : "Sign In"}
           </Button>
         </form>
       </div>

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
 import { Toaster } from "@/components/ui/sonner";
 import { SplashScreen } from "./components/SplashScreen";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -86,6 +88,22 @@ import Associates from "@/pages/ltl/Associates";
 import LivePullBoard from "@/pages/ltl/LivePullBoard";
 import EdiMonitor from "@/pages/EdiMonitor";
 import OrderDropCadence from "@/pages/OrderDropCadence";
+// ─── QC Operator Route Guard ─────────────────────────────────────────────────
+// Redirects non-QC pages to /qc/scanner for users with loginMethod="team"
+function QcOperatorGuard({ children }: { children: React.ReactNode }) {
+  const meQuery = trpc.auth.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: false });
+  const [location, navigate] = useLocation();
+  const user = meQuery.data;
+  const isQcOperator = user?.loginMethod === "team";
+  const allowedPaths = ["/qc/scanner", "/qc/history"];
+  useEffect(() => {
+    if (isQcOperator && !allowedPaths.some(p => location.startsWith(p))) {
+      navigate("/qc/scanner");
+    }
+  }, [isQcOperator, location]);
+  return <>{children}</>;
+}
+
 // Pages that should NOT have the sidebar (full-screen / print views)
 function PrintRoutes() {
   return (
@@ -99,6 +117,7 @@ function PrintRoutes() {
 // DOM element is never destroyed on navigation — scroll position is preserved.
 function AppRoutes() {
   return (
+    <QcOperatorGuard>
     <AppLayout>
       <Switch>
         <Route path="/" component={Home} />
@@ -184,6 +203,7 @@ function AppRoutes() {
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
+    </QcOperatorGuard>
   );
 }
 

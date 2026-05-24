@@ -5125,7 +5125,7 @@ const qcScannerRouter = router({
       }
     }),
   // Add a new pallet to the session
-  addPallet: protectedProcedure
+    addPallet: protectedProcedure
     .input(z.object({ sessionId: z.number(), palletType: z.string().optional() }))
     .mutation(async ({ input }) => {
       const existing = await getQcPallets(input.sessionId);
@@ -5133,7 +5133,29 @@ const qcScannerRouter = router({
       const id = await createQcPallet({ sessionId: input.sessionId, palletNumber, palletType: input.palletType ?? null, items: [] });
       return { id, palletNumber, palletType: input.palletType ?? null };
     }),
-
+  // Remove the last created pallet (soft-delete) and restore its scanned quantities to the session
+  removeLastPallet: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input }) => {
+      const pallets = await getQcPallets(input.sessionId);
+      if (pallets.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "No pallets to remove" });
+      // Sort by createdAt descending to get the last created pallet
+      const sorted = [...pallets].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const lastPallet = sorted[0];
+      const items = (lastPallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
+      // Restore scanned quantities back to the session for each item on this pallet
+      for (const item of items) {
+        const sessionItems = await getQcScanItems(input.sessionId);
+        const sessionItem = sessionItems.find((i) => i.sku === item.sku);
+        if (sessionItem) {
+          const newQty = Math.max(0, (sessionItem.scannedQty ?? 0) - item.qty);
+          await upsertQcScanItem(input.sessionId, item.sku, sessionItem.upc ?? null, { scannedQty: newQty });
+        }
+      }
+      // Soft-delete the pallet
+      await updateQcPallet(lastPallet.id, { deletedAt: new Date() });
+      return { removedPalletId: lastPallet.id, removedPalletNumber: lastPallet.palletNumber, itemCount: items.length };
+    }),
   // Assign a scan to a pallet
   assignToPallet: protectedProcedure
     .input(z.object({

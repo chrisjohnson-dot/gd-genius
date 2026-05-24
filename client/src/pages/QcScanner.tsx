@@ -960,6 +960,25 @@ export default function QcScanner() {
       toast.error(err.message ?? "Failed to set quantity");
     },
   });
+  const removeLastPallet = trpc.qcScanner.removeLastPallet.useMutation({
+    onSuccess: (data) => {
+      setPallets((prev) => prev.filter((p) => p.id !== data.removedPalletId));
+      // If the removed pallet was the active scan target, switch to the new last pallet
+      setActiveScanPalletId((prev) => {
+        if (prev === data.removedPalletId) {
+          const remaining = palletsRef.current.filter((p) => p.id !== data.removedPalletId);
+          return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+        }
+        return prev;
+      });
+      // Remove from locked/expanded sets
+      setLockedPallets((prev) => { const next = new Set(prev); next.delete(data.removedPalletId); return next; });
+      setExpandedPallets((prev) => { const next = new Set(prev); next.delete(data.removedPalletId); return next; });
+      toast.success(`Pallet ${data.removedPalletNumber} removed`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const addPallet = trpc.qcScanner.addPallet.useMutation({
     onSuccess: (data) => {
       // Auto-calculate weight for the pallet that was just closed (the previous last pallet)
@@ -2256,6 +2275,23 @@ export default function QcScanner() {
                     ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
                     : <Plus className="w-4 h-4 mr-1" />}
                   Add Pallet
+                </Button>
+                {/* Remove Pallet — removes the last created pallet and restores its quantities */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 font-semibold"
+                  onClick={() => {
+                    if (!session || pallets.length === 0) return;
+                    removeLastPallet.mutate({ sessionId: session.id });
+                  }}
+                  disabled={removeLastPallet.isPending || pallets.length === 0}
+                  title="Remove the last created pallet and restore its scanned quantities"
+                >
+                  {removeLastPallet.isPending
+                    ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                    : <Minus className="w-4 h-4 mr-1" />}
+                  Remove Pallet
                 </Button>
 {/* Auto-Assign UPCs removed — label generation now available on the Complete Order screen */}
               </div>

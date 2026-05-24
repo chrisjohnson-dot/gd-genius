@@ -28,6 +28,7 @@ import { startPackRetryScheduler } from "../scheduler/packRetry";
 import { startItemDimsSyncScheduler } from "../scheduler/itemDimsSync";
 import { startMuOnFileSyncScheduler } from "../scheduler/muOnFileSync";
 import { checkOverdueSessions } from "../routers/pullAlerts";
+import { startAppointmentRolloverScheduler } from "../scheduler/appointmentRollover";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -136,6 +137,8 @@ async function startServer() {
     startClearSightRulesSyncScheduler();
     // Nightly Extensiv pack-retry at 03:00 UTC — retries all sessions where packedInExtensiv = false
     startPackRetryScheduler();
+    // Nightly carrier appointment rollover at 23:55 UTC — advances unfinished appointments to the next day
+    startAppointmentRolloverScheduler();
     // Nightly SKU dims sync at 07:00 UTC (2:00 AM Eastern) — caches carton weights and case amounts
     startItemDimsSyncScheduler();
     // Nightly MU on-file re-sync at 07:30 UTC (2:30 AM Eastern) — rebuilds mu_labels for all warehouses

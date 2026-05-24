@@ -650,7 +650,7 @@ export function registerPdfRoutes(app: Express) {
     }
 
     const txId = session.transactionId ?? session.id;
-    const totalPallets = pallets.length;
+    const totalPallets = allPallets.length;  // always use full session pallet count, even when printing a single pallet
 
     // Build GD label data per pallet
     const gdLabels: GdPalletLabelData[] = pallets.map((p) => {

@@ -12494,6 +12494,20 @@ const carrierPickupRouter = router({
         },
       });
 
+      // ── Mark linked carrier appointment as completed ────────────────────────
+      if (session.transactionId) {
+        try {
+          const { isNotNull, and: andOp, ne } = await import("drizzle-orm");
+          await db.update(carrierAppointments)
+            .set({ status: "completed", updatedAt: new Date() })
+            .where(andOp(
+              eq(carrierAppointments.extensivOrderId, session.transactionId),
+              ne(carrierAppointments.status, "cancelled")
+            ));
+        } catch (e) {
+          console.warn("[carrierPickup] appointment status update failed:", (e as Error).message);
+        }
+      }
       // ── Auto-clear dock position ──────────────────────────────────────────
       if (session.transactionId) {
         try {

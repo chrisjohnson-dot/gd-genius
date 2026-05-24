@@ -445,23 +445,29 @@ function AppointmentDetailDialog({
 
 export default function CarrierAppointments() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [statusFilter, setStatusFilter] = useState<"all" | AppointmentStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | AppointmentStatus>("active");  // default: hide completed
   const [searchQuery, setSearchQuery] = useState("");
   const [showBookDialog, setShowBookDialog] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [, navigate] = useLocation();
 
+  // "active" is a client-side filter: fetch all then exclude completed + cancelled
   const listQuery = trpc.carrierAppointments.list.useQuery(
-    { status: statusFilter, date: selectedDate || undefined },
+    { status: statusFilter === "active" ? "all" : statusFilter, date: selectedDate || undefined },
     { refetchInterval: 30_000 }
   );
 
   const appointments: Appointment[] = (listQuery.data ?? []) as unknown as Appointment[];
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return appointments;
+    let base = appointments;
+    // "active" filter: exclude completed and cancelled appointments
+    if (statusFilter === "active") {
+      base = base.filter(a => a.status !== "completed" && a.status !== "cancelled");
+    }
+    if (!searchQuery.trim()) return base;
     const q = searchQuery.toLowerCase();
-    return appointments.filter(a =>
+    return base.filter(a =>
       (a.clientName?.toLowerCase().includes(q)) ||
       (a.extensivOrderId?.toString().includes(q)) ||
       (a.bolNumber?.toLowerCase().includes(q)) ||
@@ -554,6 +560,7 @@ export default function CarrierAppointments() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="active">Active</SelectItem>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="scheduled">Scheduled</SelectItem>
             <SelectItem value="confirmed">Confirmed</SelectItem>

@@ -12412,6 +12412,27 @@ const carrierPickupRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const { eq } = await import("drizzle-orm");
+      // ── Validate that the scanned label matches a known pallet UPC for this order ──
+      const [session] = await db.select().from(pickupSessions).where(eq(pickupSessions.id, input.sessionId));
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.transactionId) {
+        const qcSession = await getQcSessionByTransactionId(session.transactionId);
+        if (qcSession) {
+          const qcPallets = await getQcPallets(qcSession.id);
+          const knownUpcs = qcPallets
+            .map((p) => p.palletUpc?.trim().toLowerCase())
+            .filter(Boolean) as string[];
+          if (knownUpcs.length > 0) {
+            const scanned = input.labelValue.trim().toLowerCase();
+            if (!knownUpcs.includes(scanned)) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: `"${input.labelValue}" does not match any pallet label for this order. Please scan the barcode on the physical pallet label.`,
+              });
+            }
+          }
+        }
+      }
       const existing = await db
         .select()
         .from(pickupScans)

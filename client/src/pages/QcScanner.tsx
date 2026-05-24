@@ -3157,7 +3157,7 @@ export default function QcScanner() {
       </Dialog>
 
       {/* Complete Order — Mandatory Confirmation Gate */}
-      <Dialog open={completeDialog} onOpenChange={(open) => { setCompleteDialog(open); if (!open) setConfirmText(""); }}>
+      <Dialog open={completeDialog} onOpenChange={(open) => { if (open) { setCompleteDialog(true); } /* prevent closing by clicking outside — use Cancel button to dismiss */ }}>
         <DialogContent className="max-w-lg flex flex-col" style={{ maxHeight: '90vh' }}>
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">

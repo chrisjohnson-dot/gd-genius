@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Search, Truck, MapPin, Package, CheckCircle2, AlertTriangle,
   RefreshCw, ClipboardList, ArrowLeft, Zap, XCircle, Volume2, VolumeX,
@@ -762,6 +763,9 @@ export default function CarrierPickupScanner() {
               >
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Scan Pallet Label</p>
                 <div className="flex gap-2">
+                  <TooltipProvider>
+                  <Tooltip>
+                  <TooltipTrigger asChild>
                   <div className="relative flex-1">
                     <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                     <Input
@@ -799,6 +803,12 @@ export default function CarrierPickupScanner() {
                       autoFocus
                     />
                   </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <p className="text-xs">This field only accepts input from a USB barcode scanner. Keyboard entry is blocked to prevent mis-scans.</p>
+                  </TooltipContent>
+                  </Tooltip>
+                  </TooltipProvider>
                   <Button
                     onClick={handleScan}
                     disabled={!scanInput.trim() || scanPalletMutation.isPending || phase === "quickstart" || isDemo === false}

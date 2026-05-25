@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Truck, MapPin, Package, CheckCircle2, AlertTriangle,
   RefreshCw, ClipboardList, ArrowLeft, Zap, XCircle, Volume2, VolumeX,
-  User, Hash, PenLine, Printer, Download, FileCheck, Save, CloudUpload,
+  User, Hash, PenLine, Printer, Download, FileCheck, Save, CloudUpload, Barcode,
 } from "lucide-react";
 import { SignaturePad } from "@/components/SignaturePad";
 import { useScanAudio } from "@/hooks/useScanAudio";
@@ -762,40 +762,43 @@ export default function CarrierPickupScanner() {
               >
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Scan Pallet Label</p>
                 <div className="flex gap-2">
-                  <Input
-                    ref={scanInputRef}
-                    value={scanInput}
-                    onChange={e => {
-                      const now = Date.now();
-                      const gap = now - lastKeystrokeRef.current;
-                      lastKeystrokeRef.current = now;
-                      // Record inter-keystroke gap (ignore first keystroke)
-                      if (keystrokeTimingsRef.current.length > 0 || scanInput.length > 0) {
-                        keystrokeTimingsRef.current.push(gap);
-                      }
-                      setScanInput(e.target.value);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const timings = keystrokeTimingsRef.current;
-                        // A real scanner sends chars with gaps <80ms; manual typing is typically >150ms
-                        const isScanner = timings.length === 0 || timings.every(t => t < 80);
-                        keystrokeTimingsRef.current = [];
-                        lastKeystrokeRef.current = 0;
-                        if (!isScanner && !isDemo) {
-                          setScanError("Manual keyboard entry is not allowed. Please scan the barcode on the physical pallet label.");
-                          setScanInput("");
-                          return;
+                  <div className="relative flex-1">
+                    <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      ref={scanInputRef}
+                      value={scanInput}
+                      onChange={e => {
+                        const now = Date.now();
+                        const gap = now - lastKeystrokeRef.current;
+                        lastKeystrokeRef.current = now;
+                        // Record inter-keystroke gap (ignore first keystroke)
+                        if (keystrokeTimingsRef.current.length > 0 || scanInput.length > 0) {
+                          keystrokeTimingsRef.current.push(gap);
                         }
-                        handleScan();
-                      }
-                    }}
-                    placeholder="Scan pallet barcode…"
-                    className="text-lg font-mono"
-                    disabled={scanPalletMutation.isPending || phase === "quickstart"}
-                    autoFocus
-                  />
+                        setScanInput(e.target.value);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const timings = keystrokeTimingsRef.current;
+                          // A real scanner sends chars with gaps <80ms; manual typing is typically >150ms
+                          const isScanner = timings.length === 0 || timings.every(t => t < 80);
+                          keystrokeTimingsRef.current = [];
+                          lastKeystrokeRef.current = 0;
+                          if (!isScanner && !isDemo) {
+                            setScanError("Manual keyboard entry is not allowed. Please scan the barcode on the physical pallet label.");
+                            setScanInput("");
+                            return;
+                          }
+                          handleScan();
+                        }
+                      }}
+                      placeholder="Scan only — do not type"
+                      className="pl-10 text-lg font-mono"
+                      disabled={scanPalletMutation.isPending || phase === "quickstart"}
+                      autoFocus
+                    />
+                  </div>
                   <Button
                     onClick={handleScan}
                     disabled={!scanInput.trim() || scanPalletMutation.isPending || phase === "quickstart" || isDemo === false}

@@ -104,6 +104,10 @@ export default function CarrierPickupScanner() {
   const [flashState, setFlashState] = useState<"idle" | "success" | "duplicate">("idle");
   // Full-screen error blocker — must be manually cleared before scanning resumes
   const [scanError, setScanError] = useState<string | null>(null);
+  // Scanner-speed detection: track keystroke timestamps to distinguish scanner vs manual typing
+  // USB barcode scanners send all characters in <100ms total; humans type much slower
+  const lastKeystrokeRef = useRef<number>(0);
+  const keystrokeTimingsRef = useRef<number[]>([]);
   const [confirmText, setConfirmText] = useState("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
@@ -761,16 +765,42 @@ export default function CarrierPickupScanner() {
                   <Input
                     ref={scanInputRef}
                     value={scanInput}
-                    onChange={e => setScanInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleScan(); } }}
-                    placeholder="Scan or type pallet label…"
+                    onChange={e => {
+                      const now = Date.now();
+                      const gap = now - lastKeystrokeRef.current;
+                      lastKeystrokeRef.current = now;
+                      // Record inter-keystroke gap (ignore first keystroke)
+                      if (keystrokeTimingsRef.current.length > 0 || scanInput.length > 0) {
+                        keystrokeTimingsRef.current.push(gap);
+                      }
+                      setScanInput(e.target.value);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const timings = keystrokeTimingsRef.current;
+                        // A real scanner sends chars with gaps <80ms; manual typing is typically >150ms
+                        const isScanner = timings.length === 0 || timings.every(t => t < 80);
+                        keystrokeTimingsRef.current = [];
+                        lastKeystrokeRef.current = 0;
+                        if (!isScanner && !isDemo) {
+                          setScanError("Manual keyboard entry is not allowed. Please scan the barcode on the physical pallet label.");
+                          setScanInput("");
+                          return;
+                        }
+                        handleScan();
+                      }
+                    }}
+                    placeholder="Scan pallet barcode…"
                     className="text-lg font-mono"
                     disabled={scanPalletMutation.isPending || phase === "quickstart"}
                     autoFocus
                   />
                   <Button
                     onClick={handleScan}
-                    disabled={!scanInput.trim() || scanPalletMutation.isPending || phase === "quickstart"}
+                    disabled={!scanInput.trim() || scanPalletMutation.isPending || phase === "quickstart" || isDemo === false}
+                    title={isDemo ? "Click to scan (demo mode)" : "Use your barcode scanner — manual entry is not permitted"}
+                    className={isDemo ? undefined : "opacity-40 cursor-not-allowed"}
                   >
                     {scanPalletMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Scan"}
                   </Button>

@@ -12500,7 +12500,7 @@ const carrierPickupRouter = router({
 
   /** Scan a pallet label during a pickup session */
   scanPallet: protectedProcedure
-    .input(z.object({ sessionId: z.number(), labelValue: z.string().min(1) }))
+    .input(z.object({ sessionId: z.number(), labelValue: z.string().min(4, "Scan value too short — please scan the barcode on the physical pallet label") }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

@@ -276,6 +276,14 @@ const _palletWeightCache = new Map<string, {
   expiresAt: number;
 }>();
 
+// 30-minute in-memory cache for UPC→SKU map per customer (keyed by "configId:customerId")
+// Eliminates repeated Extensiv API calls on every scan when a UPC isn't yet stored in the DB.
+const _upcMapCache = new Map<string, {
+  upcToSku: Map<string, string>;
+  expiresAt: number;
+}>();
+const UPC_MAP_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 const _appRouter = router({
   system: systemRouter,
   auth: router({
@@ -4987,16 +4995,25 @@ const qcScannerRouter = router({
             } catch { /* order lookup failed, continue without customerId */ }
           }
           if (config && customerId) {
-            // fetchItemUpcMap now returns Map<upcUpperCase, sku> (reverse map).
-            // Both the each/primary UPC and the carton/packaging UPC are registered,
-            // so scanning either barcode resolves to the correct SKU.
-            const upcToSku = await fetchItemUpcMap(config, customerId);
+            // Use cached UPC→SKU map to avoid repeated Extensiv API calls on every scan.
+            // Cache is keyed by "configId:customerId" and expires after 30 minutes.
+            const cacheKey = `${config.id}:${customerId}`;
+            const now = Date.now();
+            let cached = _upcMapCache.get(cacheKey);
+            if (!cached || cached.expiresAt < now) {
+              // Cache miss or expired — fetch from Extensiv and populate cache
+              console.log(`[scanBarcode] Fetching UPC map from Extensiv for customer ${customerId} (cache miss)`);
+              const freshMap = await fetchItemUpcMap(config, customerId);
+              cached = { upcToSku: freshMap, expiresAt: now + UPC_MAP_CACHE_TTL_MS };
+              _upcMapCache.set(cacheKey, cached);
+            }
+            const upcToSku = cached.upcToSku;
             const normalised = input.barcode.trim().toUpperCase();
             const resolvedSku = upcToSku.get(normalised);
             if (resolvedSku) {
               match = items.find((i) => i.sku.toUpperCase() === resolvedSku.toUpperCase()) ?? null;
               if (match) {
-                // Persist the resolved UPC so future scans are instant (no Extensiv call)
+                // Persist the resolved UPC so future scans are instant even after cache expiry
                 await upsertQcScanItem(input.sessionId, match.sku, input.barcode.trim(), {});
               }
             }

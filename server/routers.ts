@@ -5282,8 +5282,12 @@ const qcScannerRouter = router({
       sku: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const pallets = await getQcPallets(input.palletId);
-      const pallet = pallets[0] ?? null;
+      // Look up the pallet directly by its own ID (not by sessionId)
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq: eqOp } = await import("drizzle-orm");
+      const { qcPallets: qcPalletsTable } = await import("../drizzle/schema.js");
+      const [pallet] = await db.select().from(qcPalletsTable).where(eqOp(qcPalletsTable.id, input.palletId));
       if (!pallet) throw new TRPCError({ code: "NOT_FOUND", message: "Pallet not found" });
       const items = (pallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
       const removed = items.find((i) => i.sku === input.sku);
@@ -5308,8 +5312,12 @@ const qcScannerRouter = router({
       newQty: z.number().int().min(0),
     }))
     .mutation(async ({ input }) => {
-      const pallets = await getQcPallets(input.palletId);
-      const pallet = pallets[0] ?? null;
+      // Look up the pallet directly by its own ID (not by sessionId)
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq: eqOp2 } = await import("drizzle-orm");
+      const { qcPallets: qcPalletsTable2 } = await import("../drizzle/schema.js");
+      const [pallet] = await db.select().from(qcPalletsTable2).where(eqOp2(qcPalletsTable2.id, input.palletId));
       if (!pallet) throw new TRPCError({ code: "NOT_FOUND", message: "Pallet not found" });
       const items = (pallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
       const existing = items.find((i) => i.sku === input.sku);

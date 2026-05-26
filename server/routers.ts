@@ -360,8 +360,10 @@ const _appRouter = router({
           lastSignedIn: new Date(),
         });
         const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
+        // Note: SessionPayload does not support a 'role' field — role is identified
+        // via loginMethod='team' on the users table, which is set above in upsertUser.
         const sessionToken = await sdk.signSession(
-          { openId, appId: ENV.appId || "gd-agent", name: account.name, role: account.role },
+          { openId, appId: ENV.appId || "gd-agent", name: account.name },
           { expiresInMs: EIGHT_HOURS_MS }
         );
         const cookieOptions = getSessionCookieOptions(ctx.req);

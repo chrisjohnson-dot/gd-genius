@@ -5158,8 +5158,13 @@ const qcScannerRouter = router({
         const sessionForStatus = await getQcSessionById(input.sessionId);
         const orderId = sessionForStatus?.transactionId ?? null;
         if (orderId) {
-          const allOrders = await getTrackedOrders();
-          const currentOrder = allOrders.find((o) => o.extensivOrderId === orderId) ?? null;
+          // Look up the single order directly by extensivOrderId — avoids fetching all tracked orders
+          const db2 = await getDb();
+          const { eq: eqSr } = await import("drizzle-orm");
+          const { orderTracking: otSr } = await import("../drizzle/schema.js");
+          const [currentOrder] = db2
+            ? await db2.select().from(otSr).where(eqSr(otSr.extensivOrderId, orderId)).limit(1)
+            : [];
           // Advance to ship_ready from any pre-ship stage — never go backwards from ship_ready/shipped
           const preShipStages = ["unallocated", "allocated", "picking", "qc", "qc_complete"];
           if (currentOrder && preShipStages.includes(currentOrder.lifecycleStatus)) {

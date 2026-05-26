@@ -350,7 +350,7 @@ export default function QcScanner() {
   const [items, setItems] = useState<ScanItem[]>([]);
   const [pallets, setPallets] = useState<Pallet[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [scanAsCase, setScanAsCase] = useState(false);
+  const [scanAsCase, setScanAsCase] = useState(true);  // default: scan as full case
   const [scanAsMu, setScanAsMu] = useState(false);
   const [lastScan, setLastScan] = useState<{ sku: string; found: boolean } | null>(null);
   // Admin-only manual quantity entry

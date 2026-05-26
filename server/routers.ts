@@ -5679,12 +5679,20 @@ const qcScannerRouter = router({
         });
       }
 
-      // ── 4. Apply manual SKU weight overrides for any SKU still missing ──────
+      // ── 4. Apply manual SKU weight overrides — these ALWAYS take priority over Extensiv data ──
+      // This ensures values imported from the master weights spreadsheet are always used,
+      // even if Extensiv has a different (incorrect) value for the same SKU.
       try {
-        const overrideMap = await getSkuWeightOverrideMap(config.id, customerId);
-        for (const [sku, overrideCartonW] of overrideMap) {
-          if (!cartonWeightMap.has(sku)) {
-            cartonWeightMap.set(sku, overrideCartonW);
+        const overrideRows = await getSkuWeightOverrides(config.id, customerId);
+        for (const row of overrideRows) {
+          const overrideCartonW = Number(row.cartonWeightLb);
+          if (overrideCartonW > 0) {
+            // Override wins — replace whatever Extensiv returned
+            cartonWeightMap.set(row.sku, overrideCartonW);
+            // Also override the units-per-carton if the spreadsheet has it
+            if (row.unitsPerCarton && row.unitsPerCarton > 0) {
+              caseAmountMap.set(row.sku, row.unitsPerCarton);
+            }
           }
         }
       } catch (e) {

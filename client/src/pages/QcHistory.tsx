@@ -443,7 +443,77 @@ function SessionCard({ session }: { session: SessionRow }) {
               </Button>
             </div>
 
-            {/* Pallet cards */}
+            {/* Pallet weight & dims summary table — always visible when session is expanded */}
+            {session.pallets.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Pallet Weight &amp; Dimensions
+                </p>
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted/50">
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Pallet</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">UPC / Label</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Weight</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Dimensions (L×W×H)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {session.pallets.map((p) => {
+                        const w = effectiveWeight(p);
+                        const isOverride = p.weightOverrideLb != null;
+                        return (
+                          <tr key={p.id} className="border-t border-border hover:bg-muted/20">
+                            <td className="px-3 py-2 font-semibold">
+                              Pallet {p.palletNumber}
+                              {p.palletType && (
+                                <span className="ml-1.5 text-muted-foreground font-normal">
+                                  ({PALLET_TYPE_LABELS[p.palletType] ?? p.palletType})
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 font-mono text-muted-foreground">
+                              {p.palletUpc ?? <span className="italic text-muted-foreground/60">—</span>}
+                            </td>
+                            <td className={`px-3 py-2 text-right font-medium ${isOverride ? "text-orange-600" : ""}`}>
+                              {w ?? <span className="text-muted-foreground/60">—</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {p.palletHeightIn
+                                ? <span>48 × 40 × {p.palletHeightIn}&quot;</span>
+                                : <span className="text-muted-foreground/60">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {/* Totals row */}
+                    {session.pallets.some(p => p.calculatedWeightLb || p.weightOverrideLb) && (
+                      <tfoot>
+                        <tr className="border-t-2 border-border bg-muted/30">
+                          <td colSpan={2} className="px-3 py-2 font-semibold text-muted-foreground">Total</td>
+                          <td className="px-3 py-2 text-right font-bold">
+                            {(() => {
+                              const total = session.pallets.reduce((sum, p) => {
+                                const w = parseFloat(String(p.weightOverrideLb ?? p.calculatedWeightLb ?? 0));
+                                return sum + (isNaN(w) ? 0 : w);
+                              }, 0);
+                              return total > 0 ? `${total.toFixed(1)} lbs` : "—";
+                            })()}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">
+                            {session.pallets.length} pallet{session.pallets.length !== 1 ? "s" : ""}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Pallet cards (collapsible, for SKU detail) */}
             {session.pallets.length > 0 ? (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">

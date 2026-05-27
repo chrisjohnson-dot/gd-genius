@@ -135,7 +135,7 @@ function effectiveWeight(p: PalletSummary): string | null {
 
 // ─── Pallet Card ─────────────────────────────────────────────────────────────
 
-function PalletCard({ pallet, sessionId }: { pallet: PalletSummary; sessionId: number }) {
+function PalletCard({ pallet, sessionId, overriddenSkus }: { pallet: PalletSummary; sessionId: number; overriddenSkus: Set<string> }) {
   const [open, setOpen] = useState(false);
   const items = (pallet.items as Array<{ sku: string; qty: number }> | null) ?? [];
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
@@ -231,7 +231,16 @@ function PalletCard({ pallet, sessionId }: { pallet: PalletSummary; sessionId: n
                   <tbody>
                     {items.map((item, idx) => (
                       <tr key={idx} className="border-t border-border">
-                        <td className="px-3 py-1.5 font-mono">{item.sku}</td>
+                        <td className="px-3 py-1.5 font-mono">
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            {item.sku}
+                            {overriddenSkus.has(item.sku) && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-400 text-orange-500 font-normal leading-none shrink-0">
+                                wt override
+                              </Badge>
+                            )}
+                          </span>
+                        </td>
                         <td className="px-3 py-1.5 text-right font-semibold">{item.qty}</td>
                       </tr>
                     ))}
@@ -266,7 +275,7 @@ function PalletCard({ pallet, sessionId }: { pallet: PalletSummary; sessionId: n
 
 // ─── Session Row ──────────────────────────────────────────────────────────────
 
-function SessionCard({ session }: { session: SessionRow }) {
+function SessionCard({ session, overriddenSkus }: { session: SessionRow; overriddenSkus: Set<string> }) {
   const [open, setOpen] = useState(false);
   const accuracy =
     session.totalExpected > 0
@@ -520,7 +529,7 @@ function SessionCard({ session }: { session: SessionRow }) {
                   Pallets ({session.pallets.length})
                 </p>
                 {session.pallets.map((p) => (
-                  <PalletCard key={p.id} pallet={p} sessionId={session.id} />
+                  <PalletCard key={p.id} pallet={p} sessionId={session.id} overriddenSkus={overriddenSkus} />
                 ))}
               </div>
             ) : (
@@ -546,6 +555,12 @@ export default function QcHistory() {
     clearTimeout((handleSearchChange as any)._t);
     (handleSearchChange as any)._t = setTimeout(() => setDebouncedSearch(val), 300);
   };
+
+  const { data: weightOverridesData } = trpc.skuWeight.listAll.useQuery(undefined, { refetchOnWindowFocus: false });
+  const overriddenSkus = useMemo(
+    () => new Set((weightOverridesData ?? []).map((r) => r.sku)),
+    [weightOverridesData]
+  );
 
   const { data, isLoading, refetch, isFetching } = trpc.qcScanner.getSessionHistory.useQuery(
     {
@@ -636,7 +651,7 @@ export default function QcHistory() {
       ) : (
         <div className="space-y-3">
           {sessions.map((s) => (
-            <SessionCard key={s.id} session={s} />
+            <SessionCard key={s.id} session={s} overriddenSkus={overriddenSkus} />
           ))}
         </div>
       )}

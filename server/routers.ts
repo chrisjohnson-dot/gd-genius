@@ -5670,7 +5670,24 @@ const qcScannerRouter = router({
             fetchItemUnitWeightMap(config, customerId),
           ]);
         }
-        // Store in 10-minute in-memory cache
+        // ── 4. Apply manual SKU weight overrides BEFORE caching — overrides always win ──
+        // Must be applied here (before cache storage) so the cache contains corrected values.
+        // Overrides take priority over both Extensiv API data and the item_dims DB cache.
+        try {
+          const overrideRows = await getSkuWeightOverrides(config.id, customerId);
+          for (const row of overrideRows) {
+            const overrideCartonW = Number(row.cartonWeightLb);
+            if (overrideCartonW > 0) {
+              cartonWeightMap.set(row.sku, overrideCartonW);
+              if (row.unitsPerCarton && row.unitsPerCarton > 0) {
+                caseAmountMap.set(row.sku, row.unitsPerCarton);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[calculatePalletWeight] Failed to load SKU weight overrides before caching:', e);
+        }
+        // Store in 10-minute in-memory cache (now includes override-corrected values)
         _palletWeightCache.set(cacheKey, {
           cartonWeightMap: cartonWeightMap!,
           caseAmountMap: caseAmountMap!,
@@ -5679,25 +5696,7 @@ const qcScannerRouter = router({
         });
       }
 
-      // ── 4. Apply manual SKU weight overrides — these ALWAYS take priority over Extensiv data ──
-      // This ensures values imported from the master weights spreadsheet are always used,
-      // even if Extensiv has a different (incorrect) value for the same SKU.
-      try {
-        const overrideRows = await getSkuWeightOverrides(config.id, customerId);
-        for (const row of overrideRows) {
-          const overrideCartonW = Number(row.cartonWeightLb);
-          if (overrideCartonW > 0) {
-            // Override wins — replace whatever Extensiv returned
-            cartonWeightMap.set(row.sku, overrideCartonW);
-            // Also override the units-per-carton if the spreadsheet has it
-            if (row.unitsPerCarton && row.unitsPerCarton > 0) {
-              caseAmountMap.set(row.sku, row.unitsPerCarton);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[calculatePalletWeight] Failed to load SKU weight overrides:', e);
-      }
+      // (Overrides already applied above before caching — no second pass needed)
 
       // Calculate total weight: sum(perUnitWeightLb * qty) per SKU
       // Priority: override/carton → (cartonWeightLb / unitsPerCarton) → unit_weight_lb (imperial.weight) → skip

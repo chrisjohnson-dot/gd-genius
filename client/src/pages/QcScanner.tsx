@@ -695,7 +695,16 @@ export default function QcScanner() {
         setItems((prev) =>
           prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
         );
-        if (data.sessionComplete) setPhase("complete");
+        if (data.sessionComplete) {
+          setPhase("complete");
+          // Auto-calculate weight for all pallets when the last item is scanned
+          if (session) {
+            // Recalculate weight for every pallet so labels are accurate
+            palletsRef.current.forEach((p) => {
+              calculatePalletWeight.mutate({ sessionId: session.id, palletId: p.id });
+            });
+          }
+        }
         // Auto-assign scanned item to the selected pallet (or last pallet if none selected)
         const targetId = activeScanPalletIdRef.current;
         const activePallet = targetId

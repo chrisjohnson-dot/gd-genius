@@ -2466,17 +2466,18 @@ export default function QcScanner() {
                         <span className="hidden">
                         </span>
                       )}
-                      {/* Print buttons — only visible once order is complete */}
-                      {phase === "complete" && (
+                      {/* Print buttons — visible during scanning and when complete */}
+                      {(phase === "complete" || phase === "scanning") && session && (
                         <div className="ml-auto flex gap-1" onClick={(e) => e.stopPropagation()}>
                           <Button
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs"
+                            title="Print GD pallet label for this pallet"
                             onClick={async (e) => {
                               e.stopPropagation();
                               await ensurePalletUpcs();
-                              window.open(`/api/pdf/qc-gd-labels/${session!.id}?type=gd&palletId=${pallet.id}`, "_blank");
+                              window.open(`/api/pdf/qc-gd-labels/${session.id}?type=gd&palletId=${pallet.id}`, "_blank");
                             }}
                           >
                             <Printer className="w-3 h-3 mr-1" /> GD
@@ -2485,10 +2486,11 @@ export default function QcScanner() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs"
+                            title="Print SSCC label for this pallet"
                             onClick={async (e) => {
                               e.stopPropagation();
                               await ensurePalletUpcs();
-                              window.open(`/api/pdf/qc-gd-labels/${session!.id}?type=sscc&palletId=${pallet.id}`, "_blank");
+                              window.open(`/api/pdf/qc-gd-labels/${session.id}?type=sscc&palletId=${pallet.id}`, "_blank");
                             }}
                           >
                             <Printer className="w-3 h-3 mr-1" /> SSCC

@@ -4715,15 +4715,42 @@ const qcScannerRouter = router({
         const pallets = await getQcPallets(existing.id);
         return { session: existing, items, pallets, resumed: true };
       }
+      // Auto-populate warehouseId and customerId from order_tracking if not supplied
+      // This ensures fetchFromExtensiv works immediately without a manual scan first.
+      let resolvedWarehouseId = input.warehouseId;
+      let resolvedWarehouseName = input.warehouseName;
+      let resolvedCustomerId: number | undefined;
+      try {
+        const db = await getDb();
+        if (db) {
+          const { eq: eqOt } = await import("drizzle-orm");
+          const { orderTracking: otTable } = await import("../drizzle/schema.js");
+          const [otRow] = await db.select({
+            configId: otTable.configId,
+            clientId: otTable.clientId,
+            facilityName: otTable.facilityName,
+          }).from(otTable)
+            .where(eqOt(otTable.extensivOrderId, input.transactionId))
+            .limit(1);
+          if (otRow) {
+            if (!resolvedWarehouseId && otRow.configId) resolvedWarehouseId = otRow.configId;
+            if (!resolvedWarehouseName && otRow.facilityName) resolvedWarehouseName = otRow.facilityName;
+            if (otRow.clientId) resolvedCustomerId = otRow.clientId;
+          }
+        }
+      } catch (e) {
+        console.warn('[startSession] Failed to auto-populate from order_tracking:', e);
+      }
       // Create a new session — referenceNumber will be populated after Extensiv lookup
       const sessionId = await createQcSession({
         referenceNumber: String(input.transactionId),
         transactionId: input.transactionId,
-        warehouseId: input.warehouseId,
-        warehouseName: input.warehouseName,
+        warehouseId: resolvedWarehouseId,
+        warehouseName: resolvedWarehouseName,
+        customerId: resolvedCustomerId,
         status: "scanning",
         createdBy: ctx.user.name,
-      });
+      } as any);
       const session = await getQcSessionById(sessionId);
       // Create first pallet automatically
       await createQcPallet({ sessionId, palletNumber: 1, items: [] });

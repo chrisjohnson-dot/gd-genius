@@ -68,6 +68,7 @@ type SessionRow = {
   totalCases?: number;
   stagingLane?: string | null;
   destinationAddress?: string | null;
+  caseAmountMap?: Record<string, number>;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -481,6 +482,7 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                       <tr className="bg-muted/50">
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">Pallet</th>
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">UPC / Label</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Cases</th>
                         <th className="text-right px-3 py-2 font-medium text-muted-foreground">Weight</th>
                         <th className="text-right px-3 py-2 font-medium text-muted-foreground">Dimensions (L×W×H)</th>
                       </tr>
@@ -502,6 +504,16 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                             <td className="px-3 py-2 font-mono text-muted-foreground">
                               {p.palletUpc ?? <span className="italic text-muted-foreground/60">—</span>}
                             </td>
+                            <td className="px-3 py-2 text-right font-semibold">
+                              {(() => {
+                                const items = (p.items as Array<{ sku: string; qty: number }> | null) ?? [];
+                                const totalCases = items.reduce((sum, item) => {
+                                  const ca = session.caseAmountMap?.[item.sku] ?? 1;
+                                  return sum + Math.floor(item.qty / ca);
+                                }, 0);
+                                return totalCases > 0 ? totalCases : <span className="text-muted-foreground/60">—</span>;
+                              })()}
+                            </td>
                             <td className={`px-3 py-2 text-right font-medium ${isOverride ? "text-orange-600" : ""}`}>
                               {w ?? <span className="text-muted-foreground/60">—</span>}
                             </td>
@@ -519,6 +531,9 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                       <tfoot>
                         <tr className="border-t-2 border-border bg-muted/30">
                           <td colSpan={2} className="px-3 py-2 font-semibold text-muted-foreground">Total</td>
+                          <td className="px-3 py-2 text-right font-bold">
+                            {session.totalCases ?? "—"}
+                          </td>
                           <td className="px-3 py-2 text-right font-bold">
                             {(() => {
                               const total = session.pallets.reduce((sum, p) => {

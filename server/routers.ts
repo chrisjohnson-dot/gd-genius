@@ -5952,8 +5952,16 @@ const qcScannerRouter = router({
             const ca = i.caseAmount && i.caseAmount > 1 ? i.caseAmount : 1;
             return acc + (ca > 1 ? Math.floor((i.scannedQty ?? 0) / ca) : (i.scannedQty ?? 0));
           }, 0);
+          // Build a SKU → caseAmount map for the frontend to calculate cases per pallet
+          const caseAmountMap: Record<string, number> = {};
+          for (const i of scanItems) {
+            if (i.sku && i.caseAmount && i.caseAmount > 1) {
+              caseAmountMap[i.sku] = i.caseAmount;
+            }
+          }
           return {
             ...s,
+            caseAmountMap,
             pallets: pallets.map((p) => ({
               id: p.id,
               palletNumber: p.palletNumber,

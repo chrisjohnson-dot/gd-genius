@@ -3455,6 +3455,7 @@ export default function QcScanner() {
                           customerId: session.customerId ?? 0,
                           sku,
                           cartonWeightLb: lb,
+                          sessionId: session.id,
                         });
                       }}
                     >

@@ -6583,11 +6583,30 @@ const skuWeightRouter = router({
       cartonWeightLb: z.number().positive(),
       unitsPerCarton: z.number().int().positive().optional().nullable(),
       note: z.string().max(256).optional().nullable(),
+      // Optional: sessionId to resolve configId/customerId if 0 was passed
+      sessionId: z.number().optional(),
     }))
     .mutation(async ({ input }) => {
+      let configId = input.configId;
+      let customerId = input.customerId;
+      // If configId or customerId is 0 (session missing these fields), resolve from session
+      if ((configId === 0 || customerId === 0) && input.sessionId) {
+        const session = await getQcSessionById(input.sessionId);
+        if (session?.warehouseId && configId === 0) configId = session.warehouseId;
+        if (session?.customerId && customerId === 0) customerId = session.customerId;
+      }
+      // Final fallback: use first active Extensiv config
+      if (configId === 0) {
+        const configs = await getExtensivConfigs();
+        const activeConfig = configs.find((c) => c.isActive) ?? configs[0];
+        if (activeConfig) configId = activeConfig.id;
+      }
+      if (configId === 0 || customerId === 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Could not resolve configId or customerId — please reload the order and try again.' });
+      }
       await upsertSkuWeightOverride(
-        input.configId,
-        input.customerId,
+        configId,
+        customerId,
         input.sku,
         input.cartonWeightLb,
         input.unitsPerCarton,

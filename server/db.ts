@@ -2143,9 +2143,16 @@ export async function updateQcSession(id: number, data: Partial<QcScanSession>):
   await db.update(qcScanSessions).set(data).where(eq(qcScanSessions.id, id));
 }
 
-export async function listQcSessions(limit = 50): Promise<QcScanSession[]> {
+export async function listQcSessions(limit = 50, sinceDate?: Date): Promise<QcScanSession[]> {
   const db = await getDb();
   if (!db) return [];
+  if (sinceDate) {
+    const { gte } = await import("drizzle-orm");
+    return db.select().from(qcScanSessions)
+      .where(gte(qcScanSessions.createdAt, sinceDate))
+      .orderBy(desc(qcScanSessions.createdAt))
+      .limit(limit);
+  }
   return db.select().from(qcScanSessions).orderBy(desc(qcScanSessions.createdAt)).limit(limit);
 }
 

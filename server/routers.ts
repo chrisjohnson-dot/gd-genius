@@ -5902,9 +5902,18 @@ const qcScannerRouter = router({
       status: z.enum(["scanning", "complete", "shipped"]).optional(),
       customerName: z.string().optional(),
       search: z.string().optional(), // searches referenceNumber, transactionId, customerName
+      sinceDate: z.string().optional(), // ISO date string — defaults to start of today
     }))
     .query(async ({ input }) => {
-      const sessions = await listQcSessions(input.limit ?? 100);
+      // Default to today's sessions only (midnight local time → UTC)
+      let sinceDate: Date;
+      if (input.sinceDate) {
+        sinceDate = new Date(input.sinceDate);
+      } else {
+        sinceDate = new Date();
+        sinceDate.setHours(0, 0, 0, 0);
+      }
+      const sessions = await listQcSessions(input.limit ?? 50, sinceDate);
 
       // Filter by status if provided
       let filtered = sessions;

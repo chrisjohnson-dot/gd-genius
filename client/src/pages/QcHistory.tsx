@@ -579,11 +579,19 @@ export default function QcHistory() {
     [weightOverridesData]
   );
 
+  // Date filter — defaults to today, resets each day
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  });
+  const sinceDateISO = `${selectedDate}T00:00:00`;
+
   const { data, isLoading, refetch, isFetching } = trpc.qcScanner.getSessionHistory.useQuery(
     {
-      limit: 200,
+      limit: 50,
       status: statusFilter !== "all" ? (statusFilter as "scanning" | "complete" | "shipped") : undefined,
       search: debouncedSearch || undefined,
+      sinceDate: sinceDateISO,
     },
     { refetchOnWindowFocus: false }
   );
@@ -641,9 +649,20 @@ export default function QcHistory() {
             <SelectItem value="shipped">Shipped</SelectItem>
           </SelectContent>
         </Select>
+        {/* Date picker — defaults to today, allows viewing past days */}
+        <div className="flex items-center gap-1.5">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+          <Input
+            type="date"
+            className="h-9 w-36 text-sm"
+            value={selectedDate}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+        </div>
         {total > 0 && (
           <span className="text-xs text-muted-foreground ml-auto">
-            {sessions.length} of {total} session{total !== 1 ? "s" : ""}
+            {sessions.length} of {total} session{total !== 1 ? "s" : ""} · up to 50
           </span>
         )}
       </div>

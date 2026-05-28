@@ -65,6 +65,7 @@ type Session = {
   customerName: string | null;
   warehouseName: string | null;
   warehouseId: number | null;
+  customerId: number | null;
   poNumber: string | null;
   completedAt: Date | null;
   destinationAddress: string | null;
@@ -3451,7 +3452,7 @@ export default function QcScanner() {
                         if (!lb || lb <= 0 || !session) return;
                         upsertWeightOverride.mutate({
                           configId: session.warehouseId ?? 0,
-                          customerId: (session as any).customerId ?? 0,
+                          customerId: session.customerId ?? 0,
                           sku,
                           cartonWeightLb: lb,
                         });
@@ -3467,7 +3468,7 @@ export default function QcScanner() {
                         const lb = parseFloat(skuWeightInputs[sku]);
                         if (!lb || lb <= 0 || !session) return;
                         const configId = session.warehouseId ?? 0;
-                        const customerId = (session as any).customerId ?? 0;
+                        const customerId = session.customerId ?? 0;
                         setPushingSkus((prev) => new Set(prev).add(sku));
                         pushWeightToExtensiv.mutate({ configId, customerId, sku, cartonWeightLb: lb });
                       }}

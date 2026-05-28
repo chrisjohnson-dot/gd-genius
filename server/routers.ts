@@ -6043,6 +6043,23 @@ const qcScannerRouter = router({
         if (!sku) continue;
         skuQtyMap.set(sku, (skuQtyMap.get(sku) ?? 0) + (rec.onHand ?? rec.available ?? 0));
       }
+
+      // Fallback: if all quantities are 0 (fully-allocated MU — Extensiv zeroes out onHand/available
+      // once inventory is committed to an order), use the remaining expected qty from the session
+      // for the SKUs found on this MU. This ensures the pallet gets correct quantities.
+      const allZero = Array.from(skuQtyMap.values()).every((q) => q === 0);
+      if (allZero && skuQtyMap.size > 0) {
+        const sessionItems = await getQcScanItems(input.sessionId);
+        for (const [sku] of skuQtyMap) {
+          const si = sessionItems.find((i) => i.sku === sku);
+          if (si) {
+            const remaining = Math.max(0, (si.expectedQty ?? 0) - (si.scannedQty ?? 0));
+            if (remaining > 0) skuQtyMap.set(sku, remaining);
+          }
+        }
+        console.log(`[scanMu] All-zero MU fallback for muLabel=${input.muLabel}: using remaining expected qtys`);
+      }
+
       const muItems = Array.from(skuQtyMap.entries()).map(([sku, qty]) => ({ sku, qty }));
 
       // 4. Fetch the current pallet and overwrite its items with the MU contents

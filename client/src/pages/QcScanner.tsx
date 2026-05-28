@@ -73,13 +73,15 @@ type Session = {
 type Phase = "start" | "scanning" | "complete";
 
 //// WAV URLs for each sound type
-const SOUND_URLS: Record<"success" | "error" | "complete", string> = {
+const SOUND_URLS: Record<"success" | "error" | "complete" | "scan" | "sku_complete", string> = {
   success: "/manus-storage/cryo_pistol_gunshot_454de70d.wav",
   error: "/manus-storage/wrong_item_angry_c1fd9aee.wav",
   complete: "/manus-storage/order_complete_jingle_d15136e3.wav",
+  scan: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/cWswCpGbqObgKwiS.wav",
+  sku_complete: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/RupPdbwPUWKDLTvD.wav",
 };
 // HTMLAudioElement-based sound playback — more reliable than AudioContext in mutation callbacks
-const _audioElements: Partial<Record<"success" | "error" | "complete", HTMLAudioElement>> = {};
+const _audioElements: Partial<Record<"success" | "error" | "complete" | "scan" | "sku_complete", HTMLAudioElement>> = {};
 
 function preloadSounds() {
   (Object.keys(SOUND_URLS) as Array<"success" | "error" | "complete">).forEach((type) => {
@@ -97,7 +99,7 @@ function preloadSounds() {
 let _soundMuted = false;
 function setSoundMutedFlag(muted: boolean) { _soundMuted = muted; }
 
-function playBeep(type: "success" | "error" | "complete") {
+function playBeep(type: "success" | "error" | "complete" | "scan" | "sku_complete") {
   if (_soundMuted) return;
   try {
     // Always create a fresh Audio element so rapid scans don't block each other
@@ -681,11 +683,18 @@ export default function QcScanner() {
           duration: Infinity,
         });
       } else {
+        // Determine sound: order complete > SKU complete > scan beep
+        const skuNowComplete = !data.sessionComplete &&
+          data.item?.scannedQty != null &&
+          data.item?.expectedQty != null &&
+          data.item.scannedQty >= data.item.expectedQty;
         if (data.sessionComplete) {
           playBeep("complete");
           toast.success("Order complete! All items scanned.", { duration: 5000 });
+        } else if (skuNowComplete) {
+          playBeep("sku_complete");
         } else {
-          playBeep("success");
+          playBeep("scan");
         }
         setLastScan({ sku: data.item?.sku ?? barcodeInput, found: true });
         if (data.item?.sku) triggerFlash(data.item.sku);

@@ -67,6 +67,7 @@ type SessionRow = {
   totalScanned: number;
   totalCases?: number;
   stagingLane?: string | null;
+  destinationAddress?: string | null;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -326,6 +327,22 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                     <Warehouse className="w-3 h-3" /> {session.warehouseName}
                   </span>
                 )}
+                {session.destinationAddress && (() => {
+                  try {
+                    const addr = typeof session.destinationAddress === 'string'
+                      ? JSON.parse(session.destinationAddress)
+                      : session.destinationAddress;
+                    const name = addr.companyName ?? addr.name ?? null;
+                    const city = addr.city ?? null;
+                    const state = addr.state ?? null;
+                    const line = [name, city && state ? `${city}, ${state}` : (city ?? state)].filter(Boolean).join(' — ');
+                    return line ? (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {line}
+                      </span>
+                    ) : null;
+                  } catch { return null; }
+                })()}
                 {session.createdBy && (
                   <span className="flex items-center gap-1">
                     <User className="w-3 h-3" /> {session.createdBy}

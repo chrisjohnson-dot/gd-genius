@@ -5760,7 +5760,8 @@ const qcScannerRouter = router({
       }
       // Add pallet tare weight (default 30 lbs if not set)
       const tareLb = pallet.palletTareWeightLb ? parseFloat(String(pallet.palletTareWeightLb)) : 30;
-      const weightLb = Math.round((totalLb + tareLb) * 100) / 100;
+      // Round UP to the nearest whole pound
+      const weightLb = Math.ceil(totalLb + tareLb);
       await updateQcPallet(input.palletId, { calculatedWeightLb: String(weightLb) });
       return { weightLb, skuBreakdown, zeroWeightSkus };
     }),

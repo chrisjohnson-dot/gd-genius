@@ -197,7 +197,8 @@ async function _drawLabel(doc: PDFKit.PDFDocument, p: GdPalletLabelData): Promis
   doc.fillColor(BLACK).fontSize(18).font("Helvetica-Bold");
   doc.text(String(p.transactionId), MARGIN, INFO_TX_Y, { lineBreak: false, width: MID - MARGIN * 2 });
 
-  const weightStr = p.weightLbs != null ? `${p.weightLbs} LBS` : "—";
+  // Round up to the nearest whole pound for display on the label
+  const weightStr = p.weightLbs != null ? `${Math.ceil(p.weightLbs)} LBS` : "—";
   const dimStr    = (p.dimL != null && p.dimW != null && p.dimH != null)
     ? `${p.dimL} × ${p.dimW} × ${p.dimH} in`
     : "";

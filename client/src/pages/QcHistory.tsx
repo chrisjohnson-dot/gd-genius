@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -515,12 +516,71 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                               })()}
                             </td>
                             <td className={`px-3 py-2 text-right font-medium ${isOverride ? "text-orange-600" : ""}`}>
-                              {w ?? <span className="text-muted-foreground/60">—</span>}
+                              {isAdmin && editingPallet === p.id ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <Input
+                                    type="number"
+                                    className="h-6 w-20 text-xs text-right"
+                                    value={editWeight}
+                                    onChange={(e) => setEditWeight(e.target.value)}
+                                    placeholder="lbs"
+                                    autoFocus
+                                  />
+                                  <button
+                                    className="text-xs text-green-600 font-bold px-1 hover:text-green-800"
+                                    onClick={() => {
+                                      const lb = parseFloat(editWeight);
+                                      if (!isNaN(lb) && lb > 0) {
+                                        updatePalletWeightOverride.mutate({ palletId: p.id, weightLb: lb });
+                                      }
+                                    }}
+                                  >✓</button>
+                                </div>
+                              ) : (
+                                <span
+                                  className={isAdmin ? "cursor-pointer hover:underline" : ""}
+                                  title={isAdmin ? "Click to edit weight" : undefined}
+                                  onClick={isAdmin ? () => { setEditingPallet(p.id); setEditWeight(String(p.weightOverrideLb ?? p.calculatedWeightLb ?? "")); setEditHeight(p.palletHeightIn ?? ""); } : undefined}
+                                >
+                                  {w ?? <span className="text-muted-foreground/60">—</span>}
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-right">
-                              {p.palletHeightIn
-                                ? <span>48 × 40 × {p.palletHeightIn}&quot;</span>
-                                : <span className="text-muted-foreground/60">—</span>}
+                              {isAdmin && editingPallet === p.id ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <Input
+                                    type="number"
+                                    className="h-6 w-16 text-xs text-right"
+                                    value={editHeight}
+                                    onChange={(e) => setEditHeight(e.target.value)}
+                                    placeholder="in"
+                                  />
+                                  <button
+                                    className="text-xs text-green-600 font-bold px-1 hover:text-green-800"
+                                    onClick={() => {
+                                      const h = parseFloat(editHeight);
+                                      if (!isNaN(h) && h > 0) {
+                                        updatePalletHeight.mutate({ palletId: p.id, heightIn: h });
+                                      }
+                                    }}
+                                  >✓</button>
+                                  <button
+                                    className="text-xs text-muted-foreground px-1 hover:text-foreground"
+                                    onClick={() => setEditingPallet(null)}
+                                  >×</button>
+                                </div>
+                              ) : (
+                                <span
+                                  className={isAdmin ? "cursor-pointer hover:underline" : ""}
+                                  title={isAdmin ? "Click to edit height" : undefined}
+                                  onClick={isAdmin ? () => { setEditingPallet(p.id); setEditWeight(String(p.weightOverrideLb ?? p.calculatedWeightLb ?? "")); setEditHeight(p.palletHeightIn ?? ""); } : undefined}
+                                >
+                                  {p.palletHeightIn
+                                    ? <span>48 × 40 × {p.palletHeightIn}&quot;</span>
+                                    : <span className="text-muted-foreground/60">—</span>}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -577,6 +637,13 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function QcHistory() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  // Admin inline edit state: palletId -> { weight, height }
+  const [editingPallet, setEditingPallet] = useState<number | null>(null);
+  const [editWeight, setEditWeight] = useState("");
+  const [editHeight, setEditHeight] = useState("");
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -619,6 +686,24 @@ export default function QcHistory() {
     () => Array.from(new Set(sessions.map((s) => s.customerName).filter(Boolean))).sort() as string[],
     [sessions]
   );
+
+  // Admin-only: inline pallet weight/height editing for completed orders
+  const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(`Weight updated to ${vars.weightLb} lbs`);
+      setEditingPallet(null);
+      refetch();
+    },
+    onError: (e) => toast.error(`Failed to update weight: ${e.message}`),
+  });
+  const updatePalletHeight = trpc.qcScanner.updatePalletHeight.useMutation({
+    onSuccess: () => {
+      toast.success("Height updated");
+      setEditingPallet(null);
+      refetch();
+    },
+    onError: (e) => toast.error(`Failed to update height: ${e.message}`),
+  });
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">

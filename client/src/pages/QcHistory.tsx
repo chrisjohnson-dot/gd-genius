@@ -335,8 +335,26 @@ function PalletCard({ pallet, sessionId, overriddenSkus, isAdmin, caseAmountMap,
 
 // ─── Session Row ──────────────────────────────────────────────────────────────
 
-function SessionCard({ session, overriddenSkus }: { session: SessionRow; overriddenSkus: Set<string> }) {
+function SessionCard({ session, overriddenSkus, isAdmin }: { session: SessionRow; overriddenSkus: Set<string>; isAdmin?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [editingPallet, setEditingPallet] = useState<number | null>(null);
+  const [editWeight, setEditWeight] = useState("");
+  const [editHeight, setEditHeight] = useState("");
+
+  const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(`Weight updated to ${vars.weightLb} lbs`);
+      setEditingPallet(null);
+    },
+    onError: (e) => toast.error(`Failed to update weight: ${e.message}`),
+  });
+  const updatePalletHeight = trpc.qcScanner.updatePalletHeight.useMutation({
+    onSuccess: () => {
+      toast.success("Height updated");
+      setEditingPallet(null);
+    },
+    onError: (e) => toast.error(`Failed to update height: ${e.message}`),
+  });
   const accuracy =
     session.totalExpected > 0
       ? Math.round((session.totalScanned / session.totalExpected) * 100)
@@ -678,7 +696,7 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                   Pallets ({session.pallets.length})
                 </p>
                 {session.pallets.map((p) => (
-                  <PalletCard key={p.id} pallet={p} sessionId={session.id} overriddenSkus={overriddenSkus} isAdmin={isAdmin} caseAmountMap={session.caseAmountMap} onRefetch={refetch} />
+                  <PalletCard key={p.id} pallet={p} sessionId={session.id} overriddenSkus={overriddenSkus} isAdmin={isAdmin} caseAmountMap={session.caseAmountMap} />
                 ))}
               </div>
             ) : (
@@ -696,10 +714,6 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
 export default function QcHistory() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  // Admin inline edit state: palletId -> { weight, height }
-  const [editingPallet, setEditingPallet] = useState<number | null>(null);
-  const [editWeight, setEditWeight] = useState("");
-  const [editHeight, setEditHeight] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -743,24 +757,6 @@ export default function QcHistory() {
     () => Array.from(new Set(sessions.map((s) => s.customerName).filter(Boolean))).sort() as string[],
     [sessions]
   );
-
-  // Admin-only: inline pallet weight/height editing for completed orders
-  const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
-    onSuccess: (_, vars) => {
-      toast.success(`Weight updated to ${vars.weightLb} lbs`);
-      setEditingPallet(null);
-      refetch();
-    },
-    onError: (e) => toast.error(`Failed to update weight: ${e.message}`),
-  });
-  const updatePalletHeight = trpc.qcScanner.updatePalletHeight.useMutation({
-    onSuccess: () => {
-      toast.success("Height updated");
-      setEditingPallet(null);
-      refetch();
-    },
-    onError: (e) => toast.error(`Failed to update height: ${e.message}`),
-  });
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -844,7 +840,7 @@ export default function QcHistory() {
       ) : (
         <div className="space-y-3">
           {sessions.map((s) => (
-            <SessionCard key={s.id} session={s} overriddenSkus={overriddenSkus} />
+            <SessionCard key={s.id} session={s} overriddenSkus={overriddenSkus} isAdmin={isAdmin} />
           ))}
         </div>
       )}

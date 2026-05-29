@@ -138,12 +138,23 @@ function effectiveWeight(p: PalletSummary): string | null {
 
 // ─── Pallet Card ─────────────────────────────────────────────────────────────
 
-function PalletCard({ pallet, sessionId, overriddenSkus }: { pallet: PalletSummary; sessionId: number; overriddenSkus: Set<string> }) {
+function PalletCard({ pallet, sessionId, overriddenSkus, isAdmin, caseAmountMap, onRefetch }: { pallet: PalletSummary; sessionId: number; overriddenSkus: Set<string>; isAdmin?: boolean; caseAmountMap?: Record<string, number>; onRefetch?: () => void }) {
   const [open, setOpen] = useState(false);
+  const [editingSkuCases, setEditingSkuCases] = useState<string | null>(null);
+  const [editCaseValue, setEditCaseValue] = useState("");
   const items = (pallet.items as Array<{ sku: string; qty: number }> | null) ?? [];
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
   const weight = effectiveWeight(pallet);
   const isOverride = pallet.weightOverrideLb != null;
+
+  const adjustPalletItemQty = trpc.qcScanner.adjustPalletItemQty.useMutation({
+    onSuccess: (data) => {
+      setEditingSkuCases(null);
+      toast.success(`Updated ${data.oldQty} → ${data.newQty} units`);
+      onRefetch?.();
+    },
+    onError: (e) => toast.error(`Failed to update: ${e.message}`),
+  });
 
   const openGdLabel = () => {
     window.open(`/api/pdf/qc-gd-labels/${sessionId}?type=gd`, "_blank");
@@ -228,25 +239,71 @@ function PalletCard({ pallet, sessionId, overriddenSkus }: { pallet: PalletSumma
                   <thead>
                     <tr className="bg-muted/50">
                       <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">SKU</th>
-                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
+                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Cases</th>
+                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Units</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item, idx) => (
-                      <tr key={idx} className="border-t border-border">
-                        <td className="px-3 py-1.5 font-mono">
-                          <span className="flex items-center gap-1.5 flex-wrap">
-                            {item.sku}
-                            {overriddenSkus.has(item.sku) && (
-                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-400 text-orange-500 font-normal leading-none shrink-0">
-                                wt override
-                              </Badge>
+                    {items.map((item, idx) => {
+                      const ca = caseAmountMap?.[item.sku] ?? 1;
+                      const cases = ca > 1 ? Math.floor(item.qty / ca) : item.qty;
+                      const isEditingThis = isAdmin && editingSkuCases === item.sku;
+                      return (
+                        <tr key={idx} className="border-t border-border">
+                          <td className="px-3 py-1.5 font-mono">
+                            <span className="flex items-center gap-1.5 flex-wrap">
+                              {item.sku}
+                              {overriddenSkus.has(item.sku) && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-400 text-orange-500 font-normal leading-none shrink-0">
+                                  wt override
+                                </Badge>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-semibold">
+                            {isEditingThis ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Input
+                                  type="number"
+                                  className="h-6 w-16 text-xs text-right"
+                                  value={editCaseValue}
+                                  onChange={(e) => setEditCaseValue(e.target.value)}
+                                  autoFocus
+                                  min="0"
+                                />
+                                <button
+                                  className="text-xs text-green-600 font-bold px-1 hover:text-green-800"
+                                  onClick={() => {
+                                    const newCases = parseInt(editCaseValue, 10);
+                                    if (!isNaN(newCases) && newCases >= 0) {
+                                      adjustPalletItemQty.mutate({
+                                        sessionId,
+                                        palletId: pallet.id,
+                                        sku: item.sku,
+                                        newQty: newCases * ca,
+                                      });
+                                    }
+                                  }}
+                                >✓</button>
+                                <button
+                                  className="text-xs text-muted-foreground px-1 hover:text-foreground"
+                                  onClick={() => setEditingSkuCases(null)}
+                                >×</button>
+                              </div>
+                            ) : (
+                              <span
+                                className={isAdmin ? "cursor-pointer hover:underline" : ""}
+                                title={isAdmin ? "Click to edit case count" : undefined}
+                                onClick={isAdmin ? () => { setEditingSkuCases(item.sku); setEditCaseValue(String(cases)); } : undefined}
+                              >
+                                {cases}
+                              </span>
                             )}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-semibold">{item.qty}</td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-3 py-1.5 text-right text-muted-foreground">{item.qty}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -621,7 +678,7 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                   Pallets ({session.pallets.length})
                 </p>
                 {session.pallets.map((p) => (
-                  <PalletCard key={p.id} pallet={p} sessionId={session.id} overriddenSkus={overriddenSkus} />
+                  <PalletCard key={p.id} pallet={p} sessionId={session.id} overriddenSkus={overriddenSkus} isAdmin={isAdmin} caseAmountMap={session.caseAmountMap} onRefetch={refetch} />
                 ))}
               </div>
             ) : (

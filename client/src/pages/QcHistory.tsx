@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -138,23 +137,12 @@ function effectiveWeight(p: PalletSummary): string | null {
 
 // ─── Pallet Card ─────────────────────────────────────────────────────────────
 
-function PalletCard({ pallet, sessionId, overriddenSkus, isAdmin, caseAmountMap, onRefetch }: { pallet: PalletSummary; sessionId: number; overriddenSkus: Set<string>; isAdmin?: boolean; caseAmountMap?: Record<string, number>; onRefetch?: () => void }) {
+function PalletCard({ pallet, sessionId, overriddenSkus }: { pallet: PalletSummary; sessionId: number; overriddenSkus: Set<string> }) {
   const [open, setOpen] = useState(false);
-  const [editingSkuCases, setEditingSkuCases] = useState<string | null>(null);
-  const [editCaseValue, setEditCaseValue] = useState("");
   const items = (pallet.items as Array<{ sku: string; qty: number }> | null) ?? [];
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
   const weight = effectiveWeight(pallet);
   const isOverride = pallet.weightOverrideLb != null;
-
-  const adjustPalletItemQty = trpc.qcScanner.adjustPalletItemQty.useMutation({
-    onSuccess: (data) => {
-      setEditingSkuCases(null);
-      toast.success(`Updated ${data.oldQty} → ${data.newQty} units`);
-      onRefetch?.();
-    },
-    onError: (e) => toast.error(`Failed to update: ${e.message}`),
-  });
 
   const openGdLabel = () => {
     window.open(`/api/pdf/qc-gd-labels/${sessionId}?type=gd`, "_blank");
@@ -239,71 +227,25 @@ function PalletCard({ pallet, sessionId, overriddenSkus, isAdmin, caseAmountMap,
                   <thead>
                     <tr className="bg-muted/50">
                       <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">SKU</th>
-                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Cases</th>
-                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Units</th>
+                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item, idx) => {
-                      const ca = caseAmountMap?.[item.sku] ?? 1;
-                      const cases = ca > 1 ? Math.floor(item.qty / ca) : item.qty;
-                      const isEditingThis = isAdmin && editingSkuCases === item.sku;
-                      return (
-                        <tr key={idx} className="border-t border-border">
-                          <td className="px-3 py-1.5 font-mono">
-                            <span className="flex items-center gap-1.5 flex-wrap">
-                              {item.sku}
-                              {overriddenSkus.has(item.sku) && (
-                                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-400 text-orange-500 font-normal leading-none shrink-0">
-                                  wt override
-                                </Badge>
-                              )}
-                            </span>
-                          </td>
-                          <td className="px-3 py-1.5 text-right font-semibold">
-                            {isEditingThis ? (
-                              <div className="flex items-center justify-end gap-1">
-                                <Input
-                                  type="number"
-                                  className="h-6 w-16 text-xs text-right"
-                                  value={editCaseValue}
-                                  onChange={(e) => setEditCaseValue(e.target.value)}
-                                  autoFocus
-                                  min="0"
-                                />
-                                <button
-                                  className="text-xs text-green-600 font-bold px-1 hover:text-green-800"
-                                  onClick={() => {
-                                    const newCases = parseInt(editCaseValue, 10);
-                                    if (!isNaN(newCases) && newCases >= 0) {
-                                      adjustPalletItemQty.mutate({
-                                        sessionId,
-                                        palletId: pallet.id,
-                                        sku: item.sku,
-                                        newQty: newCases * ca,
-                                      });
-                                    }
-                                  }}
-                                >✓</button>
-                                <button
-                                  className="text-xs text-muted-foreground px-1 hover:text-foreground"
-                                  onClick={() => setEditingSkuCases(null)}
-                                >×</button>
-                              </div>
-                            ) : (
-                              <span
-                                className={isAdmin ? "cursor-pointer hover:underline" : ""}
-                                title={isAdmin ? "Click to edit case count" : undefined}
-                                onClick={isAdmin ? () => { setEditingSkuCases(item.sku); setEditCaseValue(String(cases)); } : undefined}
-                              >
-                                {cases}
-                              </span>
+                    {items.map((item, idx) => (
+                      <tr key={idx} className="border-t border-border">
+                        <td className="px-3 py-1.5 font-mono">
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            {item.sku}
+                            {overriddenSkus.has(item.sku) && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-400 text-orange-500 font-normal leading-none shrink-0">
+                                wt override
+                              </Badge>
                             )}
-                          </td>
-                          <td className="px-3 py-1.5 text-right text-muted-foreground">{item.qty}</td>
-                        </tr>
-                      );
-                    })}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-semibold">{item.qty}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -335,26 +277,8 @@ function PalletCard({ pallet, sessionId, overriddenSkus, isAdmin, caseAmountMap,
 
 // ─── Session Row ──────────────────────────────────────────────────────────────
 
-function SessionCard({ session, overriddenSkus, isAdmin }: { session: SessionRow; overriddenSkus: Set<string>; isAdmin?: boolean }) {
+function SessionCard({ session, overriddenSkus }: { session: SessionRow; overriddenSkus: Set<string> }) {
   const [open, setOpen] = useState(false);
-  const [editingPallet, setEditingPallet] = useState<number | null>(null);
-  const [editWeight, setEditWeight] = useState("");
-  const [editHeight, setEditHeight] = useState("");
-
-  const updatePalletWeightOverride = trpc.qcScanner.updatePalletWeightOverride.useMutation({
-    onSuccess: (_, vars) => {
-      toast.success(`Weight updated to ${vars.weightLb} lbs`);
-      setEditingPallet(null);
-    },
-    onError: (e) => toast.error(`Failed to update weight: ${e.message}`),
-  });
-  const updatePalletHeight = trpc.qcScanner.updatePalletHeight.useMutation({
-    onSuccess: () => {
-      toast.success("Height updated");
-      setEditingPallet(null);
-    },
-    onError: (e) => toast.error(`Failed to update height: ${e.message}`),
-  });
   const accuracy =
     session.totalExpected > 0
       ? Math.round((session.totalScanned / session.totalExpected) * 100)
@@ -591,71 +515,12 @@ function SessionCard({ session, overriddenSkus, isAdmin }: { session: SessionRow
                               })()}
                             </td>
                             <td className={`px-3 py-2 text-right font-medium ${isOverride ? "text-orange-600" : ""}`}>
-                              {isAdmin && editingPallet === p.id ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <Input
-                                    type="number"
-                                    className="h-6 w-20 text-xs text-right"
-                                    value={editWeight}
-                                    onChange={(e) => setEditWeight(e.target.value)}
-                                    placeholder="lbs"
-                                    autoFocus
-                                  />
-                                  <button
-                                    className="text-xs text-green-600 font-bold px-1 hover:text-green-800"
-                                    onClick={() => {
-                                      const lb = parseFloat(editWeight);
-                                      if (!isNaN(lb) && lb > 0) {
-                                        updatePalletWeightOverride.mutate({ palletId: p.id, weightLb: lb });
-                                      }
-                                    }}
-                                  >✓</button>
-                                </div>
-                              ) : (
-                                <span
-                                  className={isAdmin ? "cursor-pointer hover:underline" : ""}
-                                  title={isAdmin ? "Click to edit weight" : undefined}
-                                  onClick={isAdmin ? () => { setEditingPallet(p.id); setEditWeight(String(p.weightOverrideLb ?? p.calculatedWeightLb ?? "")); setEditHeight(p.palletHeightIn ?? ""); } : undefined}
-                                >
-                                  {w ?? <span className="text-muted-foreground/60">—</span>}
-                                </span>
-                              )}
+                              {w ?? <span className="text-muted-foreground/60">—</span>}
                             </td>
                             <td className="px-3 py-2 text-right">
-                              {isAdmin && editingPallet === p.id ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <Input
-                                    type="number"
-                                    className="h-6 w-16 text-xs text-right"
-                                    value={editHeight}
-                                    onChange={(e) => setEditHeight(e.target.value)}
-                                    placeholder="in"
-                                  />
-                                  <button
-                                    className="text-xs text-green-600 font-bold px-1 hover:text-green-800"
-                                    onClick={() => {
-                                      const h = parseFloat(editHeight);
-                                      if (!isNaN(h) && h > 0) {
-                                        updatePalletHeight.mutate({ palletId: p.id, heightIn: h });
-                                      }
-                                    }}
-                                  >✓</button>
-                                  <button
-                                    className="text-xs text-muted-foreground px-1 hover:text-foreground"
-                                    onClick={() => setEditingPallet(null)}
-                                  >×</button>
-                                </div>
-                              ) : (
-                                <span
-                                  className={isAdmin ? "cursor-pointer hover:underline" : ""}
-                                  title={isAdmin ? "Click to edit height" : undefined}
-                                  onClick={isAdmin ? () => { setEditingPallet(p.id); setEditWeight(String(p.weightOverrideLb ?? p.calculatedWeightLb ?? "")); setEditHeight(p.palletHeightIn ?? ""); } : undefined}
-                                >
-                                  {p.palletHeightIn
-                                    ? <span>48 × 40 × {p.palletHeightIn}&quot;</span>
-                                    : <span className="text-muted-foreground/60">—</span>}
-                                </span>
-                              )}
+                              {p.palletHeightIn
+                                ? <span>48 × 40 × {p.palletHeightIn}&quot;</span>
+                                : <span className="text-muted-foreground/60">—</span>}
                             </td>
                           </tr>
                         );
@@ -696,7 +561,7 @@ function SessionCard({ session, overriddenSkus, isAdmin }: { session: SessionRow
                   Pallets ({session.pallets.length})
                 </p>
                 {session.pallets.map((p) => (
-                  <PalletCard key={p.id} pallet={p} sessionId={session.id} overriddenSkus={overriddenSkus} isAdmin={isAdmin} caseAmountMap={session.caseAmountMap} />
+                  <PalletCard key={p.id} pallet={p} sessionId={session.id} overriddenSkus={overriddenSkus} />
                 ))}
               </div>
             ) : (
@@ -712,9 +577,6 @@ function SessionCard({ session, overriddenSkus, isAdmin }: { session: SessionRow
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function QcHistory() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -840,7 +702,7 @@ export default function QcHistory() {
       ) : (
         <div className="space-y-3">
           {sessions.map((s) => (
-            <SessionCard key={s.id} session={s} overriddenSkus={overriddenSkus} isAdmin={isAdmin} />
+            <SessionCard key={s.id} session={s} overriddenSkus={overriddenSkus} />
           ))}
         </div>
       )}

@@ -102,6 +102,7 @@ const ltlItems = [
   { href: "/qc/scanner",          label: "QC Scanner",              icon: ScanBarcode },
   { href: "/qc/history",           label: "QC Session History",      icon: History },
   { href: "/weight-approval",       label: "Weight Approval",          icon: Scale },
+  { href: "/shipping/clerk",         label: "Shipping Clerk",           icon: Truck },
   { href: "/qc/production-line",  label: "Production Line Scans",   icon: Activity },
   { href: "/qc/scan-label",       label: "QC Scan & Label",         icon: Tag },
   { href: "/qc/qr-scan-history",  label: "K18QR Scanning",          icon: QrCode },

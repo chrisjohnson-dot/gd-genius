@@ -351,11 +351,12 @@ const _appRouter = router({
         }
         // Use a stable openId derived from the team account id
         const openId = `team-account-${account.id}`;
+        // Store role as 'team:roleName' in loginMethod so the frontend can read it
         await upsertUser({
           openId,
           name: account.name,
           email: null,
-          loginMethod: "team",
+          loginMethod: `team:${account.role}`,
           role: "user",
           lastSignedIn: new Date(),
         });

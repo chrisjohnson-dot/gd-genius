@@ -89,19 +89,33 @@ import LivePullBoard from "@/pages/ltl/LivePullBoard";
 import EdiMonitor from "@/pages/EdiMonitor";
 import OrderDropCadence from "@/pages/OrderDropCadence";
 import WeightApproval from "@/pages/WeightApproval";
+import ShippingClerkDashboard from "@/pages/ShippingClerkDashboard";
 // ─── QC Operator Route Guard ─────────────────────────────────────────────────
-// Redirects non-QC pages to /qc/scanner for users with loginMethod="team"
+// Redirects team accounts to their allowed pages based on role
 function QcOperatorGuard({ children }: { children: React.ReactNode }) {
   const meQuery = trpc.auth.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: false });
   const [location, navigate] = useLocation();
   const user = meQuery.data;
-  const isQcOperator = user?.loginMethod === "team";
-  const allowedPaths = ["/qc/scanner", "/qc/history"];
+  // loginMethod is stored as "team:roleName" (e.g. "team:qc_operator", "team:shipping_clerk")
+  const loginMethod = user?.loginMethod ?? "";
+  const isTeamAccount = loginMethod.startsWith("team");
+  const teamRole = loginMethod.startsWith("team:") ? loginMethod.split(":")[1] : (isTeamAccount ? "qc_operator" : null);
+
+  // QC operators: only /qc/scanner and /qc/history
+  const isQcOperator = isTeamAccount && teamRole === "qc_operator";
+  const qcAllowed = ["/qc/scanner", "/qc/history"];
+
+  // Shipping clerks: only /shipping/clerk
+  const isShippingClerk = isTeamAccount && teamRole === "shipping_clerk";
+  const shippingAllowed = ["/shipping/clerk"];
+
   useEffect(() => {
-    if (isQcOperator && !allowedPaths.some(p => location.startsWith(p))) {
+    if (isQcOperator && !qcAllowed.some(p => location.startsWith(p))) {
       navigate("/qc/scanner");
+    } else if (isShippingClerk && !shippingAllowed.some(p => location.startsWith(p))) {
+      navigate("/shipping/clerk");
     }
-  }, [isQcOperator, location]);
+  }, [isQcOperator, isShippingClerk, location]);
   return <>{children}</>;
 }
 
@@ -201,6 +215,7 @@ function AppRoutes() {
         <Route path="/edi-monitor" component={EdiMonitor} />
         <Route path="/order-drop-cadence" component={OrderDropCadence} />
         <Route path="/weight-approval" component={WeightApproval} />
+        <Route path="/shipping/clerk" component={ShippingClerkDashboard} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

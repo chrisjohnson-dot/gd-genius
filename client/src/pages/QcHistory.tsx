@@ -589,6 +589,9 @@ export default function QcHistory() {
   };
 
   const { data: weightOverridesData } = trpc.skuWeight.listAll.useQuery(undefined, { refetchOnWindowFocus: false });
+
+  // Clear the server-side weight cache when Refresh is clicked so newly approved weights show immediately
+  const clearWeightCache = trpc.skuWeight.clearWeightCache.useMutation();
   const overriddenSkus = useMemo(
     () => new Set((weightOverridesData ?? []).map((r) => r.sku)),
     [weightOverridesData]
@@ -634,10 +637,14 @@ export default function QcHistory() {
           variant="outline"
           size="sm"
           className="gap-1.5"
-          onClick={() => refetch()}
-          disabled={isFetching}
+          onClick={async () => {
+            // Clear the server-side weight cache so newly approved weights take effect immediately
+            await clearWeightCache.mutateAsync({});
+            refetch();
+          }}
+          disabled={isFetching || clearWeightCache.isPending}
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${(isFetching || clearWeightCache.isPending) ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>

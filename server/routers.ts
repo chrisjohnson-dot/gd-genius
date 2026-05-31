@@ -6740,6 +6740,24 @@ const skuWeightRouter = router({
         .limit(200);
     }),
 
+  /** Clear the server-side pallet weight cache for a customer so new weights take effect immediately */
+  clearWeightCache: protectedProcedure
+    .input(z.object({
+      configId: z.number().optional(),
+      customerId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      if (input.configId !== undefined && input.customerId !== undefined) {
+        // Clear specific customer cache
+        const key = `dims:${input.configId}:${input.customerId}`;
+        _palletWeightCache.delete(key);
+      } else {
+        // Clear all weight caches
+        _palletWeightCache.clear();
+      }
+      return { success: true, cleared: true };
+    }),
+
   /** Approve or reject a pending weight request */
   reviewWeightRequest: protectedProcedure
     .input(z.object({
@@ -6762,7 +6780,7 @@ const skuWeightRouter = router({
         reviewedAt: new Date(),
         note: input.note ?? null,
       }).where(eqOp(pwr.id, input.id));
-      // If approved, write to sku_weight_overrides
+      // If approved, write to sku_weight_overrides and clear the weight cache
       if (input.action === 'approve') {
         await upsertSkuWeightOverride(
           request.configId,
@@ -6772,8 +6790,12 @@ const skuWeightRouter = router({
           request.unitsPerCarton,
           `Approved by ${ctx.user.name ?? ctx.user.openId}`,
         );
+        // Immediately clear the in-memory weight cache for this customer
+        // so the next Calculate Weight call picks up the new value without waiting 10 minutes
+        const cacheKey = `dims:${request.configId}:${request.customerId}`;
+        _palletWeightCache.delete(cacheKey);
       }
-      return { success: true, status: newStatus };
+      return { success: true, status: newStatus, configId: request.configId, customerId: request.customerId };
     }),
 });
 // ─── Receiving Router ────────────────────────────────────────────────────────

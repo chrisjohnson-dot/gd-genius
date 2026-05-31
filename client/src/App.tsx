@@ -88,6 +88,7 @@ import Associates from "@/pages/ltl/Associates";
 import LivePullBoard from "@/pages/ltl/LivePullBoard";
 import EdiMonitor from "@/pages/EdiMonitor";
 import OrderDropCadence from "@/pages/OrderDropCadence";
+import WeightApproval from "@/pages/WeightApproval";
 // ─── QC Operator Route Guard ─────────────────────────────────────────────────
 // Redirects non-QC pages to /qc/scanner for users with loginMethod="team"
 function QcOperatorGuard({ children }: { children: React.ReactNode }) {
@@ -199,6 +200,7 @@ function AppRoutes() {
         <Route path="/ltl/live-board" component={LivePullBoard} />
         <Route path="/edi-monitor" component={EdiMonitor} />
         <Route path="/order-drop-cadence" component={OrderDropCadence} />
+        <Route path="/weight-approval" component={WeightApproval} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

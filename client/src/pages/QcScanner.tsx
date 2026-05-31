@@ -379,6 +379,7 @@ export default function QcScanner() {
   const [palletWeightBreakdown, setPalletWeightBreakdown] = useState<Record<number, SkuBreakdownEntry[]>>({});
   const [zeroWeightAlert, setZeroWeightAlert] = useState<{ palletId: number; skus: string[] } | null>(null);
   const [skuWeightInputs, setSkuWeightInputs] = useState<Record<string, string>>({});
+  const [skuUnitsInputs, setSkuUnitsInputs] = useState<Record<string, string>>({});
   // Dock location recommendation shown after session completes
   const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
   const [missingShipToWarning, setMissingShipToWarning] = useState<{ pendingUrl: string } | null>(null);
@@ -1197,6 +1198,21 @@ export default function QcScanner() {
       }
     },
     onError: (e) => toast.error(`Failed to save weight override: ${e.message}`),
+  });
+
+  // Submit a weight request for manager approval
+  const submitWeightRequest = trpc.skuWeight.submitWeightRequest.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(`Weight request submitted for ${vars.sku} — awaiting manager approval`, { duration: 6000 });
+      setSkuWeightInputs((prev) => { const n = { ...prev }; delete n[vars.sku]; return n; });
+      setSkuUnitsInputs((prev) => { const n = { ...prev }; delete n[vars.sku]; return n; });
+      if (zeroWeightAlert) {
+        handleWeightSavedForSku(vars.sku, zeroWeightAlert.palletId, zeroWeightAlert.skus);
+      } else {
+        setZeroWeightAlert(null);
+      }
+    },
+    onError: (e) => toast.error(`Failed to submit weight request: ${e.message}`),
   });
 
   // Track per-SKU push-to-Extensiv loading state
@@ -3425,63 +3441,67 @@ export default function QcScanner() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              The following SKUs had no weight data in Extensiv. Enter carton weights below.
-              <span className="text-blue-600 font-medium"> "Save to Extensiv" writes the weight directly to the item catalog</span> so it won't be missing next time.
+              The following SKUs have no weight on file. Enter the carton weight and number of inner items, then submit for manager approval.
             </p>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {zeroWeightAlert?.skus.map((sku) => (
-                <div key={sku} className="rounded-md bg-amber-50 border border-amber-200 p-2 space-y-1.5">
+                <div key={sku} className="rounded-md bg-amber-50 border border-amber-200 p-3 space-y-2">
                   <span className="font-mono text-xs text-amber-800 font-semibold">{sku}</span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      placeholder="lbs/carton"
-                      className="w-24 text-xs border border-amber-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
-                      value={skuWeightInputs[sku] ?? ""}
-                      onChange={(e) => setSkuWeightInputs((prev) => ({ ...prev, [sku]: e.target.value }))}
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs h-7 px-2 border-amber-400 text-amber-700 hover:bg-amber-100"
-                      disabled={!skuWeightInputs[sku] || isNaN(parseFloat(skuWeightInputs[sku])) || upsertWeightOverride.isPending || pushingSkus.has(sku)}
-                      onClick={() => {
-                        const lb = parseFloat(skuWeightInputs[sku]);
-                        if (!lb || lb <= 0 || !session) return;
-                        upsertWeightOverride.mutate({
-                          configId: session.warehouseId ?? 0,
-                          customerId: session.customerId ?? 0,
-                          sku,
-                          cartonWeightLb: lb,
-                          sessionId: session.id,
-                        });
-                      }}
-                    >
-                      Save locally
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="text-xs h-7 px-2 bg-blue-600 hover:bg-blue-700 text-white"
-                      disabled={!skuWeightInputs[sku] || isNaN(parseFloat(skuWeightInputs[sku])) || pushingSkus.has(sku) || upsertWeightOverride.isPending}
-                      onClick={() => {
-                        const lb = parseFloat(skuWeightInputs[sku]);
-                        if (!lb || lb <= 0 || !session) return;
-                        const configId = session.warehouseId ?? 0;
-                        const customerId = session.customerId ?? 0;
-                        setPushingSkus((prev) => new Set(prev).add(sku));
-                        pushWeightToExtensiv.mutate({ configId, customerId, sku, cartonWeightLb: lb });
-                      }}
-                    >
-                      {pushingSkus.has(sku) ? 'Saving…' : 'Save to Extensiv'}
-                    </Button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Carton weight (lbs)</label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="e.g. 9.18"
+                        className="w-full text-xs border border-amber-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        value={skuWeightInputs[sku] ?? ""}
+                        onChange={(e) => setSkuWeightInputs((prev) => ({ ...prev, [sku]: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Inner items per carton</label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        placeholder="e.g. 12"
+                        className="w-full text-xs border border-amber-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        value={skuUnitsInputs[sku] ?? ""}
+                        onChange={(e) => setSkuUnitsInputs((prev) => ({ ...prev, [sku]: e.target.value }))}
+                      />
+                    </div>
                   </div>
+                  <Button
+                    size="sm"
+                    className="w-full text-xs h-8 bg-amber-600 hover:bg-amber-700 text-white"
+                    disabled={
+                      !skuWeightInputs[sku] || isNaN(parseFloat(skuWeightInputs[sku])) ||
+                      !skuUnitsInputs[sku] || isNaN(parseInt(skuUnitsInputs[sku], 10)) ||
+                      submitWeightRequest.isPending
+                    }
+                    onClick={() => {
+                      const lb = parseFloat(skuWeightInputs[sku]);
+                      const units = parseInt(skuUnitsInputs[sku], 10);
+                      if (!lb || lb <= 0 || !units || units < 1 || !session) return;
+                      submitWeightRequest.mutate({
+                        configId: session.warehouseId ?? 0,
+                        customerId: session.customerId ?? 0,
+                        sku,
+                        cartonWeightLb: lb,
+                        unitsPerCarton: units,
+                        sessionId: session.id,
+                      });
+                    }}
+                  >
+                    {submitWeightRequest.isPending ? 'Submitting…' : 'Submit for Manager Approval'}
+                  </Button>
                 </div>
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              After saving, click <strong>Calculate</strong> again to apply the new weights.
+              A manager must approve the weight before it takes effect in calculations.
             </p>
           </div>
           <DialogFooter>

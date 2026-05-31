@@ -2452,6 +2452,30 @@ export const skuWeightOverrides = mysqlTable("sku_weight_overrides", {
 export type SkuWeightOverride = typeof skuWeightOverrides.$inferSelect;
 export type InsertSkuWeightOverride = typeof skuWeightOverrides.$inferInsert;
 
+// ─── Pending Weight Requests ────────────────────────────────────────────────────────────────────────────────────────
+// Operator-submitted weight requests awaiting manager approval.
+// On approval the weight is written to sku_weight_overrides and becomes active.
+export const pendingWeightRequests = mysqlTable("pending_weight_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  configId: int("config_id").notNull(),
+  customerId: int("customer_id").notNull(),
+  customerName: varchar("customer_name", { length: 256 }),
+  sku: varchar("sku", { length: 100 }).notNull(),
+  cartonWeightLb: decimal("carton_weight_lb", { precision: 10, scale: 4 }).notNull(),
+  unitsPerCarton: int("units_per_carton").notNull().default(1),
+  /** Who submitted the request */
+  submittedBy: varchar("submitted_by", { length: 256 }).notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  /** Status: pending | approved | rejected */
+  status: varchar("status", { length: 32 }).notNull().default("pending"),
+  /** Who approved or rejected */
+  reviewedBy: varchar("reviewed_by", { length: 256 }),
+  reviewedAt: timestamp("reviewed_at"),
+  note: varchar("note", { length: 256 }),
+});
+export type PendingWeightRequest = typeof pendingWeightRequests.$inferSelect;
+export type InsertPendingWeightRequest = typeof pendingWeightRequests.$inferInsert;
+
 // ─── Shipping Documents ───────────────────────────────────────────────────────
 // Tracks BOL, customs documents, and pallet labels attached to outbound orders.
 // orderTrackingId references orderTracking.id.

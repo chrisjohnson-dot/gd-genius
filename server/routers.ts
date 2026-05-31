@@ -6666,6 +6666,114 @@ const skuWeightRouter = router({
         error: result.error ?? null,
       };
     }),
+
+  /** Submit a pending weight request for manager approval */
+  submitWeightRequest: protectedProcedure
+    .input(z.object({
+      configId: z.number(),
+      customerId: z.number(),
+      sku: z.string().min(1),
+      cartonWeightLb: z.number().positive(),
+      unitsPerCarton: z.number().int().positive().default(1),
+      sessionId: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      let configId = input.configId;
+      let customerId = input.customerId;
+      // Resolve from session if 0
+      if ((configId === 0 || customerId === 0) && input.sessionId) {
+        const session = await getQcSessionById(input.sessionId);
+        if (session?.warehouseId && configId === 0) configId = session.warehouseId;
+        if (session?.customerId && customerId === 0) customerId = session.customerId;
+      }
+      if (configId === 0) {
+        const configs = await getExtensivConfigs();
+        const active = configs.find((c) => c.isActive) ?? configs[0];
+        if (active) configId = active.id;
+      }
+      // Get customer name from order_tracking for display
+      let customerName: string | null = null;
+      try {
+        const db = await getDb();
+        if (db) {
+          const { eq: eqCn } = await import('drizzle-orm');
+          const { orderTracking: otCn } = await import('../drizzle/schema.js');
+          const [row] = await db.select({ clientName: otCn.clientName })
+            .from(otCn)
+            .where(eqCn(otCn.clientId, customerId))
+            .limit(1);
+          customerName = row?.clientName ?? null;
+        }
+      } catch { /* ignore */ }
+      // Insert pending request
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { pendingWeightRequests: pwr } = await import('../drizzle/schema.js');
+      await db.insert(pwr).values({
+        configId,
+        customerId,
+        customerName,
+        sku: input.sku,
+        cartonWeightLb: String(input.cartonWeightLb),
+        unitsPerCarton: input.unitsPerCarton,
+        submittedBy: ctx.user.name ?? ctx.user.openId,
+        status: 'pending',
+      });
+      return { success: true, message: 'Weight request submitted for manager approval.' };
+    }),
+
+  /** List all pending weight requests (manager view) */
+  listWeightRequests: protectedProcedure
+    .input(z.object({ status: z.enum(['pending', 'approved', 'rejected', 'all']).default('pending') }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const { pendingWeightRequests: pwr } = await import('../drizzle/schema.js');
+      const { desc: descOp, eq: eqOp } = await import('drizzle-orm');
+      if (input.status === 'all') {
+        return db.select().from(pwr).orderBy(descOp(pwr.submittedAt)).limit(200);
+      }
+      return db.select().from(pwr)
+        .where(eqOp(pwr.status, input.status))
+        .orderBy(descOp(pwr.submittedAt))
+        .limit(200);
+    }),
+
+  /** Approve or reject a pending weight request */
+  reviewWeightRequest: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      action: z.enum(['approve', 'reject']),
+      note: z.string().max(256).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { pendingWeightRequests: pwr } = await import('../drizzle/schema.js');
+      const { eq: eqOp } = await import('drizzle-orm');
+      const [request] = await db.select().from(pwr).where(eqOp(pwr.id, input.id)).limit(1);
+      if (!request) throw new TRPCError({ code: 'NOT_FOUND', message: 'Weight request not found' });
+      if (request.status !== 'pending') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Request is no longer pending' });
+      const newStatus = input.action === 'approve' ? 'approved' : 'rejected';
+      await db.update(pwr).set({
+        status: newStatus,
+        reviewedBy: ctx.user.name ?? ctx.user.openId,
+        reviewedAt: new Date(),
+        note: input.note ?? null,
+      }).where(eqOp(pwr.id, input.id));
+      // If approved, write to sku_weight_overrides
+      if (input.action === 'approve') {
+        await upsertSkuWeightOverride(
+          request.configId,
+          request.customerId,
+          request.sku,
+          parseFloat(String(request.cartonWeightLb)),
+          request.unitsPerCarton,
+          `Approved by ${ctx.user.name ?? ctx.user.openId}`,
+        );
+      }
+      return { success: true, status: newStatus };
+    }),
 });
 // ─── Receiving Router ────────────────────────────────────────────────────────
 const receivingRouter = router({

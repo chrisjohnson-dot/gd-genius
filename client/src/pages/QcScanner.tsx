@@ -375,6 +375,9 @@ export default function QcScanner() {
   const [moveCreateNew, setMoveCreateNew] = useState(false);
   const [completeDialog, setCompleteDialog] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  // Pre-completion pallet review dialog — shown after last scan, before order locks
+  const [palletReviewDialog, setPalletReviewDialog] = useState(false);
+  const [palletHeightInputs, setPalletHeightInputs] = useState<Record<number, string>>({});
   // Per-pallet weight breakdown (palletId → skuBreakdown) stored after Calculate
   type SkuBreakdownEntry = { sku: string; qty: number; perUnitWeightLb: number | null; totalWeightLb: number | null; source: 'carton' | 'imperial' | 'none' };
   const [palletWeightBreakdown, setPalletWeightBreakdown] = useState<Record<number, SkuBreakdownEntry[]>>({});
@@ -708,14 +711,21 @@ export default function QcScanner() {
           prev.map((i) => (i.sku === data.item?.sku ? { ...i, scannedQty: data.item!.scannedQty } : i))
         );
         if (data.sessionComplete) {
-          setPhase("complete");
           // Auto-calculate weight for all pallets when the last item is scanned
           if (session) {
-            // Recalculate weight for every pallet so labels are accurate
             palletsRef.current.forEach((p) => {
               calculatePalletWeight.mutate({ sessionId: session.id, palletId: p.id });
             });
           }
+          // Show pallet review dialog before locking the order
+          // Pre-populate height inputs with any existing values
+          const heightInit: Record<number, string> = {};
+          palletsRef.current.forEach((p) => {
+            if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn;
+          });
+          setPalletHeightInputs(heightInit);
+          setPalletReviewDialog(true);
+          // Phase stays as 'scanning' until the review is confirmed
         }
         // Auto-assign scanned item to the selected pallet (or last pallet if none selected)
         const targetId = activeScanPalletIdRef.current;
@@ -3200,6 +3210,87 @@ export default function QcScanner() {
               className="bg-amber-500 hover:bg-amber-600 text-white"
             >
               <Flag className="w-4 h-4 mr-1" /> Flag Scan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pallet Review Dialog — shown after last scan, before order locks */}
+      <Dialog open={palletReviewDialog} onOpenChange={() => {/* prevent outside click close */}}>
+        <DialogContent className="max-w-lg flex flex-col" style={{ maxHeight: '90vh' }}>
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-amber-500" /> Review Pallets Before Completing
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 space-y-3 py-2 pr-1">
+            <p className="text-sm text-muted-foreground">
+              All items have been scanned. Please verify the weight and height for each pallet before completing the order.
+            </p>
+            {pallets.map((p) => {
+              const hasWeight = !!(p.calculatedWeightLb || p.weightOverrideLb);
+              const effectiveW = p.weightOverrideLb ?? p.calculatedWeightLb;
+              return (
+                <div key={p.id} className={`rounded-lg border p-3 space-y-2 ${hasWeight ? 'border-green-300 bg-green-50 dark:bg-green-900/10' : 'border-amber-300 bg-amber-50 dark:bg-amber-900/10'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Pallet {p.palletNumber}</span>
+                    {hasWeight
+                      ? <span className="text-xs text-green-700 font-medium">✓ {Math.ceil(parseFloat(String(effectiveW)))} lbs</span>
+                      : <span className="text-xs text-amber-700 font-medium">⚠ No weight</span>}
+                  </div>
+                  {!hasWeight && session && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs w-full border-amber-400 text-amber-700 hover:bg-amber-100"
+                      disabled={calculatePalletWeight.isPending}
+                      onClick={() => calculatePalletWeight.mutate({ sessionId: session.id, palletId: p.id })}
+                    >
+                      {calculatePalletWeight.isPending ? 'Calculating…' : 'Calculate Weight'}
+                    </Button>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-muted-foreground w-24 shrink-0">Height (in):</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      placeholder="e.g. 46"
+                      className="flex-1 text-xs border border-input rounded px-2 py-1 bg-background"
+                      value={palletHeightInputs[p.id] ?? p.palletHeightIn ?? ''}
+                      onChange={(e) => setPalletHeightInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                      onBlur={(e) => {
+                        const h = parseFloat(e.target.value);
+                        if (!isNaN(h) && h > 0 && session) {
+                          updatePalletHeight.mutate({ palletId: p.id, heightIn: h });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter className="shrink-0 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Allow going back to scanning — reset to scanning phase
+                setPalletReviewDialog(false);
+              }}
+            >Back to Scanning</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              disabled={pallets.some((p) => !(p.calculatedWeightLb || p.weightOverrideLb))}
+              onClick={() => {
+                setPalletReviewDialog(false);
+                setPhase('complete');
+              }}
+            >
+              {pallets.some((p) => !(p.calculatedWeightLb || p.weightOverrideLb))
+                ? `⚠ ${pallets.filter((p) => !(p.calculatedWeightLb || p.weightOverrideLb)).length} pallet(s) missing weight`
+                : 'Confirm & Complete Order'
+              }
             </Button>
           </DialogFooter>
         </DialogContent>

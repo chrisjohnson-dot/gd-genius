@@ -5424,13 +5424,13 @@ const qcScannerRouter = router({
         resolvedToPalletId = input.toPalletId;
       }
       if (resolvedToPalletId === input.fromPalletId) throw new TRPCError({ code: "BAD_REQUEST", message: "Source and destination pallets must be different" });
-      // Load both pallets
-      const [fromPallets, toPallets] = await Promise.all([
-        getQcPallets(input.fromPalletId),
-        getQcPallets(resolvedToPalletId),
-      ]);
-      const fromPallet = fromPallets[0] ?? null;
-      const toPallet = toPallets[0] ?? null;
+      // Load both pallets directly by their own ID
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq: eqPallet } = await import("drizzle-orm");
+      const { qcPallets: qcPalletsTable } = await import("../drizzle/schema.js");
+      const [fromPallet] = await db.select().from(qcPalletsTable).where(eqPallet(qcPalletsTable.id, input.fromPalletId));
+      const [toPallet] = await db.select().from(qcPalletsTable).where(eqPallet(qcPalletsTable.id, resolvedToPalletId));
       if (!fromPallet) throw new TRPCError({ code: "NOT_FOUND", message: "Source pallet not found" });
       if (!toPallet) throw new TRPCError({ code: "NOT_FOUND", message: "Destination pallet not found" });
       // Validate source has the SKU with enough qty

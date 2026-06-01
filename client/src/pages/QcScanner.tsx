@@ -370,7 +370,8 @@ export default function QcScanner() {
   const [moveFromPalletNumber, setMoveFromPalletNumber] = useState<number>(1);
   const [moveMaxQty, setMoveMaxQty] = useState(0);
   const [moveToPalletId, setMoveToPalletId] = useState<number | null>(null);
-  const [moveQty, setMoveQty] = useState(1);
+  const [moveQty, setMoveQty] = useState(1); // in CASES
+  const [moveCaseAmount, setMoveCaseAmount] = useState(1); // units per case for the moving SKU
   const [moveCreateNew, setMoveCreateNew] = useState(false);
   const [completeDialog, setCompleteDialog] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -2668,11 +2669,15 @@ export default function QcScanner() {
                                           toast.error("Need at least 2 pallets to move items");
                                           return;
                                         }
+                                        const skuItem = items.find((i) => i.sku === item.sku);
+                                        const ca = skuItem?.caseAmount && skuItem.caseAmount > 1 ? skuItem.caseAmount : 1;
+                                        const maxCases = ca > 1 ? Math.floor(item.qty / ca) : item.qty;
                                         setMoveSku(item.sku);
                                         setMoveFromPalletId(pallet.id);
                                         setMoveFromPalletNumber(pallet.palletNumber);
-                                        setMoveMaxQty(item.qty);
-                                        setMoveQty(item.qty);
+                                        setMoveMaxQty(maxCases);
+                                        setMoveQty(maxCases);
+                                        setMoveCaseAmount(ca);
                                         const otherPallet = pallets.find((p) => p.id !== pallet.id);
                                         setMoveToPalletId(otherPallet?.id ?? null);
                                         setMoveCreateNew(false);
@@ -3094,7 +3099,9 @@ export default function QcScanner() {
               )}
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Quantity to Move</label>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                Cases to Move {moveCaseAmount > 1 && <span className="text-muted-foreground font-normal normal-case">(1 case = {moveCaseAmount} units)</span>}
+              </label>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -3120,6 +3127,9 @@ export default function QcScanner() {
                   onClick={() => setMoveQty(moveMaxQty)}
                 >All ({moveMaxQty})</button>
               </div>
+              {moveCaseAmount > 1 && (
+                <p className="text-xs text-muted-foreground mt-1">{moveQty} case{moveQty !== 1 ? 's' : ''} = {moveQty * moveCaseAmount} units</p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -3128,12 +3138,14 @@ export default function QcScanner() {
               disabled={(!moveToPalletId && !moveCreateNew) || !session || movePalletItem.isPending}
               onClick={() => {
                 if (!session || !moveFromPalletId) return;
+                // Convert cases back to units before submitting
+                const unitsToMove = moveQty * moveCaseAmount;
                 if (moveCreateNew) {
                   movePalletItem.mutate({
                     sessionId: session.id,
                     fromPalletId: moveFromPalletId,
                     sku: moveSku,
-                    qty: moveQty,
+                    qty: unitsToMove,
                     createNewPallet: true,
                   });
                 } else {
@@ -3143,7 +3155,7 @@ export default function QcScanner() {
                     fromPalletId: moveFromPalletId,
                     toPalletId: moveToPalletId,
                     sku: moveSku,
-                    qty: moveQty,
+                    qty: unitsToMove,
                   });
                 }
               }}

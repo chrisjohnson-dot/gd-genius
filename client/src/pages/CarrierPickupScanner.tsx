@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ type Phase = "lookup" | "arrival" | "quickstart" | "scanning" | "complete";
 interface ScannedPallet {
   labelValue: string;
   scannedAt: Date;
+  photoDataUrl?: string | null;
 }
 
 interface SelectedOrder {
@@ -73,6 +75,19 @@ function playCompleteBeep() {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function CarrierPickupScanner() {
+  const { user } = useAuth();
+  const loginMethod = user?.loginMethod ?? "";
+  const isAdmin = loginMethod.startsWith("team:") ? loginMethod.split(":")[1] === "admin" : user?.role === "admin";
+
+  // Camera state
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | undefined>(undefined);
+
   // Phase
   const [phase, setPhase] = useState<Phase>("lookup");
   const [showSignatureCapture, setShowSignatureCapture] = useState(false);
@@ -274,6 +289,61 @@ export default function CarrierPickupScanner() {
     return () => window.removeEventListener("keydown", handler);
   }, [phase]);
 
+  // ─── Camera effects ────────────────────────────────────────────────────────
+  // Enumerate available cameras when admin enables camera
+  useEffect(() => {
+    if (!cameraEnabled) return;
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const cams = devices.filter((d) => d.kind === "videoinput");
+      setAvailableCameras(cams);
+      if (!selectedCameraId && cams.length > 0) setSelectedCameraId(cams[0].deviceId);
+    }).catch(() => {});
+  }, [cameraEnabled]);
+
+  // Start/stop camera stream when enabled or camera selection changes
+  useEffect(() => {
+    if (!cameraEnabled) {
+      if (cameraStream) { cameraStream.getTracks().forEach((t) => t.stop()); setCameraStream(null); }
+      return;
+    }
+    const constraints: MediaStreamConstraints = {
+      video: selectedCameraId ? { deviceId: { exact: selectedCameraId } } : { facingMode: "environment" },
+    };
+    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+      setCameraStream(stream);
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    }).catch((err) => {
+      toast.error("Camera access failed: " + err.message);
+      setCameraEnabled(false);
+    });
+    return () => {
+      cameraStream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [cameraEnabled, selectedCameraId]);
+
+  // Attach stream to video element when stream changes
+  useEffect(() => {
+    if (videoRef.current && cameraStream) videoRef.current.srcObject = cameraStream;
+  }, [cameraStream]);
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => { cameraStream?.getTracks().forEach((t) => t.stop()); };
+  }, [cameraStream]);
+
+  // Capture a photo from the current camera frame
+  const capturePhoto = useCallback((): string | null => {
+    if (!videoRef.current || !canvasRef.current || !cameraEnabled) return null;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  }, [cameraEnabled]);
+
   // tRPC
   const searchQuery2 = debouncedQuery.trim();
   const searchResult = trpc.carrierPickup.searchOrders.useQuery(
@@ -301,7 +371,9 @@ export default function CarrierPickupScanner() {
       } else {
         if (!muted) playSuccess();
         setFlashState("success");
-        setScannedPallets(prev => [{ labelValue: scanInput.trim(), scannedAt: new Date() }, ...prev]);
+        // Capture photo silently on successful scan
+        const photo = capturePhoto();
+        setScannedPallets(prev => [{ labelValue: scanInput.trim(), scannedAt: new Date(), photoDataUrl: photo }, ...prev]);
         setScanInput("");
         setTimeout(() => setFlashState("idle"), 500);
       }
@@ -861,16 +933,91 @@ export default function CarrierPickupScanner() {
                   </div>
                   <div className="divide-y max-h-64 overflow-y-auto">
                     {scannedPallets.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between px-4 py-2 text-sm">
+                      <div key={i} className="flex items-center justify-between px-4 py-2 text-sm gap-3">
                         <span className="font-mono font-medium">{p.labelValue}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {p.scannedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {p.photoDataUrl && (
+                            <img
+                              src={p.photoDataUrl}
+                              alt={`Pallet ${p.labelValue}`}
+                              className="w-12 h-9 object-cover rounded border border-border cursor-pointer"
+                              onClick={() => window.open(p.photoDataUrl!, '_blank')}
+                              title="Click to view full photo"
+                            />
+                          )}
+                          <span className="text-muted-foreground text-xs">
+                            {p.scannedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              {/* Admin Camera Panel — alignment/testing only, hidden from regular employees */}
+              {isAdmin && phase === "scanning" && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-muted px-4 py-2 text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      📷 Camera (Admin)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {cameraEnabled && availableCameras.length > 1 && (
+                        <select
+                          className="text-xs border border-input rounded px-1 py-0.5 bg-background"
+                          value={selectedCameraId ?? ""}
+                          onChange={(e) => setSelectedCameraId(e.target.value)}
+                        >
+                          {availableCameras.map((cam, idx) => (
+                            <option key={cam.deviceId} value={cam.deviceId}>
+                              {cam.label || `Camera ${idx + 1}`}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <button
+                        className="text-xs text-blue-600 hover:underline"
+                        onClick={() => {
+                          if (!cameraEnabled) {
+                            setCameraEnabled(true);
+                            setShowCameraPreview(true);
+                          } else {
+                            setShowCameraPreview((v) => !v);
+                          }
+                        }}
+                      >
+                        {!cameraEnabled ? 'Enable Camera' : showCameraPreview ? 'Hide Preview' : 'Show Preview'}
+                      </button>
+                      {cameraEnabled && (
+                        <button
+                          className="text-xs text-red-500 hover:underline"
+                          onClick={() => { setCameraEnabled(false); setShowCameraPreview(false); }}
+                        >
+                          Disable
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {showCameraPreview && cameraEnabled && (
+                    <div className="p-2 bg-black">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full max-h-48 object-contain rounded"
+                      />
+                      <p className="text-xs text-center text-gray-400 mt-1">Live preview — align camera to cover the pallet area</p>
+                    </div>
+                  )}
+                  {cameraEnabled && !showCameraPreview && (
+                    <div className="px-4 py-2 text-xs text-green-600">✓ Camera active — photos will be captured on each scan</div>
+                  )}
+                </div>
+              )}
+              {/* Hidden canvas for photo capture */}
+              <canvas ref={canvasRef} className="hidden" />
             </div>
 
             {/* Bottom action bar */}
@@ -927,6 +1074,27 @@ export default function CarrierPickupScanner() {
                 )}
               </div>
             </div>
+
+            {/* Photo gallery — shown if any photos were captured */}
+            {scannedPallets.some((p) => p.photoDataUrl) && (
+              <div className="max-w-2xl mx-auto mt-6 text-left">
+                <h3 className="text-sm font-semibold text-muted-foreground mb-2">📷 Pallet Photos</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {scannedPallets.filter((p) => p.photoDataUrl).map((p, i) => (
+                    <div key={i} className="space-y-1">
+                      <img
+                        src={p.photoDataUrl!}
+                        alt={`Pallet ${p.labelValue}`}
+                        className="w-full aspect-video object-cover rounded border border-border cursor-pointer hover:opacity-90"
+                        onClick={() => window.open(p.photoDataUrl!, '_blank')}
+                        title="Click to view full size"
+                      />
+                      <p className="text-xs text-center text-muted-foreground font-mono truncate">{p.labelValue}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ── Document & Signature Actions ── */}
             <div className="max-w-sm mx-auto mt-6 space-y-3">

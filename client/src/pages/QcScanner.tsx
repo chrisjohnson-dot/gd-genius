@@ -3299,7 +3299,8 @@ export default function QcScanner() {
               disabled={pallets.some((p) => !(p.calculatedWeightLb || p.weightOverrideLb))}
               onClick={() => {
                 setPalletReviewDialog(false);
-                setPhase('complete');
+                // Open the CONFIRMED text confirmation dialog
+                setCompleteDialog(true);
               }}
             >
               {pallets.some((p) => !(p.calculatedWeightLb || p.weightOverrideLb))

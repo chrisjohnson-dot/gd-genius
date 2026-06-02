@@ -5907,14 +5907,9 @@ const qcScannerRouter = router({
       sinceDate: z.string().optional(), // ISO date string — defaults to start of today
     }))
     .query(async ({ input }) => {
-      // Default to today's sessions only (midnight local time → UTC)
-      let sinceDate: Date;
-      if (input.sinceDate) {
-        sinceDate = new Date(input.sinceDate);
-      } else {
-        sinceDate = new Date();
-        sinceDate.setHours(0, 0, 0, 0);
-      }
+      // No default date filter — show all sessions up to the limit
+      // sinceDate is optional and only applied if explicitly passed by the client
+      const sinceDate = input.sinceDate ? new Date(input.sinceDate) : undefined;
       const sessions = await listQcSessions(input.limit ?? 50, sinceDate);
 
       // Filter by status if provided

@@ -109,13 +109,19 @@ function QcOperatorGuard({ children }: { children: React.ReactNode }) {
   const isShippingClerk = isTeamAccount && teamRole === "shipping_clerk";
   const shippingAllowed = ["/shipping/clerk"];
 
+  // Dock operators: only /shipping/appointments and /shipping/carrier-pickup
+  const isDockOperator = isTeamAccount && teamRole === "dock_operator";
+  const dockAllowed = ["/shipping/appointments", "/shipping/carrier-pickup"];
+
   useEffect(() => {
     if (isQcOperator && !qcAllowed.some(p => location.startsWith(p))) {
       navigate("/qc/scanner");
     } else if (isShippingClerk && !shippingAllowed.some(p => location.startsWith(p))) {
       navigate("/shipping/clerk");
+    } else if (isDockOperator && !dockAllowed.some(p => location.startsWith(p))) {
+      navigate("/shipping/carrier-pickup");
     }
-  }, [isQcOperator, isShippingClerk, location]);
+  }, [isQcOperator, isShippingClerk, isDockOperator, location]);
   return <>{children}</>;
 }
 

@@ -12683,21 +12683,26 @@ const carrierPickupRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
-      const { or, like } = await import("drizzle-orm");
+      const { or, like, eq, inArray } = await import("drizzle-orm");
       const { orderTracking } = await import("../drizzle/schema");
       const q = `%${input.query}%`;
+      // Check if the query looks like a numeric TX ID
+      const numericId = /^\d+$/.test(input.query.trim()) ? parseInt(input.query.trim(), 10) : null;
       const rows = await db
         .select()
         .from(orderTracking)
         .where(
           or(
+            // Include qc_complete and ship_ready orders so employees can start pickup for any QC'd order
+            numericId != null ? eq(orderTracking.extensivOrderId, numericId) : undefined,
             like(orderTracking.referenceNum, q),
             like(orderTracking.clientName, q),
             like(orderTracking.shipToName, q),
             like(orderTracking.outboundLocation, q)
           )
         )
-        .limit(10);
+        .limit(20);
+      // Return all matching orders regardless of lifecycle status
       return rows;
     }),
 

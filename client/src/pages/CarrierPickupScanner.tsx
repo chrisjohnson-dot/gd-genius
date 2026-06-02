@@ -87,6 +87,8 @@ export default function CarrierPickupScanner() {
   const [showCameraPreview, setShowCameraPreview] = useState(false);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | undefined>(undefined);
+  // Capture delay in ms — time between scan and photo capture (allows pallet to move into frame)
+  const [captureDelayMs, setCaptureDelayMs] = useState(500);
 
   // Phase
   const [phase, setPhase] = useState<Phase>("lookup");
@@ -371,9 +373,19 @@ export default function CarrierPickupScanner() {
       } else {
         if (!muted) playSuccess();
         setFlashState("success");
-        // Capture photo silently on successful scan
-        const photo = capturePhoto();
-        setScannedPallets(prev => [{ labelValue: scanInput.trim(), scannedAt: new Date(), photoDataUrl: photo }, ...prev]);
+        // Capture photo after configurable delay (allows pallet to move into frame)
+        const labelForPhoto = scanInput.trim();
+        const scannedAt = new Date();
+        if (cameraEnabled && captureDelayMs > 0) {
+          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: null }, ...prev]);
+          setTimeout(() => {
+            const photo = capturePhoto();
+            setScannedPallets(prev => prev.map((p, i) => i === 0 && p.labelValue === labelForPhoto ? { ...p, photoDataUrl: photo } : p));
+          }, captureDelayMs);
+        } else {
+          const photo = capturePhoto();
+          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: photo }, ...prev]);
+        }
         setScanInput("");
         setTimeout(() => setFlashState("idle"), 500);
       }
@@ -1012,7 +1024,24 @@ export default function CarrierPickupScanner() {
                     </div>
                   )}
                   {cameraEnabled && !showCameraPreview && (
-                    <div className="px-4 py-2 text-xs text-green-600">✓ Camera active — photos will be captured on each scan</div>
+                    <div className="px-4 py-2 text-xs text-green-600">✓ Camera active — photos will be captured {captureDelayMs > 0 ? `${captureDelayMs}ms after` : 'immediately on'} each scan</div>
+                  )}
+                  {cameraEnabled && (
+                    <div className="px-4 py-2 border-t border-border flex items-center gap-3 text-xs">
+                      <label className="text-muted-foreground shrink-0">Capture delay:</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={2000}
+                        step={100}
+                        value={captureDelayMs}
+                        onChange={(e) => setCaptureDelayMs(Number(e.target.value))}
+                        className="flex-1"
+                      />
+                      <span className="text-muted-foreground w-14 text-right shrink-0">
+                        {captureDelayMs === 0 ? 'Instant' : `${captureDelayMs}ms`}
+                      </span>
+                    </div>
                   )}
                 </div>
               )}

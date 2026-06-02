@@ -494,14 +494,18 @@ export default function QcScanner() {
   // Ctrl+Enter keyboard shortcut — opens the Complete Order dialog when in scanning phase
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && phase === "scanning" && !completeDialog) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && phase === "scanning" && !completeDialog && !palletReviewDialog) {
         e.preventDefault();
-        setCompleteDialog(true);
+        // Open pallet review dialog first
+        const heightInit: Record<number, string> = {};
+        palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+        setPalletHeightInputs(heightInit);
+        setPalletReviewDialog(true);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [phase, completeDialog]);
+  }, [phase, completeDialog, palletReviewDialog]);
   const flashSkuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerFlash = useCallback((sku: string) => {
     if (flashSkuTimerRef.current) clearTimeout(flashSkuTimerRef.current);
@@ -1996,11 +2000,22 @@ export default function QcScanner() {
             <Flag className="w-3.5 h-3.5 text-amber-500" />
           </Button>
           {(phase === "complete" || allComplete) ? (
-            <Button size="sm" className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700" onClick={() => setCompleteDialog(true)} title="Complete Order">
+            <Button size="sm" className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700" onClick={() => {
+              // Show pallet review dialog first so employee can verify weights before completing
+              const heightInit: Record<number, string> = {};
+              palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+              setPalletHeightInputs(heightInit);
+              setPalletReviewDialog(true);
+            }} title="Complete Order">
               <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Complete
             </Button>
           ) : (
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setCompleteDialog(true)} title="Complete Order">
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => {
+              const heightInit: Record<number, string> = {};
+              palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+              setPalletHeightInputs(heightInit);
+              setPalletReviewDialog(true);
+            }} title="Complete Order">
               Complete
             </Button>
           )}

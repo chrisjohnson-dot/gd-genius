@@ -6064,7 +6064,15 @@ const qcScannerRouter = router({
         console.log(`[scanMu] All-zero MU fallback for muLabel=${input.muLabel}: using remaining expected qtys`);
       }
 
-      const muItems = Array.from(skuQtyMap.entries()).map(([sku, qty]) => ({ sku, qty }));
+      // Cap each SKU's quantity at caseAmount if it is explicitly set in qc_scan_items
+      // This allows supervisors to control how many units a single MU scan adds per pallet
+      const sessionItemsForCap = await getQcScanItems(input.sessionId);
+      const muItems = Array.from(skuQtyMap.entries()).map(([sku, qty]) => {
+        const si = sessionItemsForCap.find((i) => i.sku === sku);
+        // Only cap if caseAmount > 1 (caseAmount=1 means no cap, use full MU qty)
+        const cap = si?.caseAmount && si.caseAmount > 1 ? si.caseAmount : null;
+        return { sku, qty: cap !== null ? Math.min(qty, cap) : qty };
+      });
 
       // 4. Fetch the current pallet and overwrite its items with the MU contents
       const existingPallets = await getQcPallets(input.sessionId);

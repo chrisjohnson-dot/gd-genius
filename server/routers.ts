@@ -5284,9 +5284,17 @@ const qcScannerRouter = router({
     .mutation(async ({ input }) => {
       const pallets = await getQcPallets(input.sessionId);
       if (pallets.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "No pallets to remove" });
+      // Protect Pallet 1 — it can never be removed as it is the base pallet for the session
+      if (pallets.length === 1) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot remove Pallet 1 — at least one pallet must remain. Use the QC Scanner to clear items from the pallet instead." });
+      }
       // Sort by createdAt descending to get the last created pallet
       const sorted = [...pallets].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       const lastPallet = sorted[0];
+      // Extra safety: never allow removing palletNumber 1
+      if (lastPallet.palletNumber === 1) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot remove Pallet 1 — it is the base pallet for this session." });
+      }
       const items = (lastPallet.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
       // Restore scanned quantities back to the session for each item on this pallet
       for (const item of items) {

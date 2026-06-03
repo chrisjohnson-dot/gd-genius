@@ -1270,15 +1270,33 @@ export default function QcScanner() {
   };
 
   const removeFromPallet = trpc.qcScanner.removeFromPallet.useMutation({
-    onSuccess: (data) => {
+    onSuccess: (data, vars) => {
       toast.success(`Removed ${data.removedQty} unit(s) from pallet`);
-      trpcUtils.qcScanner.getSession.invalidate();
+      // Immediately update local pallets state so UI reflects the change without a page refresh
+      setPallets((prev) => prev.map((p) => {
+        if (p.id !== vars.palletId) return p;
+        const existingItems = (p.items as Array<{ sku: string; qty: number }> | null) ?? [];
+        return { ...p, items: existingItems.filter((i) => i.sku !== vars.sku) };
+      }));
+      // Also update items scanned count
+      setItems((prev) => prev.map((i) => {
+        if (i.sku !== vars.sku) return i;
+        return { ...i, scannedQty: Math.max(0, (i.scannedQty ?? 0) - (data.removedQty ?? 0)) };
+      }));
     },
     onError: (e) => toast.error(e.message),
   });
   const adjustPalletItemQty = trpc.qcScanner.adjustPalletItemQty.useMutation({
-    onSuccess: () => {
-      trpcUtils.qcScanner.getSession.invalidate();
+    onSuccess: (_data, vars) => {
+      // Immediately update local pallets state so UI reflects the change without a page refresh
+      setPallets((prev) => prev.map((p) => {
+        if (p.id !== vars.palletId) return p;
+        const existingItems = (p.items as Array<{ sku: string; qty: number }> | null) ?? [];
+        const newItems = vars.newQty === 0
+          ? existingItems.filter((i) => i.sku !== vars.sku)
+          : existingItems.map((i) => i.sku === vars.sku ? { ...i, qty: vars.newQty } : i);
+        return { ...p, items: newItems };
+      }));
     },
     onError: (e) => toast.error(e.message),
   });

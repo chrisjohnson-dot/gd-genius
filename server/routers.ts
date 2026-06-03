@@ -5942,6 +5942,25 @@ const qcScannerRouter = router({
       const offset = input.offset ?? 0;
       const page = filtered.slice(offset, offset + (input.limit ?? 100));
 
+      // Pre-fetch outbound locations from order_tracking for all sessions in this page
+      const transactionIds = page.map((s) => s.transactionId).filter(Boolean) as number[];
+      let outboundLocationMap: Record<number, string | null> = {};
+      if (transactionIds.length > 0) {
+        try {
+          const db2 = await getDb();
+          if (db2) {
+            const { inArray: inArr } = await import("drizzle-orm");
+            const { orderTracking: otEnrich } = await import("../drizzle/schema.js");
+            const otRows = await db2.select({ extensivOrderId: otEnrich.extensivOrderId, outboundLocation: otEnrich.outboundLocation })
+              .from(otEnrich)
+              .where(inArr(otEnrich.extensivOrderId, transactionIds));
+            for (const row of otRows) {
+              outboundLocationMap[row.extensivOrderId] = row.outboundLocation ?? null;
+            }
+          }
+        } catch { /* non-fatal */ }
+      }
+
       // Enrich each session with pallets + scan item summary
       const enriched = await Promise.all(
         page.map(async (s) => {
@@ -5965,6 +5984,7 @@ const qcScannerRouter = router({
           }
           return {
             ...s,
+            outboundLocation: s.transactionId ? (outboundLocationMap[s.transactionId] ?? null) : null,
             caseAmountMap,
             pallets: pallets.map((p) => ({
               id: p.id,

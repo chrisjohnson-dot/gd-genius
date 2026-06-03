@@ -67,6 +67,7 @@ type SessionRow = {
   totalScanned: number;
   totalCases?: number;
   stagingLane?: string | null;
+  outboundLocation?: string | null;
   destinationAddress?: string | null;
   caseAmountMap?: Record<string, number>;
 };
@@ -375,10 +376,10 @@ function SessionCard({ session, overriddenSkus }: { session: SessionRow; overrid
                   {session.totalCases} case{(session.totalCases ?? 0) !== 1 ? "s" : ""}
                 </span>
               )}
-              {session.stagingLane && (
+              {(session.stagingLane || session.outboundLocation) && (
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 font-semibold">
                   <MapPin className="w-3 h-3" />
-                  {formatDockLocation(session.stagingLane)}
+                  {session.stagingLane ? formatDockLocation(session.stagingLane) : session.outboundLocation}
                 </span>
               )}
               {accuracy !== null && (

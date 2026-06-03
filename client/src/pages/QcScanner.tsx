@@ -3151,8 +3151,12 @@ export default function QcScanner() {
                   min={1}
                   max={moveMaxQty}
                   value={moveQty}
-                  onChange={(e) => setMoveQty(Math.min(moveMaxQty, Math.max(1, Number(e.target.value))))}
-                  className="w-20 text-center border border-input rounded-md px-2 py-1 text-sm"
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? 1 : Math.min(moveMaxQty, Math.max(1, parseInt(e.target.value, 10) || 1));
+                    setMoveQty(val);
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  className="w-24 text-center border border-input rounded-md px-2 py-1 text-sm font-semibold"
                 />
                 <button
                   type="button"

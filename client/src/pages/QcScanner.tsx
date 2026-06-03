@@ -3312,8 +3312,9 @@ export default function QcScanner() {
               disabled={pallets.some((p) => !(p.calculatedWeightLb || p.weightOverrideLb))}
               onClick={() => {
                 setPalletReviewDialog(false);
-                // Open the CONFIRMED text confirmation dialog
-                setCompleteDialog(true);
+                // Small delay ensures the review dialog fully closes before the CONFIRMED dialog opens
+                // (prevents React state batching from suppressing the second dialog render)
+                setTimeout(() => setCompleteDialog(true), 150);
               }}
             >
               {pallets.some((p) => !(p.calculatedWeightLb || p.weightOverrideLb))

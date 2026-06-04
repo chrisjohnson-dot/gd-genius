@@ -13163,7 +13163,7 @@ const carrierAppointmentsRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
-      const { eq, and, or, gte, lte, desc } = await import("drizzle-orm");
+      const { eq, and, desc, inArray: inArrCa } = await import("drizzle-orm");
       const conditions: any[] = [];
       if (input.facilityId) conditions.push(eq(carrierAppointments.facilityId, input.facilityId));
       if (input.status !== "all") conditions.push(eq(carrierAppointments.status, input.status as any));
@@ -13173,7 +13173,67 @@ const carrierAppointmentsRouter = router({
         .from(carrierAppointments)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(carrierAppointments.scheduledDate), carrierAppointments.scheduledTimeStart);
-      return rows;
+
+      // Also include ship_ready orders that don't already have an active appointment
+      // These appear as synthetic "Ready for Pickup" entries so employees can start pickup without typing TX IDs
+      let syntheticEntries: typeof rows = [];
+      if (input.status === "all" || input.status === "scheduled" || input.status === "confirmed") {
+        try {
+          const { orderTracking: otCa } = await import("../drizzle/schema.js");
+          const shipReadyOrders = await db
+            .select({
+              extensivOrderId: otCa.extensivOrderId,
+              referenceNum: otCa.referenceNum,
+              clientName: otCa.clientName,
+              facilityId: otCa.facilityId,
+              facilityName: otCa.facilityName,
+              shipToName: otCa.shipToName,
+              outboundLocation: otCa.outboundLocation,
+              palletCount: otCa.palletCount,
+              shipReadyAt: otCa.shipReadyAt,
+            })
+            .from(otCa)
+            .where(eq(otCa.lifecycleStatus, "ship_ready"));
+
+          // Filter out orders that already have an active appointment
+          const existingOrderIds = new Set(rows.map(r => r.extensivOrderId).filter(Boolean));
+          const newOrders = shipReadyOrders.filter(o => !existingOrderIds.has(o.extensivOrderId));
+
+          // Build synthetic appointment entries
+          syntheticEntries = newOrders.map(o => ({
+            id: -(o.extensivOrderId), // negative ID to distinguish from real appointments
+            extensivOrderId: o.extensivOrderId,
+            referenceNum: o.referenceNum ?? null,
+            clientName: o.clientName,
+            facilityId: o.facilityId,
+            facilityName: o.facilityName ?? null,
+            shipToName: o.shipToName ?? null,
+            outboundLocation: o.outboundLocation ?? null,
+            palletCount: o.palletCount ?? null,
+            scheduledDate: o.shipReadyAt ? o.shipReadyAt.toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+            scheduledTimeStart: null,
+            scheduledTimeEnd: null,
+            status: "confirmed" as const,
+            carrierName: null,
+            driverName: null,
+            trailerNumber: null,
+            sealNumber: null,
+            proNumber: null,
+            bolNumber: null,
+            contactPhone: null,
+            contactEmail: null,
+            notes: "Ready for pickup — staged order",
+            createdBy: null,
+            createdByName: null,
+            documentsGeneratedAt: null,
+            bolDocUrl: null,
+            createdAt: o.shipReadyAt ?? new Date(),
+            updatedAt: o.shipReadyAt ?? new Date(),
+          })) as unknown as typeof rows;
+        } catch { /* non-fatal — return real appointments only */ }
+      }
+
+      return [...syntheticEntries, ...rows];
     }),
 
   getByOrder: protectedProcedure

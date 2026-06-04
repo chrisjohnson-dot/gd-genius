@@ -371,6 +371,37 @@ const _appRouter = router({
         ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
         return { success: true, role: account.role, name: account.name } as const;
       }),
+    // Badge scan login — single barcode on employee badge logs them in instantly
+    badgeLogin: publicProcedure
+      .input(z.object({ token: z.string().min(8) }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { teamAccounts } = await import("../drizzle/schema.js");
+        const { eq } = await import("drizzle-orm");
+        const [account] = await db.select().from(teamAccounts)
+          .where(eq(teamAccounts.badgeToken, input.token.trim()));
+        if (!account || !account.active) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Badge not recognised. Please log in manually." });
+        }
+        const openId = `team-account-${account.id}`;
+        await upsertUser({
+          openId,
+          name: account.name,
+          email: null,
+          loginMethod: `team:${account.role}`,
+          role: "user",
+          lastSignedIn: new Date(),
+        });
+        const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
+        const sessionToken = await sdk.signSession(
+          { openId, appId: ENV.appId || "gd-agent", name: account.name },
+          { expiresInMs: EIGHT_HOURS_MS }
+        );
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+        return { success: true, role: account.role, name: account.name } as const;
+      }),
   }),
   // ─── Team Account Management (admin only) ─────────────────────────────────
   teamAccounts: router({

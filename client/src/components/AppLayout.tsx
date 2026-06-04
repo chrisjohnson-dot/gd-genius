@@ -160,6 +160,7 @@ function SharedLoginGate() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
+  const [badgeScanBuffer, setBadgeScanBuffer] = useState("");
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
 
@@ -171,13 +172,39 @@ function SharedLoginGate() {
   const teamLoginMutation = trpc.auth.teamLogin.useMutation({
     onSuccess: (data) => {
       utils.auth.me.invalidate();
-      // QC operators are redirected directly to the QC Scanner
-      if (data.role === "qc_operator") {
-        setTimeout(() => navigate("/qc/scanner"), 100);
-      }
+      if (data.role === "qc_operator") setTimeout(() => navigate("/qc/scanner"), 100);
     },
     onError: (err) => { setError(err.message || "Invalid username or password"); },
   });
+
+  const badgeLoginMutation = trpc.auth.badgeLogin.useMutation({
+    onSuccess: () => { utils.auth.me.invalidate(); },
+    onError: () => { setError("Badge not recognised. Please log in manually."); },
+  });
+
+  // Detect badge scan: USB scanner sends all chars rapidly then Enter
+  // Badge tokens start with 'GDLOGIN-'
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyTime = 0;
+    const handleKey = (e: KeyboardEvent) => {
+      const now = Date.now();
+      // Reset buffer if gap > 200ms (human typing)
+      if (now - lastKeyTime > 200) buffer = "";
+      lastKeyTime = now;
+      if (e.key === "Enter") {
+        if (buffer.startsWith("GDLOGIN-") && buffer.length > 10) {
+          e.preventDefault();
+          badgeLoginMutation.mutate({ token: buffer });
+        }
+        buffer = "";
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

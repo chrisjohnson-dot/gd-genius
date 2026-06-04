@@ -2599,6 +2599,7 @@ export const teamAccounts = mysqlTable("team_accounts", {
   name: varchar("name", { length: 256 }).notNull(),
   role: varchar("role", { length: 64 }).notNull().default("qc_operator"),
   active: boolean("active").default(true).notNull(),
+  badgeToken: varchar("badge_token", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

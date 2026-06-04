@@ -12799,17 +12799,26 @@ const carrierPickupRouter = router({
         const qcSession = await getQcSessionByTransactionId(session.transactionId);
         if (qcSession) {
           const qcPallets = await getQcPallets(qcSession.id);
+          const scanned = input.labelValue.trim().toLowerCase();
+
+          // Build known UPCs from stored palletUpc values
           const knownUpcs = qcPallets
             .map((p) => p.palletUpc?.trim().toLowerCase())
             .filter(Boolean) as string[];
-          if (knownUpcs.length > 0) {
-            const scanned = input.labelValue.trim().toLowerCase();
-            if (!knownUpcs.includes(scanned)) {
-              throw new TRPCError({
-                code: "BAD_REQUEST",
-                message: `"${input.labelValue}" does not match any pallet label for this order. Please scan the barcode on the physical pallet label.`,
-              });
-            }
+
+          // Also build generated GD label format: GD-{sessionId}-P{palletNumber}
+          // This is the format used when palletUpc is not stored
+          const generatedLabels = qcPallets.map((p) =>
+            `gd-${qcSession.id}-p${p.palletNumber}`.toLowerCase()
+          );
+
+          const allValidLabels = [...new Set([...knownUpcs, ...generatedLabels])];
+
+          if (allValidLabels.length > 0 && !allValidLabels.includes(scanned)) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `"${input.labelValue}" does not match any pallet label for this order. Please scan the barcode on the physical pallet label.`,
+            });
           }
         }
       }

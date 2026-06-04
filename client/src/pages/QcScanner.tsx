@@ -2019,25 +2019,14 @@ export default function QcScanner() {
           </Button>
           {(phase === "complete" || allComplete) ? (
             <Button size="sm" className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700" onClick={() => {
-              if (phase === "complete") {
-                // Order already complete — skip review/CONFIRMED and go straight to staging
-                setCompletedSessionInfo({
-                  sessionId: session?.id ?? 0,
-                  configId: session?.warehouseId ?? null,
-                  palletCount: pallets.length,
-                  customerName: session?.customerName ?? null,
-                  transactionId: session?.transactionId ?? null,
-                  customerId: (session as any)?.customerId ?? null,
-                });
-                setDockRecommendDialog(true);
-              } else {
-                // Show pallet review dialog first so employee can verify weights before completing
-                const heightInit: Record<number, string> = {};
-                palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
-                setPalletHeightInputs(heightInit);
-                setPalletReviewDialog(true);
-              }
-            }} title="Complete Order">
+              // Always show pallet review dialog first so employee can verify heights
+              // For already-complete orders, the review dialog's confirm button will open
+              // the CONFIRMED dialog which then triggers staging
+              const heightInit: Record<number, string> = {};
+              palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+              setPalletHeightInputs(heightInit);
+              setPalletReviewDialog(true);
+            }} title={phase === "complete" ? "Stage Pallets" : "Complete Order"}>
               <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> {phase === "complete" ? "Stage Pallets" : "Complete"}
             </Button>
           ) : (

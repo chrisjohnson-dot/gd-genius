@@ -58,19 +58,21 @@ interface SelectedOrder {
 }
 
 // ─── Audio ────────────────────────────────────────────────────────────────────
-function playCompleteBeep() {
+const CARRIER_SOUNDS = {
+  scanAccepted: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/YpFnVchcxAmjqGes.wav",
+  loadComplete: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/HBxMrBpYYiUkiOnS.wav",
+};
+
+function playCarrierAudio(type: keyof typeof CARRIER_SOUNDS) {
   try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 1047;
-    gain.gain.value = 0.15;
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-    osc.stop(ctx.currentTime + 0.6);
+    const audio = new Audio(CARRIER_SOUNDS[type]);
+    audio.volume = 1.0;
+    audio.play().catch(() => {});
   } catch { /* ignore */ }
+}
+
+function playCompleteBeep() {
+  playCarrierAudio("loadComplete");
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -173,7 +175,9 @@ export default function CarrierPickupScanner() {
   });
 
   // Sound
-  const { playSuccess, playError } = useScanAudio();
+  const { playError } = useScanAudio();
+  // Use voice audio for carrier pickup — louder and clearer for warehouse dock
+  const playSuccess = () => playCarrierAudio("scanAccepted");
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem("carrierPickup_soundMuted") === "true"; } catch { return false; }
   });

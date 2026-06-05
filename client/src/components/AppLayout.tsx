@@ -225,9 +225,9 @@ function SharedLoginGate() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: "#191C21" }}>
-      {/* Logo */}
+      {/* Logo — large for kiosk display */}
       <div className="mb-10">
-        <img src={GD_LOGO} alt="GD Genius" className="h-24 w-auto" />
+        <img src={GD_LOGO} alt="GD Genius" className="h-48 w-auto" style={{ filter: 'drop-shadow(0 4px 24px rgba(0,0,0,0.5))' }} />
       </div>
 
       {/* Kiosk login card */}

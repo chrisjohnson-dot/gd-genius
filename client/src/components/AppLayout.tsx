@@ -224,57 +224,52 @@ function SharedLoginGate() {
   const isPending = sharedLoginMutation.isPending || teamLoginMutation.isPending;
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: "#f3f4f6" }}>
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8 space-y-6">
-        <div className="flex flex-col items-center gap-3">
-          <img src={GD_LOGO} alt="GD Genius" className="h-20 w-auto" />
-          <p className="text-sm text-muted-foreground">Sign in to access the dashboard</p>
+    <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: "#191C21" }}>
+      {/* Logo */}
+      <div className="mb-10">
+        <img src={GD_LOGO} alt="GD Genius" className="h-24 w-auto" />
+      </div>
+
+      {/* Kiosk login card */}
+      <div className="w-full max-w-xl bg-[#1E2530] rounded-3xl shadow-2xl p-10 space-y-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-white tracking-tight">Welcome</h1>
+          <p className="text-lg text-gray-400 mt-2">Sign in or scan your badge to continue</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">Username</label>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-xl font-semibold text-gray-300">Username</label>
             <input
               type="text"
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              className="w-full border-2 border-gray-600 bg-[#252B35] rounded-xl px-5 py-4 text-2xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
               placeholder="Enter username"
               required
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">Password</label>
+          <div className="space-y-2">
+            <label className="text-xl font-semibold text-gray-300">Password</label>
             <input
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              className="w-full border-2 border-gray-600 bg-[#252B35] rounded-xl px-5 py-4 text-2xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
               placeholder="Enter password"
               required
             />
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              id="rememberMe"
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 accent-gray-800 cursor-pointer"
-            />
-            <label htmlFor="rememberMe" className="text-sm text-gray-600 cursor-pointer select-none">
-              Remember me
-            </label>
-            <span className="text-xs text-gray-400 ml-1">
-              {rememberMe ? "(stays signed in for 1 year)" : "(signs out after 8 hours)"}
-            </span>
-          </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && (
+            <div className="bg-red-900/40 border border-red-500 rounded-xl px-5 py-4">
+              <p className="text-xl text-red-300 font-medium">{error}</p>
+            </div>
+          )}
           <Button
             type="submit"
-            size="lg"
-            className="w-full"
+            className="w-full h-16 text-2xl font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
             disabled={isPending}
           >
             {isPending ? "Signing in..." : "Sign In"}

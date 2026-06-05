@@ -383,6 +383,13 @@ export default function QcScanner() {
   const [palletWeightBreakdown, setPalletWeightBreakdown] = useState<Record<number, SkuBreakdownEntry[]>>({});
   const [zeroWeightAlert, setZeroWeightAlert] = useState<{ palletId: number; skus: string[] } | null>(null);
   const [skuWeightInputs, setSkuWeightInputs] = useState<Record<string, string>>({});
+  // MU case count dialog: shown when an MU scan finds SKUs with no known case count
+  const [muCaseCountDialog, setMuCaseCountDialog] = useState<{
+    muLabel: string; palletId: number; skus: string[];
+    configId: number; customerId: number;
+    pendingMuData: { sessionId: number; palletType?: string };
+  } | null>(null);
+  const [muCaseInputs, setMuCaseInputs] = useState<Record<string, string>>({});
   const [skuUnitsInputs, setSkuUnitsInputs] = useState<Record<string, string>>({});
   // Dock location recommendation shown after session completes
   const [dockRecommendDialog, setDockRecommendDialog] = useState(false);
@@ -910,6 +917,30 @@ export default function QcScanner() {
     onError: () => { /* silently ignore — non-critical */ },
   });
 
+  const submitMuCaseCount = trpc.muCaseCount.submit.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(`Case count for ${vars.sku} submitted for manager approval`);
+      // Retry the MU scan now that the case count has been submitted
+      if (muCaseCountDialog) {
+        const remaining = muCaseCountDialog.skus.filter(s => s !== vars.sku);
+        if (remaining.length === 0) {
+          setMuCaseCountDialog(null);
+          setMuCaseInputs({});
+          // Retry the full MU scan
+          scanMu.mutate({
+            sessionId: muCaseCountDialog.pendingMuData.sessionId,
+            muLabel: muCaseCountDialog.muLabel,
+            palletId: muCaseCountDialog.palletId,
+            palletType: muCaseCountDialog.pendingMuData.palletType,
+          });
+        } else {
+          setMuCaseCountDialog(prev => prev ? { ...prev, skus: remaining } : null);
+        }
+      }
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const scanMu = trpc.qcScanner.scanMu.useMutation({
     onSuccess: (data) => {
       if (data.notFound) {
@@ -918,6 +949,23 @@ export default function QcScanner() {
         toast.error(`MU not found: ${data.muLabel}`, {
           description: "This MU label was not found in Extensiv. Check the label and try again.",
           duration: 5000,
+        });
+        setBarcodeInput("");
+        return;
+      }
+      // If some SKUs are missing case counts, show the dialog for the employee to enter them
+      if ((data as any).missingCaseCounts?.length > 0) {
+        const missing = (data as any).missingCaseCounts as string[];
+        const initInputs: Record<string, string> = {};
+        missing.forEach((sku: string) => { initInputs[sku] = ""; });
+        setMuCaseInputs(initInputs);
+        setMuCaseCountDialog({
+          muLabel: data.muLabel,
+          palletId: data.palletId,
+          skus: missing,
+          configId: (data as any).configId ?? 0,
+          customerId: (data as any).customerId ?? 0,
+          pendingMuData: { sessionId: session?.id ?? 0, palletType: undefined },
         });
         setBarcodeInput("");
         return;
@@ -3660,6 +3708,49 @@ export default function QcScanner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ─── MU Case Count Dialog ─────────────────────────── */}
+      <Dialog open={!!muCaseCountDialog} onOpenChange={(o) => { if (!o) { setMuCaseCountDialog(null); setMuCaseInputs({}); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-blue-500" />
+              MU Case Count Required
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2 text-sm">
+            <p className="text-muted-foreground">
+              The system doesn&apos;t know how many cases are on MU <span className="font-mono font-bold text-foreground">{muCaseCountDialog?.muLabel}</span>. Enter the case count for each SKU and submit for manager approval.
+            </p>
+            {muCaseCountDialog?.skus.map((sku) => (
+              <div key={sku} className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{sku} — Cases per MU</label>
+                <input
+                  type="number" min={1}
+                  value={muCaseInputs[sku] ?? ""}
+                  onChange={(e) => setMuCaseInputs(prev => ({ ...prev, [sku]: e.target.value }))}
+                  onFocus={(e) => e.target.select()}
+                  placeholder="Enter number of cases"
+                  className="w-full border border-input rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Button size="sm" className="w-full"
+                  disabled={!muCaseInputs[sku] || parseInt(muCaseInputs[sku]) < 1 || submitMuCaseCount.isPending}
+                  onClick={() => {
+                    if (!muCaseCountDialog) return;
+                    submitMuCaseCount.mutate({ configId: muCaseCountDialog.configId, customerId: muCaseCountDialog.customerId, sku, casesPerMu: parseInt(muCaseInputs[sku]) });
+                  }}>
+                  Submit for Approval
+                </Button>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Once a manager approves this, the system will remember it for all future MU scans of this SKU.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setMuCaseCountDialog(null); setMuCaseInputs({}); }}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ─── Missing Ship-To Warning Dialog ───────────────────────────── */}
       <Dialog open={!!missingShipToWarning} onOpenChange={(o) => { if (!o) setMissingShipToWarning(null); }}>
         <DialogContent className="max-w-sm">

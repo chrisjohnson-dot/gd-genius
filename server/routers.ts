@@ -6123,15 +6123,55 @@ const qcScannerRouter = router({
         console.log(`[scanMu] All-zero MU fallback for muLabel=${input.muLabel}: using remaining expected qtys`);
       }
 
-      // Cap each SKU's quantity at caseAmount if it is explicitly set in qc_scan_items
-      // This allows supervisors to control how many units a single MU scan adds per pallet
+      // Check mu_case_counts table for known cases-per-MU for each SKU
+      // If any SKU is missing a case count, return them so the frontend can prompt the employee
       const sessionItemsForCap = await getQcScanItems(input.sessionId);
-      const muItems = Array.from(skuQtyMap.entries()).map(([sku, qty]) => {
+      const missingCaseCounts: string[] = [];
+      const muItems = await Promise.all(Array.from(skuQtyMap.entries()).map(async ([sku, qty]) => {
         const si = sessionItemsForCap.find((i) => i.sku === sku);
-        // Only cap if caseAmount > 1 (caseAmount=1 means no cap, use full MU qty)
-        const cap = si?.caseAmount && si.caseAmount > 1 ? si.caseAmount : null;
-        return { sku, qty: cap !== null ? Math.min(qty, cap) : qty };
-      });
+        // First check mu_case_counts table for an approved case count
+        let casesPerMu: number | null = null;
+        if (config && session.customerId) {
+          try {
+            const db2 = await getDb();
+            if (db2) {
+              const { sql: sqlMu } = await import("drizzle-orm");
+              const rows = await db2.execute(sqlMu`SELECT cases_per_mu FROM mu_case_counts WHERE config_id = ${config.id} AND customer_id = ${session.customerId} AND sku = ${sku} AND status = 'approved' ORDER BY updated_at DESC LIMIT 1`);
+              const rowsAny = rows as any;
+              const arr = Array.isArray(rowsAny) ? rowsAny[0] : (Array.isArray(rowsAny?.rows) ? rowsAny.rows : []);
+              if (arr && arr.length > 0) casesPerMu = Number(arr[0]?.cases_per_mu ?? 0);
+            }
+          } catch { /* non-fatal */ }
+        }
+        // Fall back to caseAmount from session items
+        if (!casesPerMu && si?.caseAmount && si.caseAmount > 1) casesPerMu = si.caseAmount;
+        // If still no case count, flag this SKU as missing
+        if (!casesPerMu) {
+          missingCaseCounts.push(sku);
+          return { sku, qty }; // use raw qty for now
+        }
+        // Cap qty at casesPerMu (cases per MU × units per case)
+        const unitsPerCase = si?.caseAmount && si.caseAmount > 1 ? si.caseAmount : 1;
+        const maxUnits = casesPerMu * unitsPerCase;
+        return { sku, qty: Math.min(qty, maxUnits) };
+      }));
+      // If any SKUs are missing case counts, return early so frontend can prompt the employee
+      if (missingCaseCounts.length > 0) {
+        return {
+          notFound: false,
+          muLabel: input.muLabel,
+          palletId: input.palletId,
+          palletNumber: null,
+          muItems: [],
+          nextPalletId: null,
+          nextPalletNumber: null,
+          missingCaseCounts,
+          configId: config.id,
+          customerId: session.customerId ?? 0,
+          sessionComplete: false,
+          calculatedWeightLb: null,
+        };
+      }
 
       // 4. Fetch the current pallet and overwrite its items with the MU contents
       const existingPallets = await getQcPallets(input.sessionId);
@@ -6860,7 +6900,59 @@ const skuWeightRouter = router({
       return { success: true, status: newStatus, configId: request.configId, customerId: request.customerId };
     }),
 });
-// ─── Receiving Router ────────────────────────────────────────────────────────
+// ─── MU Case Count Router ──────────────────────────────────────────────────────
+const muCaseCountRouter = router({
+  /** Look up the approved cases-per-MU for a SKU. Returns null if not set. */
+  lookup: protectedProcedure
+    .input(z.object({ configId: z.number(), customerId: z.number(), sku: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const { eq, and, sql: sqlRaw } = await import("drizzle-orm");
+      const rows = await db.execute(sqlRaw`SELECT cases_per_mu FROM mu_case_counts WHERE config_id = ${input.configId} AND customer_id = ${input.customerId} AND sku = ${input.sku} AND status = 'approved' ORDER BY updated_at DESC LIMIT 1`);
+      const data = rows as any;
+      const arr = Array.isArray(data) ? data[0] : data;
+      if (!arr || arr.length === 0) return null;
+      return { casesPerMu: Number(arr[0]?.cases_per_mu ?? arr[0]?.casesPerMu ?? 0) };
+    }),
+
+  /** Employee submits a case count request for manager approval */
+  submit: protectedProcedure
+    .input(z.object({ configId: z.number(), customerId: z.number(), sku: z.string(), casesPerMu: z.number().int().positive(), submittedBy: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { sql: sqlRaw } = await import("drizzle-orm");
+      await db.execute(sqlRaw`INSERT INTO mu_case_counts (config_id, customer_id, sku, cases_per_mu, status, submitted_by) VALUES (${input.configId}, ${input.customerId}, ${input.sku}, ${input.casesPerMu}, 'pending', ${ctx.user?.name ?? input.submittedBy ?? 'unknown'})`);
+      return { success: true };
+    }),
+
+  /** List all pending (or all) MU case count requests */
+  list: protectedProcedure
+    .input(z.object({ status: z.string().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const { sql: sqlRaw } = await import("drizzle-orm");
+      const status = input.status ?? 'pending';
+      const rows = await db.execute(sqlRaw`SELECT * FROM mu_case_counts WHERE status = ${status} ORDER BY created_at DESC LIMIT 100`);
+      const data = rows as any;
+      return Array.isArray(data) ? data[0] : data;
+    }),
+
+  /** Manager approves or rejects a case count request */
+  review: protectedProcedure
+    .input(z.object({ id: z.number(), action: z.enum(['approve', 'reject']), note: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { sql: sqlRaw } = await import("drizzle-orm");
+      const newStatus = input.action === 'approve' ? 'approved' : 'rejected';
+      await db.execute(sqlRaw`UPDATE mu_case_counts SET status = ${newStatus}, reviewed_by = ${ctx.user?.name ?? 'manager'}, note = ${input.note ?? null} WHERE id = ${input.id}`);
+      return { success: true };
+    }),
+});
+// ─── Receiving Router ────────────────────────────────────────────
 const receivingRouter = router({
   /**
    * List inbound receivers (ASN/PO receipts) from Extensiv.
@@ -8797,6 +8889,7 @@ export const appRouter = router({
   cortex: cortexRouter,
   qcScanner: qcScannerRouter,
   skuWeight: skuWeightRouter,
+  muCaseCount: muCaseCountRouter,
   palletScanner: palletScannerRouter,
   receiving: receivingRouter,
   palletCapture: palletCaptureRouter,

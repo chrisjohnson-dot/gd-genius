@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Tab = "weights" | "sku-overrides" | "scan-errors" | "orders" | "health" | "users";
+type Tab = "weights" | "mu-cases" | "sku-overrides" | "scan-errors" | "orders" | "health" | "users";
 
 // ─── Tab Button ───────────────────────────────────────────────────────────────
 function TabBtn({ id, label, icon: Icon, active, onClick, badge }: {
@@ -88,6 +88,69 @@ function WeightApprovalsSection() {
                   </Button>
                   <Button size="sm" variant="outline" className="h-8 border-red-500/50 text-red-400 hover:bg-red-500/10"
                     onClick={() => reviewMutation.mutate({ id: r.id, action: "reject", note: "Rejected by manager" })}>
+                    <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MU Case Counts Section ──────────────────────────────────────────────────
+function MuCaseCountsSection() {
+  const [filter, setFilter] = useState<"pending" | "approved" | "rejected">("pending");
+  const listQuery = trpc.muCaseCount.list.useQuery({ status: filter });
+  const reviewMutation = trpc.muCaseCount.review.useMutation({
+    onSuccess: () => { toast.success("Case count request reviewed"); listQuery.refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const requests = Array.isArray(listQuery.data) ? listQuery.data : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        {(["pending", "approved", "rejected"] as const).map((s) => (
+          <button key={s} onClick={() => setFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${filter === s ? "bg-blue-600 text-white" : "bg-white/10 text-gray-400 hover:text-white"}`}>
+            {s}
+          </button>
+        ))}
+        <Button variant="outline" size="sm" className="ml-auto h-7" onClick={() => listQuery.refetch()}>
+          <RefreshCw className={`w-3 h-3 ${listQuery.isFetching ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
+      {requests.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">No {filter} MU case count requests.</div>
+      ) : (
+        <div className="space-y-2">
+          {requests.map((r: any) => (
+            <div key={r.id} className="bg-white/5 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-white">{r.sku}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    r.status === "pending" ? "bg-amber-500/20 text-amber-300" :
+                    r.status === "approved" ? "bg-green-500/20 text-green-300" :
+                    "bg-red-500/20 text-red-300"
+                  }`}>{r.status}</span>
+                </div>
+                <div className="text-sm text-gray-400 mt-1">
+                  <strong className="text-white">{r.cases_per_mu}</strong> cases per MU
+                  {r.submitted_by && <> · Submitted by <span className="text-gray-300">{r.submitted_by}</span></>}
+                </div>
+              </div>
+              {r.status === "pending" && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button size="sm" className="h-8 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => reviewMutation.mutate({ id: r.id, action: "approve" })}>
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 border-red-500/50 text-red-400 hover:bg-red-500/10"
+                    onClick={() => reviewMutation.mutate({ id: r.id, action: "reject" })}>
                     <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
                   </Button>
                 </div>
@@ -384,8 +447,12 @@ export default function ManagerDashboard() {
   const pendingCount = pendingQuery.data?.length ?? 0;
   const flagCount = Array.isArray(flagsQuery.data) ? flagsQuery.data.length : 0;
 
+  const muCasesQuery = trpc.muCaseCount.list.useQuery({ status: "pending" });
+  const muCasesCount = Array.isArray(muCasesQuery.data) ? muCasesQuery.data.length : 0;
+
   const tabs: Array<{ id: Tab; label: string; icon: React.ElementType; badge?: number }> = [
     { id: "weights",      label: "Weight Approvals",  icon: Scale,         badge: pendingCount },
+    { id: "mu-cases",    label: "MU Case Counts",    icon: Package,       badge: muCasesCount },
     { id: "sku-overrides",label: "SKU Overrides",     icon: Package },
     { id: "scan-errors",  label: "Scan Errors",       icon: AlertTriangle, badge: flagCount },
     { id: "orders",       label: "Orders",            icon: Warehouse },
@@ -412,6 +479,7 @@ export default function ManagerDashboard() {
         {/* Content */}
         <div className="bg-white/5 rounded-2xl p-6">
           {activeTab === "weights"       && <WeightApprovalsSection />}
+          {activeTab === "mu-cases"      && <MuCaseCountsSection />}
           {activeTab === "sku-overrides" && <SkuOverridesSection />}
           {activeTab === "scan-errors"   && <ScanErrorsSection />}
           {activeTab === "orders"        && <OrdersSection />}

@@ -76,7 +76,7 @@ type Phase = "start" | "scanning" | "complete";
 //// WAV URLs for each sound type
 const SOUND_URLS: Record<"success" | "error" | "complete" | "scan" | "sku_complete", string> = {
   success: "/manus-storage/cryo_pistol_gunshot_454de70d.wav",
-  error: "/manus-storage/wrong_item_angry_c1fd9aee.wav",
+  error: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/ORJCkEJulxhYRcWh.m4a",
   complete: "/manus-storage/order_complete_jingle_d15136e3.wav",
   scan: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/cWswCpGbqObgKwiS.wav",
   sku_complete: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/RupPdbwPUWKDLTvD.wav",

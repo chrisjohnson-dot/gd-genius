@@ -89,6 +89,7 @@ import LivePullBoard from "@/pages/ltl/LivePullBoard";
 import EdiMonitor from "@/pages/EdiMonitor";
 import OrderDropCadence from "@/pages/OrderDropCadence";
 import WeightApproval from "@/pages/WeightApproval";
+import ManagerDashboard from "@/pages/ManagerDashboard";
 import ShippingClerkDashboard from "@/pages/ShippingClerkDashboard";
 // ─── QC Operator Route Guard ─────────────────────────────────────────────────
 // Redirects team accounts to their allowed pages based on role
@@ -221,6 +222,7 @@ function AppRoutes() {
         <Route path="/edi-monitor" component={EdiMonitor} />
         <Route path="/order-drop-cadence" component={OrderDropCadence} />
         <Route path="/weight-approval" component={WeightApproval} />
+        <Route path="/manager" component={ManagerDashboard} />
         <Route path="/shipping/clerk" component={ShippingClerkDashboard} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

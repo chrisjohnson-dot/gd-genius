@@ -55,6 +55,7 @@ import {
   Wifi,
   CheckSquare,
   Scale,
+  LayoutDashboard,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -102,6 +103,7 @@ const ltlItems = [
   { href: "/qc/scanner",          label: "QC Scanner",              icon: ScanBarcode },
   { href: "/qc/history",           label: "QC Session History",      icon: History },
   { href: "/weight-approval",       label: "Weight Approval",          icon: Scale },
+  { href: "/manager",               label: "Manager Dashboard",        icon: LayoutDashboard },
   { href: "/shipping/clerk",         label: "Shipping Clerk",           icon: Truck },
   { href: "/qc/production-line",  label: "Production Line Scans",   icon: Activity },
   { href: "/qc/scan-label",       label: "QC Scan & Label",         icon: Tag },

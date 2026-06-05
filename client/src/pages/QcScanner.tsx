@@ -472,6 +472,8 @@ export default function QcScanner() {
   const [activeScanPalletId, setActiveScanPalletId] = useState<number | null>(null);
   const activeScanPalletIdRef = useRef<number | null>(null);
   useEffect(() => { activeScanPalletIdRef.current = activeScanPalletId; }, [activeScanPalletId]);
+  // Ref to capture the barcode value at submission time — prevents stale closure in MU fallback
+  const lastSubmittedBarcodeRef = useRef<string>("");
 
   // Locked pallets: set of pallet IDs that are locked (scan input hidden)
   // When a new pallet is added, all previous pallets are auto-locked
@@ -670,11 +672,13 @@ export default function QcScanner() {
         // The active pallet at the time of scan is captured in activeScanPalletIdRef.
         const muPalletId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
         const sessionRef = session;
-        if (muPalletId && sessionRef) {
-          console.log(`[QcScanner] UPC not found — auto-trying as MU label: ${barcodeInput}`);
+        // Use the ref value — barcodeInput state may be stale or cleared by this point
+        const muLabelToTry = lastSubmittedBarcodeRef.current || barcodeInput.trim();
+        if (muPalletId && sessionRef && muLabelToTry) {
+          console.log(`[QcScanner] UPC not found — auto-trying as MU label: ${muLabelToTry}`);
           scanMu.mutate({
             sessionId: sessionRef.id,
-            muLabel: barcodeInput.trim(),
+            muLabel: muLabelToTry,
             palletId: muPalletId,
             palletType: palletsRef.current.find((p) => p.id === muPalletId)?.palletType ?? undefined,
           });
@@ -1394,6 +1398,9 @@ export default function QcScanner() {
     (e: React.FormEvent) => {
       e.preventDefault();
       if (!barcodeInput.trim() || !session) return;
+      // Capture the barcode in a ref so the MU fallback always has the correct value
+      // even if barcodeInput state is cleared before scanBarcode.onSuccess fires
+      lastSubmittedBarcodeRef.current = barcodeInput.trim();
       scanBarcode.mutate({ sessionId: session.id, barcode: barcodeInput.trim(), scanAsCase });
     },
     [barcodeInput, session, scanAsCase]

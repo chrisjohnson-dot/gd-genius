@@ -11,7 +11,7 @@
  * Silently no-ops if AudioContext is unavailable (e.g. SSR, blocked by browser).
  */
 
-const ERROR_SOUND_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/ZUOecDpAOOYTGGWI.m4a";
+const ERROR_SOUND_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/ORJCkEJulxhYRcWh.m4a";
 
 function getAudioContext(): AudioContext | null {
   try {

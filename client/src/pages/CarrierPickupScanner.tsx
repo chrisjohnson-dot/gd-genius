@@ -61,6 +61,7 @@ interface SelectedOrder {
 const CARRIER_SOUNDS = {
   scanAccepted: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/YpFnVchcxAmjqGes.wav",
   loadComplete: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/HBxMrBpYYiUkiOnS.wav",
+  error: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/ORJCkEJulxhYRcWh.m4a",
 };
 
 function playCarrierAudio(type: keyof typeof CARRIER_SOUNDS) {
@@ -175,9 +176,10 @@ export default function CarrierPickupScanner() {
   });
 
   // Sound
-  const { playError } = useScanAudio();
-  // Use voice audio for carrier pickup — louder and clearer for warehouse dock
+  const { playError: _playErrorFallback } = useScanAudio();
+  // Use carrier-specific audio for all sounds — louder and clearer for warehouse dock
   const playSuccess = () => playCarrierAudio("scanAccepted");
+  const playError = () => playCarrierAudio("error");
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem("carrierPickup_soundMuted") === "true"; } catch { return false; }
   });

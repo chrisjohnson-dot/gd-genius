@@ -370,6 +370,10 @@ export default function CarrierPickupScanner() {
     },
   });
 
+  const uploadPickupPhotoMutation = trpc.carrierPickup.uploadPickupPhoto.useMutation({
+    onError: (e) => console.warn("[CarrierPickup] Photo upload failed:", e.message),
+  });
+
   const scanPalletMutation = trpc.carrierPickup.scanPallet.useMutation({
     onSuccess: (data) => {
       if (data.duplicate) {
@@ -382,15 +386,22 @@ export default function CarrierPickupScanner() {
         // Capture photo after configurable delay (allows pallet to move into frame)
         const labelForPhoto = scanInput.trim();
         const scannedAt = new Date();
+        const uploadPhoto = (photo: string | null, sid: number | null) => {
+          if (photo && sid) {
+            uploadPickupPhotoMutation.mutate({ sessionId: sid, palletLabel: labelForPhoto, dataUrl: photo });
+          }
+        };
         if (cameraEnabled && captureDelayMs > 0) {
           setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: null }, ...prev]);
           setTimeout(() => {
             const photo = capturePhoto();
             setScannedPallets(prev => prev.map((p, i) => i === 0 && p.labelValue === labelForPhoto ? { ...p, photoDataUrl: photo } : p));
+            uploadPhoto(photo, sessionId);
           }, captureDelayMs);
         } else {
           const photo = capturePhoto();
           setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: photo }, ...prev]);
+          uploadPhoto(photo, sessionId);
         }
         setScanInput("");
         setTimeout(() => setFlashState("idle"), 500);

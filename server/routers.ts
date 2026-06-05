@@ -13245,6 +13245,41 @@ const carrierPickupRouter = router({
       return sessions.map(s => ({ ...s, scannedCount: countMap.get(s.id) ?? 0 }));
     }),
 
+  /** Upload a pallet photo captured during carrier pickup (base64 data URL → S3) */
+  uploadPickupPhoto: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      palletLabel: z.string(),
+      dataUrl: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const base64 = input.dataUrl.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64, "base64");
+      const suffix = Date.now();
+      const safeLabel = input.palletLabel.replace(/[^a-zA-Z0-9-]/g, "-");
+      const key = `pickup-photos/${input.sessionId}/${safeLabel}-${suffix}.jpg`;
+      const { url } = await storagePut(key, buffer, "image/jpeg");
+      // Save to pickup_scan_photos table
+      const { sql: sqlPhoto } = await import("drizzle-orm");
+      await db.execute(sqlPhoto`INSERT INTO pickup_scan_photos (pickup_session_id, pallet_label, photo_url) VALUES (${input.sessionId}, ${input.palletLabel}, ${url})`);
+      return { url };
+    }),
+
+  /** Get all photos for a pickup session */
+  getSessionPhotos: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const { sql: sqlPhoto } = await import("drizzle-orm");
+      const rows = await db.execute(sqlPhoto`SELECT id, pallet_label, photo_url, captured_at FROM pickup_scan_photos WHERE pickup_session_id = ${input.sessionId} ORDER BY captured_at ASC`);
+      const rowsAny = rows as any;
+      const arr = Array.isArray(rowsAny) ? rowsAny[0] : (Array.isArray(rowsAny?.rows) ? rowsAny.rows : []);
+      return arr.map((r: any) => ({ id: r.id, palletLabel: r.pallet_label, photoUrl: r.photo_url, capturedAt: r.captured_at }));
+    }),
+
   /** Retry marking a completed session as Shipped in Extensiv */
   retryShipInExtensiv: protectedProcedure
     .input(z.object({ sessionId: z.number() }))

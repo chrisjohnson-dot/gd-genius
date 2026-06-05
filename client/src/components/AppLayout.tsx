@@ -610,6 +610,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     ? user.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     : (user?.email?.[0] ?? "U").toUpperCase();
 
+  // Dock operators only see Carrier Pickup in the sidebar
+  const isDockOperator = user?.loginMethod?.startsWith("team:") && user.loginMethod.split(":")[1] === "dock_operator";
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6" }}>
       {/* ── Sidebar ─────────────────────────────────────────────────────────────────── */}
@@ -654,6 +657,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Navigation */}
         <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
+          {/* Dock Operator: simplified nav — Carrier Pickup only */}
+          {isDockOperator ? (
+            <div className="space-y-2 pt-2">
+              <NavItem
+                href="/shipping/carrier-pickup"
+                label="Carrier Pickup"
+                icon={Truck}
+                active={location === "/shipping/carrier-pickup"}
+              />
+            </div>
+          ) : (<>
           {/* Dashboard section */}
           <div>
             <button onClick={() => setDashboardOpen((o) => !o)} className="w-full flex items-center justify-between px-2 mb-1 group">
@@ -837,6 +851,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
+          </>)}
         </nav>
 
         {/* Footer — user card */}

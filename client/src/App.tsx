@@ -237,6 +237,19 @@ function Router() {
 
 function App() {
   const [splashDone, setSplashDone] = useState(false);
+
+  // Keep-alive ping: prevents server cold-start JSON errors by keeping the
+  // server warm. Fires every 4 minutes — well within Cloud Run's idle timeout.
+  useEffect(() => {
+    const ping = () => {
+      fetch("/api/scheduled/keepalive", { method: "POST" }).catch(() => {});
+    };
+    // Ping immediately on load, then every 4 minutes
+    ping();
+    const interval = setInterval(ping, 4 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (!splashDone) return <SplashScreen onDone={() => setSplashDone(true)} />;
   return (
     <ErrorBoundary>

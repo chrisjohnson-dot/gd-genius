@@ -300,9 +300,28 @@ function ScanErrorsSection() {
 }
 
 // ─── Orders Section ───────────────────────────────────────────────────────────
+function fmtTime(d: string | Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+}
+function fmtDate(d: string | Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+function fmtDuration(start: string | Date | null | undefined, end: string | Date | null | undefined) {
+  if (!start || !end) return null;
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (ms <= 0) return null;
+  const mins = Math.floor(ms / 60000);
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hrs > 0) return `${hrs}h ${remMins}m`;
+  return `${mins}m`;
+}
+
 function OrdersSection() {
   const [search, setSearch] = useState("");
-  const listQuery = trpc.qcScanner.getSessionHistory.useQuery({ limit: 20, search: search || undefined });
+  const listQuery = trpc.qcScanner.getSessionHistory.useQuery({ limit: 50, search: search || undefined });
   const sessions = listQuery.data?.sessions ?? [];
 
   return (
@@ -318,20 +337,36 @@ function OrdersSection() {
         </Button>
       </div>
       <div className="space-y-2">
-        {sessions.map((s: any) => (
-          <div key={s.id} className="bg-white/5 rounded-xl p-4 flex items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-white">TX {s.transactionId}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${s.status === "complete" ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-amber-300"}`}>{s.status}</span>
+        {sessions.map((s: any) => {
+          const duration = fmtDuration(s.createdAt, s.completedAt);
+          return (
+            <div key={s.id} className="bg-white/5 rounded-xl p-4 flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-white">TX {s.transactionId}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${s.status === "complete" ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-amber-300"}`}>{s.status}</span>
+                </div>
+                <p className="text-sm text-gray-400 mt-0.5">{s.customerName} · {s.totalScanned}/{s.totalExpected} units</p>
               </div>
-              <p className="text-sm text-gray-400 mt-0.5">{s.customerName} · {s.totalScanned}/{s.totalExpected} units</p>
+              <div className="text-right text-xs text-gray-400 shrink-0 space-y-0.5">
+                <div className="text-gray-500">{fmtDate(s.createdAt)}</div>
+                <div>
+                  <span className="text-gray-500">Start: </span>
+                  <span className="text-white">{fmtTime(s.createdAt)}</span>
+                </div>
+                {s.completedAt && (
+                  <div>
+                    <span className="text-gray-500">End: </span>
+                    <span className="text-white">{fmtTime(s.completedAt)}</span>
+                  </div>
+                )}
+                {duration && (
+                  <div className="text-blue-400 font-semibold">⏱ {duration}</div>
+                )}
+              </div>
             </div>
-            <div className="text-right text-xs text-gray-500">
-              {new Date(s.createdAt).toLocaleDateString()}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

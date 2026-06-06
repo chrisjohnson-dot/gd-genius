@@ -6,8 +6,11 @@ import { toast } from "sonner";
 import {
   Scale, Users, AlertTriangle, Package, Activity, RefreshCw,
   CheckCircle2, XCircle, Clock, Edit2, Save, X, Undo2, ChevronDown, ChevronUp,
-  Warehouse, Search
+  Warehouse, Search, TrendingUp, Settings
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Tab = "weights" | "mu-cases" | "sku-overrides" | "scan-errors" | "orders" | "health" | "users";
@@ -487,55 +490,298 @@ function fmtDuration(start: string | Date | null | undefined, end: string | Date
   return `${mins}m`;
 }
 
+function durationToMinutes(start: string | Date | null | undefined, end: string | Date | null | undefined): number | null {
+  if (!start || !end) return null;
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (ms <= 0) return null;
+  return Math.round(ms / 60000 * 10) / 10;
+}
+function durationColor(mins: number | null, green: number, yellow: number): string {
+  if (mins === null) return "text-gray-400";
+  if (mins <= green) return "text-green-400";
+  if (mins <= yellow) return "text-amber-400";
+  return "text-red-400";
+}
+function durationBadgeClass(mins: number | null, green: number, yellow: number): string {
+  if (mins === null) return "bg-gray-500/20 text-gray-300";
+  if (mins <= green) return "bg-green-500/20 text-green-300";
+  if (mins <= yellow) return "bg-amber-500/20 text-amber-300";
+  return "bg-red-500/20 text-red-300";
+}
+
 function OrdersSection() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.loginMethod === "team:admin";
   const [search, setSearch] = useState("");
+  const [activeView, setActiveView] = useState<"list" | "trends">("list");
+  const [trendDays, setTrendDays] = useState(30);
+  const [showThresholdEditor, setShowThresholdEditor] = useState(false);
+  const [greenInput, setGreenInput] = useState("");
+  const [yellowInput, setYellowInput] = useState("");
+
   const listQuery = trpc.qcScanner.getSessionHistory.useQuery({ limit: 50, search: search || undefined });
   const sessions = listQuery.data?.sessions ?? [];
 
+  const thresholdsQuery = trpc.processingTime.getThresholds.useQuery();
+  const green = thresholdsQuery.data?.greenMaxMinutes ?? 60;
+  const yellow = thresholdsQuery.data?.yellowMaxMinutes ?? 120;
+
+  const trendsQuery = trpc.processingTime.getDwellTrends.useQuery(
+    { days: trendDays },
+    { enabled: activeView === "trends" }
+  );
+
+  const saveThresholds = trpc.processingTime.saveThresholds.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Thresholds saved: green ≤${data.greenMaxMinutes}m, yellow ≤${data.yellowMaxMinutes}m`);
+      thresholdsQuery.refetch();
+      setShowThresholdEditor(false);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const handleSaveThresholds = () => {
+    const g = parseInt(greenInput, 10);
+    const y = parseInt(yellowInput, 10);
+    if (isNaN(g) || isNaN(y) || g < 1 || y < 1) { toast.error("Enter valid minute values"); return; }
+    if (g >= y) { toast.error("Green threshold must be less than yellow"); return; }
+    saveThresholds.mutate({ greenMaxMinutes: g, yellowMaxMinutes: y });
+  };
+
+  const trends = trendsQuery.data;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search TX ID, customer, PO..."
-            className="w-full bg-white/10 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setActiveView("list")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              activeView === "list" ? "bg-blue-600 text-white" : "bg-white/10 text-gray-400 hover:text-white"
+            }`}>
+            <Warehouse className="w-3.5 h-3.5" /> Orders
+          </button>
+          <button onClick={() => setActiveView("trends")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              activeView === "trends" ? "bg-blue-600 text-white" : "bg-white/10 text-gray-400 hover:text-white"
+            }`}>
+            <TrendingUp className="w-3.5 h-3.5" /> Dwell Trends
+          </button>
         </div>
-        <Button variant="outline" size="sm" className="h-9" onClick={() => listQuery.refetch()}>
-          <RefreshCw className={`w-3.5 h-3.5 ${listQuery.isFetching ? "animate-spin" : ""}`} />
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-gray-400 bg-white/5 rounded-lg px-3 py-1.5">
+            <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+            <span>≤{green}m</span>
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block ml-1" />
+            <span>≤{yellow}m</span>
+            <span className="w-2 h-2 rounded-full bg-red-400 inline-block ml-1" />
+            <span>&gt;{yellow}m</span>
+          </div>
+          {isAdmin && (
+            <Button variant="outline" size="sm" className="h-7 px-2" title="Edit thresholds"
+              onClick={() => { setGreenInput(String(green)); setYellowInput(String(yellow)); setShowThresholdEditor(!showThresholdEditor); }}>
+              <Settings className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="h-7" onClick={() => { listQuery.refetch(); trendsQuery.refetch(); }}>
+            <RefreshCw className={`w-3 h-3 ${(listQuery.isFetching || trendsQuery.isFetching) ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
-      <div className="space-y-2">
-        {sessions.map((s: any) => {
-          const duration = fmtDuration(s.createdAt, s.completedAt);
-          return (
-            <div key={s.id} className="bg-white/5 rounded-xl p-4 flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono font-bold text-white">TX {s.transactionId}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${s.status === "complete" ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-amber-300"}`}>{s.status}</span>
-                </div>
-                <p className="text-sm text-gray-400 mt-0.5">{s.customerName} · {s.totalScanned}/{s.totalExpected} units</p>
-              </div>
-              <div className="text-right text-xs text-gray-400 shrink-0 space-y-0.5">
-                <div className="text-gray-500">{fmtDate(s.createdAt)}</div>
-                <div>
-                  <span className="text-gray-500">Start: </span>
-                  <span className="text-white">{fmtTime(s.createdAt)}</span>
-                </div>
-                {s.completedAt && (
-                  <div>
-                    <span className="text-gray-500">End: </span>
-                    <span className="text-white">{fmtTime(s.completedAt)}</span>
+
+      {/* Threshold editor (admin only) */}
+      {showThresholdEditor && isAdmin && (
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10 flex items-end gap-4 flex-wrap">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Green max (minutes)</label>
+            <input type="number" min={1} max={480} value={greenInput} onChange={(e) => setGreenInput(e.target.value)}
+              className="w-24 bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Yellow max (minutes)</label>
+            <input type="number" min={1} max={480} value={yellowInput} onChange={(e) => setYellowInput(e.target.value)}
+              className="w-24 bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500" />
+          </div>
+          <Button size="sm" className="h-9 bg-blue-600 hover:bg-blue-700" onClick={handleSaveThresholds}
+            disabled={saveThresholds.isPending}>
+            <Save className="w-3.5 h-3.5 mr-1" /> Save
+          </Button>
+          <Button variant="outline" size="sm" className="h-9" onClick={() => setShowThresholdEditor(false)}>
+            <X className="w-3.5 h-3.5" />
+          </Button>
+          <p className="text-xs text-gray-500 w-full">Green = fast (on time), Yellow = caution, Red = slow. Changes apply to all orders immediately.</p>
+        </div>
+      )}
+
+      {/* LIST VIEW */}
+      {activeView === "list" && (
+        <>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search TX ID, customer, PO..."
+              className="w-full bg-white/10 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+          </div>
+          <div className="space-y-2">
+            {sessions.map((s: any) => {
+              const durationMins = durationToMinutes(s.createdAt, s.completedAt);
+              const duration = fmtDuration(s.createdAt, s.completedAt);
+              return (
+                <div key={s.id} className="bg-white/5 rounded-xl p-4 flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-white">TX {s.transactionId}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        s.status === "complete" ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-amber-300"
+                      }`}>{s.status}</span>
+                    </div>
+                    <p className="text-sm text-gray-400 mt-0.5">{s.customerName} · {s.totalScanned}/{s.totalExpected} units</p>
                   </div>
-                )}
-                {duration && (
-                  <div className="text-blue-400 font-semibold">⏱ {duration}</div>
-                )}
+                  <div className="text-right text-xs text-gray-400 shrink-0 space-y-0.5">
+                    <div className="text-gray-500">{fmtDate(s.createdAt)}</div>
+                    <div>
+                      <span className="text-gray-500">Start: </span>
+                      <span className="text-white">{fmtTime(s.createdAt)}</span>
+                    </div>
+                    {s.completedAt && (
+                      <div>
+                        <span className="text-gray-500">End: </span>
+                        <span className="text-white">{fmtTime(s.completedAt)}</span>
+                      </div>
+                    )}
+                    {duration && (
+                      <div>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${durationBadgeClass(durationMins, green, yellow)}`}>
+                          ⏱ {duration}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* TRENDS VIEW */}
+      {activeView === "trends" && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Show last:</span>
+            {[7, 14, 30, 60, 90].map((d) => (
+              <button key={d} onClick={() => setTrendDays(d)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  trendDays === d ? "bg-blue-600 text-white" : "bg-white/10 text-gray-400 hover:text-white"
+                }`}>{d}d</button>
+            ))}
+          </div>
+
+          {trendsQuery.isLoading ? (
+            <div className="text-center py-12 text-gray-500">Loading trend data...</div>
+          ) : !trends ? (
+            <div className="text-center py-12 text-gray-500">No data available.</div>
+          ) : (
+            <>
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Orders", value: String(trends.summary.totalOrders), cls: "text-white" },
+                  { label: "Avg Duration", value: `${trends.summary.avgMinutes}m`, cls: durationColor(trends.summary.avgMinutes, green, yellow) },
+                  { label: "Fastest", value: `${trends.summary.minMinutes}m`, cls: "text-green-400" },
+                  { label: "Slowest", value: `${trends.summary.maxMinutes}m`, cls: "text-red-400" },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-white/5 rounded-xl p-4">
+                    <p className="text-xs text-gray-400 mb-1">{kpi.label}</p>
+                    <p className={`text-2xl font-bold ${kpi.cls}`}>{kpi.value}</p>
+                  </div>
+                ))}
               </div>
-            </div>
-          );
-        })}
-      </div>
+
+              {/* Daily avg duration chart */}
+              {trends.daily.length > 0 && (
+                <div className="bg-white/5 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-white mb-3">Avg Processing Time by Day</h3>
+                  <div style={{ height: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={trends.daily} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }}
+                          tickFormatter={(d: string) => { const dt = new Date(d + "T00:00:00"); return `${dt.getMonth()+1}/${dt.getDate()}`; }} />
+                        <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} unit="m" />
+                        <Tooltip
+                          contentStyle={{ background: "#1f2937", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
+                          labelStyle={{ color: "#e5e7eb" }}
+                          formatter={(v: number) => [`${v}m`, "Avg Duration"]}
+                          labelFormatter={(d: string) => `Date: ${d}`}
+                        />
+                        <Bar dataKey="avgMinutes" radius={[3,3,0,0]}
+                          fill="#4ade80"
+                          label={false}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* By customer table */}
+              {trends.byCustomer.length > 0 && (
+                <div className="bg-white/5 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-white mb-3">Avg Duration by Customer (last {trendDays}d)</h3>
+                  <div className="rounded-xl overflow-hidden border border-white/10">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-white/5 text-gray-400 text-xs uppercase tracking-wide">
+                          <th className="text-left px-4 py-2">Customer</th>
+                          <th className="text-right px-4 py-2">Orders</th>
+                          <th className="text-right px-4 py-2">Avg</th>
+                          <th className="text-right px-4 py-2">Min</th>
+                          <th className="text-right px-4 py-2">Max</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trends.byCustomer.map((c: any) => (
+                          <tr key={c.customerName} className="border-t border-white/5 hover:bg-white/5">
+                            <td className="px-4 py-2 text-white font-medium">{c.customerName}</td>
+                            <td className="px-4 py-2 text-right text-gray-400">{c.orderCount}</td>
+                            <td className={`px-4 py-2 text-right font-semibold ${durationColor(c.avgMinutes, green, yellow)}`}>{c.avgMinutes}m</td>
+                            <td className="px-4 py-2 text-right text-green-400">{c.minMinutes}m</td>
+                            <td className="px-4 py-2 text-right text-red-400">{c.maxMinutes}m</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Hour-of-day chart */}
+              {trends.byHour.length > 0 && (
+                <div className="bg-white/5 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-white mb-3">Avg Duration by Hour of Day</h3>
+                  <div style={{ height: 180 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={trends.byHour} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="hourOfDay" tick={{ fontSize: 10, fill: "#9ca3af" }}
+                          tickFormatter={(h: number) => `${h}:00`} />
+                        <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} unit="m" />
+                        <Tooltip
+                          contentStyle={{ background: "#1f2937", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
+                          labelStyle={{ color: "#e5e7eb" }}
+                          formatter={(v: number) => [`${v}m`, "Avg Duration"]}
+                          labelFormatter={(h: number) => `Hour: ${h}:00`}
+                        />
+                        <Bar dataKey="avgMinutes" fill="#60a5fa" radius={[3,3,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

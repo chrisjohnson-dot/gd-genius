@@ -5257,6 +5257,33 @@ const qcScannerRouter = router({
         console.warn(`[QcScanner] Failed to persist palletCount to orderTracking:`, err);
       }
 
+      // --- Non-fatal: log dwell time for processing time scorecard ---
+      try {
+        const completedSession = await getQcSessionById(input.sessionId);
+        if (completedSession?.completedAt && completedSession?.createdAt) {
+          const dwellDb = await getDb();
+          if (dwellDb) {
+            const items = await getQcScanItems(input.sessionId);
+            const totalUnits = items.reduce((s: number, i: any) => s + (i.scannedQty ?? 0), 0);
+            const totalSkus = items.length;
+            const durationMinutes = Math.round(
+              (completedSession.completedAt.getTime() - completedSession.createdAt.getTime()) / 60000 * 100
+            ) / 100;
+            await dwellDb.execute(sql`
+              INSERT IGNORE INTO dwell_time_log
+                (session_id, transaction_id, customer_name, facility_id, started_at, completed_at, duration_minutes, total_units, total_skus, pallet_count)
+              VALUES
+                (${input.sessionId}, ${completedSession.transactionId ?? null}, ${completedSession.customerName ?? null},
+                 ${completedSession.facilityId ?? 0}, ${completedSession.createdAt}, ${completedSession.completedAt},
+                 ${durationMinutes}, ${totalUnits}, ${totalSkus}, ${activePalletCount})
+            `);
+            console.log(`[QcScanner] Logged dwell time ${durationMinutes}min for session ${input.sessionId}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[QcScanner] Failed to log dwell time:`, err);
+      }
+
       return {
         success: true,
         packedInExtensiv,
@@ -13823,6 +13850,160 @@ const muSyncRouter = router({
     }),
 });
 
+// ─── Processing Time / Dwell Time Router ─────────────────────────────────────
+// Manages per-facility processing time thresholds and dwell time trend analytics.
+// saveThresholds is restricted to admin or team:admin users.
+
+function isManagerOrAdmin(user: { role: string; loginMethod?: string | null }): boolean {
+  return user.role === "admin" || user.loginMethod === "team:admin";
+}
+
+const processingTimeRouter = router({
+  // Read global (facility_id=0) thresholds
+  getThresholds: protectedProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const rows = await db.execute(sql`
+        SELECT green_max_minutes, yellow_max_minutes
+        FROM processing_time_settings
+        WHERE facility_id = 0
+        LIMIT 1
+      `);
+      const row = (rows as any[])[0];
+      return {
+        greenMaxMinutes: row ? Number(row.green_max_minutes) : 60,
+        yellowMaxMinutes: row ? Number(row.yellow_max_minutes) : 120,
+      };
+    }),
+
+  // Save thresholds — admin or team:admin only
+  saveThresholds: protectedProcedure
+    .input(z.object({
+      greenMaxMinutes: z.number().int().min(1).max(480),
+      yellowMaxMinutes: z.number().int().min(1).max(480),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (!isManagerOrAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required to change processing time thresholds" });
+      }
+      if (input.greenMaxMinutes >= input.yellowMaxMinutes) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Green threshold must be less than yellow threshold" });
+      }
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.execute(sql`
+        INSERT INTO processing_time_settings (facility_id, green_max_minutes, yellow_max_minutes, updated_by)
+        VALUES (0, ${input.greenMaxMinutes}, ${input.yellowMaxMinutes}, ${ctx.user.name ?? "admin"})
+        ON DUPLICATE KEY UPDATE
+          green_max_minutes = ${input.greenMaxMinutes},
+          yellow_max_minutes = ${input.yellowMaxMinutes},
+          updated_by = ${ctx.user.name ?? "admin"}
+      `);
+      return { success: true, greenMaxMinutes: input.greenMaxMinutes, yellowMaxMinutes: input.yellowMaxMinutes };
+    }),
+
+  // Dwell time trend data — last N days, grouped by day and optionally by customer
+  getDwellTrends: protectedProcedure
+    .input(z.object({
+      days: z.number().int().min(1).max(365).default(30),
+      customerId: z.number().nullable().optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const customerFilter = input.customerId != null
+        ? sql`AND transaction_id = ${input.customerId}`
+        : sql``;
+
+      const dailyRows = await db.execute(sql`
+        SELECT
+          DATE(started_at) AS day,
+          COUNT(*) AS order_count,
+          ROUND(AVG(duration_minutes), 1) AS avg_minutes,
+          ROUND(MIN(duration_minutes), 1) AS min_minutes,
+          ROUND(MAX(duration_minutes), 1) AS max_minutes,
+          SUM(total_units) AS total_units
+        FROM dwell_time_log
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ${input.days} DAY)
+          ${customerFilter}
+        GROUP BY DATE(started_at)
+        ORDER BY day ASC
+      `);
+
+      const customerRows = await db.execute(sql`
+        SELECT
+          customer_name,
+          COUNT(*) AS order_count,
+          ROUND(AVG(duration_minutes), 1) AS avg_minutes,
+          ROUND(MIN(duration_minutes), 1) AS min_minutes,
+          ROUND(MAX(duration_minutes), 1) AS max_minutes
+        FROM dwell_time_log
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ${input.days} DAY)
+        GROUP BY customer_name
+        ORDER BY order_count DESC
+        LIMIT 15
+      `);
+
+      const hourRows = await db.execute(sql`
+        SELECT
+          HOUR(started_at) AS hour_of_day,
+          COUNT(*) AS order_count,
+          ROUND(AVG(duration_minutes), 1) AS avg_minutes
+        FROM dwell_time_log
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ${input.days} DAY)
+          ${customerFilter}
+        GROUP BY HOUR(started_at)
+        ORDER BY hour_of_day ASC
+      `);
+
+      const summaryRows = await db.execute(sql`
+        SELECT
+          COUNT(*) AS total_orders,
+          ROUND(AVG(duration_minutes), 1) AS avg_minutes,
+          ROUND(MIN(duration_minutes), 1) AS min_minutes,
+          ROUND(MAX(duration_minutes), 1) AS max_minutes,
+          ROUND(AVG(total_units), 0) AS avg_units
+        FROM dwell_time_log
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ${input.days} DAY)
+          ${customerFilter}
+      `);
+
+      const summary = (summaryRows as any[])[0] ?? {};
+
+      return {
+        daily: (dailyRows as any[]).map(r => ({
+          day: String(r.day),
+          orderCount: Number(r.order_count),
+          avgMinutes: Number(r.avg_minutes ?? 0),
+          minMinutes: Number(r.min_minutes ?? 0),
+          maxMinutes: Number(r.max_minutes ?? 0),
+          totalUnits: Number(r.total_units ?? 0),
+        })),
+        byCustomer: (customerRows as any[]).map(r => ({
+          customerName: String(r.customer_name ?? "Unknown"),
+          orderCount: Number(r.order_count),
+          avgMinutes: Number(r.avg_minutes ?? 0),
+          minMinutes: Number(r.min_minutes ?? 0),
+          maxMinutes: Number(r.max_minutes ?? 0),
+        })),
+        byHour: (hourRows as any[]).map(r => ({
+          hourOfDay: Number(r.hour_of_day),
+          orderCount: Number(r.order_count),
+          avgMinutes: Number(r.avg_minutes ?? 0),
+        })),
+        summary: {
+          totalOrders: Number(summary.total_orders ?? 0),
+          avgMinutes: Number(summary.avg_minutes ?? 0),
+          minMinutes: Number(summary.min_minutes ?? 0),
+          maxMinutes: Number(summary.max_minutes ?? 0),
+          avgUnits: Number(summary.avg_units ?? 0),
+        },
+      };
+    }),
+});
+
 // ──────────────────────────────────────────────────────────────────────────────
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
@@ -13856,5 +14037,6 @@ export const appRouterV4 = router({
   dockManager: dockManagerRouter,
   muSync: muSyncRouter,
   analytics: analyticsRouter,
+  processingTime: processingTimeRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;

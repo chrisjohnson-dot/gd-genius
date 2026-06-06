@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import {
   ScrollText, Search, Plus, RefreshCw, Package, Truck,
   ExternalLink, Copy, Check, X, RotateCcw, Eye, EyeOff,
-  Download, Printer, FileCheck, FileX, CheckCircle2, AlertTriangle,
+  Download, Printer, FileCheck, FileX, CheckCircle2, AlertTriangle, Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -308,6 +308,46 @@ function BolCell({ session }: { session: PickupSession }) {
 
 // ─── Carrier Pickups tab ──────────────────────────────────────────────────────
 
+function PhotosCell({ sessionId }: { sessionId: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const photosQuery = trpc.carrierPickup.getSessionPhotos.useQuery(
+    { sessionId },
+    { enabled: expanded, staleTime: 5 * 60 * 1000 }
+  );
+  const photos = photosQuery.data ?? [];
+  if (!expanded) {
+    return (
+      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={() => setExpanded(true)}>
+        <Camera className="h-3.5 w-3.5" /> Photos
+      </Button>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1">
+        <span className="text-xs font-medium">Proof of Shipping</span>
+        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-auto" onClick={() => setExpanded(false)}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+      {photosQuery.isLoading ? (
+        <div className="text-xs text-muted-foreground">Loading...</div>
+      ) : photos.length === 0 ? (
+        <div className="text-xs text-muted-foreground">No photos stored</div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {photos.map((p: any) => (
+            <a key={p.id} href={p.photoUrl} target="_blank" rel="noopener noreferrer" title={`Pallet: ${p.palletLabel}`}>
+              <img src={p.photoUrl} alt={p.palletLabel}
+                className="w-16 h-16 object-cover rounded border border-border hover:opacity-80 transition-opacity" />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CarrierPickupsTab() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "scanning">("all");
@@ -410,6 +450,7 @@ function CarrierPickupsTab() {
                 <TableHead className="w-[130px] text-center">Scanned / Expected</TableHead>
                 <TableHead className="w-[110px]">Status</TableHead>
                 <TableHead className="w-[200px]">BOL</TableHead>
+                <TableHead className="w-[120px]">Photos</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -469,6 +510,9 @@ function CarrierPickupsTab() {
                   </TableCell>
                   <TableCell>
                     <BolCell session={s} />
+                  </TableCell>
+                  <TableCell>
+                    <PhotosCell sessionId={s.id} />
                   </TableCell>
                 </TableRow>
               ))}

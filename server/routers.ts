@@ -6918,7 +6918,13 @@ const muCaseCountRouter = router({
 
   /** Employee submits a case count request for manager approval */
   submit: protectedProcedure
-    .input(z.object({ configId: z.number(), customerId: z.number(), sku: z.string(), casesPerMu: z.number().int().positive(), submittedBy: z.string().optional() }))
+    .input(z.object({
+      configId: z.number().int().positive(),
+      customerId: z.number().int().positive(),
+      sku: z.string().min(1).max(100),
+      casesPerMu: z.number().int().min(1, "Cases/MU must be at least 1").max(500, "Cases/MU cannot exceed 500"),
+      submittedBy: z.string().optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });

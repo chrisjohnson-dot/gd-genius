@@ -164,10 +164,42 @@ function MuCaseCountsSection() {
 }
 
 // ─── SKU Weight Overrides Section ─────────────────────────────────────────────
+// ─── Validation helpers ───────────────────────────────────────────────────────
+function validateCartonWeight(v: string): string | null {
+  if (v === "" || v === null) return "Required";
+  const n = parseFloat(v);
+  if (isNaN(n)) return "Must be a number";
+  if (n <= 0) return "Must be > 0";
+  if (n > 9999) return "Max 9999 lbs";
+  return null;
+}
+function validateUnitsPerCarton(v: string): string | null {
+  if (v === "" || v === null) return "Required";
+  const n = parseInt(v, 10);
+  if (isNaN(n) || !Number.isInteger(parseFloat(v))) return "Must be a whole number";
+  if (n <= 0) return "Must be ≥ 1";
+  if (n > 10000) return "Max 10,000 units";
+  return null;
+}
+function validateCasesPerMu(v: string): string | null {
+  if (v === "" || v === null || v === undefined) return null; // optional field
+  const n = parseInt(v, 10);
+  if (isNaN(n) || !Number.isInteger(parseFloat(v))) return "Must be a whole number";
+  if (n <= 0) return "Must be ≥ 1";
+  if (n > 500) return "Max 500 cases/MU";
+  return null;
+}
+
 function SkuOverridesSection() {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<{ cartonWeightLb: string; unitsPerCarton: string; casesPerMu: string }>({ cartonWeightLb: "", unitsPerCarton: "", casesPerMu: "" });
+
+  // Derived validation errors for the currently-edited row
+  const weightErr = editingId !== null ? validateCartonWeight(editValues.cartonWeightLb) : null;
+  const unitsErr  = editingId !== null ? validateUnitsPerCarton(editValues.unitsPerCarton) : null;
+  const casesErr  = editingId !== null ? validateCasesPerMu(editValues.casesPerMu) : null;
+  const hasErrors = !!(weightErr || unitsErr || casesErr);
 
   const listQuery = trpc.skuWeight.listAll.useQuery();
   const muCaseListQuery = trpc.muCaseCount.list.useQuery({ status: "approved" });
@@ -277,14 +309,34 @@ function SkuOverridesSection() {
                 <td className="px-4 py-3 text-gray-400">{o.customerName ?? `Customer ${o.customerId}`}</td>
                 <td className="px-4 py-3 text-right">
                   {editingId === o.id ? (
-                    <input type="number" value={editValues.cartonWeightLb} onChange={(e) => setEditValues(v => ({ ...v, cartonWeightLb: e.target.value }))}
-                      className="w-24 bg-white/10 border border-blue-500 rounded px-2 py-1 text-white text-right focus:outline-none" />
+                    <div className="flex flex-col items-end gap-0.5">
+                      <input
+                        type="number"
+                        value={editValues.cartonWeightLb}
+                        onChange={(e) => setEditValues(v => ({ ...v, cartonWeightLb: e.target.value }))}
+                        step="0.01"
+                        className={`w-24 bg-white/10 border rounded px-2 py-1 text-white text-right focus:outline-none ${
+                          weightErr ? "border-red-500 focus:border-red-400" : "border-blue-500 focus:border-blue-400"
+                        }`}
+                      />
+                      {weightErr && <span className="text-red-400 text-xs">{weightErr}</span>}
+                    </div>
                   ) : <span className="text-white">{parseFloat(o.cartonWeightLb).toFixed(2)}</span>}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {editingId === o.id ? (
-                    <input type="number" value={editValues.unitsPerCarton} onChange={(e) => setEditValues(v => ({ ...v, unitsPerCarton: e.target.value }))}
-                      className="w-20 bg-white/10 border border-blue-500 rounded px-2 py-1 text-white text-right focus:outline-none" />
+                    <div className="flex flex-col items-end gap-0.5">
+                      <input
+                        type="number"
+                        value={editValues.unitsPerCarton}
+                        onChange={(e) => setEditValues(v => ({ ...v, unitsPerCarton: e.target.value }))}
+                        step="1"
+                        className={`w-20 bg-white/10 border rounded px-2 py-1 text-white text-right focus:outline-none ${
+                          unitsErr ? "border-red-500 focus:border-red-400" : "border-blue-500 focus:border-blue-400"
+                        }`}
+                      />
+                      {unitsErr && <span className="text-red-400 text-xs">{unitsErr}</span>}
+                    </div>
                   ) : <span className="text-white">{o.unitsPerCarton}</span>}
                 </td>
                 <td className="px-4 py-3 text-right text-gray-400">
@@ -292,10 +344,21 @@ function SkuOverridesSection() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   {editingId === o.id ? (
-                    <input type="number" min={1} value={editValues.casesPerMu}
-                      onChange={(e) => setEditValues(v => ({ ...v, casesPerMu: e.target.value }))}
-                      placeholder="—"
-                      className="w-16 bg-white/10 border border-blue-500 rounded px-2 py-1 text-white text-right focus:outline-none" />
+                    <div className="flex flex-col items-end gap-0.5">
+                      <input
+                        type="number"
+                        min={1}
+                        max={500}
+                        step="1"
+                        value={editValues.casesPerMu}
+                        onChange={(e) => setEditValues(v => ({ ...v, casesPerMu: e.target.value }))}
+                        placeholder="—"
+                        className={`w-16 bg-white/10 border rounded px-2 py-1 text-white text-right focus:outline-none ${
+                          casesErr ? "border-red-500 focus:border-red-400" : "border-blue-500 focus:border-blue-400"
+                        }`}
+                      />
+                      {casesErr && <span className="text-red-400 text-xs">{casesErr}</span>}
+                    </div>
                   ) : (
                     <span className={muCaseMap.has(o.sku) ? "text-white" : "text-gray-600"}>
                       {muCaseMap.get(o.sku)?.casesPerMu ?? "—"}
@@ -305,21 +368,27 @@ function SkuOverridesSection() {
                 <td className="px-4 py-3 text-right">
                   {editingId === o.id ? (
                     <div className="flex items-center justify-end gap-1">
-                      <Button size="sm" className="h-7 bg-green-600 hover:bg-green-700 text-white px-2"
+                      <Button
+                        size="sm"
+                        className="h-7 bg-green-600 hover:bg-green-700 text-white px-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={hasErrors || upsertMutation.isPending || muCaseSubmitMutation.isPending}
+                        title={hasErrors ? "Fix validation errors before saving" : "Save changes"}
                         onClick={() => {
-                          upsertMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, cartonWeightLb: parseFloat(editValues.cartonWeightLb), unitsPerCarton: parseInt(editValues.unitsPerCarton) });
-                          // Save Cases/MU if changed
-                          const newCases = parseInt(editValues.casesPerMu);
-                          if (newCases > 0) {
-                            const existing = muCaseMap.get(o.sku);
-                            if (existing) {
-                              // Update existing approved record by re-inserting
-                              muCaseSubmitMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, casesPerMu: newCases });
-                            } else {
-                              muCaseSubmitMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, casesPerMu: newCases });
-                            }
+                          if (hasErrors) return;
+                          upsertMutation.mutate({
+                            sku: o.sku,
+                            configId: o.configId,
+                            customerId: o.customerId,
+                            cartonWeightLb: parseFloat(editValues.cartonWeightLb),
+                            unitsPerCarton: parseInt(editValues.unitsPerCarton, 10),
+                          });
+                          // Save Cases/MU only if a value was entered
+                          const newCases = parseInt(editValues.casesPerMu, 10);
+                          if (!isNaN(newCases) && newCases > 0) {
+                            muCaseSubmitMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, casesPerMu: newCases });
                           }
-                        }}>
+                        }}
+                      >
                         <Save className="w-3 h-3" />
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setEditingId(null)}>

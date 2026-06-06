@@ -193,7 +193,22 @@ function SkuOverridesSection() {
   }
 
   const allOverrides = listQuery.data ?? [];
-  const overrides = search ? allOverrides.filter((o: any) => o.sku?.toLowerCase().includes(search.toLowerCase())) : allOverrides;
+
+  // Build unique customer list from overrides
+  const customers = Array.from(
+    new Map((allOverrides as any[]).map((o) => [
+      o.customerId,
+      { id: o.customerId, name: o.customerName ?? `Customer ${o.customerId}` }
+    ])).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | "all">("all");
+
+  const overrides = (allOverrides as any[]).filter((o) => {
+    if (selectedCustomerId !== "all" && o.customerId !== selectedCustomerId) return false;
+    if (search && !o.sku?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-4">
@@ -211,6 +226,34 @@ function SkuOverridesSection() {
           <RefreshCw className={`w-3.5 h-3.5 ${listQuery.isFetching ? "animate-spin" : ""}`} />
         </Button>
       </div>
+
+      {/* Customer tabs */}
+      {customers.length > 1 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <button
+            onClick={() => setSelectedCustomerId("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              selectedCustomerId === "all" ? "bg-blue-600 text-white" : "bg-white/10 text-gray-400 hover:text-white"
+            }`}
+          >
+            All ({(allOverrides as any[]).length})
+          </button>
+          {customers.map((c) => {
+            const count = (allOverrides as any[]).filter((o) => o.customerId === c.id).length;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedCustomerId(c.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  selectedCustomerId === c.id ? "bg-blue-600 text-white" : "bg-white/10 text-gray-400 hover:text-white"
+                }`}
+              >
+                {c.name} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="rounded-xl overflow-hidden border border-white/10">
         <table className="w-full text-sm">

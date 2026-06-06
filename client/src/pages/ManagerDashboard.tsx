@@ -289,8 +289,8 @@ function SkuOverridesSection() {
         </div>
       )}
 
-      <div className="rounded-xl overflow-hidden border border-white/10">
-        <table className="w-full text-sm">
+      <div className="rounded-xl overflow-hidden border border-white/10" style={{backgroundColor: '#191C21'}}>
+        <table className="w-full text-sm" style={{backgroundColor: '#191C21'}}>
           <thead>
             <tr className="bg-white/5 text-gray-400 text-xs uppercase tracking-wide">
               <th className="text-left px-4 py-3">SKU</th>
@@ -306,7 +306,7 @@ function SkuOverridesSection() {
             {overrides.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-8 text-gray-500">No overrides found.</td></tr>
             ) : overrides.map((o: any) => (
-              <tr key={o.id} className="border-t border-white/5 hover:bg-white/5 transition-colors">
+              <tr key={o.id} className="border-t border-white/5 hover:bg-white/5 transition-colors" style={{backgroundColor: '#191C21'}}>
                 <td className="px-4 py-3 font-mono font-semibold text-white">{o.sku}</td>
                 <td className="px-4 py-3 text-gray-400">{o.customerName ?? `Customer ${o.customerId}`}</td>
                 <td className="px-4 py-3 text-right">

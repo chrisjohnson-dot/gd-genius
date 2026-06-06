@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   Scale, Users, AlertTriangle, Package, Activity, RefreshCw,
-  CheckCircle2, XCircle, Clock, Edit2, Save, X, ChevronDown, ChevronUp,
+  CheckCircle2, XCircle, Clock, Edit2, Save, X, Undo2, ChevronDown, ChevronUp,
   Warehouse, Search
 } from "lucide-react";
 
@@ -194,6 +194,8 @@ function SkuOverridesSection() {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<{ cartonWeightLb: string; unitsPerCarton: string; casesPerMu: string }>({ cartonWeightLb: "", unitsPerCarton: "", casesPerMu: "" });
+  // Snapshot of values at the moment the row entered edit mode — used by Undo
+  const [originalValues, setOriginalValues] = useState<{ cartonWeightLb: string; unitsPerCarton: string; casesPerMu: string }>({ cartonWeightLb: "", unitsPerCarton: "", casesPerMu: "" });
 
   // Derived validation errors for the currently-edited row
   const weightErr = editingId !== null ? validateCartonWeight(editValues.cartonWeightLb) : null;
@@ -391,14 +393,25 @@ function SkuOverridesSection() {
                       >
                         <Save className="w-3 h-3" />
                       </Button>
+                        <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-amber-400 border-amber-400/40 hover:bg-amber-400/10 hover:text-amber-300"
+                        title="Undo — revert to original values"
+                        onClick={() => setEditValues(originalValues)}
+                      >
+                        <Undo2 className="w-3 h-3" />
+                      </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setEditingId(null)}>
                         <X className="w-3 h-3" />
                       </Button>
                     </div>
                   ) : (
                     <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => {
+                      const initial = { cartonWeightLb: String(o.cartonWeightLb), unitsPerCarton: String(o.unitsPerCarton), casesPerMu: String(muCaseMap.get(o.sku)?.casesPerMu ?? "") };
                       setEditingId(o.id);
-                      setEditValues({ cartonWeightLb: String(o.cartonWeightLb), unitsPerCarton: String(o.unitsPerCarton), casesPerMu: String(muCaseMap.get(o.sku)?.casesPerMu ?? "") });
+                      setEditValues(initial);
+                      setOriginalValues(initial);
                     }}>
                       <Edit2 className="w-3 h-3" />
                     </Button>

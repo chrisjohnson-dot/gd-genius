@@ -167,13 +167,30 @@ function MuCaseCountsSection() {
 function SkuOverridesSection() {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValues, setEditValues] = useState<{ cartonWeightLb: string; unitsPerCarton: string }>({ cartonWeightLb: "", unitsPerCarton: "" });
+  const [editValues, setEditValues] = useState<{ cartonWeightLb: string; unitsPerCarton: string; casesPerMu: string }>({ cartonWeightLb: "", unitsPerCarton: "", casesPerMu: "" });
 
   const listQuery = trpc.skuWeight.listAll.useQuery();
+  const muCaseListQuery = trpc.muCaseCount.list.useQuery({ status: "approved" });
   const upsertMutation = trpc.skuWeight.upsert.useMutation({
     onSuccess: () => { toast.success("Weight override saved"); setEditingId(null); listQuery.refetch(); },
     onError: (e) => toast.error(e.message),
   });
+  const muCaseUpsertMutation = trpc.muCaseCount.review.useMutation({
+    onSuccess: () => { toast.success("Cases/MU saved"); muCaseListQuery.refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const muCaseSubmitMutation = trpc.muCaseCount.submit.useMutation({
+    onSuccess: () => { toast.success("Cases/MU saved"); muCaseListQuery.refetch(); setEditingId(null); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // Build a map of sku -> casesPerMu from approved mu_case_counts
+  const muCaseMap = new Map<string, { id: number; casesPerMu: number }>();
+  const muCaseData = Array.isArray(muCaseListQuery.data) ? muCaseListQuery.data : [];
+  for (const r of muCaseData as any[]) {
+    const key = r.sku;
+    if (!muCaseMap.has(key)) muCaseMap.set(key, { id: r.id, casesPerMu: r.cases_per_mu });
+  }
 
   const allOverrides = listQuery.data ?? [];
   const overrides = search ? allOverrides.filter((o: any) => o.sku?.toLowerCase().includes(search.toLowerCase())) : allOverrides;
@@ -204,12 +221,13 @@ function SkuOverridesSection() {
               <th className="text-right px-4 py-3">Carton Weight (lbs)</th>
               <th className="text-right px-4 py-3">Units/Carton</th>
               <th className="text-right px-4 py-3">Per Unit (lbs)</th>
+              <th className="text-right px-4 py-3">Cases/MU</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {overrides.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-8 text-gray-500">No overrides found.</td></tr>
+              <tr><td colSpan={7} className="text-center py-8 text-gray-500">No overrides found.</td></tr>
             ) : overrides.map((o: any) => (
               <tr key={o.id} className="border-t border-white/5 hover:bg-white/5 transition-colors">
                 <td className="px-4 py-3 font-mono font-semibold text-white">{o.sku}</td>
@@ -231,9 +249,34 @@ function SkuOverridesSection() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   {editingId === o.id ? (
+                    <input type="number" min={1} value={editValues.casesPerMu}
+                      onChange={(e) => setEditValues(v => ({ ...v, casesPerMu: e.target.value }))}
+                      placeholder="—"
+                      className="w-16 bg-white/10 border border-blue-500 rounded px-2 py-1 text-white text-right focus:outline-none" />
+                  ) : (
+                    <span className={muCaseMap.has(o.sku) ? "text-white" : "text-gray-600"}>
+                      {muCaseMap.get(o.sku)?.casesPerMu ?? "—"}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {editingId === o.id ? (
                     <div className="flex items-center justify-end gap-1">
                       <Button size="sm" className="h-7 bg-green-600 hover:bg-green-700 text-white px-2"
-                        onClick={() => upsertMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, cartonWeightLb: parseFloat(editValues.cartonWeightLb), unitsPerCarton: parseInt(editValues.unitsPerCarton) })}>
+                        onClick={() => {
+                          upsertMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, cartonWeightLb: parseFloat(editValues.cartonWeightLb), unitsPerCarton: parseInt(editValues.unitsPerCarton) });
+                          // Save Cases/MU if changed
+                          const newCases = parseInt(editValues.casesPerMu);
+                          if (newCases > 0) {
+                            const existing = muCaseMap.get(o.sku);
+                            if (existing) {
+                              // Update existing approved record by re-inserting
+                              muCaseSubmitMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, casesPerMu: newCases });
+                            } else {
+                              muCaseSubmitMutation.mutate({ sku: o.sku, configId: o.configId, customerId: o.customerId, casesPerMu: newCases });
+                            }
+                          }
+                        }}>
                         <Save className="w-3 h-3" />
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setEditingId(null)}>
@@ -243,7 +286,7 @@ function SkuOverridesSection() {
                   ) : (
                     <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => {
                       setEditingId(o.id);
-                      setEditValues({ cartonWeightLb: String(o.cartonWeightLb), unitsPerCarton: String(o.unitsPerCarton) });
+                      setEditValues({ cartonWeightLb: String(o.cartonWeightLb), unitsPerCarton: String(o.unitsPerCarton), casesPerMu: String(muCaseMap.get(o.sku)?.casesPerMu ?? "") });
                     }}>
                       <Edit2 className="w-3 h-3" />
                     </Button>

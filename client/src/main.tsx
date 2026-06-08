@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink } from "@trpc/client";
+import { httpBatchLink, httpLink, splitLink } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
@@ -31,32 +31,43 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+// Shared fetch wrapper — logs non-JSON responses for diagnostics
+function gdFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return globalThis.fetch(input, {
+    ...(init ?? {}),
+    credentials: "include",
+  }).then(async (res) => {
+    const ct = res.headers.get("content-type") ?? "";
+    if (!ct.includes("application/json")) {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      const body = await res.clone().text().catch(() => "(unreadable)");
+      console.error(
+        `[tRPC] Non-JSON response from ${url}\n` +
+        `  Status: ${res.status} ${res.statusText}\n` +
+        `  Content-Type: ${ct}\n` +
+        `  Body preview: ${body.slice(0, 300)}`
+      );
+    }
+    return res;
+  });
+}
+
 const trpcClient = trpc.createClient({
   links: [
-    httpBatchLink({
-      url: "/api/trpc",
-      transformer: superjson,
-      fetch(input, init) {
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          credentials: "include",
-        }).then(async (res) => {
-          // Diagnostic: if the response is not JSON, log the raw body and URL so we
-          // can identify exactly which procedure is returning non-JSON content.
-          const ct = res.headers.get("content-type") ?? "";
-          if (!ct.includes("application/json")) {
-            const url = typeof input === "string" ? input : (input as Request).url;
-            const body = await res.clone().text().catch(() => "(unreadable)");
-            console.error(
-              `[tRPC] Non-JSON response from ${url}\n` +
-              `  Status: ${res.status} ${res.statusText}\n` +
-              `  Content-Type: ${ct}\n` +
-              `  Body preview: ${body.slice(0, 300)}`
-            );
-          }
-          return res;
-        });
-      },
+    // Mutations (e.g. scanBarcode) bypass batching so a slow Extensiv UPC lookup
+    // cannot block or corrupt other concurrent requests.
+    splitLink({
+      condition: (op) => op.type === "mutation",
+      true: httpLink({
+        url: "/api/trpc",
+        transformer: superjson,
+        fetch: gdFetch,
+      }),
+      false: httpBatchLink({
+        url: "/api/trpc",
+        transformer: superjson,
+        fetch: gdFetch,
+      }),
     }),
   ],
 });

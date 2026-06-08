@@ -701,7 +701,7 @@ function OrdersSection() {
               {trends.daily.length > 0 && (
                 <div className="bg-white/5 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-white mb-3">Avg Processing Time by Day</h3>
-                  <div style={{ height: 200 }}>
+                  <div style={{ height: 200, background: 'transparent' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={trends.daily} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -759,7 +759,7 @@ function OrdersSection() {
               {trends.byHour.length > 0 && (
                 <div className="bg-white/5 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-white mb-3">Avg Duration by Hour of Day</h3>
-                  <div style={{ height: 180 }}>
+                  <div style={{ height: 180, background: 'transparent' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={trends.byHour} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />

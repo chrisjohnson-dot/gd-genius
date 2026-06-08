@@ -2325,6 +2325,8 @@ export const pickupSessions = mysqlTable("pickup_sessions", {
   createdBy: varchar("createdBy", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  /** JSON array of extensivOrderIds for batch pickup sessions (null = single-order) */
+  batchOrderIds: json("batchOrderIds").$type<number[]>(),
 });
 export type PickupSession = typeof pickupSessions.$inferSelect;
 export type InsertPickupSession = typeof pickupSessions.$inferInsert;
@@ -2337,6 +2339,8 @@ export const pickupScans = mysqlTable("pickup_scans", {
   labelValue: varchar("labelValue", { length: 256 }).notNull(),
   scannedAt: timestamp("scannedAt").defaultNow().notNull(),
   scannedBy: varchar("scannedBy", { length: 256 }),
+  /** Which order this pallet belongs to (for batch sessions) */
+  orderId: int("orderId"),
 });
 export type PickupScan = typeof pickupScans.$inferSelect;
 export type InsertPickupScan = typeof pickupScans.$inferInsert;

@@ -35,7 +35,16 @@ const DEMO_PALLET_LABELS = [
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // "quickstart" = arrived from Shipping Dashboard with orderId in URL; skip lookup + arrival form
-type Phase = "lookup" | "arrival" | "quickstart" | "scanning" | "complete";
+// "batch-setup" = operator is building a multi-order batch pickup list
+type Phase = "lookup" | "arrival" | "quickstart" | "scanning" | "complete" | "batch-setup" | "batch-arrival";
+
+interface BatchOrderEntry {
+  transactionId: number;
+  clientName: string;
+  referenceNum: string | null;
+  palletCount: number | null;
+  outboundLocation: string | null;
+}
 
 interface ScannedPallet {
   labelValue: string;
@@ -81,6 +90,7 @@ export default function CarrierPickupScanner() {
   const { user } = useAuth();
   const loginMethod = user?.loginMethod ?? "";
   const isAdmin = loginMethod.startsWith("team:") ? loginMethod.split(":")[1] === "admin" : user?.role === "admin";
+  const trpcUtils = trpc.useUtils();
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -131,6 +141,12 @@ export default function CarrierPickupScanner() {
   const keystrokeTimingsRef = useRef<number[]>([]);
   const [confirmText, setConfirmText] = useState("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  // Batch pickup state
+  const [batchOrders, setBatchOrders] = useState<BatchOrderEntry[]>([]);
+  const [batchTxInput, setBatchTxInput] = useState("");
+  const [batchResolving, setBatchResolving] = useState(false);
+  const [batchResolveError, setBatchResolveError] = useState<string | null>(null);
 
   // Complete
   const [shippedInExtensiv, setShippedInExtensiv] = useState<boolean | null>(null);
@@ -391,8 +407,9 @@ export default function CarrierPickupScanner() {
             uploadPickupPhotoMutation.mutate({ sessionId: sid, palletLabel: labelForPhoto, dataUrl: photo });
           }
         };
+        const matchedOid = (data as any).matchedOrderId as number | undefined;
         if (cameraEnabled && captureDelayMs > 0) {
-          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: null }, ...prev]);
+          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: null, orderId: matchedOid } as any, ...prev]);
           setTimeout(() => {
             const photo = capturePhoto();
             setScannedPallets(prev => prev.map((p, i) => i === 0 && p.labelValue === labelForPhoto ? { ...p, photoDataUrl: photo } : p));
@@ -400,7 +417,7 @@ export default function CarrierPickupScanner() {
           }, captureDelayMs);
         } else {
           const photo = capturePhoto();
-          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: photo }, ...prev]);
+          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: photo, orderId: matchedOid } as any, ...prev]);
           uploadPhoto(photo, sessionId);
         }
         setScanInput("");
@@ -528,6 +545,9 @@ export default function CarrierPickupScanner() {
     setShowConfirmDialog(false);
     setShippedInExtensiv(null);
     setUrlOrderId(null);
+    setBatchOrders([]);
+    setBatchTxInput("");
+    setBatchResolveError(null);
     setShowQuickstartForm(false);
     setShowSignatureCapture(false);
     setSignatureDataUrl(null);
@@ -541,12 +561,62 @@ export default function CarrierPickupScanner() {
     window.history.replaceState({}, "", url.toString());
   };
 
-  const expectedPallets = selectedOrder?.palletCount ?? 0;
+  const isBatchMode = phase === "batch-setup" || phase === "batch-arrival" ||
+    (phase === "scanning" && batchOrders.length > 0);
+  const expectedPallets = isBatchMode
+    ? batchOrders.reduce((s, o) => s + (o.palletCount ?? 0), 0)
+    : (selectedOrder?.palletCount ?? 0);
   const scannedCount = scannedPallets.length;
   const progressPct = expectedPallets > 0 ? Math.min(100, Math.round((scannedCount / expectedPallets) * 100)) : 0;
 
+  // Per-order scan counts for batch mode (keyed by transactionId)
+  const batchScanCounts = new Map<number, number>();
+  if (isBatchMode) {
+    for (const p of scannedPallets) {
+      const oid = (p as any).orderId as number | undefined;
+      if (oid) batchScanCounts.set(oid, (batchScanCounts.get(oid) ?? 0) + 1);
+    }
+  }
+
   // Build outbound pallet list (expected pallets numbered 1..N)
   const outboundPalletList = Array.from({ length: expectedPallets }, (_, i) => i + 1);
+
+  // Batch: add a TX ID to the list
+  const handleAddBatchOrder = async () => {
+    const txId = parseInt(batchTxInput.trim(), 10);
+    if (isNaN(txId) || txId <= 0) { setBatchResolveError("Enter a valid Transaction ID"); return; }
+    if (batchOrders.find(o => o.transactionId === txId)) { setBatchResolveError("This order is already in the batch"); return; }
+    setBatchResolving(true);
+    setBatchResolveError(null);
+    try {
+      // Use trpcUtils to call resolveOrder imperatively
+      const result = await trpcUtils.carrierPickup.resolveOrder.fetch({ transactionId: txId });
+      setBatchOrders(prev => [...prev, result]);
+      setBatchTxInput("");
+    } catch (e: any) {
+      setBatchResolveError(e.message ?? `Order ${txId} not found`);
+    } finally {
+      setBatchResolving(false);
+    }
+  };
+
+  // Batch: start the session with all orders
+  const handleStartBatchSession = () => {
+    if (batchOrders.length < 2) { toast.error("Add at least 2 orders for a batch pickup"); return; }
+    if (!driverName.trim() || !trailerNumber.trim()) { toast.error("Driver name and trailer number are required"); return; }
+    const totalPallets = batchOrders.reduce((s, o) => s + (o.palletCount ?? 0), 0);
+    startSessionMutation.mutate({
+      batchOrderIds: batchOrders.map(o => o.transactionId),
+      referenceNum: `BATCH-${batchOrders.map(o => o.transactionId).join("-")}`,
+      expectedPallets: totalPallets || undefined,
+      carrierName: carrierName.trim() || undefined,
+      driverName: driverName.trim(),
+      trailerNumber: trailerNumber.trim(),
+      sealNumber: sealNumber.trim() || undefined,
+      proNumber: proNumber.trim() || undefined,
+      isDemo: false,
+    });
+  };
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
@@ -616,9 +686,20 @@ export default function CarrierPickupScanner() {
       {/* ── Phase 1: Order Lookup ── */}
       {phase === "lookup" && urlOrderId === null && (
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-6 w-full">
-          <div>
-            <h2 className="text-lg font-semibold mb-1">Find Order</h2>
-            <p className="text-sm text-muted-foreground">Search by reference number, client name, ship-to, or outbound location.</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold mb-1">Find Order</h2>
+              <p className="text-sm text-muted-foreground">Search by reference number, client name, ship-to, or outbound location.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-purple-500 text-purple-700 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-950/30"
+              onClick={() => setPhase("batch-setup")}
+            >
+              <Package className="h-3.5 w-3.5 mr-1.5" />
+              Batch Pickup
+            </Button>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -738,8 +819,167 @@ export default function CarrierPickupScanner() {
         </div>
       )}
 
+      {/* ── Batch Phase 1: Add Orders ── */}
+      {phase === "batch-setup" && (
+        <div className="max-w-3xl mx-auto px-4 py-6 space-y-6 w-full">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-950/40">
+              <Package className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Batch Pickup Setup</h2>
+              <p className="text-sm text-muted-foreground">Add all transaction IDs for this load, then enter carrier details.</p>
+            </div>
+          </div>
+
+          {/* TX ID input */}
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input
+                placeholder="Enter Transaction ID (e.g. 3496544)"
+                value={batchTxInput}
+                onChange={e => { setBatchTxInput(e.target.value); setBatchResolveError(null); }}
+                onKeyDown={e => { if (e.key === "Enter") handleAddBatchOrder(); }}
+                autoFocus
+              />
+              {batchResolveError && (
+                <p className="text-xs text-red-500 mt-1">{batchResolveError}</p>
+              )}
+            </div>
+            <Button onClick={handleAddBatchOrder} disabled={batchResolving || !batchTxInput.trim()}>
+              {batchResolving ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Add Order"}
+            </Button>
+          </div>
+
+          {/* Order list */}
+          {batchOrders.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Orders in Batch ({batchOrders.length})
+              </div>
+              {batchOrders.map((o, i) => (
+                <div key={o.transactionId} className="border rounded-lg p-3 flex items-center justify-between gap-3 bg-card">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                    <div>
+                      <div className="font-semibold text-sm">{o.clientName}</div>
+                      <div className="text-xs text-muted-foreground">TX {o.transactionId} · Ref: {o.referenceNum ?? "—"}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <div className="text-xs font-medium">{o.palletCount ?? "?"} pallets</div>
+                      {o.outboundLocation && <div className="text-xs text-blue-600">{o.outboundLocation}</div>}
+                    </div>
+                    <button
+                      onClick={() => setBatchOrders(prev => prev.filter(x => x.transactionId !== o.transactionId))}
+                      className="text-muted-foreground hover:text-red-500 transition-colors"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Summary */}
+              <div className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
+                <span className="text-sm font-semibold">Total</span>
+                <span className="text-sm font-bold">
+                  {batchOrders.reduce((s, o) => s + (o.palletCount ?? 0), 0)} pallets across {batchOrders.length} orders
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" className="flex-1" onClick={handleReset}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+              disabled={batchOrders.length < 2}
+              onClick={() => setPhase("batch-arrival")}
+            >
+              <Truck className="h-4 w-4 mr-2" />
+              Continue to Carrier Details
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Batch Phase 2: Carrier Details ── */}
+      {phase === "batch-arrival" && (
+        <div className="max-w-3xl mx-auto px-4 py-6 space-y-5 w-full">
+          {/* Batch summary card */}
+          <div className="border rounded-lg p-4 bg-purple-50 dark:bg-purple-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Package className="h-4 w-4 text-purple-600" />
+              <span className="font-semibold text-sm">Batch Pickup — {batchOrders.length} Orders</span>
+            </div>
+            <div className="space-y-1">
+              {batchOrders.map((o, i) => (
+                <div key={o.transactionId} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{i + 1}. TX {o.transactionId} — {o.clientName}</span>
+                  <span className="font-medium">{o.palletCount ?? "?"} pallets</span>
+                </div>
+              ))}
+              <div className="border-t pt-1 mt-1 flex justify-between text-xs font-bold">
+                <span>Total</span>
+                <span>{batchOrders.reduce((s, o) => s + (o.palletCount ?? 0), 0)} pallets</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-lg font-semibold mb-1">Carrier Arrival Details</h2>
+            <p className="text-sm text-muted-foreground">Fill in the carrier info before starting the scan-out.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Carrier Name</label>
+              <Input value={carrierName} onChange={e => setCarrierName(e.target.value)} placeholder="e.g. XPO Logistics" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">PRO / Tracking #</label>
+              <Input value={proNumber} onChange={e => setProNumber(e.target.value)} placeholder="Optional" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Driver Name <span className="text-red-500">*</span></label>
+              <Input value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="First Last" autoFocus />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Trailer / Truck # <span className="text-red-500">*</span></label>
+              <Input value={trailerNumber} onChange={e => setTrailerNumber(e.target.value)} placeholder="e.g. XPO-44821" />
+            </div>
+            <div className="space-y-1 col-span-2">
+              <label className="text-sm font-medium">Seal Number</label>
+              <Input value={sealNumber} onChange={e => setSealNumber(e.target.value)} placeholder="Optional" />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => setPhase("batch-setup")}>
+              Back
+            </Button>
+            <Button
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+              size="lg"
+              disabled={!driverName.trim() || !trailerNumber.trim() || startSessionMutation.isPending}
+              onClick={handleStartBatchSession}
+            >
+              {startSessionMutation.isPending ? (
+                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Starting…</>
+              ) : (
+                <><Truck className="h-4 w-4 mr-2" /> Start Batch Scan-Out ({batchOrders.length} orders)</>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ── Phase 3 (quickstart) + Phase 3 (scanning): Split-panel layout ── */}
-      {(phase === "quickstart" || phase === "scanning") && selectedOrder && (
+      {(phase === "quickstart" || phase === "scanning") && (selectedOrder || isBatchMode) && (
         <div className="flex flex-1 overflow-hidden relative">
 
           {/* ─── FULL-SCREEN SCAN ERROR BLOCKER ────────────────────────────────────── */}
@@ -770,23 +1010,34 @@ export default function CarrierPickupScanner() {
           {/* LEFT PANEL: Outbound pallets */}
           <div className="w-72 shrink-0 border-r bg-card flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b bg-muted/50 shrink-0">
-              <div className="font-semibold text-sm">{selectedOrder.clientName}</div>
-              <div className="text-xs text-muted-foreground truncate">{selectedOrder.shipToName}</div>
-
-              {/* Dock location — prominent display */}
-              <div className={`mt-3 rounded-lg px-3 py-2 flex items-center gap-2 ${
-                selectedOrder.outboundLocation
-                  ? "bg-blue-600 text-white"
-                  : "bg-muted text-muted-foreground border border-dashed"
-              }`}>
-                <MapPin className="h-4 w-4 shrink-0" />
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide opacity-75">Dock Location</div>
-                  <div className="text-base font-bold leading-tight">
-                    {selectedOrder.outboundLocation ?? "Not assigned"}
+              {isBatchMode ? (
+                <>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Package className="h-4 w-4 text-purple-600" />
+                    <div className="font-semibold text-sm">Batch Pickup</div>
                   </div>
-                </div>
-              </div>
+                  <div className="text-xs text-muted-foreground">{batchOrders.length} orders</div>
+                </>
+              ) : (
+                <>
+                  <div className="font-semibold text-sm">{selectedOrder?.clientName}</div>
+                  <div className="text-xs text-muted-foreground truncate">{selectedOrder?.shipToName}</div>
+                  {/* Dock location — prominent display */}
+                  <div className={`mt-3 rounded-lg px-3 py-2 flex items-center gap-2 ${
+                    selectedOrder?.outboundLocation
+                      ? "bg-blue-600 text-white"
+                      : "bg-muted text-muted-foreground border border-dashed"
+                  }`}>
+                    <MapPin className="h-4 w-4 shrink-0" />
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide opacity-75">Dock Location</div>
+                      <div className="text-base font-bold leading-tight">
+                        {selectedOrder?.outboundLocation ?? "Not assigned"}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="flex items-center gap-3 mt-2">
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -796,47 +1047,99 @@ export default function CarrierPickupScanner() {
               {/* Progress bar */}
               <div className="h-1.5 rounded-full bg-muted mt-2 overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-300 ${scannedCount >= expectedPallets && expectedPallets > 0 ? "bg-green-500" : "bg-blue-500"}`}
+                  className={`h-full rounded-full transition-all duration-300 ${scannedCount >= expectedPallets && expectedPallets > 0 ? "bg-green-500" : isBatchMode ? "bg-purple-500" : "bg-blue-500"}`}
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b flex items-center gap-1">
-                <Package className="h-3 w-3" /> Outbound Pallets ({expectedPallets})
-              </div>
-              {outboundPalletList.length === 0 ? (
-                <div className="px-4 py-6 text-xs text-muted-foreground text-center">No pallet count set</div>
-              ) : (
-                <div className="divide-y">
-                  {outboundPalletList.map((num) => {
-                    const scanned = scannedPallets[num - 1];
-                    return (
-                      <div key={num} className={`flex items-center justify-between px-4 py-2.5 text-sm ${scanned ? "bg-green-50 dark:bg-green-950/20" : ""}`}>
-                        <span className="font-medium text-muted-foreground">Pallet {num}</span>
-                        {scanned ? (
-                          <div className="flex items-center gap-1 text-green-600 text-xs">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            <span className="font-mono truncate max-w-[100px]">{scanned.labelValue}</span>
+              {isBatchMode ? (
+                /* Batch mode: per-order progress */
+                <>
+                  <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b flex items-center gap-1">
+                    <Package className="h-3 w-3" /> Orders ({batchOrders.length})
+                  </div>
+                  <div className="divide-y">
+                    {batchOrders.map((o) => {
+                      const orderScanned = batchScanCounts.get(o.transactionId) ?? 0;
+                      const orderExpected = o.palletCount ?? 0;
+                      const orderDone = orderExpected > 0 && orderScanned >= orderExpected;
+                      return (
+                        <div key={o.transactionId} className={`px-3 py-2.5 ${orderDone ? "bg-green-50 dark:bg-green-950/20" : ""}` }>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold truncate">{o.clientName}</div>
+                              <div className="text-[10px] text-muted-foreground">TX {o.transactionId}</div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {orderDone
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                                : <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                              }
+                              <span className={`text-xs font-bold ${orderDone ? "text-green-600" : "text-foreground"}`}>
+                                {orderScanned}/{orderExpected > 0 ? orderExpected : "?"}
+                              </span>
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Pending</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {/* Extra scanned pallets beyond expected */}
-                  {scannedPallets.slice(expectedPallets).map((p, i) => (
-                    <div key={`extra-${i}`} className="flex items-center justify-between px-4 py-2.5 text-sm bg-amber-50 dark:bg-amber-950/20">
-                      <span className="font-medium text-amber-600">Extra {i + 1}</span>
-                      <div className="flex items-center gap-1 text-amber-600 text-xs">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span className="font-mono truncate max-w-[100px]">{p.labelValue}</span>
-                      </div>
+                          {orderExpected > 0 && (
+                            <div className="h-1 rounded-full bg-muted mt-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${orderDone ? "bg-green-500" : "bg-purple-500"}`}
+                                style={{ width: `${Math.min(100, Math.round(orderScanned / orderExpected * 100))}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Unmatched scans */}
+                  {scannedPallets.filter(p => !(p as any).orderId).length > 0 && (
+                    <div className="px-3 py-2 text-xs text-amber-600 border-t">
+                      {scannedPallets.filter(p => !(p as any).orderId).length} unmatched scan(s)
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
+              ) : (
+                /* Single order mode: numbered pallet list */
+                <>
+                  <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b flex items-center gap-1">
+                    <Package className="h-3 w-3" /> Outbound Pallets ({expectedPallets})
+                  </div>
+                  {outboundPalletList.length === 0 ? (
+                    <div className="px-4 py-6 text-xs text-muted-foreground text-center">No pallet count set</div>
+                  ) : (
+                    <div className="divide-y">
+                      {outboundPalletList.map((num) => {
+                        const scanned = scannedPallets[num - 1];
+                        return (
+                          <div key={num} className={`flex items-center justify-between px-4 py-2.5 text-sm ${scanned ? "bg-green-50 dark:bg-green-950/20" : ""}`}>
+                            <span className="font-medium text-muted-foreground">Pallet {num}</span>
+                            {scanned ? (
+                              <div className="flex items-center gap-1 text-green-600 text-xs">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span className="font-mono truncate max-w-[100px]">{scanned.labelValue}</span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Pending</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {/* Extra scanned pallets beyond expected */}
+                      {scannedPallets.slice(expectedPallets).map((p, i) => (
+                        <div key={`extra-${i}`} className="flex items-center justify-between px-4 py-2.5 text-sm bg-amber-50 dark:bg-amber-950/20">
+                          <span className="font-medium text-amber-600">Extra {i + 1}</span>
+                          <div className="flex items-center gap-1 text-amber-600 text-xs">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span className="font-mono truncate max-w-[100px]">{p.labelValue}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

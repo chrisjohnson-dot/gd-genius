@@ -12916,14 +12916,17 @@ const carrierPickupRouter = router({
       sealNumber: z.string().optional(),
       proNumber: z.string().optional(),
       isDemo: z.boolean().default(false),
+      // Batch pickup: array of transaction IDs (overrides single transactionId)
+      batchOrderIds: z.array(z.number()).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const isBatch = input.batchOrderIds && input.batchOrderIds.length > 0;
       const [result] = await db.insert(pickupSessions).values({
-        transactionId: input.transactionId,
+        transactionId: isBatch ? null : (input.transactionId ?? null),
         referenceNum: input.referenceNum,
-        clientName: input.clientName,
+        clientName: isBatch ? `Batch (${input.batchOrderIds!.length} orders)` : (input.clientName ?? null),
         shipToName: input.shipToName,
         outboundLocation: input.outboundLocation,
         expectedPallets: input.expectedPallets,
@@ -12937,9 +12940,44 @@ const carrierPickupRouter = router({
         status: "scanning",
         isDemo: input.isDemo,
         createdBy: ctx.user?.name ?? "unknown",
-      });
+        batchOrderIds: isBatch ? input.batchOrderIds : null,
+      } as any);
       const sessionId = (result as unknown as { insertId: number }).insertId;
       return { sessionId };
+    }),
+
+  /** Resolve a transaction ID to order metadata (for batch setup validation) */
+  resolveOrder: protectedProcedure
+    .input(z.object({ transactionId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { eq } = await import("drizzle-orm");
+      const { orderTracking } = await import("../drizzle/schema.js");
+      const [order] = await db.select().from(orderTracking)
+        .where(eq(orderTracking.extensivOrderId, input.transactionId))
+        .limit(1);
+      if (!order) {
+        // Also check qc_scan_sessions
+        const qcSession = await getQcSessionByTransactionId(input.transactionId);
+        if (qcSession) {
+          return {
+            transactionId: input.transactionId,
+            clientName: qcSession.customerName ?? "Unknown",
+            referenceNum: qcSession.referenceNumber ?? null,
+            palletCount: null,
+            outboundLocation: null,
+          };
+        }
+        throw new TRPCError({ code: "NOT_FOUND", message: `Order ${input.transactionId} not found` });
+      }
+      return {
+        transactionId: input.transactionId,
+        clientName: order.clientName ?? "Unknown",
+        referenceNum: order.referenceNum ?? null,
+        palletCount: order.palletCount ?? null,
+        outboundLocation: order.outboundLocation ?? null,
+      };
     }),
 
   /** Scan a pallet label during a pickup session */
@@ -12949,51 +12987,64 @@ const carrierPickupRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const { eq } = await import("drizzle-orm");
-      // ── Validate that the scanned label matches a known pallet UPC for this order ──
       const [session] = await db.select().from(pickupSessions).where(eq(pickupSessions.id, input.sessionId));
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
-      if (session.transactionId) {
+
+      const scanned = input.labelValue.trim().toLowerCase();
+      let matchedOrderId: number | null = null;
+
+      // ── Batch mode: match pallet to one of the batch orders ──────────────────
+      const batchIds = (session as any).batchOrderIds as number[] | null;
+      if (batchIds && batchIds.length > 0) {
+        // Try to match the scanned label against each order's QC pallets
+        for (const txId of batchIds) {
+          const qcSession = await getQcSessionByTransactionId(txId);
+          if (!qcSession) continue;
+          const qcPallets = await getQcPallets(qcSession.id);
+          const knownUpcs = qcPallets.map((p) => p.palletUpc?.trim().toLowerCase()).filter(Boolean) as string[];
+          const generatedLabels = qcPallets.map((p) => `gd-${qcSession.id}-p${p.palletNumber}`.toLowerCase());
+          const allValidLabels = [...new Set([...knownUpcs, ...generatedLabels])];
+          if (allValidLabels.includes(scanned)) {
+            matchedOrderId = txId;
+            break;
+          }
+        }
+        // If no match found in any order, still allow the scan (label may not be in DB yet)
+        // but flag it as unmatched so the UI can show a warning
+      } else if (session.transactionId) {
+        // ── Single-order mode: validate against that order's pallets ─────────
         const qcSession = await getQcSessionByTransactionId(session.transactionId);
         if (qcSession) {
           const qcPallets = await getQcPallets(qcSession.id);
-          const scanned = input.labelValue.trim().toLowerCase();
-
-          // Build known UPCs from stored palletUpc values
-          const knownUpcs = qcPallets
-            .map((p) => p.palletUpc?.trim().toLowerCase())
-            .filter(Boolean) as string[];
-
-          // Also build generated GD label format: GD-{sessionId}-P{palletNumber}
-          // This is the format used when palletUpc is not stored
-          const generatedLabels = qcPallets.map((p) =>
-            `gd-${qcSession.id}-p${p.palletNumber}`.toLowerCase()
-          );
-
+          const knownUpcs = qcPallets.map((p) => p.palletUpc?.trim().toLowerCase()).filter(Boolean) as string[];
+          const generatedLabels = qcPallets.map((p) => `gd-${qcSession.id}-p${p.palletNumber}`.toLowerCase());
           const allValidLabels = [...new Set([...knownUpcs, ...generatedLabels])];
-
           if (allValidLabels.length > 0 && !allValidLabels.includes(scanned)) {
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: `"${input.labelValue}" does not match any pallet label for this order. Please scan the barcode on the physical pallet label.`,
             });
           }
+          matchedOrderId = session.transactionId;
         }
       }
+
       const existing = await db
         .select()
         .from(pickupScans)
         .where(eq(pickupScans.sessionId, input.sessionId))
         .then((rows: Array<{ labelValue: string }>) => rows.find(r => r.labelValue === input.labelValue));
       if (existing) {
-        return { success: false, duplicate: true, message: `Label ${input.labelValue} already scanned.` };
+        return { success: false, duplicate: true, message: `Label ${input.labelValue} already scanned.`, matchedOrderId: null };
       }
       await db.insert(pickupScans).values({
         sessionId: input.sessionId,
         labelValue: input.labelValue,
         scannedBy: ctx.user?.name ?? "unknown",
-      });
+        orderId: matchedOrderId,
+      } as any);
       const allScans = await db.select().from(pickupScans).where(eq(pickupScans.sessionId, input.sessionId));
-      return { success: true, duplicate: false, totalScanned: allScans.length };
+      return { success: true, duplicate: false, totalScanned: allScans.length, matchedOrderId };
     }),
 
   /** Get current session state */

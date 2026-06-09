@@ -6,14 +6,14 @@ import { toast } from "sonner";
 import {
   Scale, Users, AlertTriangle, Package, Activity, RefreshCw,
   CheckCircle2, XCircle, Clock, Edit2, Save, X, Undo2, ChevronDown, ChevronUp,
-  Warehouse, Search, TrendingUp, Settings
+  Warehouse, Search, TrendingUp, Settings, RotateCcw
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Tab = "weights" | "mu-cases" | "sku-overrides" | "scan-errors" | "orders" | "health" | "users";
+type Tab = "weights" | "mu-cases" | "sku-overrides" | "scan-errors" | "orders" | "reopen" | "health" | "users";
 
 // ─── Tab Button ───────────────────────────────────────────────────────────────
 function TabBtn({ id, label, icon: Icon, active, onClick, badge }: {
@@ -786,6 +786,113 @@ function OrdersSection() {
   );
 }
 
+// ─── Reopen Order Section ────────────────────────────────────────────────────
+function ReopenOrderSection() {
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+
+  const searchQuery = trpc.qcScanner.searchCompletedSessions.useQuery(
+    { query: debouncedSearch },
+    { enabled: debouncedSearch.trim().length >= 2 }
+  );
+
+  const reopenMutation = trpc.qcScanner.reopenSession.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Order TX ${data.transactionId} (${data.customerName ?? "Unknown"}) reopened — operators can now update and re-complete it.`);
+      setConfirmId(null);
+      searchQuery.refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const results = searchQuery.data ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-white mb-1">Reopen Order</h2>
+        <p className="text-sm text-gray-400">Search for a completed order and reopen it so operators can make corrections before re-completing. Works across all buildings.</p>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <input
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setDebouncedSearch(e.target.value); }}
+          placeholder="Search by TX ID, reference number, or customer name…"
+          className="w-full bg-white/10 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          autoFocus
+        />
+      </div>
+
+      {debouncedSearch.trim().length >= 2 && (
+        <div className="space-y-2">
+          {searchQuery.isLoading && (
+            <div className="text-center py-8 text-gray-500">Searching…</div>
+          )}
+          {!searchQuery.isLoading && results.length === 0 && (
+            <div className="text-center py-8 text-gray-500">No sessions found matching "{debouncedSearch}".</div>
+          )}
+          {results.map((s: any) => (
+            <div key={s.id} className="bg-white/5 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-white">TX {s.transactionId}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    s.status === "complete" ? "bg-green-500/20 text-green-300" :
+                    s.status === "scanning" ? "bg-blue-500/20 text-blue-300" :
+                    "bg-gray-500/20 text-gray-300"
+                  }`}>{s.status}</span>
+                  {s.facilityName && (
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">{s.facilityName}</span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-400 mt-0.5">{s.customerName ?? "—"}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Ref: {s.referenceNumber ?? "—"}
+                  {s.completedAt && <> · Completed: {new Date(s.completedAt).toLocaleString()}</>}
+                </p>
+              </div>
+              <div className="shrink-0">
+                {s.status === "complete" ? (
+                  confirmId === s.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-amber-400">Reopen this order?</span>
+                      <Button size="sm" className="h-7 bg-amber-600 hover:bg-amber-700 text-white"
+                        disabled={reopenMutation.isPending}
+                        onClick={() => reopenMutation.mutate({ sessionId: s.id })}>
+                        {reopenMutation.isPending ? <RefreshCw className="w-3 h-3 animate-spin" /> : "Confirm"}
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7" onClick={() => setConfirmId(null)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-7 border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+                      onClick={() => setConfirmId(s.id)}>
+                      <RotateCcw className="w-3 h-3 mr-1" /> Reopen
+                    </Button>
+                  )
+                ) : (
+                  <span className="text-xs text-gray-500 italic">Already open</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {debouncedSearch.trim().length < 2 && (
+        <div className="text-center py-12 text-gray-500 text-sm">
+          Type at least 2 characters to search across all buildings.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ─── System Health Section ────────────────────────────────────────────────────
 function SystemHealthSection() {
   const healthQuery = trpc.auth.me.useQuery();
@@ -905,6 +1012,7 @@ export default function ManagerDashboard() {
     { id: "sku-overrides",label: "SKU Overrides",     icon: Package },
     { id: "scan-errors",  label: "Scan Errors",       icon: AlertTriangle, badge: flagCount },
     { id: "orders",       label: "Orders",            icon: Warehouse },
+    { id: "reopen",       label: "Reopen Order",       icon: RotateCcw },
     { id: "health",       label: "System Health",     icon: Activity },
     { id: "users",        label: "Team Accounts",     icon: Users },
   ];
@@ -932,6 +1040,7 @@ export default function ManagerDashboard() {
           {activeTab === "sku-overrides" && <SkuOverridesSection />}
           {activeTab === "scan-errors"   && <ScanErrorsSection />}
           {activeTab === "orders"        && <OrdersSection />}
+          {activeTab === "reopen"        && <ReopenOrderSection />}
           {activeTab === "health"        && <SystemHealthSection />}
           {activeTab === "users"         && <UsersSection />}
         </div>

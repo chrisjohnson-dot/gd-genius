@@ -6070,6 +6070,72 @@ const qcScannerRouter = router({
       };
     }),
 
+  /**
+   * Search completed QC sessions by TX ID, reference number, or customer name.
+   * Used by Manager Dashboard Reopen Order tab.
+   */
+  searchCompletedSessions: protectedProcedure
+    .input(z.object({
+      query: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const q = input.query.trim().toLowerCase();
+      const sessions = await listQcSessions(200);
+      const filtered = sessions.filter((s) =>
+        s.referenceNumber?.toLowerCase().includes(q) ||
+        String(s.transactionId ?? "").includes(q) ||
+        s.customerName?.toLowerCase().includes(q) ||
+        s.poNumber?.toLowerCase().includes(q)
+      );
+      return filtered.slice(0, 20).map((s) => ({
+        id: s.id,
+        transactionId: s.transactionId,
+        referenceNumber: s.referenceNumber,
+        customerName: s.customerName,
+        facilityName: s.facilityName,
+        status: s.status,
+        completedAt: s.completedAt,
+        createdAt: s.createdAt,
+      }));
+    }),
+
+  /**
+   * Reopen a completed QC session — sets status back to 'scanning' and clears completedAt.
+   * Restricted to admin or team:admin users.
+   */
+  reopenSession: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      if (!isManagerOrAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required to reopen sessions" });
+      }
+      const session = await getQcSessionById(input.sessionId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+      if (session.status !== "complete") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Session is already in '${session.status}' status — only completed sessions can be reopened` });
+      }
+      await updateQcSession(input.sessionId, { status: "scanning", completedAt: null } as any);
+      // Audit log
+      await createAuditLog({
+        action: "qc.reopenSession",
+        entityType: "qc_scan_session",
+        entityId: String(input.sessionId),
+        userId: ctx.user.id,
+        details: JSON.stringify({
+          sessionId: input.sessionId,
+          transactionId: session.transactionId,
+          customerName: session.customerName,
+          reopenedBy: ctx.user.name,
+        }),
+      });
+      return {
+        success: true,
+        sessionId: input.sessionId,
+        transactionId: session.transactionId,
+        customerName: session.customerName,
+      };
+    }),
+
   /** Persist the outbound staging lane chosen in the dock recommendation dialog */
   setStagingLane: protectedProcedure
     .input(z.object({

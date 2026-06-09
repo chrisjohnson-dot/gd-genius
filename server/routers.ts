@@ -6746,7 +6746,44 @@ const skuWeightRouter = router({
 
   /** List ALL weight overrides across all configs/customers — for the management table in Settings */
   listAll: protectedProcedure.query(async () => {
-    return listAllSkuWeightOverrides();
+    const overrides = await listAllSkuWeightOverrides();
+    // Enrich with customer names — look up the most recent customerName from qc_scan_sessions
+    // for each unique customerId, plus a static override map for customers without sessions.
+    const CUSTOMER_NAME_OVERRIDES: Record<number, string> = {
+      100: "Chlorophyl Water",
+    };
+    const db = await getDb();
+    const customerNameMap = new Map<number, string>();
+    // Apply static overrides first
+    for (const [id, name] of Object.entries(CUSTOMER_NAME_OVERRIDES)) {
+      customerNameMap.set(Number(id), name);
+    }
+    // Then look up from qc_scan_sessions for any not already mapped
+    if (db) {
+      try {
+        const uniqueIds = [...new Set(overrides.map(o => o.customerId))]
+          .filter(id => !customerNameMap.has(id));
+        if (uniqueIds.length > 0) {
+          const { inArray: inArr, isNotNull } = await import("drizzle-orm");
+          const { qcScanSessions } = await import("../drizzle/schema.js");
+          const rows = await db.selectDistinct({
+            customerId: qcScanSessions.customerId,
+            customerName: qcScanSessions.customerName,
+          }).from(qcScanSessions)
+            .where(inArr(qcScanSessions.customerId, uniqueIds))
+            .limit(200);
+          for (const r of rows) {
+            if (r.customerId && r.customerName && !customerNameMap.has(r.customerId)) {
+              customerNameMap.set(r.customerId, r.customerName);
+            }
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+    return overrides.map(o => ({
+      ...o,
+      customerName: customerNameMap.get(o.customerId) ?? null,
+    }));
   }),
 
   /** Update a single override row by id */

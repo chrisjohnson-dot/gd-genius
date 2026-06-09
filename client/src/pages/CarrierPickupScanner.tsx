@@ -70,7 +70,7 @@ interface SelectedOrder {
 const CARRIER_SOUNDS = {
   scanAccepted: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/YpFnVchcxAmjqGes.wav",
   loadComplete: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/HBxMrBpYYiUkiOnS.wav",
-  error: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/ORJCkEJulxhYRcWh.m4a",
+  error: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663682817598/sImXLLPBXmtjYBfK.m4a",
 };
 
 function playCarrierAudio(type: keyof typeof CARRIER_SOUNDS) {

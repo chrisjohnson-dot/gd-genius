@@ -6266,6 +6266,39 @@ const qcScannerRouter = router({
         };
       }
 
+      // ── Over-scan guard: if the MU qty for any SKU exceeds what remains, block the scan ──
+      // The employee must scan the remaining units individually instead.
+      const overScanDetails: Array<{ sku: string; muQty: number; remaining: number }> = [];
+      const freshSessionItems = await getQcScanItems(input.sessionId);
+      for (const muItem of muItems) {
+        const si = freshSessionItems.find((i) => i.sku === muItem.sku);
+        if (!si) continue;
+        const remaining = Math.max(0, (si.expectedQty ?? 0) - (si.scannedQty ?? 0));
+        if (muItem.qty > remaining) {
+          overScanDetails.push({ sku: muItem.sku, muQty: muItem.qty, remaining });
+        }
+      }
+      if (overScanDetails.length > 0) {
+        // Build a human-readable message listing each over-scan SKU
+        const details = overScanDetails
+          .map(d => `${d.sku}: MU has ${d.muQty} units but only ${d.remaining} remain — scan the remaining ${d.remaining} unit${d.remaining === 1 ? '' : 's'} individually`)
+          .join('; ');
+        return {
+          notFound: false,
+          muLabel: input.muLabel,
+          palletId: input.palletId,
+          palletNumber: null,
+          muItems: [],
+          nextPalletId: null,
+          nextPalletNumber: null,
+          overScan: true,
+          overScanDetails,
+          overScanMessage: `MU over-scan blocked. ${details}.`,
+          sessionComplete: false,
+          calculatedWeightLb: null,
+        };
+      }
+
       // 4. Fetch the current pallet and overwrite its items with the MU contents
       const existingPallets = await getQcPallets(input.sessionId);
       const activePallet = existingPallets.find((p) => p.id === input.palletId);

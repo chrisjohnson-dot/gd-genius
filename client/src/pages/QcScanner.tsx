@@ -953,6 +953,27 @@ export default function QcScanner() {
         setBarcodeInput("");
         return;
       }
+      // If the MU would over-fill any SKU, block it and tell the employee to scan remaining units individually
+      if ((data as any).overScan) {
+        playBeep("error");
+        setTimeout(() => playBeep("error"), 300); // double buzz like regular over-scan
+        const overScanDetails = (data as any).overScanDetails as Array<{ sku: string; muQty: number; remaining: number }>;
+        const firstDetail = overScanDetails[0];
+        const message = firstDetail
+          ? `MU has ${firstDetail.muQty} units but only ${firstDetail.remaining} remain for ${firstDetail.sku}`
+          : (data as any).overScanMessage ?? "MU over-scan blocked";
+        const description = firstDetail
+          ? `Scan the remaining ${firstDetail.remaining} unit${firstDetail.remaining === 1 ? '' : 's'} individually using the SKU barcode.`
+          : "Scan the remaining units individually.";
+        setLastScan({ sku: firstDetail?.sku ?? data.muLabel, found: false });
+        toast.error(`⛔ MU over-scan blocked — ${message}`, {
+          description,
+          duration: Infinity,
+        });
+        setBarcodeInput("");
+        return;
+      }
+
       // If some SKUs are missing case counts, show the dialog for the employee to enter them
       if ((data as any).missingCaseCounts?.length > 0) {
         const missing = (data as any).missingCaseCounts as string[];

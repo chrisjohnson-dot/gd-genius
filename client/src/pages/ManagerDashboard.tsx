@@ -6,14 +6,14 @@ import { toast } from "sonner";
 import {
   Scale, Users, AlertTriangle, Package, Activity, RefreshCw,
   CheckCircle2, XCircle, Clock, Edit2, Save, X, Undo2, ChevronDown, ChevronUp,
-  Warehouse, Search, TrendingUp, Settings, RotateCcw
+  Warehouse, Search, TrendingUp, Settings, RotateCcw, ClipboardCheck, ChevronLeft, ChevronRight
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Tab = "weights" | "mu-cases" | "sku-overrides" | "scan-errors" | "orders" | "reopen" | "health" | "users";
+type Tab = "weights" | "mu-cases" | "sku-overrides" | "scan-errors" | "orders" | "reopen" | "weekly" | "health" | "users";
 
 // ─── Tab Button ───────────────────────────────────────────────────────────────
 function TabBtn({ id, label, icon: Icon, active, onClick, badge }: {
@@ -893,6 +893,141 @@ function ReopenOrderSection() {
 }
 
 
+// ─── Weekly Approvals Section ────────────────────────────────────────────────
+function getWeekStart(offsetWeeks = 0): string {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diff + offsetWeeks * 7);
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString().split('T')[0];
+}
+function fmtWeekLabel(weekStart: string): string {
+  const d = new Date(weekStart + 'T00:00:00');
+  const end = new Date(d);
+  end.setDate(d.getDate() + 6);
+  const fmt = (dt: Date) => dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return fmt(d) + ' – ' + fmt(end);
+}
+
+function WeeklyApprovalsSection() {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekStart = getWeekStart(weekOffset);
+
+  const query = trpc.weeklyApprovals.getWeeklyActivity.useQuery({ weekStart });
+  const data = query.data;
+
+  const typeLabel: Record<string, string> = {
+    weight: 'Weight Approval',
+    mu_case: 'MU Case Count',
+    manual_qty: 'Manual Qty Override',
+    reopen: 'Order Reopen',
+  };
+  const typeColor: Record<string, string> = {
+    weight: 'bg-blue-500/20 text-blue-300',
+    mu_case: 'bg-purple-500/20 text-purple-300',
+    manual_qty: 'bg-amber-500/20 text-amber-300',
+    reopen: 'bg-teal-500/20 text-teal-300',
+  };
+
+  const allItems = data ? [
+    ...data.weightApprovals.map((r: any) => ({ ...r, type: 'weight' })),
+    ...data.muCaseApprovals.map((r: any) => ({ ...r, type: 'mu_case' })),
+    ...data.manualQtyOverrides.map((r: any) => ({ ...r, type: 'manual_qty' })),
+    ...data.sessionReopens.map((r: any) => ({ ...r, type: 'reopen' })),
+  ].sort((a: any, b: any) => new Date(b.actedAt).getTime() - new Date(a.actedAt).getTime()) : [];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Weekly Manager Approvals</h2>
+          <p className="text-sm text-gray-400">Everything managers approved or acted on this week.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setWeekOffset((w: number) => w - 1)}>
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </Button>
+          <span className="text-sm text-white font-medium min-w-[160px] text-center">{fmtWeekLabel(weekStart)}</span>
+          <Button variant="outline" size="sm" className="h-7 px-2" disabled={weekOffset >= 0} onClick={() => setWeekOffset((w: number) => w + 1)}>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="h-7" onClick={() => query.refetch()}>
+            <RefreshCw className={`w-3 h-3 ${query.isFetching ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </div>
+
+      {query.isLoading ? (
+        <div className="text-center py-12 text-gray-500">Loading…</div>
+      ) : !data || data.totalActions === 0 ? (
+        <div className="text-center py-12 text-gray-500">No manager approvals recorded for this week.</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {data.managerSummary.map((m: any) => (
+              <div key={m.manager} className="bg-white/5 rounded-xl p-4">
+                <p className="text-sm font-semibold text-white">{m.manager}</p>
+                <p className="text-2xl font-bold text-white mt-1">{m.total}</p>
+                <div className="flex gap-2 mt-1">
+                  <span className="text-xs text-green-400">{m.approved} approved</span>
+                  {m.rejected > 0 && <span className="text-xs text-red-400">{m.rejected} rejected</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white/5 rounded-xl overflow-hidden border border-white/10">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-white/5 text-gray-400 text-xs uppercase tracking-wide">
+                  <th className="text-left px-4 py-3">When</th>
+                  <th className="text-left px-4 py-3">Manager</th>
+                  <th className="text-left px-4 py-3">Type</th>
+                  <th className="text-left px-4 py-3">SKU / Order</th>
+                  <th className="text-left px-4 py-3">Customer</th>
+                  <th className="text-left px-4 py-3">Detail</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allItems.map((item: any, i: number) => (
+                  <tr key={i} className="border-t border-white/5 hover:bg-white/5">
+                    <td className="px-4 py-2.5 text-gray-400 text-xs whitespace-nowrap">
+                      {item.actedAt ? new Date(item.actedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 font-semibold text-white">{item.manager}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${typeColor[item.type] ?? 'bg-gray-500/20 text-gray-300'}`}>
+                        {typeLabel[item.type] ?? item.type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-gray-300 text-xs">
+                      {item.sku ?? (item.transactionId ? 'TX ' + item.transactionId : '—')}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-400 text-xs">{item.customerName ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-gray-400 text-xs">
+                      {item.type === 'weight' && item.value ? item.value + ' lbs' : ''}
+                      {item.type === 'mu_case' && item.value ? item.value + ' cases/MU' : ''}
+                      {item.type === 'manual_qty' && item.prevQty != null ? item.prevQty + ' → ' + item.newQty : ''}
+                      {item.submittedBy ? <span className="text-gray-500 ml-1">by {item.submittedBy}</span> : ''}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${item.status === 'approved' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>{item.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 // ─── System Health Section ────────────────────────────────────────────────────
 function SystemHealthSection() {
   const healthQuery = trpc.auth.me.useQuery();
@@ -1013,6 +1148,7 @@ export default function ManagerDashboard() {
     { id: "scan-errors",  label: "Scan Errors",       icon: AlertTriangle, badge: flagCount },
     { id: "orders",       label: "Orders",            icon: Warehouse },
     { id: "reopen",       label: "Reopen Order",       icon: RotateCcw },
+    { id: "weekly",       label: "Weekly Approvals",   icon: ClipboardCheck },
     { id: "health",       label: "System Health",     icon: Activity },
     { id: "users",        label: "Team Accounts",     icon: Users },
   ];
@@ -1041,6 +1177,7 @@ export default function ManagerDashboard() {
           {activeTab === "scan-errors"   && <ScanErrorsSection />}
           {activeTab === "orders"        && <OrdersSection />}
           {activeTab === "reopen"        && <ReopenOrderSection />}
+          {activeTab === "weekly"        && <WeeklyApprovalsSection />}
           {activeTab === "health"        && <SystemHealthSection />}
           {activeTab === "users"         && <UsersSection />}
         </div>

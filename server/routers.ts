@@ -14159,6 +14159,184 @@ const processingTimeRouter = router({
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+
+// ─── Weekly Manager Approvals Router ───────────────────────────────────────────
+// Returns everything managers approved/rejected in a given week.
+// Sources: pending_weight_requests, mu_case_counts, audit_logs (manualSetQty)
+
+const weeklyApprovalsRouter = router({
+  getWeeklyActivity: protectedProcedure
+    .input(z.object({
+      // ISO week start date (Monday), e.g. "2026-06-09"
+      weekStart: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Determine week window
+      const now = new Date();
+      let weekStartDate: Date;
+      if (input.weekStart) {
+        weekStartDate = new Date(input.weekStart + "T00:00:00");
+      } else {
+        // Default: start of current week (Monday)
+        const day = now.getDay(); // 0=Sun
+        const diff = (day === 0 ? -6 : 1 - day);
+        weekStartDate = new Date(now);
+        weekStartDate.setDate(now.getDate() + diff);
+        weekStartDate.setHours(0, 0, 0, 0);
+      }
+      const weekEndDate = new Date(weekStartDate);
+      weekEndDate.setDate(weekStartDate.getDate() + 7);
+
+      // 1. Weight approvals/rejections
+      const weightRows = await db.execute(sql`
+        SELECT
+          reviewed_by AS manager,
+          status,
+          sku,
+          customer_name,
+          carton_weight_lb AS value,
+          reviewed_at AS actedAt,
+          submitted_by AS submittedBy
+        FROM pending_weight_requests
+        WHERE reviewed_at >= ${weekStartDate}
+          AND reviewed_at < ${weekEndDate}
+          AND status IN ('approved', 'rejected')
+        ORDER BY reviewed_at DESC
+      `);
+
+      // 2. MU case count approvals/rejections
+      const muRows = await db.execute(sql`
+        SELECT
+          reviewed_by AS manager,
+          status,
+          sku,
+          cases_per_mu AS value,
+          updated_at AS actedAt,
+          submitted_by AS submittedBy,
+          customer_id AS customerId
+        FROM mu_case_counts
+        WHERE updated_at >= ${weekStartDate}
+          AND updated_at < ${weekEndDate}
+          AND status IN ('approved', 'rejected')
+          AND reviewed_by IS NOT NULL
+        ORDER BY updated_at DESC
+      `);
+
+      // 3. Manual quantity overrides from audit log
+      const manualRows = await db.execute(sql`
+        SELECT
+          u.name AS manager,
+          al.details,
+          al.created_at AS actedAt
+        FROM audit_logs al
+        LEFT JOIN users u ON u.id = al.user_id
+        WHERE al.action = 'qc.manualSetQty'
+          AND al.created_at >= ${weekStartDate}
+          AND al.created_at < ${weekEndDate}
+        ORDER BY al.created_at DESC
+      `);
+
+      // 4. Session reopens from audit log
+      const reopenRows = await db.execute(sql`
+        SELECT
+          u.name AS manager,
+          al.details,
+          al.created_at AS actedAt
+        FROM audit_logs al
+        LEFT JOIN users u ON u.id = al.user_id
+        WHERE al.action = 'qc.reopenSession'
+          AND al.created_at >= ${weekStartDate}
+          AND al.created_at < ${weekEndDate}
+        ORDER BY al.created_at DESC
+      `);
+
+      // Parse manual qty rows
+      const manualApprovals = (manualRows as any[]).map(r => {
+        let details: any = {};
+        try { details = typeof r.details === 'string' ? JSON.parse(r.details) : (r.details ?? {}); } catch {}
+        return {
+          type: 'manual_qty' as const,
+          manager: r.manager ?? 'Unknown',
+          sku: details.sku ?? '?',
+          customerName: null as string | null,
+          transactionId: details.sessionId ?? null,
+          prevQty: details.prevQty ?? null,
+          newQty: details.newQty ?? null,
+          actedAt: r.actedAt,
+          status: 'approved' as const,
+        };
+      });
+
+      // Parse reopen rows
+      const reopenApprovals = (reopenRows as any[]).map(r => {
+        let details: any = {};
+        try { details = typeof r.details === 'string' ? JSON.parse(r.details) : (r.details ?? {}); } catch {}
+        return {
+          type: 'reopen' as const,
+          manager: r.manager ?? 'Unknown',
+          sku: null as string | null,
+          customerName: details.customerName ?? null,
+          transactionId: details.transactionId ?? null,
+          actedAt: r.actedAt,
+          status: 'approved' as const,
+        };
+      });
+
+      // Summary by manager
+      const allItems = [
+        ...(weightRows as any[]).map(r => ({ type: 'weight', manager: r.manager, status: r.status })),
+        ...(muRows as any[]).map(r => ({ type: 'mu_case', manager: r.manager, status: r.status })),
+        ...manualApprovals.map(r => ({ type: 'manual_qty', manager: r.manager, status: 'approved' })),
+        ...reopenApprovals.map(r => ({ type: 'reopen', manager: r.manager, status: 'approved' })),
+      ];
+
+      const managerSummary = new Map<string, { approved: number; rejected: number; total: number }>();
+      for (const item of allItems) {
+        const m = item.manager ?? 'Unknown';
+        if (!managerSummary.has(m)) managerSummary.set(m, { approved: 0, rejected: 0, total: 0 });
+        const s = managerSummary.get(m)!;
+        s.total++;
+        if (item.status === 'approved') s.approved++;
+        else s.rejected++;
+      }
+
+      return {
+        weekStart: weekStartDate.toISOString().split('T')[0],
+        weekEnd: weekEndDate.toISOString().split('T')[0],
+        weightApprovals: (weightRows as any[]).map(r => ({
+          type: 'weight' as const,
+          manager: r.manager ?? 'Unknown',
+          status: r.status,
+          sku: r.sku,
+          customerName: r.customer_name ?? null,
+          value: r.value ? Number(r.value) : null,
+          submittedBy: r.submittedBy ?? null,
+          actedAt: r.actedAt,
+        })),
+        muCaseApprovals: (muRows as any[]).map(r => ({
+          type: 'mu_case' as const,
+          manager: r.manager ?? 'Unknown',
+          status: r.status,
+          sku: r.sku,
+          customerName: null as string | null,
+          value: r.value ? Number(r.value) : null,
+          submittedBy: r.submittedBy ?? null,
+          actedAt: r.actedAt,
+        })),
+        manualQtyOverrides: manualApprovals,
+        sessionReopens: reopenApprovals,
+        managerSummary: Array.from(managerSummary.entries()).map(([manager, counts]) => ({
+          manager,
+          ...counts,
+        })).sort((a, b) => b.total - a.total),
+        totalActions: allItems.length,
+      };
+    }),
+});
+
 export const appRouterV4 = router({
   ...appRouterFull._def.record,
   slaPerformance: slaPerformanceRouter,
@@ -14192,5 +14370,7 @@ export const appRouterV4 = router({
   muSync: muSyncRouter,
   analytics: analyticsRouter,
   processingTime: processingTimeRouter,
+  weeklyApprovals: weeklyApprovalsRouter,
 });
 export type AppRouterV4 = typeof appRouterV4;
+

@@ -102,7 +102,6 @@ const ltlItems = [
   { href: "/ltl/pull-manager",    label: "Pull Manager",            icon: BarChart2 },
   { href: "/qc/scanner",          label: "QC Scanner",              icon: ScanBarcode },
   { href: "/qc/history",           label: "QC Session History",      icon: History },
-  { href: "/weight-approval",       label: "Weight Approval",          icon: Scale },
   { href: "/manager",               label: "Manager Dashboard",        icon: LayoutDashboard },
   { href: "/shipping/clerk",         label: "Shipping Clerk",           icon: Truck },
   { href: "/qc/production-line",  label: "Production Line Scans",   icon: Activity },

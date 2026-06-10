@@ -359,12 +359,16 @@ export default function CarrierPickupScanner() {
   }, [cameraStream]);
 
   // Capture a photo from the current camera frame
+  // Returns null if camera not ready; caller should retry after a short delay
   const capturePhoto = useCallback((): string | null => {
     if (!videoRef.current || !canvasRef.current || !cameraEnabled) return null;
     const video = videoRef.current;
+    // Ensure the video stream is actually playing and has valid dimensions
+    // readyState >= 2 (HAVE_CURRENT_DATA) means frames are available
+    if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return null;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -419,17 +423,26 @@ export default function CarrierPickupScanner() {
           }
         };
         const matchedOid = (data as any).matchedOrderId as number | undefined;
-        if (cameraEnabled && captureDelayMs > 0) {
+
+        // Helper: try to capture photo, retry up to 5x with 300ms gaps if video not ready yet
+        const captureWithRetry = (onDone: (photo: string | null) => void, attemptsLeft = 5) => {
+          const photo = capturePhoto();
+          if (photo) { onDone(photo); return; }
+          if (attemptsLeft <= 0) { onDone(null); return; }
+          setTimeout(() => captureWithRetry(onDone, attemptsLeft - 1), 300);
+        };
+
+        if (cameraEnabled) {
+          const delay = captureDelayMs > 0 ? captureDelayMs : 0;
           setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: null, orderId: matchedOid } as any, ...prev]);
           setTimeout(() => {
-            const photo = capturePhoto();
-            setScannedPallets(prev => prev.map((p, i) => i === 0 && p.labelValue === labelForPhoto ? { ...p, photoDataUrl: photo } : p));
-            uploadPhoto(photo, sessionId);
-          }, captureDelayMs);
+            captureWithRetry((photo) => {
+              setScannedPallets(prev => prev.map((p, i) => i === 0 && p.labelValue === labelForPhoto ? { ...p, photoDataUrl: photo } : p));
+              uploadPhoto(photo, sessionId);
+            });
+          }, delay);
         } else {
-          const photo = capturePhoto();
-          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: photo, orderId: matchedOid } as any, ...prev]);
-          uploadPhoto(photo, sessionId);
+          setScannedPallets(prev => [{ labelValue: labelForPhoto, scannedAt, photoDataUrl: null, orderId: matchedOid } as any, ...prev]);
         }
         setScanInput("");
         setTimeout(() => setFlashState("idle"), 500);

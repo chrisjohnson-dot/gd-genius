@@ -953,6 +953,19 @@ export default function QcScanner() {
         setBarcodeInput("");
         return;
       }
+      // If Extensiv returned 0 qty for all SKUs (fully allocated MU) — block and tell operator to scan individually
+      if ((data as any).allZeroBlocked) {
+        playBeep("error");
+        setTimeout(() => playBeep("error"), 300);
+        setLastScan({ sku: data.muLabel, found: false });
+        toast.error(`⛔ MU ${data.muLabel} — qty unknown`, {
+          description: (data as any).allZeroMessage ?? "This MU is fully allocated in Extensiv and its quantity cannot be read automatically. Scan the individual SKU barcodes instead.",
+          duration: Infinity,
+        });
+        setBarcodeInput("");
+        return;
+      }
+
       // If the MU would over-fill any SKU, block it and tell the employee to scan remaining units individually
       if ((data as any).overScan) {
         playBeep("error");

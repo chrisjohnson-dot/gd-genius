@@ -6200,20 +6200,25 @@ const qcScannerRouter = router({
         skuQtyMap.set(sku, (skuQtyMap.get(sku) ?? 0) + (rec.onHand ?? rec.available ?? 0));
       }
 
-      // Fallback: if all quantities are 0 (fully-allocated MU — Extensiv zeroes out onHand/available
-      // once inventory is committed to an order), use the remaining expected qty from the session
-      // for the SKUs found on this MU. This ensures the pallet gets correct quantities.
+      // If Extensiv returns 0 for all SKUs on this MU, the MU is fully allocated and
+      // Extensiv cannot tell us how many units are physically on it.
+      // Block the scan — the operator must scan units individually.
       const allZero = Array.from(skuQtyMap.values()).every((q) => q === 0);
       if (allZero && skuQtyMap.size > 0) {
-        const sessionItems = await getQcScanItems(input.sessionId);
-        for (const [sku] of skuQtyMap) {
-          const si = sessionItems.find((i) => i.sku === sku);
-          if (si) {
-            const remaining = Math.max(0, (si.expectedQty ?? 0) - (si.scannedQty ?? 0));
-            if (remaining > 0) skuQtyMap.set(sku, remaining);
-          }
-        }
-        console.log(`[scanMu] All-zero MU fallback for muLabel=${input.muLabel}: using remaining expected qtys`);
+        const skuList = Array.from(skuQtyMap.keys()).join(', ');
+        return {
+          notFound: false,
+          muLabel: input.muLabel,
+          palletId: input.palletId,
+          palletNumber: null,
+          muItems: [],
+          nextPalletId: null,
+          nextPalletNumber: null,
+          allZeroBlocked: true,
+          allZeroMessage: `MU ${input.muLabel} is fully allocated in Extensiv — qty cannot be determined automatically. Scan the individual SKU barcodes instead (SKUs: ${skuList}).`,
+          sessionComplete: false,
+          calculatedWeightLb: null,
+        };
       }
 
       // Use Extensiv qty directly — no manager approval needed.

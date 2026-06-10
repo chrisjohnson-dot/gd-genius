@@ -974,23 +974,6 @@ export default function QcScanner() {
         return;
       }
 
-      // If some SKUs are missing case counts, show the dialog for the employee to enter them
-      if ((data as any).missingCaseCounts?.length > 0) {
-        const missing = (data as any).missingCaseCounts as string[];
-        const initInputs: Record<string, string> = {};
-        missing.forEach((sku: string) => { initInputs[sku] = ""; });
-        setMuCaseInputs(initInputs);
-        setMuCaseCountDialog({
-          muLabel: data.muLabel,
-          palletId: data.palletId,
-          skus: missing,
-          configId: (data as any).configId ?? 0,
-          customerId: (data as any).customerId ?? 0,
-          pendingMuData: { sessionId: session?.id ?? 0, palletType: undefined },
-        });
-        setBarcodeInput("");
-        return;
-      }
       playBeep("success");
       // Update scanned quantities in the item list
       setItems((prev) =>

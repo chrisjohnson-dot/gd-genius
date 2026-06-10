@@ -6216,55 +6216,10 @@ const qcScannerRouter = router({
         console.log(`[scanMu] All-zero MU fallback for muLabel=${input.muLabel}: using remaining expected qtys`);
       }
 
-      // Check mu_case_counts table for known cases-per-MU for each SKU
-      // If any SKU is missing a case count, return them so the frontend can prompt the employee
-      const sessionItemsForCap = await getQcScanItems(input.sessionId);
-      const missingCaseCounts: string[] = [];
-      const muItems = await Promise.all(Array.from(skuQtyMap.entries()).map(async ([sku, qty]) => {
-        const si = sessionItemsForCap.find((i) => i.sku === sku);
-        // First check mu_case_counts table for an approved case count
-        let casesPerMu: number | null = null;
-        if (config && session.customerId) {
-          try {
-            const db2 = await getDb();
-            if (db2) {
-              const { sql: sqlMu } = await import("drizzle-orm");
-              const rows = await db2.execute(sqlMu`SELECT cases_per_mu FROM mu_case_counts WHERE config_id = ${config.id} AND customer_id = ${session.customerId} AND sku = ${sku} AND status = 'approved' ORDER BY updated_at DESC LIMIT 1`);
-              const rowsAny = rows as any;
-              const arr = Array.isArray(rowsAny) ? rowsAny[0] : (Array.isArray(rowsAny?.rows) ? rowsAny.rows : []);
-              if (arr && arr.length > 0) casesPerMu = Number(arr[0]?.cases_per_mu ?? 0);
-            }
-          } catch { /* non-fatal */ }
-        }
-        // Fall back to caseAmount from session items
-        if (!casesPerMu && si?.caseAmount && si.caseAmount > 1) casesPerMu = si.caseAmount;
-        // If still no case count, flag this SKU as missing
-        if (!casesPerMu) {
-          missingCaseCounts.push(sku);
-          return { sku, qty }; // use raw qty for now
-        }
-        // Cap qty at casesPerMu (cases per MU × units per case)
-        const unitsPerCase = si?.caseAmount && si.caseAmount > 1 ? si.caseAmount : 1;
-        const maxUnits = casesPerMu * unitsPerCase;
-        return { sku, qty: Math.min(qty, maxUnits) };
-      }));
-      // If any SKUs are missing case counts, return early so frontend can prompt the employee
-      if (missingCaseCounts.length > 0) {
-        return {
-          notFound: false,
-          muLabel: input.muLabel,
-          palletId: input.palletId,
-          palletNumber: null,
-          muItems: [],
-          nextPalletId: null,
-          nextPalletNumber: null,
-          missingCaseCounts,
-          configId: config.id,
-          customerId: session.customerId ?? 0,
-          sessionComplete: false,
-          calculatedWeightLb: null,
-        };
-      }
+      // Use Extensiv qty directly — no manager approval needed.
+      // The qty from Extensiv (onHand/available) is the authoritative source for what's on the MU.
+      // We simply pass through the aggregated SKU quantities from Extensiv as-is.
+      const muItems = Array.from(skuQtyMap.entries()).map(([sku, qty]) => ({ sku, qty }));
 
       // ── Over-scan guard: if the MU qty for any SKU exceeds what remains, block the scan ──
       // The employee must scan the remaining units individually instead.

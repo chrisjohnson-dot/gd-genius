@@ -13,7 +13,7 @@ import {
 } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Tab = "weights" | "mu-cases" | "sku-overrides" | "scan-errors" | "orders" | "reopen" | "weekly" | "health" | "users";
+type Tab = "weights" | "sku-overrides" | "scan-errors" | "orders" | "reopen" | "weekly" | "health" | "users";
 
 // ─── Tab Button ───────────────────────────────────────────────────────────────
 function TabBtn({ id, label, icon: Icon, active, onClick, badge }: {
@@ -1138,12 +1138,9 @@ export default function ManagerDashboard() {
   const pendingCount = pendingQuery.data?.length ?? 0;
   const flagCount = Array.isArray(flagsQuery.data) ? flagsQuery.data.length : 0;
 
-  const muCasesQuery = trpc.muCaseCount.list.useQuery({ status: "pending" });
-  const muCasesCount = Array.isArray(muCasesQuery.data) ? muCasesQuery.data.length : 0;
 
   const tabs: Array<{ id: Tab; label: string; icon: React.ElementType; badge?: number }> = [
     { id: "weights",      label: "Weight Approvals",  icon: Scale,         badge: pendingCount },
-    { id: "mu-cases",    label: "MU Case Counts",    icon: Package,       badge: muCasesCount },
     { id: "sku-overrides",label: "SKU Overrides",     icon: Package },
     { id: "scan-errors",  label: "Scan Errors",       icon: AlertTriangle, badge: flagCount },
     { id: "orders",       label: "Orders",            icon: Warehouse },
@@ -1172,7 +1169,6 @@ export default function ManagerDashboard() {
         {/* Content */}
         <div className="bg-white/5 rounded-2xl p-6">
           {activeTab === "weights"       && <WeightApprovalsSection />}
-          {activeTab === "mu-cases"      && <MuCaseCountsSection />}
           {activeTab === "sku-overrides" && <SkuOverridesSection />}
           {activeTab === "scan-errors"   && <ScanErrorsSection />}
           {activeTab === "orders"        && <OrdersSection />}

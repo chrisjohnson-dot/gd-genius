@@ -337,7 +337,10 @@ export default function CarrierPickupScanner() {
       setCameraStream(stream);
       if (videoRef.current) videoRef.current.srcObject = stream;
     }).catch((err) => {
-      toast.error("Camera access failed: " + err.message);
+      toast.error("⚠ Camera access failed — proof-of-shipping photos will NOT be captured", {
+        description: err.message + ". Check that the browser has camera permission and a camera is connected.",
+        duration: Infinity,
+      });
       setCameraEnabled(false);
     });
     return () => {
@@ -380,6 +383,8 @@ export default function CarrierPickupScanner() {
       setSessionId(data.sessionId);
       setShowQuickstartForm(false);
       setPhase("scanning");
+      // Auto-enable camera for proof-of-shipping photos
+      setCameraEnabled(true);
     },
     onError: (err) => {
       toast.error(err.message);
@@ -387,7 +392,13 @@ export default function CarrierPickupScanner() {
   });
 
   const uploadPickupPhotoMutation = trpc.carrierPickup.uploadPickupPhoto.useMutation({
-    onError: (e) => console.warn("[CarrierPickup] Photo upload failed:", e.message),
+    onError: (e) => {
+      console.warn("[CarrierPickup] Photo upload failed:", e.message);
+      toast.error("Photo upload failed — pallet scanned but no proof photo saved", {
+        description: e.message,
+        duration: 8000,
+      });
+    },
   });
 
   const scanPalletMutation = trpc.carrierPickup.scanPallet.useMutation({
@@ -482,6 +493,7 @@ export default function CarrierPickupScanner() {
       setSessionId(-1);
       setShowQuickstartForm(false);
       setPhase("scanning");
+      setCameraEnabled(true);
       return;
     }
     startSessionMutation.mutate({

@@ -452,9 +452,10 @@ export default function CarrierAppointments() {
   const [, navigate] = useLocation();
 
   // "active" is a client-side filter: fetch all then exclude completed + cancelled
+  // Refetch every 2 minutes instead of 30s — reduces server load significantly
   const listQuery = trpc.carrierAppointments.list.useQuery(
-    { status: statusFilter === "active" ? "all" : statusFilter, date: selectedDate || undefined },
-    { refetchInterval: 30_000 }
+    { status: statusFilter === "active" ? "all" : statusFilter },
+    { refetchInterval: 120_000 }
   );
 
   const appointments: Appointment[] = (listQuery.data ?? []) as unknown as Appointment[];
@@ -464,6 +465,10 @@ export default function CarrierAppointments() {
     // "active" filter: exclude completed and cancelled appointments
     if (statusFilter === "active") {
       base = base.filter(a => a.status !== "completed" && a.status !== "cancelled");
+    }
+    // Client-side date filter (faster than round-tripping to server on every date change)
+    if (selectedDate) {
+      base = base.filter(a => !a.scheduledDate || a.scheduledDate === selectedDate);
     }
     if (!searchQuery.trim()) return base;
     const q = searchQuery.toLowerCase();

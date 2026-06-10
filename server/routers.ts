@@ -13559,6 +13559,10 @@ const carrierAppointmentsRouter = router({
       if (input.status === "all" || input.status === "scheduled" || input.status === "confirmed") {
         try {
           const { orderTracking: otCa } = await import("../drizzle/schema.js");
+          // Only load ship-ready orders from the last 14 days to prevent overloading the page
+          const { gte: gteCa } = await import("drizzle-orm");
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - 14);
           const shipReadyOrders = await db
             .select({
               extensivOrderId: otCa.extensivOrderId,
@@ -13572,7 +13576,9 @@ const carrierAppointmentsRouter = router({
               shipReadyAt: otCa.shipReadyAt,
             })
             .from(otCa)
-            .where(eq(otCa.lifecycleStatus, "ship_ready"));
+            .where(and(eq(otCa.lifecycleStatus, "ship_ready"), gteCa(otCa.shipReadyAt, cutoff)))
+            .orderBy(desc(otCa.shipReadyAt))
+            .limit(50);
 
           // Filter out orders that already have an active appointment
           const existingOrderIds = new Set(rows.map(r => r.extensivOrderId).filter(Boolean));

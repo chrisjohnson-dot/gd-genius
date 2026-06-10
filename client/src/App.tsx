@@ -114,15 +114,21 @@ function QcOperatorGuard({ children }: { children: React.ReactNode }) {
   const isDockOperator = isTeamAccount && teamRole === "dock_operator";
   const dockAllowed = ["/shipping/appointments", "/shipping/carrier-pickup"];
 
+  // Senior operators: full access to all pages except manager dashboard
+  const isSeniorOperator = isTeamAccount && teamRole === "senior_operator";
+  const seniorBlocked = ["/manager"];
+
   useEffect(() => {
-    if (isQcOperator && !qcAllowed.some(p => location.startsWith(p))) {
+    if (isSeniorOperator && seniorBlocked.some(p => location.startsWith(p))) {
+      navigate("/");
+    } else if (isQcOperator && !qcAllowed.some(p => location.startsWith(p))) {
       navigate("/qc/scanner");
     } else if (isShippingClerk && !shippingAllowed.some(p => location.startsWith(p))) {
       navigate("/shipping/clerk");
     } else if (isDockOperator && !dockAllowed.some(p => location.startsWith(p))) {
       navigate("/shipping/carrier-pickup");
     }
-  }, [isQcOperator, isShippingClerk, isDockOperator, location]);
+  }, [isSeniorOperator, isQcOperator, isShippingClerk, isDockOperator, location]);
   return <>{children}</>;
 }
 

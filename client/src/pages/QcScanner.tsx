@@ -105,7 +105,7 @@ function playBeep(type: "success" | "error" | "complete" | "scan" | "sku_complet
   try {
     // Always create a fresh Audio element so rapid scans don't block each other
     const el = new Audio(SOUND_URLS[type]);
-    el.volume = 1.0;
+      el.volume = 1.0; // Max volume — confirmed by Toronto facility feedback
     void el.play().catch(() => {
       // If autoplay blocked, try resuming via the preloaded element
       const cached = _audioElements[type];
@@ -222,11 +222,11 @@ function ItemsTable({
     );
   }
 
-  // Compact QC view: SKU | Description | [Case] | Req | Cases | − Scanned +
+  // Compact QC view: SKU | Description | [Case] | Req | Cases | Left | − Scanned +
   const hasCaseAmounts = showCaseBadge && items.some((i) => (i.caseAmount ?? 1) > 1);
   const cols = phase === "scanning"
-    ? hasCaseAmounts ? "100px 1fr 46px 44px 50px 90px" : "100px 1fr 44px 50px 90px"
-    : hasCaseAmounts ? "100px 1fr 46px 44px 50px 56px" : "100px 1fr 44px 50px 56px";
+    ? hasCaseAmounts ? "100px 1fr 46px 44px 50px 50px 90px" : "100px 1fr 44px 50px 50px 90px"
+    : hasCaseAmounts ? "100px 1fr 46px 44px 50px 50px 56px" : "100px 1fr 44px 50px 50px 56px";
   return (
     <div className="rounded-lg overflow-hidden border border-border">
       {/* Header */}
@@ -239,6 +239,7 @@ function ItemsTable({
         {hasCaseAmounts && <span className="text-right">Case</span>}
         <span className="text-right">Req</span>
         <span className="text-right">Cases</span>
+        <span className="text-right">Left</span>
         <span className="text-right">Scanned</span>
       </div>
 
@@ -254,7 +255,7 @@ function ItemsTable({
         let rowBg = isAlt ? "#EEF4FB" : "#ffffff";
         if (isPartialCase && !over) rowBg = isAlt ? "#fef3c7" : "#fffbeb"; // amber for partial case
         if (over)  rowBg = isAlt ? "#fef3c7" : "#fffbeb";
-        if (done && !over && !isPartialCase) rowBg = isAlt ? "#dcfce7" : "#f0fdf4";
+        if (done && !over && !isPartialCase) rowBg = isAlt ? "#86efac" : "#bbf7d0"; // Darker green — clearly visible as complete
         if (isFlashing) rowBg = "#bbf7d0"; // bright green flash override
 
         return (
@@ -307,6 +308,11 @@ function ItemsTable({
               {ca > 1
                 ? Math.floor(item.scannedQty / ca)
                 : item.scannedQty}
+            </div>
+
+            {/* Cases left to scan */}
+            <div className={`text-right text-xs font-semibold tabular-nums ${done ? "text-green-600" : "text-orange-600"}`}>
+              {done ? "✓" : ca > 1 ? Math.ceil(Math.max(0, item.expectedQty - item.scannedQty) / ca) : Math.max(0, item.expectedQty - item.scannedQty)}
             </div>
 
             {/* Scanned qty with optional +/- controls */}
@@ -426,6 +432,13 @@ function ItemsTable({
         <span className="text-right text-[#333333]">{items.reduce((s, i) => s + i.expectedQty, 0)}</span>
         <span className="text-right text-blue-700">
           {items.reduce((s, i) => s + ((i.caseAmount ?? 1) > 1 ? Math.floor(i.scannedQty / (i.caseAmount ?? 1)) : i.scannedQty), 0)}
+        </span>
+        <span className="text-right text-orange-600">
+          {items.every(i => i.scannedQty >= i.expectedQty) ? <span className="text-green-600">✓</span> : items.reduce((s, i) => {
+            const ca = i.caseAmount ?? 1;
+            const rem = Math.max(0, i.expectedQty - i.scannedQty);
+            return s + (ca > 1 ? Math.ceil(rem / ca) : rem);
+          }, 0)}
         </span>
         <span className="text-right">
           <span className={
@@ -849,21 +862,22 @@ export default function QcScanner() {
         if (activePallet && session) {
           // Use the server-committed scannedQty as the cap source of truth.
           // The server uses LEAST(scannedQty + amount, expectedQty), so data.item.scannedQty
-          // is the actual committed value. We compute how much was actually added vs requested.
+          // is the actual committed value. We compute the actual delta added (may be less than requested).
           const committedTotal = data.item?.scannedQty ?? 0;
           const expectedQty = data.item?.expectedQty ?? Infinity;
-          // Optimistically update pallet items in local state
+          // Get the previous scannedQty from local items state to compute actual delta
+          const prevSessionQty = items.find(i => i.sku === scannedSku)?.scannedQty ?? 0;
+          const actualDelta = committedTotal - prevSessionQty; // actual units added (server-capped)
+          // Update pallet items using actual delta (not requested amount) to prevent discrepancy
           setPallets((prev) => prev.map((p) => {
             if (p.id !== activePallet.id) return p;
             const existingItems = (p.items as Array<{ sku: string; upc?: string; qty: number }> | null) ?? [];
             const existing = existingItems.find((i) => i.sku === scannedSku);
-            // Cap the pallet qty: never let the pallet show more than expectedQty for this SKU
             const prevPalletQty = existing?.qty ?? 0;
-            const newPalletQty = Math.min(prevPalletQty + scannedAmount, expectedQty);
+            const newPalletQty = Math.min(prevPalletQty + Math.max(0, actualDelta), expectedQty);
             const newItems = existing
               ? existingItems.map((i) => i.sku === scannedSku ? { ...i, qty: newPalletQty } : i)
-              : [...existingItems, { sku: scannedSku, upc: scannedUpc, qty: Math.min(scannedAmount, expectedQty) }];
-            void committedTotal; // used for reference — pallet qty is capped independently per-pallet
+              : [...existingItems, { sku: scannedSku, upc: scannedUpc, qty: Math.max(0, actualDelta) }];
             // Recalculate weight from demoUpcMap if available
             let newWeight = p.calculatedWeightLb;
             if (isDemoSession && demoUpcMap.length > 0) {
@@ -3783,12 +3797,12 @@ export default function QcScanner() {
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && confirmText === "CONFIRMED" && session && !completeSession.isPending) {
+                  if (e.key === "Enter" && confirmText.toUpperCase() === "CONFIRMED" && session && !completeSession.isPending) {
                     completeSession.mutate({ sessionId: session.id });
                   }
                 }}
                 className={`font-mono text-center text-base h-11 ${
-                  confirmText === "CONFIRMED"
+                  confirmText.toUpperCase() === "CONFIRMED"
                     ? "border-green-500 ring-1 ring-green-500"
                     : ""
                 }`}
@@ -3801,7 +3815,7 @@ export default function QcScanner() {
             <Button
               className="bg-green-600 hover:bg-green-700"
               onClick={() => session && completeSession.mutate({ sessionId: session.id })}
-              disabled={confirmText !== "CONFIRMED" || completeSession.isPending}
+              disabled={confirmText.toUpperCase() !== "CONFIRMED" || completeSession.isPending}
             >
               {completeSession.isPending ? (
                 <RefreshCw className="w-4 h-4 mr-1 animate-spin" />

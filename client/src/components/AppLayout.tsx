@@ -185,18 +185,22 @@ function SharedLoginGate() {
 
   // Detect badge scan: USB scanner sends all chars rapidly then Enter
   // Badge tokens start with 'GDLOGIN-'
+  // Gap threshold increased to 500ms to handle slower USB scanners
   useEffect(() => {
     let buffer = "";
     let lastKeyTime = 0;
+    let pendingToken = ""; // store last valid token for Enter retry
     const handleKey = (e: KeyboardEvent) => {
       const now = Date.now();
-      // Reset buffer if gap > 200ms (human typing)
-      if (now - lastKeyTime > 200) buffer = "";
+      // Reset buffer if gap > 500ms (human typing) — increased from 200ms for slower scanners
+      if (now - lastKeyTime > 500) buffer = "";
       lastKeyTime = now;
       if (e.key === "Enter") {
-        if (buffer.startsWith("GDLOGIN-") && buffer.length > 10) {
+        const tokenToTry = buffer.startsWith("GDLOGIN-") && buffer.length > 10 ? buffer : pendingToken;
+        if (tokenToTry) {
           e.preventDefault();
-          badgeLoginMutation.mutate({ token: buffer });
+          pendingToken = tokenToTry; // keep for retry
+          badgeLoginMutation.mutate({ token: tokenToTry });
         }
         buffer = "";
       } else if (e.key.length === 1) {

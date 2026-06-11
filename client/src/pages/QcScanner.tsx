@@ -85,7 +85,7 @@ const SOUND_URLS: Record<"success" | "error" | "complete" | "scan" | "sku_comple
 const _audioElements: Partial<Record<"success" | "error" | "complete" | "scan" | "sku_complete", HTMLAudioElement>> = {};
 
 function preloadSounds() {
-  (Object.keys(SOUND_URLS) as Array<"success" | "error" | "complete">).forEach((type) => {
+  (Object.keys(SOUND_URLS) as Array<"success" | "error" | "complete" | "scan" | "sku_complete">).forEach((type) => {
     if (_audioElements[type]) return;
     try {
       const el = new Audio(SOUND_URLS[type]);
@@ -164,6 +164,7 @@ function ItemsTable({
   isLoading,
   onAdjust,
   onPartialEntry,
+  onSessionComplete,
   flashSku,
   onRowRef,
   showCaseBadge,
@@ -175,6 +176,7 @@ function ItemsTable({
   isLoading?: boolean;
   onAdjust?: (sku: string, delta: number) => void;
   onPartialEntry?: (sku: string, qty: number) => void;
+  onSessionComplete?: () => void;
   flashSku?: string | null;
   onRowRef?: (sku: string, el: HTMLDivElement | null) => void;
   showCaseBadge?: boolean;
@@ -188,7 +190,8 @@ function ItemsTable({
       setPartialInputSku(null);
       setPartialInputVal("");
       if (data.sessionComplete) {
-        toast.success("Order complete! All items scanned.", { duration: 5000 });
+        // Notify parent to trigger pallet review dialog
+        onSessionComplete?.();
       }
     },
     onError: (e) => toast.error(e.message),
@@ -873,7 +876,7 @@ export default function QcScanner() {
               }
               // Add tare weight (use pallet's stored tare or default 30 lbs)
               const tareLb = p.palletTareWeightLb ? parseFloat(p.palletTareWeightLb) : 30;
-              newWeight = totalLb > 0 ? String(Math.round((totalLb + tareLb) * 100) / 100) : p.calculatedWeightLb;
+              newWeight = totalLb > 0 ? String(Math.ceil(totalLb + tareLb)) : p.calculatedWeightLb;
             }
             return { ...p, items: newItems, calculatedWeightLb: newWeight ?? p.calculatedWeightLb };
           }));
@@ -973,8 +976,17 @@ export default function QcScanner() {
       }
       if (data.sessionComplete) {
         playBeep("complete");
-        toast.success("Order complete!");
-        setPhase("complete");
+        toast.success("Order complete! All items scanned.", { duration: 5000 });
+        // Show pallet review dialog — do NOT skip to complete
+        const heightInit: Record<number, string> = {};
+        palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+        setPalletHeightInputs(heightInit);
+        setPalletReviewDialog(true);
+        if (session) {
+          palletsRef.current.forEach((p) => {
+            calculatePalletWeight.mutate({ sessionId: session.id, palletId: p.id });
+          });
+        }
       } else {
         playBeep("success");
       }
@@ -1129,8 +1141,18 @@ export default function QcScanner() {
       });
       if (data.sessionComplete) {
         playBeep("complete");
-        toast.success("Order complete!");
-        setPhase("complete");
+        toast.success("Order complete! All items scanned.", { duration: 5000 });
+        // Show pallet review dialog (same as scanBarcode path) — do NOT skip to complete
+        const heightInit: Record<number, string> = {};
+        palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+        setPalletHeightInputs(heightInit);
+        setPalletReviewDialog(true);
+        // Auto-calculate weights for all pallets
+        if (session) {
+          palletsRef.current.forEach((p) => {
+            calculatePalletWeight.mutate({ sessionId: session.id, palletId: p.id });
+          });
+        }
       }
     },
     onError: (err) => {
@@ -1152,8 +1174,17 @@ export default function QcScanner() {
       toast.success(`✓ ${data.item?.sku ?? "Item"} manually set to ${data.item?.scannedQty ?? 0}`);
       if (data.sessionComplete) {
         playBeep("complete");
-        toast.success("Order complete!");
-        setPhase("complete");
+        toast.success("Order complete! All items scanned.", { duration: 5000 });
+        // Show pallet review dialog — do NOT skip to complete
+        const heightInit: Record<number, string> = {};
+        palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+        setPalletHeightInputs(heightInit);
+        setPalletReviewDialog(true);
+        if (session) {
+          palletsRef.current.forEach((p) => {
+            calculatePalletWeight.mutate({ sessionId: session.id, palletId: p.id });
+          });
+        }
       }
     },
     onError: (err) => {
@@ -2400,6 +2431,39 @@ export default function QcScanner() {
               if (el) itemRowRefs.current.set(sku, el);
               else itemRowRefs.current.delete(sku);
             }}
+            onPartialEntry={(sku, qty) => {
+              // Mirror partial entry into active pallet item list
+              const targetId = activeScanPalletIdRef.current ?? (palletsRef.current[palletsRef.current.length - 1]?.id ?? null);
+              if (!targetId) return;
+              const orderItem = items.find((i) => i.sku === sku);
+              const maxQty = orderItem?.expectedQty ?? Infinity;
+              setItems((prev) => prev.map((i) => i.sku === sku ? { ...i, scannedQty: Math.min(i.scannedQty + qty, i.expectedQty) } : i));
+              setPallets((prev) => prev.map((p) => {
+                if (p.id !== targetId) return p;
+                const existingItems = (p.items as Array<{ sku: string; qty: number }> | null) ?? [];
+                const existing = existingItems.find((i) => i.sku === sku);
+                const newQty = Math.min((existing?.qty ?? 0) + qty, maxQty);
+                const newItems = existing
+                  ? existingItems.map((i) => i.sku === sku ? { ...i, qty: newQty } : i)
+                  : [...existingItems, { sku, qty: newQty }];
+                return { ...p, items: newItems };
+              }));
+              if (session) updatePalletItems.mutate({ palletId: targetId, items: [] }); // will be overwritten by setPallets
+            }}
+            onSessionComplete={() => {
+              // Partial case entry completed the order — show pallet review dialog
+              playBeep("complete");
+              toast.success("Order complete! All items scanned.", { duration: 5000 });
+              const heightInit: Record<number, string> = {};
+              palletsRef.current.forEach((p) => { if (p.palletHeightIn) heightInit[p.id] = p.palletHeightIn; });
+              setPalletHeightInputs(heightInit);
+              setPalletReviewDialog(true);
+              if (session) {
+                palletsRef.current.forEach((p) => {
+                  calculatePalletWeight.mutate({ sessionId: session.id, palletId: p.id });
+                });
+              }
+            }}
           />
         </div>
       </div>{/* end left column scrollable body */}
@@ -2814,11 +2878,11 @@ export default function QcScanner() {
                                 </Button>
                               )}
                               {/* Demo Cheat Sheet removed — operators scan using the barcode input directly */}
-                              {/* MU lookup in-progress indicator */}
-                              {scanMu.isPending && (
+                              {/* MU lookup in-progress indicator — also shows during scanBarcode when auto-MU-fallback may fire */}
+                              {(scanMu.isPending || (scanBarcode.isPending)) && (
                                 <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
                                   <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                                  <span>Looking up MU in Extensiv… this may take a few seconds</span>
+                                  <span>{scanMu.isPending ? "Looking up MU in Extensiv… this may take a few seconds" : "Scanning…"}</span>
                                 </div>
                               )}
                               {/* Last scan feedback */}

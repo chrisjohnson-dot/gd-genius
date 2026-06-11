@@ -6322,7 +6322,10 @@ const qcScannerRouter = router({
         }
       }
 
-      // 6. Auto-calculate weight for the MU pallet
+      // 5b. Warn about SKUs on the MU that are NOT in the order's scan items
+      const unknownSkus = muItems.filter(m => !sessionItems.find(si => si.sku === m.sku)).map(m => m.sku);
+
+      // 6. Auto-calculate weight for the MU pallet (use Math.ceil — round UP to nearest whole lb)
       const cartonWeightBySkuFromDB = new Map<string, number>();
       for (const si of sessionItems) {
         if (si.cartonWeightLb != null) cartonWeightBySkuFromDB.set(si.sku, parseFloat(String(si.cartonWeightLb)));
@@ -6333,7 +6336,8 @@ const qcScannerRouter = router({
         if (w) totalItemLb += w * item.qty;
       }
       const tareLb = activePallet.palletTareWeightLb ? parseFloat(String(activePallet.palletTareWeightLb)) : 30;
-      const calculatedWeightLb = totalItemLb > 0 ? String(Math.round((totalItemLb + tareLb) * 100) / 100) : null;
+      // Round UP to nearest whole pound (consistent with calculatePalletWeight server procedure)
+      const calculatedWeightLb = totalItemLb > 0 ? String(Math.ceil(totalItemLb + tareLb)) : null;
       if (calculatedWeightLb) await updateQcPallet(input.palletId, { calculatedWeightLb });
 
       // 7. Check if the session is now complete
@@ -6363,6 +6367,8 @@ const qcScannerRouter = router({
         nextPalletNumber,
         sessionComplete,
         calculatedWeightLb: calculatedWeightLb ? parseFloat(calculatedWeightLb) : null,
+        // SKUs on the MU that are not in this order's scan items (flagged for operator awareness)
+        unknownSkus: unknownSkus.length > 0 ? unknownSkus : undefined,
       };
     }),
   /**

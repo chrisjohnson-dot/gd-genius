@@ -1134,11 +1134,19 @@ export default function QcScanner() {
       }
       setBarcodeInput("");
       setScanAsMu(false);
-      const skuSummary = data.muItems.map((m: { sku: string; qty: number }) => `${m.sku} ×${m.qty}`).join(", ");
+      const skuSummary = data.muItems.map((m: { sku: string; qty: number }) => `${m.sku} \xd7${m.qty}`).join(", ");
       toast.success(`MU ${data.muLabel} imported as Pallet ${data.palletNumber}`, {
         description: skuSummary,
         duration: 5000,
       });
+      // Warn if the MU contained SKUs not in this order
+      const unknownSkus = (data as any).unknownSkus as string[] | undefined;
+      if (unknownSkus && unknownSkus.length > 0) {
+        toast.warning(`⚠️ MU contains ${unknownSkus.length} SKU${unknownSkus.length > 1 ? 's' : ''} not in this order`, {
+          description: `These SKUs were on the MU but not counted: ${unknownSkus.join(', ')}. Verify the pallet contents.`,
+          duration: Infinity,
+        });
+      }
       if (data.sessionComplete) {
         playBeep("complete");
         toast.success("Order complete! All items scanned.", { duration: 5000 });

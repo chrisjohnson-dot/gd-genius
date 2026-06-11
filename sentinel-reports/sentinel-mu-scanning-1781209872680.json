@@ -1,0 +1,117 @@
+{
+  "suite": "MU Scanning",
+  "description": "Every scenario where MU scanning can return the wrong quantity — DB integrity, qty accuracy, weight, and edge cases",
+  "timestamp": "2026-06-11T20:31:12.680Z",
+  "elapsed": 3492,
+  "summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "blockers": 0,
+    "warned": 0,
+    "skipped": 0
+  },
+  "verdict": "✅ SENTINEL CLEARED — Safe to deploy",
+  "results": [
+    {
+      "id": 1,
+      "name": "MU import: correct qty applied to session scannedQty",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "scannedQty=84/84",
+      "warning": "",
+      "fix": "",
+      "elapsed": 419
+    },
+    {
+      "id": 2,
+      "name": "MU all-zero blocked: fully allocated MU does NOT use remaining qty as fallback",
+      "category": "REG",
+      "result": "PASS",
+      "detail": "Regression fix confirmed: allZero MU returns allZeroBlocked=true instead of using remaining=74",
+      "warning": "This was the root cause of order 3513284 scanning 285 units instead of 66",
+      "fix": "",
+      "elapsed": 308
+    },
+    {
+      "id": 3,
+      "name": "MU over-scan guard: MU qty > remaining is blocked",
+      "category": "SEC",
+      "result": "PASS",
+      "detail": "MU has 84 units, 74 remain — over-scan guard blocks (84 > 74). scannedQty unchanged at 10",
+      "warning": "",
+      "fix": "",
+      "elapsed": 350
+    },
+    {
+      "id": 4,
+      "name": "MU pallet merge: pre-scanned items not double-counted",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "After pre-scan(10) + MU(90): scannedQty=100 (expected 100), pallet qty=100",
+      "warning": "",
+      "fix": "",
+      "elapsed": 354
+    },
+    {
+      "id": 5,
+      "name": "MU weight calculation uses Math.ceil (rounds UP)",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "84×12.5 + 30 tare = 1080lb (ceil). Stored: 1080.00",
+      "warning": "",
+      "fix": "",
+      "elapsed": 365
+    },
+    {
+      "id": 6,
+      "name": "MU with SKU not in order: unknownSkus returned in response",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "Unknown SKUs detected: GR-UNKNOWN-SKU — server returns these in unknownSkus field, client shows warning toast",
+      "warning": "",
+      "fix": "",
+      "elapsed": 302
+    },
+    {
+      "id": 7,
+      "name": "MU scan on completed session is blocked",
+      "category": "SEC",
+      "result": "PASS",
+      "detail": "Session status=complete — completed sessions cannot accept new MU scans",
+      "warning": "",
+      "fix": "",
+      "elapsed": 336
+    },
+    {
+      "id": 8,
+      "name": "Multiple MU scans: each MU creates a new pallet, session totals accumulate correctly",
+      "category": "WF",
+      "result": "PASS",
+      "detail": "2 MUs: total scannedQty=168/168, P1=84, P2=84",
+      "warning": "",
+      "fix": "",
+      "elapsed": 391
+    },
+    {
+      "id": 9,
+      "name": "MU label DB cache (mu_labels table): stale qty warning",
+      "category": "DB",
+      "result": "PASS",
+      "detail": "mu_labels: 0 total, 0 (0%) older than 2 days",
+      "warning": "",
+      "fix": "",
+      "elapsed": 259
+    },
+    {
+      "id": 10,
+      "name": "MU scan reopen: after session reopen, MU pallet data preserved",
+      "category": "REG",
+      "result": "PASS",
+      "detail": "After reopen: scannedQty=84, muLabel=MU-TEST-001, pallet qty=84",
+      "warning": "",
+      "fix": "",
+      "elapsed": 403
+    }
+  ]
+}

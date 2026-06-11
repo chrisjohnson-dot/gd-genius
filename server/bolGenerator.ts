@@ -194,16 +194,18 @@ export async function overlaySignatureOnBol(
   const sigImage = await pdfDoc.embedPng(sigBytes);
 
   // The BOL driver signature box is at:
-  //   x = col2 = 310 points from left
-  //   y = measured from bottom in PDF coords
+  //   x = col2 = 310 points from left, width = 240pt
+  //   y = measured from BOTTOM in PDF coords (pdf-lib convention)
   // LETTER page = 612 x 792 points
-  // The signature box is drawn roughly 270-340 points from the bottom
-  // (after header ~100pt + fields ~120pt + commodity table ~80pt + sig area)
-  // We place the signature image inside the driver box with a small inset
-  const sigWidth = 230;
+  // Measured from the actual BOL PDF:
+  //   Box top border = 340pt from bottom
+  //   Box height = 70pt
+  //   Box bottom border = 270pt from bottom
+  // We place the signature with a small inset inside the box
+  const sigWidth = 228;
   const sigHeight = 58;
-  const sigX = 312;           // col2 = 310, slight inset
-  const sigY = height * 0.33; // ~33% from bottom = inside driver sig box
+  const sigX = 314;    // col2=310 + 4pt inset
+  const sigY = 275;    // 275pt from bottom = inside the driver sig box (box is 270-340pt)
 
   firstPage.drawImage(sigImage, {
     x: sigX,
@@ -213,11 +215,11 @@ export async function overlaySignatureOnBol(
     opacity: 1.0,
   });
 
-  // Add "Signed electronically" text below the signature
+  // Add "Signed electronically" text just below the signature (inside the box)
   const font = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
   firstPage.drawText(`Signed electronically — ${new Date().toLocaleString()}`, {
     x: sigX,
-    y: sigY - 10,
+    y: sigY - 8,
     size: 7,
     font,
     color: rgb(0.4, 0.4, 0.4),

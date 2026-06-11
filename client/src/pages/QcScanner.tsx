@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -163,6 +163,7 @@ function ItemsTable({
   adjustQty,
   isLoading,
   onAdjust,
+  onPartialEntry,
   flashSku,
   onRowRef,
   showCaseBadge,
@@ -173,10 +174,38 @@ function ItemsTable({
   adjustQty: ReturnType<typeof trpc.qcScanner.adjustQty.useMutation>;
   isLoading?: boolean;
   onAdjust?: (sku: string, delta: number) => void;
+  onPartialEntry?: (sku: string, qty: number) => void;
   flashSku?: string | null;
   onRowRef?: (sku: string, el: HTMLDivElement | null) => void;
   showCaseBadge?: boolean;
 }) {
+  const [partialInputSku, setPartialInputSku] = React.useState<string | null>(null);
+  const [partialInputVal, setPartialInputVal] = React.useState<string>("");
+  const partialInputRef = React.useRef<HTMLInputElement>(null);
+  const partialCaseMutation = trpc.qcScanner.partialCaseEntry.useMutation({
+    onSuccess: (data) => {
+      onPartialEntry?.(partialInputSku ?? "", Number(partialInputVal));
+      setPartialInputSku(null);
+      setPartialInputVal("");
+      if (data.sessionComplete) {
+        toast.success("Order complete! All items scanned.", { duration: 5000 });
+      }
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const openPartialInput = (sku: string, remaining: number) => {
+    setPartialInputSku(sku);
+    setPartialInputVal(String(remaining));
+    setTimeout(() => { partialInputRef.current?.select(); }, 80);
+  };
+
+  const submitPartial = () => {
+    const qty = parseInt(partialInputVal, 10);
+    if (!partialInputSku || isNaN(qty) || qty < 1) return;
+    partialCaseMutation.mutate({ sessionId, sku: partialInputSku, qty });
+  };
+
   if (isLoading) {
     return <ItemsTableSkeleton />;
   }
@@ -226,8 +255,8 @@ function ItemsTable({
         if (isFlashing) rowBg = "#bbf7d0"; // bright green flash override
 
         return (
+          <React.Fragment key={item.sku}>
           <div
-            key={item.sku}
             ref={(el) => onRowRef?.(item.sku, el)}
             className="grid items-center border-b border-[#CDD4DC] last:border-0"
             style={{ gridTemplateColumns: cols, background: rowBg, minHeight: 32, padding: "3px 8px", transition: "background 0.15s ease" }}
@@ -314,8 +343,75 @@ function ItemsTable({
               )}
             </div>
           </div>
+
+          {/* Partial Case prompt — appears when remaining qty < full case size */}
+          {phase === "scanning" && ca > 1 && !done && !over && (() => {
+            const remaining = item.expectedQty - item.scannedQty;
+            if (remaining >= ca) return null; // still has full cases to scan
+            if (remaining <= 0) return null;
+            const isActive = partialInputSku === item.sku;
+            return (
+              <div
+                key={`partial-${item.sku}`}
+                className="border-b border-[#CDD4DC] last:border-0"
+                style={{ background: isActive ? "#eff6ff" : "#fef9c3", padding: "4px 8px" }}
+              >
+                {!isActive ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="text-xs font-semibold text-amber-700">
+                        {remaining} single{remaining !== 1 ? "s" : ""} remaining for {item.sku} — less than 1 full case
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-7 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shrink-0"
+                      onClick={() => openPartialInput(item.sku, remaining)}
+                    >
+                      Enter Partial Count
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-blue-700 shrink-0">Count for {item.sku}:</span>
+                    <input
+                      ref={partialInputRef}
+                      type="number"
+                      min={1}
+                      max={remaining}
+                      value={partialInputVal}
+                      onChange={(e) => setPartialInputVal(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") submitPartial(); if (e.key === "Escape") { setPartialInputSku(null); setPartialInputVal(""); } }}
+                      className="w-20 h-8 border border-blue-400 rounded px-2 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder={String(remaining)}
+                    />
+                    <span className="text-xs text-gray-500">/ {remaining} max</span>
+                    <Button
+                      size="sm"
+                      className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+                      disabled={partialCaseMutation.isPending}
+                      onClick={submitPartial}
+                    >
+                      {partialCaseMutation.isPending ? "Saving..." : "Confirm"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2"
+                      onClick={() => { setPartialInputSku(null); setPartialInputVal(""); }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          </React.Fragment>
         );
       })}
+
 
       {/* Totals footer */}
       <div

@@ -5128,6 +5128,41 @@ const qcScannerRouter = router({
       return { item: updated, sessionComplete, overScan: false };
     }),
 
+  /**
+   * Partial case entry — operator-accessible.
+   * Adds a specific count of singles for a SKU when the remaining qty is less than a full case.
+   * Validates that qty <= remaining to prevent over-scanning.
+   */
+  partialCaseEntry: protectedProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      sku: z.string(),
+      qty: z.number().int().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const items = await getQcScanItems(input.sessionId);
+      const match = items.find((i) => i.sku.toUpperCase() === input.sku.toUpperCase());
+      if (!match) throw new TRPCError({ code: "NOT_FOUND", message: `SKU ${input.sku} not found in this session` });
+      const remaining = Math.max(0, (match.expectedQty ?? 0) - (match.scannedQty ?? 0));
+      if (input.qty > remaining) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Partial count ${input.qty} exceeds remaining ${remaining} units for ${input.sku}. Enter ${remaining} or less.`,
+        });
+      }
+      if (input.qty <= 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Count must be at least 1" });
+      }
+      const updated = await incrementQcScanItem(input.sessionId, match.sku, input.qty);
+      const allItems = await getQcScanItems(input.sessionId);
+      const sessionComplete = allItems.every((i) => i.scannedQty >= i.expectedQty);
+      return {
+        item: updated,
+        sessionComplete,
+        remaining: Math.max(0, (match.expectedQty ?? 0) - ((updated?.scannedQty ?? 0))),
+      };
+    }),
+
   // Admin-only: set scannedQty to an exact value for a SKU (bypasses scan requirement)
   manualSetQty: protectedProcedure
     .input(z.object({

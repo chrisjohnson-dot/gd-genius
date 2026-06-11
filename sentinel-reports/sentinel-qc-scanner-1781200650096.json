@@ -1,0 +1,167 @@
+{
+  "suite": "QC Scanner",
+  "description": "Full coverage of QC Scanner: session lifecycle, scanning modes, pallet management, weight, completion",
+  "timestamp": "2026-06-11T17:57:30.096Z",
+  "elapsed": 4854,
+  "summary": {
+    "total": 15,
+    "passed": 15,
+    "failed": 0,
+    "blockers": 0,
+    "warned": 0,
+    "skipped": 0
+  },
+  "verdict": "✅ SENTINEL CLEARED — Safe to deploy",
+  "results": [
+    {
+      "id": 1,
+      "name": "Session created with correct facilityId and status",
+      "category": "DB",
+      "result": "PASS",
+      "detail": "facilityId=2, status=scanning",
+      "warning": "",
+      "fix": "",
+      "elapsed": 279
+    },
+    {
+      "id": 2,
+      "name": "Scan items seeded with correct expectedQty and caseAmount",
+      "category": "DB",
+      "result": "PASS",
+      "detail": "K18-SEED-A: exp=72 case=36 wt=15.700. K18-SEED-B: exp=24",
+      "warning": "",
+      "fix": "",
+      "elapsed": 309
+    },
+    {
+      "id": 3,
+      "name": "Unit scan: adds exactly 1 unit, not caseAmount",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "scannedQty=1 (expected 1)",
+      "warning": "",
+      "fix": "",
+      "elapsed": 317
+    },
+    {
+      "id": 4,
+      "name": "Case scan: adds caseAmount units, hard-capped at expectedQty",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "After 2 case scans: scannedQty=70 (expected 70, capped)",
+      "warning": "",
+      "fix": "",
+      "elapsed": 333
+    },
+    {
+      "id": 5,
+      "name": "Over-scan blocked: scannedQty cannot exceed expectedQty",
+      "category": "SEC",
+      "result": "PASS",
+      "detail": "scannedQty=10, expectedQty=10",
+      "warning": "",
+      "fix": "",
+      "elapsed": 323
+    },
+    {
+      "id": 6,
+      "name": "Partial case entry: validates qty <= remaining, rejects over-count",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "Over-count blocked=true, partial 34 accepted: scannedQty=70/70",
+      "warning": "",
+      "fix": "",
+      "elapsed": 317
+    },
+    {
+      "id": 7,
+      "name": "Pallet items JSON valid and matches scanned quantities",
+      "category": "DB",
+      "result": "PASS",
+      "detail": "Pallet JSON: PALLET-A=72, PALLET-B=24",
+      "warning": "",
+      "fix": "",
+      "elapsed": 321
+    },
+    {
+      "id": 8,
+      "name": "Weight calculation uses Math.ceil (rounds UP to nearest whole pound)",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "61.4lb → ceil = 62.00lb (expected 62)",
+      "warning": "",
+      "fix": "",
+      "elapsed": 326
+    },
+    {
+      "id": 9,
+      "name": "Session completion: status=complete, completedAt set, all items at 100%",
+      "category": "WF",
+      "result": "PASS",
+      "detail": "status=complete, completedAt=set, allDone=true",
+      "warning": "",
+      "fix": "",
+      "elapsed": 331
+    },
+    {
+      "id": 10,
+      "name": "Reopen: session returns to scanning, all data preserved",
+      "category": "REG",
+      "result": "PASS",
+      "detail": "Reopened: status=scanning, scannedQty=72, height=48.00\"",
+      "warning": "",
+      "fix": "",
+      "elapsed": 335
+    },
+    {
+      "id": 11,
+      "name": "MU all-zero blocked: fully allocated MU returns allZeroBlocked flag",
+      "category": "REG",
+      "result": "PASS",
+      "detail": "Old behavior would have scanned 74 units. New behavior blocks with allZeroBlocked=true",
+      "warning": "This test verifies the regression fix for order 3513284 (MU 198463 scanning 285 instead of 66)",
+      "fix": "",
+      "elapsed": 296
+    },
+    {
+      "id": 12,
+      "name": "Facility address map covers all active warehouses (2=Columbus, 3=Reno, 4=Calgary, 5=Mississauga, 1=Toronto)",
+      "category": "INT",
+      "result": "PASS",
+      "detail": "0 sessions with unknown facilityId, 66 sessions with null facilityId (scanning)",
+      "warning": "66 active sessions have null facilityId — pallet labels will fail for these orders",
+      "fix": "",
+      "elapsed": 257
+    },
+    {
+      "id": 13,
+      "name": "Concurrent scans do not corrupt scannedQty (race condition protection)",
+      "category": "EDGE",
+      "result": "PASS",
+      "detail": "After 5 concurrent scans each: RACE-A=5, RACE-B=5, RACE-C=5",
+      "warning": "",
+      "fix": "",
+      "elapsed": 522
+    },
+    {
+      "id": 14,
+      "name": "Session cleanup: deleting session removes all items and pallets",
+      "category": "DB",
+      "result": "PASS",
+      "detail": "After cleanup: items=0, pallets=0",
+      "warning": "",
+      "fix": "",
+      "elapsed": 338
+    },
+    {
+      "id": 15,
+      "name": "Recent sessions query returns data within acceptable time (<2s)",
+      "category": "PERF",
+      "result": "PASS",
+      "detail": "Query returned 50 sessions in 5ms",
+      "warning": "",
+      "fix": "",
+      "elapsed": 246
+    }
+  ]
+}

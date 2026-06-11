@@ -1,0 +1,67 @@
+{
+  "suite": "Carrier Pickup",
+  "description": "Carrier pickup session lifecycle, photo capture, batch mode, and BOL generation",
+  "timestamp": "2026-06-11T17:57:25.239Z",
+  "elapsed": 1560,
+  "summary": {
+    "total": 5,
+    "passed": 4,
+    "failed": 0,
+    "blockers": 0,
+    "warned": 1,
+    "skipped": 0
+  },
+  "verdict": "⚠️  CLEARED WITH WARNINGS — Review warnings before deploying",
+  "results": [
+    {
+      "id": 1,
+      "name": "Pickup session created with required fields",
+      "category": "DB",
+      "result": "PASS",
+      "detail": "Session 180011: status=scanning, driver=Test Driver",
+      "warning": "",
+      "fix": "",
+      "elapsed": 348
+    },
+    {
+      "id": 2,
+      "name": "Photo upload stores URL correctly in pickup_scan_photos",
+      "category": "DB",
+      "result": "PASS",
+      "detail": "Photo stored: https://files.manuscdn.com/pickup-photos/180012/GD-TEST-P1.j...",
+      "warning": "",
+      "fix": "",
+      "elapsed": 317
+    },
+    {
+      "id": 3,
+      "name": "Duplicate pallet scan blocked (same label cannot be scanned twice)",
+      "category": "BL",
+      "result": "PASS",
+      "detail": "Duplicate detection: label GD-990057-P1 already scanned (1 record)",
+      "warning": "",
+      "fix": "",
+      "elapsed": 291
+    },
+    {
+      "id": 4,
+      "name": "Batch pickup: multiple order IDs stored in session",
+      "category": "BL",
+      "result": "WARN",
+      "detail": "batch_order_ids column not yet in DB — deploy latest code to enable batch pickup",
+      "warning": "Run pending deployment to activate batch pickup feature",
+      "fix": "",
+      "elapsed": 248
+    },
+    {
+      "id": 5,
+      "name": "Photo isolation: photos from one session not visible in another",
+      "category": "SEC",
+      "result": "PASS",
+      "detail": "Session isolation: S1 has 1 photo, S2 has 1 photo — no cross-contamination",
+      "warning": "",
+      "fix": "",
+      "elapsed": 351
+    }
+  ]
+}

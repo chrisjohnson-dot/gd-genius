@@ -618,6 +618,7 @@ export function registerPdfRoutes(app: Express) {
     const GD_NAME = "Go Direct Solutions";
     // Facility address map keyed by Extensiv facilityId
     const FACILITY_ADDRESSES: Record<number, { address: string; csz: string }> = {
+      1: { address: "460 Admiral Boulevard",         csz: "Mississauga, ON  L5T 3A3" },         // Toronto (TOR)
       4: { address: "#4 – 149 High Plains Place",  csz: "Rocky View County, AB  T4A 0W7" },  // Calgary
       2: { address: "5830 Saltzgaber Road",          csz: "Groveport, OH  43125" },             // Columbus
       5: { address: "460 Admiral Boulevard",         csz: "Mississauga, ON  L5T 3A3" },         // Mississauga

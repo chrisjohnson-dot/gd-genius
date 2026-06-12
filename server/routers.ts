@@ -6232,7 +6232,12 @@ const qcScannerRouter = router({
       for (const rec of muRecords) {
         const sku = rec.itemIdentifier?.sku;
         if (!sku) continue;
-        skuQtyMap.set(sku, (skuQtyMap.get(sku) ?? 0) + (rec.onHand ?? rec.available ?? 0));
+        // Prefer onHand over available:
+        // - onHand = physical units on the pallet (correct for QC scanning)
+        // - available = 0 when fully allocated to an order (misleading for QC)
+        // For MU 203403: OnHandQty=2592, AvailableQty=0 — we want 2592
+        const qty = rec.onHand > 0 ? rec.onHand : rec.available;
+        skuQtyMap.set(sku, (skuQtyMap.get(sku) ?? 0) + qty);
       }
 
       // If Extensiv returns 0 for all SKUs on this MU, the MU is fully allocated and

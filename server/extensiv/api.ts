@@ -595,8 +595,11 @@ function normalizeInventoryRecord(raw: Record<string, unknown>): ExtensivInvento
       id: (get<number>(itemId as Record<string, unknown>, "id") ?? 0) as number,
     },
     description: get<string>(raw, "description"),
-    available: (get<number>(raw, "available") ?? 0) as number,
-    onHand: (get<number>(raw, "onHand") ?? 0) as number,
+    // The /inventory endpoint uses PascalCase with 'Qty' suffix: OnHandQty, AvailableQty
+    // The /inventory/stockdetails endpoint uses camelCase: onHand, available
+    // We check both forms so both endpoints work correctly.
+    available: (get<number>(raw, "available") ?? (raw["AvailableQty"] as number | undefined) ?? 0) as number,
+    onHand: (get<number>(raw, "onHand") ?? (raw["OnHandQty"] as number | undefined) ?? 0) as number,
     isOnHold: !!(get<boolean>(raw, "isOnHold")),
     quarantined: !!(get<boolean>(raw, "quarantined")),
     lotNumber: get<string>(raw, "lotNumber"),

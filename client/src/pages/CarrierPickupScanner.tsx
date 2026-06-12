@@ -387,8 +387,9 @@ export default function CarrierPickupScanner() {
       setSessionId(data.sessionId);
       setShowQuickstartForm(false);
       setPhase("scanning");
-      // Auto-enable camera for proof-of-shipping photos
+      // Auto-enable camera and show preview so operator can verify it's working
       setCameraEnabled(true);
+      setShowCameraPreview(true);
     },
     onError: (err) => {
       toast.error(err.message);
@@ -507,6 +508,7 @@ export default function CarrierPickupScanner() {
       setShowQuickstartForm(false);
       setPhase("scanning");
       setCameraEnabled(true);
+      setShowCameraPreview(true);
       return;
     }
     startSessionMutation.mutate({
@@ -1313,11 +1315,11 @@ export default function CarrierPickupScanner() {
               )}
 
               {/* Admin Camera Panel — alignment/testing only, hidden from regular employees */}
-              {isAdmin && phase === "scanning" && (
+              {phase === "scanning" && (
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted px-4 py-2 text-xs font-semibold text-muted-foreground flex items-center justify-between">
                     <span className="flex items-center gap-2">
-                      📷 Camera (Admin)
+                      📷 Camera
                     </span>
                     <div className="flex items-center gap-2">
                       {cameraEnabled && availableCameras.length > 1 && (
@@ -1356,8 +1358,9 @@ export default function CarrierPickupScanner() {
                       )}
                     </div>
                   </div>
-                  {showCameraPreview && cameraEnabled && (
-                    <div className="p-2 bg-black">
+                  {/* Video element always rendered when camera enabled so stream attaches immediately */}
+                  {cameraEnabled && (
+                    <div className={`p-2 bg-black ${showCameraPreview ? '' : 'hidden'}`}>
                       <video
                         ref={videoRef}
                         autoPlay
